@@ -5,6 +5,7 @@ from elf.io import open_file
 from .data import ConcatDataset, SegmentationDataset
 from .loss import DiceLoss
 from .trainer import DefaultTrainer
+from .trainer.tensorboard_logger import TensorboardLogger
 from .transform import get_augmentations, get_raw_transform
 
 
@@ -84,7 +85,7 @@ def default_segmentation_loader(
             label_transform2=label_transform2,
             transform=transform,
             roi=rois,
-            n_samles=n_samples,
+            n_samples=n_samples,
             sampler=sampler
         )
     else:
@@ -137,6 +138,7 @@ def default_segmentation_trainer(
     log_image_interval=100,
     mixed_precision=True,
     early_stopping=None,
+    logger=TensorboardLogger,
     scheduler_kwargs=DEFAULT_SCHEDULER_KWARGS,
     optimizer_kwargs={}
 ):
@@ -166,6 +168,7 @@ def default_segmentation_trainer(
         lr_scheduler=scheduler,
         mixed_precision=mixed_precision,
         early_stopping=early_stopping,
-        log_image_interval=log_image_interval
+        log_image_interval=log_image_interval,
+        logger=logger
     )
     return trainer
