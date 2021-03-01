@@ -3,12 +3,9 @@ import torch
 from elf.io import open_file
 
 from .data import ConcatDataset, SegmentationDataset
+from .loss import DiceLoss
 from .trainer import DefaultTrainer
 from .transform import get_augmentations, get_raw_transform
-
-# TODO move (or reimplement) the important things to this repository to get rid of the
-# inferno / neurofire / mipnet dependencies
-from inferno.extensions.criteria import SorensenDiceLoss
 
 
 # TODO add a heuristic to estimate this from the number of epochs
@@ -151,8 +148,8 @@ def default_segmentation_trainer(
         **scheduler_kwargs
     )
 
-    loss = SorensenDiceLoss() if loss is None else loss
-    metric = SorensenDiceLoss() if metric is None else metric
+    loss = DiceLoss() if loss is None else loss
+    metric = DiceLoss() if metric is None else metric
 
     if device is None:
         device = torch.device('cuda')

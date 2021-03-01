@@ -47,7 +47,7 @@ def dice_score(input_, target, invert=False, channelwise=True, eps=1e-7):
     return score
 
 
-class DiceLoss(nn.module):
+class DiceLoss(nn.Module):
     def __init__(self, channelwise=True, eps=1e-7):
         super().__init__()
         self.channelwise = channelwise
@@ -59,7 +59,7 @@ class DiceLoss(nn.module):
                           eps=self.eps)
 
 
-class DiceLossWithLogits(nn.module):
+class DiceLossWithLogits(nn.Module):
     def __init__(self, channelwise=True, eps=1e-7):
         super().__init__()
         self.channelwise = channelwise
@@ -76,7 +76,7 @@ class DiceLossWithLogits(nn.module):
 
 
 # TODO think about how to handle combined losses like this for mixed precision training
-class BCEDiceLossWithLogits(nn.module):
+class BCEDiceLossWithLogits(nn.Module):
 
     def __init__(self, alpha=1., beta=1., channelwise=True, eps=1e-7):
         super().__init__()
