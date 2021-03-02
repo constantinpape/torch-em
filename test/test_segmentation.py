@@ -7,7 +7,6 @@ import numpy as np
 import torch
 
 
-# TODO use torch_em unet implementation once available
 # TODO test for instance segmentation training
 # TODO all tests for 2d and 3d training
 class TestSegmentation(unittest.TestCase):
@@ -40,10 +39,8 @@ class TestSegmentation(unittest.TestCase):
         from torch_em.segmentation import (default_segmentation_loader,
                                            default_segmentation_trainer)
         from torch_em.transform import labels_to_binary
-        # TODO torch_em unet implementation
-        from mipnet.models.unet import UNet3d
-        model = UNet3d(in_channels=1, out_channels=1,
-                       initial_features=8, pad_convs=True)
+        from torch_em.model import UNet3d
+        model = UNet3d(in_channels=1, out_channels=1, initial_features=8)
 
         batch_size = 1
         patch_shape = (64,) * 3
