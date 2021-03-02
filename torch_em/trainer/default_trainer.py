@@ -51,7 +51,8 @@ class DefaultTrainer:
         self.checkpoint_folder = os.path.join('./checkpoints', self.name)
 
         log_dir = os.path.join('./logs', self.name)
-        self.logger = None if logger is None else logger(log_dir)
+        self.logger = None if logger is None else logger(log_dir,
+                                                         log_image_interval)
 
     def _initialize(self, iterations, load_from_checkpoint):
         assert self.train_loader is not None
@@ -105,7 +106,7 @@ class DefaultTrainer:
 
         save_dict = torch.load(save_path)
 
-        self._iteraion = save_dict['iteration']
+        self._iteration = save_dict['iteration']
         self._epoch = save_dict['epoch']
         self._ebest_poch = save_dict['best_epoch']
         self.best_metric = save_dict['best_metric']
@@ -184,7 +185,7 @@ class DefaultTrainer:
 
             lr = [pm['lr'] for pm in self.optimizer.param_groups][0]
             if self.logger is not None:
-                self.logger.log_train(loss, lr,
+                self.logger.log_train(self._iteration, loss, lr,
                                       x, y, prediction,
                                       log_gradients=True)
 
@@ -217,7 +218,7 @@ class DefaultTrainer:
 
             lr = [pm['lr'] for pm in self.optimizer.param_groups][0]
             if self.logger is not None:
-                self.logger.log_train(loss, lr,
+                self.logger.log_train(self._iteration, loss, lr,
                                       x, y, prediction)
 
             self._iteration += 1
@@ -245,7 +246,7 @@ class DefaultTrainer:
         metric /= len(self.val_loader)
         loss /= len(self.val_loader)
         if self.logger is not None:
-            self.logger.log_validation(metric, loss,
+            self.logger.log_validation(self._iteration, metric, loss,
                                        x, y, prediction)
         return metric
 

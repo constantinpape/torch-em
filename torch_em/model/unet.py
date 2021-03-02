@@ -62,7 +62,7 @@ class UNetBase(nn.Module):
             return_activation = getattr(nn, activation, None)
         if return_activation is None:
             raise ValueError(f"Invalid activation: {activation}")
-        return return_activation
+        return return_activation()
 
     # load encoder / decoder / base states for pretraining
     def load_encoder_state(self, state):

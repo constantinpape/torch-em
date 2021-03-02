@@ -2,15 +2,25 @@ import numpy as np
 import torch
 from torchvision.utils import make_grid
 
+# tensorboard import only works if tensobard package is available, so
+# we wrap this in a try except
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    SummaryWriter = None
+
 from ..util import ensure_tensor
 
 
 class TensorboardLogger:
-    def __init__(self, log_dir):
+    def __init__(self, log_dir, log_image_interval):
+        if SummaryWriter is None:
+            msg = "Need tensorboard package to use the logger. Install it via conda install -c conda-forge tensorboard"
+            raise RuntimeError(msg)
         self.tb = torch.utils.tensorboard.SummaryWriter(log_dir)
+        self.log_image_interval = log_image_interval
 
-    def log_images(self, x, y, prediction, name, gradients=None):
-        step = self._iteration
+    def log_images(self, step, x, y, prediction, name, gradients=None):
 
         def _normalize(im):
             im = ensure_tensor(im, dtype=torch.float32)
@@ -52,17 +62,15 @@ class TensorboardLogger:
                           img_tensor=im,
                           global_step=step)
 
-    def log_train(self, loss, lr, x, y, prediction, log_gradients=False):
-        step = self._iteration
+    def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
         self.tb.add_scalar(tag='train/loss', scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag='train/learning_rate', scalar_value=lr, global_step=step)
         if step % self.log_image_interval == 0:
             gradients = prediction.grad if log_gradients else None
-            self.log_images(x, y, prediction, 'train',
+            self.log_images(step, x, y, prediction, 'train',
                             gradients=gradients)
 
-    def log_validation(self, metric, loss, x, y, prediction):
-        step = self._iteration
+    def log_validation(self, step, metric, loss, x, y, prediction):
         self.tb.add_scalar(tag='validation/loss', scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag='validation/metric', scalar_value=metric, global_step=step)
-        self.log_images(x, y, prediction, 'validation')
+        self.log_images(step, x, y, prediction, 'validation')
