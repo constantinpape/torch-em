@@ -1,3 +1,5 @@
+[![Build Status](https://github.com/constantinpape/torch-em/workflows/test/badge.svg)](https://github.com/constantinpape/torch-em/actions)
+
 # Torch'em
 
 Deep-learning based semantic and instance segmentation for 3D Electron Microscopy and other bioimage analysis problems based on pytorch.
@@ -30,14 +32,14 @@ label_transform = torch_em.transform.BoundaryTransform(
 train_loader = torch_em.default_segmentation_loader(
     "dsb2018/train/images", "*.tif",
     "dsb2018/train/masks", "*.tif",
-    batch_size=8, patch_shape=(512, 512),
+    batch_size=8, patch_shape=(1, 256, 256),
     label_transform=label_transform,
     n_samples=250
 )
 val_loader = torch_em.default_segmentation_loader(
     "dsb2018/test/images", "*.tif",  # misusing the test data for validation ;)
     "dsb2018/test/masks", "*.tif",
-    batch_size=8, patch_shape=(512, 512),
+    batch_size=8, patch_shape=(1, 256, 256),
     label_transform=label_transform,
     n_samples=25
 )
@@ -47,7 +49,7 @@ val_loader = torch_em.default_segmentation_loader(
 # the tensorboard logs will be saved in "logs/dsb-boundary-model"
 trainer = torch_em.default_segmentation_trainer(
     name="dsb-boundary-model",
-    model=moddel,
+    model=model,
     train_loader=train_loader,
     val_loader=val_loader,
     learning_rate=1e-4,
