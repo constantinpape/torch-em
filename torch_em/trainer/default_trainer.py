@@ -269,6 +269,6 @@ class DefaultTrainer:
         metric_val /= len(self.val_loader)
         loss_val /= len(self.val_loader)
         if self.logger is not None:
-            self.logger.log_validation(metric, loss,
+            self.logger.log_validation(self._iteration, metric, loss,
                                        x, y, prediction)
         return metric_val
