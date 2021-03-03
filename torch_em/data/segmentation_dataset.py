@@ -6,8 +6,9 @@ from elf.wrapper import RoiWrapper
 from ..util import ensure_tensor_with_channels
 
 
-# TODO sample random versus sample windows
 class SegmentationDataset(torch.utils.data.Dataset):
+    """
+    """
     max_sampling_attempts = 500
 
     @staticmethod
