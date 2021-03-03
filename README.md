@@ -73,6 +73,6 @@ You can set up a conda environment with all necessary dependencies like this:
 ```sh
 conda env create -f <ENV>.yaml -n <ENV_NAME> --python 3.7
 conda activate <ENV_NAME>
-conda install -c conda-forge -c cpape "elf>=0.24" affogato "numba<0.50"
+conda install -c conda-forge -c cpape elf affogato "numba<0.50"
 pip install -e .
 ```
