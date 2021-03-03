@@ -45,6 +45,7 @@ trainer = torch_em.default_segmentation_trainer(
     train_loader=train_loader,
     val_loader=val_loader,
     learning_rate=1e-4,
-    device=torch.device("cpu")
+    device=torch.device("cpu"),
+    mixed_precision=False
 )
-trainer.fit(iterations=5000)
+trainer.fit(iterations=500)
