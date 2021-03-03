@@ -6,6 +6,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from ..transform.raw import standardize
+
 
 def _load_block(input_, offset, block_shape, halo,
                 padding_mode='reflect'):
@@ -56,7 +58,7 @@ def predict_with_halo(
     block_shape,
     halo,
     output=None,
-    preprocess=None,
+    preprocess=standardize,
     postprocess=None
 ):
     """ Run block-wise network prediction with halo.
@@ -67,8 +69,11 @@ def predict_with_halo(
         gpu_ids [list[int or string]] - list of gpus id used for prediction
         block_shape [tuple] - shape of inner block used for prediction
         halo [tuple] - shape of halo used for prediction
-        output [arraylike] - output data, will be allocated if None (default: None)
-        preprocess [callable] - function to preprocess input data before passing it to the network (default: None)
+        output [arraylike or list[tuple[arraylike, slice]]] - output data, will be allocated if None is passed.
+            Instead of a single output, this can also be a list of outputs and the corresponding channels.
+            (default: None)
+        preprocess [callable] - function to preprocess input data before passing it to the network.
+            (default: standardize)
         postprocess [callable] - function to postprocess the network predictions (default: None)
     """
     devices = [torch.device(gpu) for gpu in gpu_ids]
@@ -99,26 +104,31 @@ def predict_with_halo(
 
             inp = torch.from_numpy(inp[None, None]).to(device)
 
-            out = net(inp)
+            prediction = net(inp)
             # allow for list of tensors
             try:
-                out = out.cpu().numpy().squeeze(0)
+                prediction = prediction.cpu().numpy().squeeze(0)
             except AttributeError:
-                out = out[0]
-                out = out.cpu().numpy().squeeze(0)
+                prediction = prediction[0]
+                prediction = prediction.cpu().numpy().squeeze(0)
 
             if postprocess is not None:
-                out = postprocess(out)
+                prediction = postprocess(prediction)
 
             inner_bb = tuple(slice(ha, ha + bs) for ha, bs in zip(halo, block.shape))
-            if out.ndim == ndim + 1:
+            if prediction.ndim == ndim + 1:
                 inner_bb = (slice(None),) + inner_bb
-            out = out[inner_bb]
+            prediction = prediction[inner_bb]
 
-            bb_out = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
-            if output.ndim == ndim + 1:
-                bb_out = (slice(None),) + bb_out
-            output[bb_out] = out
+            bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
+            if isinstance(output, list):  # we have multiple outputs and split the prediction channels
+                for out, channel_slice in output:
+                    this_bb = bb if out.ndim == ndim else (slice(None),) + bb
+                    out[this_bb] = prediction[channel_slice]
+            else:  # we only have a single output array
+                if output.ndim == ndim + 1:
+                    bb = (slice(None),) + bb
+                output[bb] = prediction
 
     n_blocks = blocking.numberOfBlocks
     with futures.ThreadPoolExecutor(n_workers) as tp:
