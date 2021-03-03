@@ -7,10 +7,13 @@ Deep-learning based semantic and instance segmentation for 3D Electron Microscop
 This library is in a very early state, so don't expect a stable API, no bugs and there be dragons ;). Early feedback is highly appreciated, just open an issue!
 
 Highlights:
+- Functional API with sensible defaults to train a simple model with a few lines of code.
+- Differentiable augmentations on GPU and CPU thanks to [kornia](https://github.com/kornia/kornia)
+- Export trained models to [bioimage.io](https://bioimage.io/#/) model format with one function call.
+
+Design:
 - All parameters are specified in code, no configuration files.
 - No callback logic; to extend the core functionality inherit from `trainer.DefaultTrainer` instead.
-- Functional API with sensible defaults to train a simple model with a few lines of code.
-- Export trained models to [bioimage.io](https://bioimage.io/#/) model format with one function call.
 
 ```python
 # train a 2d U-Net for foreground and boundary segmentation of nuclei
