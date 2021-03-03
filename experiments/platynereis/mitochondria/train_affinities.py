@@ -70,8 +70,7 @@ def get_loader(split, patch_shape,
     )
 
 
-def train_affinties():
-
+def get_model():
     # we have 1 channel per affinty offsets and another channel
     # for foreground background segmentation
     n_out = len(OFFSETS) + 1
@@ -90,6 +89,11 @@ def train_affinties():
         final_activation='Sigmoid',
         anisotropic_kernel=False  # set anisotropic kernels if scale factors are anisotropic
     )
+    return model
+
+
+def train_affinties():
+    model = get_model()
 
     # shape of input patches (blocks) used for training
     patch_shape = [128, 128, 128]
