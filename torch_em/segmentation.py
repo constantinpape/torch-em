@@ -98,7 +98,7 @@ def _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
             assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
         ds = SegmentationDataset(raw_paths, raw_key,
                                  label_paths, label_key,
-                                 rois=rois, **kwargs)
+                                 roi=rois, **kwargs)
     else:
         if rois is not None:
             assert len(rois) == len(label_paths)

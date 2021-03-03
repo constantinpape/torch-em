@@ -86,8 +86,8 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         # sample random bounding box for this image
         bb = self._sample_bounding_box(shape)
 
-        raw = raw[bb]
-        label = label[bb]
+        raw = np.array(raw[bb])
+        label = np.array(label[bb])
 
         return raw, label
 
