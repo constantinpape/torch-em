@@ -19,3 +19,7 @@ additional requirements via
 conda install -c conda-forge -c cpape napari mobie_utils
 ```
 Then, install the MitoEM validation scripts from: https://github.com/ygCoconut/mAP_3Dvolume.git
+
+## Results
+
+The experiments for the submissions in the first round of the challenge were run with commit [101e406](https://github.com/constantinpape/torch-em/commit/101e406900d6cfb3451448b1b16f2b49eaa0a7f4)
