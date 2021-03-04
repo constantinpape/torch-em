@@ -51,6 +51,7 @@ def _load_block(input_, offset, block_shape, halo,
 
 
 # TODO support input channels
+# TODO half precision prediction
 def predict_with_halo(
     input_,
     model,
