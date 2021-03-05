@@ -4,10 +4,12 @@ import os
 import torch
 import torch_em
 from torch_em.model import UNet2d
+from torch_em.trainer.wandb_logger import WandbLogger
 
 parser = argparse.ArgumentParser()
 parser.add_argument('root', type=str,
                     help="Path to dsb2018 folder with train and test subfolders")
+parser.add_argument('--iterations', '-i', type=int, default=51)
 args = parser.parse_args()
 root = args.root
 
@@ -19,21 +21,20 @@ label_transform = torch_em.transform.BoundaryTransform(
     add_binary_target=True, ndim=2
 )
 
-# TODO need to support differently sized tif images
-# training and validation data loader
+batch_size = 4
 train_loader = torch_em.default_segmentation_loader(
     os.path.join(root, "train/images"), "*.tif",
     os.path.join(root, "train/masks"), "*.tif",
-    batch_size=8, patch_shape=(1, 256, 256),
+    batch_size=batch_size, patch_shape=(1, 256, 256),
     label_transform=label_transform,
-    n_samples=250
+    n_samples=10*batch_size
 )
 val_loader = torch_em.default_segmentation_loader(
     os.path.join(root, "test/images"), "*.tif",
     os.path.join(root, "test/masks"), "*.tif",
-    batch_size=8, patch_shape=(1, 256, 256),
+    batch_size=batch_size, patch_shape=(1, 256, 256),
     label_transform=label_transform,
-    n_samples=25
+    n_samples=1*batch_size
 )
 
 # the trainer object that handles the training details
@@ -46,6 +47,8 @@ trainer = torch_em.default_segmentation_trainer(
     val_loader=val_loader,
     learning_rate=1e-4,
     device=torch.device("cpu"),
-    mixed_precision=False
+    mixed_precision=False,
+    logger=WandbLogger,
+    log_image_interval=10
 )
-trainer.fit(iterations=500)
+trainer.fit(iterations=args.iterations)

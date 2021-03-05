@@ -8,6 +8,7 @@ import torch.cuda.amp as amp
 from tqdm import tqdm
 
 from .tensorboard_logger import TensorboardLogger
+from .wandb_logger import WandbLogger
 
 
 class DefaultTrainer:
@@ -50,9 +51,8 @@ class DefaultTrainer:
         self.scaler = amp.GradScaler() if self.mixed_precision else None
         self.checkpoint_folder = os.path.join('./checkpoints', self.name)
 
-        log_dir = os.path.join('./logs', self.name)
-        self.logger = None if logger is None else logger(log_dir,
-                                                         log_image_interval)
+        self.logger_class = logger
+        self.log_image_interval = log_image_interval
 
     def _initialize(self, iterations, load_from_checkpoint):
         assert self.train_loader is not None
@@ -74,7 +74,13 @@ class DefaultTrainer:
         self.loss.to(self.device)
 
         os.makedirs(self.checkpoint_folder, exist_ok=True)
-        os.makedirs('./logs', exist_ok=True)
+
+        if self.logger_class is None:
+            self.logger = None
+        else:
+            self.log_dir = './logs'
+            os.makedirs(self.log_dir, exist_ok=True)
+            self.logger = self.logger_class(self)
 
         print("Start fitting for", self.max_iteration - self._iteration,
               "iterations / ", self.max_epoch - self._epoch, "epochs")
@@ -164,6 +170,9 @@ class DefaultTrainer:
 
         print(f"Finished training after {self._epoch} epochs / {self._iteration} iterations.")
         print(f"The best epoch is number {self._best_epoch}.")
+        # TODO save the model to wandb if we have the wandb logger
+        if isinstance(self.logger, WandbLogger):
+            self.logger.get_wandb().finish()
 
     def _train_epoch(self, progress):
         self.model.train()

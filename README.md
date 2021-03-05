@@ -8,7 +8,8 @@ This library is in a very early state, so don't expect a stable API, no bugs and
 
 Highlights:
 - Functional API with sensible defaults to train a simple model with a few lines of code.
-- Differentiable augmentations on GPU and CPU thanks to [kornia](https://github.com/kornia/kornia)
+- Differentiable augmentations on GPU and CPU thanks to [kornia](https://github.com/kornia/kornia).
+- Off-the-shelf logging with [tensorboard](https://www.tensorflow.org/tensorboard) or [wandb](https://wandb.ai/site).
 - Export trained models to [bioimage.io](https://bioimage.io/#/) model format with one function call.
 
 Design:
