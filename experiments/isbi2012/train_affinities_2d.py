@@ -13,15 +13,33 @@ OFFSETS = [
     [-27, 0], [0, -27]
 ]
 
+DIAG_OFFSETS = [[-2, -9],
+                [-5, -7],
+                [-7, -5],
+                [-9, -2],
+                [-9, 2],
+                [-7, 5],
+                [-5, 7],
+                [-2, 9]]
+
+
+def get_offsets(use_diagonal_offsets):
+    if use_diagonal_offsets:
+        offsets = OFFSETS[:4] + DIAG_OFFSETS + OFFSETS[6:]
+    else:
+        offsets = OFFSETS
+    return offsets
+
 
 def get_loader(input_path, patch_shape, roi,
-               batch_size=1,):
+               batch_size=1, use_diagonal_offsets=False):
 
     raw_key = 'raw'
     label_key = 'labels/gt_segmentation'
 
+    offsets = get_offsets(use_diagonal_offsets)
     # we add a binary target channel for foreground background segmentation
-    label_transform = torch_em.transform.label.AffinityTransform(offsets=OFFSETS,
+    label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
                                                                  ignore_label=None,
                                                                  add_binary_target=False,
                                                                  add_mask=True)
@@ -39,10 +57,8 @@ def get_loader(input_path, patch_shape, roi,
     )
 
 
-def get_model():
-    # we have 1 channel per affinty offsets and another channel
-    # for foreground background segmentation
-    n_out = len(OFFSETS)
+def get_model(use_diagonal_offsets):
+    n_out = len(get_offsets(use_diagonal_offsets))
 
     def my_sampler(scale_factor, inc, outc):
         return Upsampler2d(scale_factor, inc, outc, mode='bilinear')
@@ -57,8 +73,8 @@ def get_model():
     return model
 
 
-def train_affinties(input_path):
-    model = get_model()
+def train_affinties(input_path, use_diagonal_offsets):
+    model = get_model(use_diagonal_offsets)
 
     # shape of input patches (blocks) used for training
     patch_shape = [1, 512, 512]
@@ -66,12 +82,14 @@ def train_affinties(input_path):
     train_loader = get_loader(
         input_path,
         patch_shape=patch_shape,
-        roi=np.s_[:28, :, :]
+        roi=np.s_[:28, :, :],
+        use_diagonal_offsets=use_diagonal_offsets
     )
     val_loader = get_loader(
         input_path,
         patch_shape=patch_shape,
-        roi=np.s_[28:, :, :]
+        roi=np.s_[28:, :, :],
+        use_diagonal_offsets=use_diagonal_offsets
     )
 
     loss = torch_em.loss.LossWrapper(
@@ -79,8 +97,11 @@ def train_affinties(input_path):
         transform=torch_em.loss.ApplyAndRemoveMask()
     )
 
+    name = 'affinity-model'
+    if use_diagonal_offsets:
+        name += '_diagonal_offsets'
     trainer = torch_em.default_segmentation_trainer(
-        name='affinity-model',
+        name=name,
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -91,11 +112,12 @@ def train_affinties(input_path):
         log_image_interval=50
     )
 
-    trainer.fit(int(2e4))
+    trainer.fit(int(1e4))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', required=True)
+    parser.add_argument('-d', '--use_diagonal_offsets', type=int, default=0)
     args = parser.parse_args()
-    train_affinties(args.input)
+    train_affinties(args.input, bool(args.use_diagonal_offsets))

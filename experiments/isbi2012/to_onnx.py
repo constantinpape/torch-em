@@ -4,8 +4,8 @@ import onnx
 from train_affinities_2d import get_model
 
 
-def export_model(ckpt, output):
-    model = get_model()
+def export_model(ckpt, output, use_diagonal_offsets):
+    model = get_model(use_diagonal_offsets=use_diagonal_offsets)
     state = torch.load(ckpt)['model_state']
     model.load_state_dict(state)
     model.eval()
@@ -22,5 +22,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', required=True)
     parser.add_argument('-o', '--output', required=True)
+    parser.add_argument('-d', '--use_diagonal_offsets', type=int, default=0)
     args = parser.parse_args()
-    export_model(args.input, args.output)
+    export_model(args.input, args.output, bool(args.use_diagonal_offsets))
