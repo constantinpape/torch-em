@@ -332,6 +332,8 @@ class UNet2d(UNetBase):
         final_activation=None,
         return_side_outputs=False,
         conv_block_impl=ConvBlock2d,
+        pooler_impl=nn.MaxPool2d,
+        sampler_impl=Upsampler2d,
         **conv_block_kwargs
     ):
         features_encoder = [in_channels] + [initial_features * gain ** i for i in range(depth)]
@@ -354,14 +356,14 @@ class UNet2d(UNetBase):
                 features=features_encoder,
                 scale_factors=scale_factors,
                 conv_block_impl=conv_block_impl,
-                pooler_impl=nn.MaxPool2d,
+                pooler_impl=pooler_impl,
                 **conv_block_kwargs
             ),
             decoder=Decoder(
                 features=features_decoder,
                 scale_factors=scale_factors[::-1],
                 conv_block_impl=conv_block_impl,
-                sampler_impl=Upsampler2d,
+                sampler_impl=sampler_impl,
                 **conv_block_kwargs
             ),
             base=conv_block_impl(
