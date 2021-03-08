@@ -6,7 +6,6 @@ import torch_em
 from torch_em.model import UNet2d
 from torch_em.model.unet import Upsampler2d
 
-# TODO adapt the offsets for training data at native resolution
 OFFSETS = [
     [-1, 0], [0, -1],
     [-3, 0], [0, -3],
