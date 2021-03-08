@@ -35,20 +35,21 @@ class SegmentationDataset(torch.utils.data.Dataset):
         dtype=torch.float32,
         label_dtype=torch.float32,
         n_samples=None,
-        sampler=None
+        sampler=None,
+        ndim=None
     ):
         self.raw = open_file(raw_path, mode='r')[raw_key]
         self.labels = open_file(label_path, mode='r')[label_key]
         assert self.raw.shape == self.labels.shape
-        self._ndim = self.raw.ndim
+        self._ndim = self.raw.ndim if ndim is None else ndim
         assert self._ndim in (2, 3)
 
         if roi is not None:
-            assert len(roi) == self._ndim
+            assert len(roi) == self.raw.ndim
             self.raw = RoiWrapper(self.raw, roi)
             self.labels = RoiWrapper(self.labels, roi)
 
-        assert len(patch_shape) == self._ndim
+        assert len(patch_shape) == self.raw.ndim
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform

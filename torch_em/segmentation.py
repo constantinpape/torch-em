@@ -188,6 +188,7 @@ def default_segmentation_loader(
     rois=None,
     n_samples=None,
     sampler=None,
+    ndim=None,
     **loader_kwargs
 ):
     check_paths(raw_paths, label_paths)
@@ -207,7 +208,8 @@ def default_segmentation_loader(
         ds = _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
                                         patch_shape=patch_shape, label_transform=label_transform,
                                         label_transform2=label_transform2, transform=transform,
-                                        rois=rois, n_samples=n_samples, sampler=sampler)
+                                        rois=rois, n_samples=n_samples, sampler=sampler,
+                                        ndim=ndim)
     else:
         if rois is not None:
             raise ValueError("Image collection dataset does not support a ROI")

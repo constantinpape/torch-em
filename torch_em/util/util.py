@@ -27,12 +27,15 @@ def ensure_tensor_with_channels(tensor, ndim, dtype=None):
     assert ndim in (2, 3)
     tensor = ensure_tensor(tensor, dtype)
     if ndim == 2:
-        assert tensor.ndim in (2, 3, 4)
+        assert tensor.ndim in (2, 3, 4, 5)
         if tensor.ndim == 2:
             tensor = tensor[None]
         elif tensor.ndim == 4:
             assert tensor.shape[0] == 1
             tensor = tensor[0]
+        elif tensor.ndim == 5:
+            assert tensor.shape[:2] == (1, 1)
+            tensor = tensor[0, 0]
     else:
         assert tensor.ndim in (3, 4, 5)
         if tensor.ndim == 3:
@@ -56,15 +59,18 @@ def ensure_spatial_array(array, ndim, dtype=None):
     assert ndim in (2, 3)
     array = ensure_array(array, dtype)
     if ndim == 2:
-        assert array.ndim in (2, 3, 4)
+        assert array.ndim in (2, 3, 4, 5), str(array.ndim)
         if array.ndim == 3:
             assert array.shape[0] == 1
             array = array[0]
         elif array.ndim == 4:
             assert array.shape[:2] == (1, 1)
             array = array[0, 0]
+        elif array.ndim == 5:
+            assert array.shape[:3] == (1, 1, 1)
+            array = array[0, 0, 0]
     else:
-        assert array.ndim in (3, 4, 5)
+        assert array.ndim in (3, 4, 5), str(array.ndim)
         if array.ndim == 4:
             assert array.shape[0] == 1
             array = array[0]
