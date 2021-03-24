@@ -1,3 +1,4 @@
+import numpy as np
 
 
 #
@@ -35,18 +36,43 @@ def normalize_percentile():
 
 
 #
+# defect augmentations
+#
+
+
+# TODO more defect types
+class EMDefectAugmentation:
+    def __init__(self, p_drop_slice):
+        self.p_drop_slice = p_drop_slice
+
+    def __call__(self, raw):
+        for z in range(raw.shape[0]):
+            if np.random.rand() < self.p_drop_slice:
+                raw[z] = 0
+        return raw
+
+
+#
 # default transformation:
 # apply intensity augmentations and normalize
 #
 
-# TODO noise augmentations
 class RawTransform:
-    def __init__(self, normalizer):
+    def __init__(self, normalizer, augmentation1=None, augmentation2=None):
         self.normalizer = normalizer
+        self.augmentation1 = augmentation1
+        self.augmentation2 = augmentation2
 
     def __call__(self, raw):
-        return self.normalizer(raw)
+        if self.augmentation1 is not None:
+            raw = self.augmentation1(raw)
+        raw = self.normalizer(raw)
+        if self.augmentation2 is not None:
+            raw = self.augmentation2(raw)
+        return raw
 
 
-def get_raw_transform(normalizer=standardize):
-    return RawTransform(normalizer)
+def get_raw_transform(normalizer=standardize, augmentation1=None, augmentation2=None):
+    return RawTransform(normalizer,
+                        augmentation1=augmentation1,
+                        augmentation2=augmentation2)
