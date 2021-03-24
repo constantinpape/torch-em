@@ -100,6 +100,7 @@ def _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
                                  label_paths, label_key,
                                  roi=rois, **kwargs)
     else:
+        assert len(raw_paths) > 0
         if rois is not None:
             assert len(rois) == len(label_paths)
             assert all(isinstance(roi, tuple) for roi in rois)
@@ -206,7 +207,8 @@ def default_segmentation_loader(
 
     if is_seg_dataset:
         ds = _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
-                                        patch_shape=patch_shape, label_transform=label_transform,
+                                        patch_shape=patch_shape,
+                                        raw_transform=raw_transform, label_transform=label_transform,
                                         label_transform2=label_transform2, transform=transform,
                                         rois=rois, n_samples=n_samples, sampler=sampler,
                                         ndim=ndim)
@@ -215,6 +217,7 @@ def default_segmentation_loader(
             raise ValueError("Image collection dataset does not support a ROI")
         ds = _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key,
                                             patch_shape=patch_shape, label_transform=label_transform,
+                                            raw_transform=raw_transform,
                                             label_transform2=label_transform2, transform=transform,
                                             n_samples=n_samples, sampler=sampler)
 
