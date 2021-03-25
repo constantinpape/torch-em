@@ -38,16 +38,45 @@ class TestSegmentation(unittest.TestCase):
         _remove('./logs')
         _remove('./checkpoints')
 
-    def test_semantic_training_3d(self):
-        from torch_em.segmentation import (default_segmentation_loader,
-                                           default_segmentation_trainer)
+    def _test_training(self, model_class, model_kwargs,
+                       train_loader, val_loader, n_iterations):
+        from torch_em.segmentation import default_segmentation_trainer
+        model = model_class(**model_kwargs)
+        trainer = default_segmentation_trainer('test', model,
+                                               train_loader, val_loader,
+                                               mixed_precision=False,
+                                               device=torch.device('cpu'),
+                                               logger=None)
+        train_iters = 51
+        trainer.fit(train_iters)
+
+        def _test_checkpoint(cp_path, check_progress):
+            self.assertTrue(os.path.exists(cp_path))
+            checkpoint = torch.load(cp_path)
+
+            self.assertIn('optimizer_state', checkpoint)
+            self.assertIn('model_state', checkpoint)
+
+            loaded_model = model_class(**model_kwargs)
+            loaded_model.load_state_dict(checkpoint['model_state'])
+
+            if check_progress:
+                self.assertEqual(checkpoint['iteration'], train_iters)
+                self.assertEqual(checkpoint['epoch'], 2)
+
+        _test_checkpoint('./checkpoints/test/latest.pt', True)
+
+        # we might not have a best checkpoint, depending on the validation error for the random data
+        best = './checkpoints/test/best.pt'
+        if os.path.exists(best):
+            _test_checkpoint(best, False)
+
+    def _test_semantic_training_3d(self, model_class, model_kwargs, patch_shape):
+        from torch_em.segmentation import default_segmentation_loader
         from torch_em.transform import labels_to_binary
         from torch_em.data import SegmentationDataset
-        from torch_em.model import UNet3d
-        model = UNet3d(in_channels=1, out_channels=1, initial_features=8, depth=3)
 
         batch_size = 1
-        patch_shape = (64,) * 3
 
         label_trafo = labels_to_binary
 
@@ -61,33 +90,31 @@ class TestSegmentation(unittest.TestCase):
                                                  self.data_path, self.semantic_label_key,
                                                  batch_size, patch_shape,
                                                  label_transform=label_trafo,
-                                                 n_samples=5)
+                                                 n_samples=2)
         self.assertIsInstance(val_loader.dataset, SegmentationDataset)
 
-        trainer = default_segmentation_trainer('test', model,
-                                               train_loader, val_loader,
-                                               mixed_precision=False,
-                                               device=torch.device('cpu'),
-                                               logger=None)
-        train_iters = 51
-        trainer.fit(train_iters)
+        self._test_training(model_class, model_kwargs, train_loader, val_loader, n_iterations=51)
 
-        cp_path = './checkpoints/test/latest.pt'
-        self.assertTrue(os.path.exists(cp_path))
-        checkpoint = torch.load(cp_path)
+    def test_semantic_training_3d(self):
+        from torch_em.model import UNet3d
+        model_kwargs = dict(in_channels=1, out_channels=1, initial_features=4, depth=3)
+        patch_shape = (64,) * 3
+        self._test_semantic_training_3d(UNet3d, model_kwargs, patch_shape)
 
-        self.assertIn('optimizer_state', checkpoint)
-        self.assertIn('model_state', checkpoint)
-        self.assertEqual(checkpoint['iteration'], train_iters)
-        self.assertEqual(checkpoint['epoch'], 2)
+    def test_semantic_training_anisotropic(self):
+        from torch_em.model import AnisotropicUNet
+        model_kwargs = dict(in_channels=1, out_channels=1, initial_features=4,
+                            scale_factors=[[1, 2, 2],
+                                           [2, 2, 2]])
+        patch_shape = (32, 64, 64)
+        self._test_semantic_training_3d(AnisotropicUNet, model_kwargs, patch_shape)
 
     def test_semantic_training_2d(self):
-        from torch_em.segmentation import (default_segmentation_loader,
-                                           default_segmentation_trainer)
+        from torch_em.segmentation import default_segmentation_loader
         from torch_em.transform import labels_to_binary
         from torch_em.data import ImageCollectionDataset
         from torch_em.model import UNet2d
-        model = UNet2d(in_channels=1, out_channels=1, initial_features=8, depth=3)
+        model_kwargs = dict(in_channels=1, out_channels=1, initial_features=8, depth=3)
 
         batch_size = 1
         patch_shape = (256,) * 2
@@ -109,22 +136,7 @@ class TestSegmentation(unittest.TestCase):
                                                  n_samples=5)
         self.assertIsInstance(val_loader.dataset, ImageCollectionDataset)
 
-        trainer = default_segmentation_trainer('test', model,
-                                               train_loader, val_loader,
-                                               mixed_precision=False,
-                                               device=torch.device('cpu'),
-                                               logger=None)
-        train_iters = 51
-        trainer.fit(train_iters)
-
-        cp_path = './checkpoints/test/latest.pt'
-        self.assertTrue(os.path.exists(cp_path))
-        checkpoint = torch.load(cp_path)
-
-        self.assertIn('optimizer_state', checkpoint)
-        self.assertIn('model_state', checkpoint)
-        self.assertEqual(checkpoint['iteration'], train_iters)
-        self.assertEqual(checkpoint['epoch'], 2)
+        self._test_training(UNet2d, model_kwargs, train_loader, val_loader, n_iterations=51)
 
 
 if __name__ == '__main__':
