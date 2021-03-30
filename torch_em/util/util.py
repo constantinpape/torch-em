@@ -27,7 +27,7 @@ def ensure_tensor_with_channels(tensor, ndim, dtype=None):
     assert ndim in (2, 3)
     tensor = ensure_tensor(tensor, dtype)
     if ndim == 2:
-        assert tensor.ndim in (2, 3, 4, 5)
+        assert tensor.ndim in (2, 3, 4, 5), str(tensor.ndim)
         if tensor.ndim == 2:
             tensor = tensor[None]
         elif tensor.ndim == 4:
