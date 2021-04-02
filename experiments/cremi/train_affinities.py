@@ -1,6 +1,5 @@
 import argparse
 import os
-from glob import glob
 import numpy as np
 
 import torch_em
@@ -24,21 +23,31 @@ OFFSETS = [
 ]
 
 
-def get_loader(is_train, patch_shape,
-               batch_size=1, n_samples=None,
-               roi=None):
-
+def samples_to_paths(samples, is_train):
     val_slice = 75
     if is_train:
         # we train on sampleA + sampleB + 0:75 of sampleC
-        paths = glob(os.path.join(ROOT, '*.hdf'))
-        rois = [np.s_[:, :, :], np.s_[:, :, :], np.s_[:val_slice, :, :]]
+        paths = [os.path.join(ROOT, f'sample_{sample}_20160501.hdf') for sample in samples]
+        if len(samples) == 3:
+            rois = [np.s_[:, :, :], np.s_[:, :, :], np.s_[:val_slice, :, :]]
+        elif 'C' in samples:
+            rois = [np.s_[:, :, :], np.s_[:val_slice, :, :]]
+        else:
+            rois = [np.s_[:, :, :], np.s_[:, :, :]]
     else:
-        # we validate on 75:125 of sampleC
+        # we validate on 75:125 of sampleC, regardless of inut samples
         paths = [
             os.path.join(ROOT, 'sample_C_20160501.hdf')
         ]
         rois = [np.s_[val_slice:, :, :]]
+    return paths, rois
+
+
+def get_loader(samples, is_train, patch_shape,
+               batch_size=1, n_samples=None,
+               roi=None):
+
+    paths, rois = samples_to_paths(samples, is_train)
 
     raw_key = 'volumes/raw'
     label_key = 'volumes/labels/neuron_ids'
@@ -104,6 +113,22 @@ def get_model(large_model):
     return model
 
 
+def normalize_samples(samples):
+    if set(samples) == {'A', 'B', 'C'}:
+        samples = ('A', 'B', 'C')
+        prefix = None
+    elif set(samples) == {'A', 'B'}:
+        samples = ('A', 'B')
+        prefix = 'AB'
+    elif set(samples) == {'A', 'C'}:
+        samples = ('A', 'C')
+        prefix = 'AC'
+    elif set(samples) == {'B', 'C'}:
+        samples = ('B', 'C')
+        prefix = 'BC'
+    return samples, prefix
+
+
 def train_affinities(args):
     large_model = bool(args.large_model)
     model = get_model(large_model)
@@ -117,12 +142,15 @@ def train_affinities(args):
     else:
         patch_shape = [32, 360, 360]
 
+    samples, prefix = normalize_samples(args.samples)
     train_loader = get_loader(
+        samples=samples,
         is_train=True,
         patch_shape=patch_shape,
         n_samples=1000
     )
     val_loader = get_loader(
+        samples=samples,
         is_train=False,
         patch_shape=patch_shape,
         n_samples=100
@@ -132,6 +160,8 @@ def train_affinities(args):
                        transform=ApplyAndRemoveMask())
 
     tag = 'large' if large_model else 'default'
+    if prefix is not None:
+        tag += f"_{prefix}"
     name = f"affinity_model_{tag}"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
@@ -180,6 +210,7 @@ if __name__ == '__main__':
     parser.add_argument('--iterations', '-i', type=int, default=int(1e5))
     parser.add_argument('--from_checkpoint', type=int, default=0)
     parser.add_argument('--large_model', '-l', type=int, default=0)
+    parser.add_argument('--samples', type=str, nargs='+', default=['A', 'B', 'C'])
 
     args = parser.parse_args()
 
