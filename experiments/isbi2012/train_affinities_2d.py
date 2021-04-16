@@ -116,9 +116,18 @@ def train_affinties(input_path, use_diagonal_offsets):
     trainer.fit(int(1e4))
 
 
+def print_the_offsets(use_diagonal_offsets):
+    offs = get_offsets(use_diagonal_offsets)
+    print(offs)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', required=True)
     parser.add_argument('-d', '--use_diagonal_offsets', type=int, default=0)
+    parser.add_argument('-p', '--print_offsets', default=0)
     args = parser.parse_args()
-    train_affinties(args.input, bool(args.use_diagonal_offsets))
+    if bool(args.print_offsets):
+        print_the_offsets(bool(args.use_diagonal_offsets))
+    else:
+        train_affinties(args.input, bool(args.use_diagonal_offsets))
