@@ -186,6 +186,8 @@ def default_segmentation_loader(
     label_transform2=None,
     raw_transform=None,
     transform=None,
+    dtype=torch.float32,
+    label_dtype=torch.float32,
     rois=None,
     n_samples=None,
     sampler=None,
@@ -211,7 +213,7 @@ def default_segmentation_loader(
                                         raw_transform=raw_transform, label_transform=label_transform,
                                         label_transform2=label_transform2, transform=transform,
                                         rois=rois, n_samples=n_samples, sampler=sampler,
-                                        ndim=ndim)
+                                        ndim=ndim, dtype=dtype, label_dtype=label_dtype)
     else:
         if rois is not None:
             raise ValueError("Image collection dataset does not support a ROI")

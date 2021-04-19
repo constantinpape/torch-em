@@ -1,6 +1,7 @@
 import argparse
 import os
 
+import torch
 import torch_em
 from torch_em.model import AnisotropicUNet
 
@@ -30,7 +31,8 @@ def get_loader(datasets, patch_shape,
         sampler=sampler,
         n_samples=n_samples,
         num_workers=8*batch_size,
-        shuffle=True
+        shuffle=True,
+        label_dtype=torch.int64
     )
 
 
@@ -76,12 +78,12 @@ def train_boundaries(args, datasets):
 
     # patch shapes:
     if large_model:
-        # largest possible shape for 2080Ti with mixed training
+        # largest possible shape for A100 with mixed training and large model
         # patch_shape = [32, 320, 320]
         patch_shape = [32, 256, 256]
     else:
-        # largest possible shape for A100 with mixed training and large model
-        patch_shape = [32, 256, 256]
+        # largest possible shape for 2080Ti with mixed training
+        patch_shape = [24, 192, 192]
 
     train_sets = [f'{ds}_train' for ds in datasets]
     val_sets = [f'{ds}_val' for ds in datasets]
@@ -99,6 +101,11 @@ def train_boundaries(args, datasets):
         n_samples=100
     )
 
+    loss = torch_em.loss.ContrastiveLoss(
+        delta_var=1.,
+        delta_dist=2.
+    )
+
     tag = 'large' if large_model else 'default'
     if args.train_on_val:
         tag += '_train_on_val'
@@ -108,9 +115,12 @@ def train_boundaries(args, datasets):
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
+        loss=loss,
+        metric=loss,
         learning_rate=5e-5,
         mixed_precision=True,
-        log_image_interval=50
+        log_image_interval=50,
+        logger=None
     )
 
     if args.from_checkpoint:
@@ -134,6 +144,7 @@ def check(datasets, train=True, val=True, n_images=5):
         check_loader(loader, n_images)
 
 
+# TODO adapt visualisation for embeddings in tb / wandb
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--datasets', '-d', type=str, nargs='+', default=['human', 'rat'])
