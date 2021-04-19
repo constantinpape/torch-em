@@ -91,11 +91,11 @@ def train_affinities(args, datasets):
 
     # patch shapes:
     if large_model:
-        # largest possible shape for 2080Ti with mixed training
-        # patch_shape = [32, 320, 320]
+        # largest possible shape for A100 with mixed training and large model
         patch_shape = [32, 256, 256]
     else:
-        # largest possible shape for A100 with mixed training and large model
+        # largest possible shape for 2080Ti with mixed training
+        # patch_shape = [32, 320, 320]
         patch_shape = [32, 256, 256]
 
     train_sets = [f'{ds}_train' for ds in datasets]
