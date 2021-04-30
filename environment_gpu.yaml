@@ -6,10 +6,9 @@ name:
     torch-em
 dependencies:
     - cudatoolkit=10.2  # set correct cuda version for your system
-    # FIXME solver takes ages; try mamba?!
-    # - elf
-    # - numba <=0.50  # need to pin this due to skan dependency in elf
-    # - affogato  # TODO need to put it on conda-forge!
+    - elf
+    - numba <=0.50  # need to pin this due to skan dependency in elf
+    - affogato
     - pip
     - pytorch
     - tensorboard

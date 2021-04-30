@@ -72,8 +72,7 @@ If you want to use the gpu version, make sure to set the correct cuda version fo
 
 You can set up a conda environment with all necessary dependencies like this:
 ```sh
-conda env create -f <ENV>.yaml -n <ENV_NAME> --python 3.7
+conda env create -f <ENV>.yaml -n <ENV_NAME>
 conda activate <ENV_NAME>
-conda install -c conda-forge -c cpape elf affogato "numba<0.50"
 pip install -e .
 ```
