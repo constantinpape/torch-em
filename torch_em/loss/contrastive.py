@@ -10,7 +10,6 @@ def check_consecutive(labels):
     return (labels[0] == 0) and (diff == 1).all()
 
 
-# TODO add less memory hungry (CUDA?) implementation
 # TODO support ignore labels:
 # - ignore_label: ignored in all terms
 # - ignore_dist: ignored in distance term
@@ -19,7 +18,9 @@ class ContrastiveLoss(nn.Module):
     """ Implementation of contrastive loss defined in https://arxiv.org/pdf/1708.02551.pdf
     'Semantic Instance Segmentation with a Discriminative Loss Function'
     """
-    def __init__(self, delta_var, delta_dist, norm='fro', alpha=1., beta=1., gamma=0.001):
+    implementations = (None, 'scatter', 'expand')
+
+    def __init__(self, delta_var, delta_dist, norm='fro', alpha=1., beta=1., gamma=0.001, impl=None):
         super().__init__()
         self.delta_var = delta_var
         self.delta_dist = delta_dist
@@ -28,10 +29,28 @@ class ContrastiveLoss(nn.Module):
         self.beta = beta
         self.gamma = gamma
 
+        assert impl in self.implementations
+        has_torch_scatter = self.has_torch_scatter()
+        if impl is None:
+            self._contrastive_impl = self._scatter_impl_batch if has_torch_scatter else self._expand_impl_batch
+        elif impl == 'scatter':
+            assert has_torch_scatter
+            self._contrastive_impl = self._scatter_impl_batch
+        elif impl == 'expand':
+            self._contrastive_impl = self._expand_impl_batch
+
+    @staticmethod
+    def has_torch_scatter():
+        try:
+            import torch_scatter
+        except ImportError:
+            torch_scatter = None
+        return torch_scatter is not None
+
     # This implementation expands all tensors to match the instance dimensions.
     # Hence it's fast, but has high memory consumption.
     # The implementation does not support masking any instance labels in the loss.
-    def _expand_impl_batch(self, input_batch, target_batch, n_dim):
+    def _expand_impl_batch(self, input_batch, target_batch, ndim):
         # add singleton batch dimension required for further computation
         input_batch = input_batch.unsqueeze(0)
 
@@ -45,11 +64,31 @@ class ContrastiveLoss(nn.Module):
         target_batch = impl.expand_as_one_hot(target_batch, n_instances)
 
         cluster_means, embeddings_per_instance = impl._compute_cluster_means(input_batch,
-                                                                             target_batch, n_dim)
+                                                                             target_batch, ndim)
         variance_term = impl._compute_variance_term(cluster_means, embeddings_per_instance,
-                                                    target_batch, n_dim, self.norm, self.delta_var)
-        distance_term = impl._compute_distance_term(cluster_means, n_instances, n_dim, self.norm, self.delta_dist)
-        regularization_term = impl._compute_regularizer_term(cluster_means, n_instances, n_dim, self.norm)
+                                                    target_batch, ndim, self.norm, self.delta_var)
+        distance_term = impl._compute_distance_term(cluster_means, n_instances, ndim, self.norm, self.delta_dist)
+        regularization_term = impl._compute_regularizer_term(cluster_means, n_instances, ndim, self.norm)
+
+        # compute total loss
+        return self.alpha * variance_term + self.beta * distance_term + self.gamma * regularization_term
+
+    def _scatter_impl_batch(self, input_batch, target_batch, ndim):
+        # add singleton batch dimension required for further computation
+        input_batch = input_batch.unsqueeze(0)
+
+        instance_ids, instance_sizes = torch.unique(target_batch, return_counts=True)
+        n_instances = len(instance_ids)
+        cluster_means = impl._compute_cluster_means_scatter(input_batch, target_batch, ndim,
+                                                            n_lbl=n_instances)
+
+        variance_term = impl._compute_variance_term_scatter(cluster_means, input_batch, target_batch, self.norm,
+                                                            self.delta_var, instance_sizes)
+        distance_term = impl._compute_distance_term_scatter(cluster_means, self.norm, self.delta_dist)
+
+        regularization_term = torch.sum(
+            torch.norm(cluster_means, p=self.norm, dim=1)
+        ).div(n_instances)
 
         # compute total loss
         return self.alpha * variance_term + self.beta * distance_term + self.gamma * regularization_term
@@ -61,13 +100,13 @@ class ContrastiveLoss(nn.Module):
         assert n_batches == target.shape[0]
         assert input_.size()[2:] == target.size()[2:]
 
-        n_dim = input_.dim() - 2
-        assert n_dim in (2, 3)
+        ndim = input_.dim() - 2
+        assert ndim in (2, 3)
 
         # iterate over the batches
         loss = 0.
         for input_batch, target_batch in zip(input_, target):
-            loss_batch = self._expand_impl_batch(input_batch, target_batch, n_dim)
+            loss_batch = self._contrastive_impl(input_batch, target_batch, ndim)
             loss += loss_batch
 
         return loss.div(n_batches)
