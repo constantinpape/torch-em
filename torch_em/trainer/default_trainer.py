@@ -78,7 +78,7 @@ class DefaultTrainer:
         if self.logger_class is None:
             self.logger = None
         else:
-            self.log_dir = './logs'
+            self.log_dir = f'./logs/{self.name}'
             os.makedirs(self.log_dir, exist_ok=True)
             self.logger = self.logger_class(self)
 

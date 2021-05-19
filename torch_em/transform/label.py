@@ -10,9 +10,12 @@ except ImportError:
     compute_affinities = None
 
 
-def connected_components(labels, ndim=None):
+def connected_components(labels, ndim=None, ensure_zero=False):
     labels = ensure_array(labels) if ndim is None else ensure_spatial_array(labels, ndim)
-    return skimage.measure.label(labels)
+    labels = skimage.measure.label(labels)
+    if ensure_zero and 0 not in labels:
+        labels -= 1
+    return labels
 
 
 def labels_to_binary(labels, background_label=0):
