@@ -61,6 +61,11 @@ class ContrastiveLoss(nn.Module):
         elif impl == 'expand':
             self._contrastive_impl = self._expand_impl_batch
 
+        # all torch_em classes should store init kwargs to easily recreate the init call
+        self.init_kwargs = {'detal_var': delta_var, 'delta_dist': delta_dist, 'norm': norm,
+                            'alpha': alpha, 'beta': beta, 'gamma': gamma, 'ignore_label': ignore_label,
+                            'impl': impl}
+
     @staticmethod
     def has_torch_scatter():
         try:

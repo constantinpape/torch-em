@@ -224,6 +224,8 @@ def default_segmentation_loader(
                                             n_samples=n_samples, sampler=sampler)
 
     loader = torch.utils.data.DataLoader(ds, batch_size=batch_size, **loader_kwargs)
+    # monkey patch shuffle attribute to the loader
+    loader.shuffle = loader_kwargs.get('shuffle', False)
     return loader
 
 

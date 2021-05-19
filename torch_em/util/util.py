@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import torch
 
@@ -78,3 +79,37 @@ def ensure_spatial_array(array, ndim, dtype=None):
             assert array.shape[:2] == (1, 1)
             array = array[0, 0]
     return array
+
+
+def get_constructor_arguments(obj):
+
+    # all relevant torch_em classes have 'init_kwargs' to
+    # directly recover the init call
+    if hasattr(obj, 'init_kwargs'):
+        return getattr(obj, 'init_kwargs')
+
+    def _get_args(obj, param_names):
+        return {name: getattr(obj, name) for name in param_names}
+
+    # we don't need to find the constructor arguments for optimizers,
+    # because we deserialize the state later
+    if isinstance(obj, torch.optim.Optimizer):
+        return {}
+
+    # recover the arguments for torch dataloader
+    elif isinstance(obj, torch.utils.data.DataLoader):
+        # These are all the "simple" arguements.
+        # 'sampler', 'batch_sampler' and 'worker_init_fn' are more complicated
+        # and generally not used in torch_em
+        return _get_args(obj, ['batch_size', 'shuffle', 'num_workers',
+                               'pin_memory', 'drop_last', 'persistent_workers',
+                               'prefetch_factor', 'timeout'])
+
+    # TODO support common torch losses (e.g. CrossEntropy, BCE)
+
+    warnings.warn(
+        f"Constructor arguments for {type(obj)} cannot be deduced." +
+        "For this object, empty constructor arguments will be used." +
+        "Hence, the trainer can probably not be correctly deserialized via 'DefaultTrainer.from_checkpoint'."
+    )
+    return {}

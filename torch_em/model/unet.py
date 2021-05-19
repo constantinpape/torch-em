@@ -373,6 +373,11 @@ class UNet2d(UNetBase):
             out_conv=out_conv,
             final_activation=final_activation
         )
+        self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'depth': depth,
+                            'initial_features': initial_features, 'gain': gain,
+                            'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
+                            'conv_block_impl': conv_block_impl, 'pooler_impl': pooler_impl,
+                            'sampler_impl': sampler_impl, **conv_block_kwargs}
 
 
 #
@@ -445,6 +450,11 @@ class AnisotropicUNet(UNetBase):
             out_conv=out_conv,
             final_activation=final_activation
         )
+        self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'scale_factors': scale_factors,
+                            'initial_features': initial_features, 'gain': gain,
+                            'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
+                            'conv_block_impl': conv_block_impl, 'anisotropic_kernel': anisotropic_kernel,
+                            **conv_block_kwargs}
 
 
 class UNet3d(AnisotropicUNet):
@@ -467,3 +477,7 @@ class UNet3d(AnisotropicUNet):
                          return_side_outputs=return_side_outputs,
                          anisotropic_kernel=False,
                          conv_block_impl=conv_block_impl, **conv_block_kwargs)
+        self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'depth': depth,
+                            'initial_features': initial_features, 'gain': gain,
+                            'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
+                            'conv_block_impl': conv_block_impl, **conv_block_kwargs}
