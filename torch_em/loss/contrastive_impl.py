@@ -119,13 +119,13 @@ def expand_as_one_hot(input_, C, ignore_label=None):
         input_ = input_.clone()
         input_[input_ == ignore_label] = 0
         # scatter to get the one-hot tensor
-        result = torch.zeros(output_shape).to(input_.device).scatter_(1, input_, 1)
+        result = torch.zeros(output_shape, device=input_.device).scatter_(1, input_, 1)
         # bring back the ignore_label in the result
         result[mask] = ignore_label
         return result
     else:
         # scatter to get the one-hot tensor
-        return torch.zeros(output_shape).to(input_.device).scatter_(1, input_, 1)
+        return torch.zeros(output_shape, device=input_.device).scatter_(1, input_, 1)
 
 
 def _compute_cluster_means(input_, target, ndim):

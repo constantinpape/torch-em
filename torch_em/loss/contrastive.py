@@ -12,8 +12,7 @@ def check_consecutive(labels):
     return (labels[0] == 0) and (diff == 1).all()
 
 
-# TODO support ignore labels:
-# - ignore_label: ignored in all terms
+# TODO support more sophisticated ignore labels:
 # - ignore_dist: ignored in distance term
 # - ignore_var: ignored in variance term
 class ContrastiveLoss(nn.Module):
@@ -31,11 +30,15 @@ class ContrastiveLoss(nn.Module):
         aplpha [float] -
         beta [float] -
         gamma [float] -
+        ignore_label [int] -
         impl [str] -
     """
     implementations = (None, 'scatter', 'expand')
 
-    def __init__(self, delta_var, delta_dist, norm='fro', alpha=1., beta=1., gamma=0.001, impl=None):
+    def __init__(self, delta_var, delta_dist, norm='fro',
+                 alpha=1., beta=1., gamma=0.001,
+                 ignore_label=None, impl=None):
+        assert ignore_label is None, "Not implemented"  # TODO
         super().__init__()
         self.delta_var = delta_var
         self.delta_dist = delta_dist
@@ -43,6 +46,7 @@ class ContrastiveLoss(nn.Module):
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+        self.ignore_label = ignore_label
 
         assert impl in self.implementations
         has_torch_scatter = self.has_torch_scatter()
