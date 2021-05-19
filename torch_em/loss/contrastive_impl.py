@@ -43,9 +43,8 @@ def _compute_distance_term_scatter(cluster_means, norm, delta_dist):
 
     # create matrix for the repulsion distance (i.e. cluster centers further apart than 2 * delta_dist
     # are not longer repulsed)
-    repulsion_dist = 2 * delta_dist * (1 - torch.eye(C))
     # CxC
-    repulsion_dist = repulsion_dist.to(cluster_means.device)
+    repulsion_dist = 2 * delta_dist * (1 - torch.eye(C, device=cluster_means.device))
     # zero out distances grater than 2*delta_dist (CxC)
     hinged_dist = torch.clamp(repulsion_dist - dist_matrix, min=0) ** 2
     # sum all of the hinged pair-wise distances
@@ -54,13 +53,20 @@ def _compute_distance_term_scatter(cluster_means, norm, delta_dist):
     return hinged_dist / (C * (C - 1))
 
 
+# NOTE: it would be better to not expand the instance sizes spatially, but instead expand the
+# instance dimension once we have the variance summed up and then divide by the instance sizes
+# (both for performance and numerical stability)
 def _compute_variance_term_scatter(cluster_means, embeddings, target, norm, delta_var, instance_sizes):
     ndim = embeddings.ndim - 2
     assert ndim in (2, 3)
     n_instances = cluster_means.shape[0]
+
+    # compute the spatial mean and instance fields by scattering with the
+    # target tensor
     cluster_means_spatial = cluster_means[target]
     instance_sizes_spatial = instance_sizes[target]
 
+    # permute the embedding dimension to axis 1
     if ndim == 2:
         cluster_means_spatial = cluster_means_spatial.permute(0, 3, 1, 2)
         dim_arg = (1, 2)
@@ -69,15 +75,16 @@ def _compute_variance_term_scatter(cluster_means, embeddings, target, norm, delt
         dim_arg = (1, 2, 3)
     assert embeddings.shape == cluster_means_spatial.shape
 
-    embedding_variance = torch.norm(embeddings - cluster_means_spatial, norm, dim=1)
-    assert embedding_variance.shape == instance_sizes_spatial.shape
+    # compute the variance
+    variance = torch.norm(embeddings - cluster_means_spatial, norm, dim=1)
 
-    embedding_variance = torch.clamp(embedding_variance - delta_var, min=0) ** 2
-    embedding_variance.div(instance_sizes_spatial)
-    embedding_variance = torch.sum(embedding_variance, dim=dim_arg)
+    # hinge the variance
+    variance = torch.clamp(variance - delta_var, min=0) ** 2
+    assert variance.shape == instance_sizes_spatial.shape
 
-    embedding_variance = embedding_variance / n_instances
-    return embedding_variance
+    # normalize the variance by instance sizes and number of instances and sum it up
+    variance = torch.sum(variance / instance_sizes_spatial, dim=dim_arg) / n_instances
+    return variance
 
 
 #
@@ -154,27 +161,27 @@ def _compute_cluster_means(input_, target, ndim):
     return mean_embeddings, embeddings_per_instance
 
 
-def _compute_variance_term(cluster_means, embeddings_per_instance, target, ndim, norm, delta_var):
+def _compute_variance_term(cluster_means, embeddings, target, ndim, norm, delta_var):
     dim_arg = (2, 3) if ndim == 2 else (2, 3, 4)
 
     # compute the distance to cluster means, result:(NxCxSPATIAL)
-    embedding_variance = torch.norm(embeddings_per_instance - cluster_means, norm, dim=2)
+    variance = torch.norm(embeddings - cluster_means, norm, dim=2)
 
     # get per instance distances (apply instance mask)
-    embedding_variance = embedding_variance * target
+    assert variance.shape == target.shape
+    variance = variance * target
 
     # zero out distances less than delta_var and sum to get the variance (NxC)
-    embedding_variance = torch.clamp(embedding_variance - delta_var, min=0) ** 2
-    embedding_variance = torch.sum(embedding_variance, dim=dim_arg)
+    variance = torch.clamp(variance - delta_var, min=0) ** 2
+    variance = torch.sum(variance, dim=dim_arg)
 
     # get number of voxels per instance (NxC)
     num_voxels_per_instance = torch.sum(target, dim=dim_arg)
 
     # normalize the variance term
     C = target.size()[1]
-    variance_term = torch.sum(embedding_variance / num_voxels_per_instance, dim=1) / C
-    variance_term = torch.sum(embedding_variance, dim=1) / C
-    return variance_term
+    variance = torch.sum(variance / num_voxels_per_instance, dim=1) / C
+    return variance
 
 
 def _compute_distance_term(cluster_means, C, ndim, norm, delta_dist):
@@ -199,9 +206,9 @@ def _compute_distance_term(cluster_means, C, ndim, norm, delta_dist):
 
     # create matrix for the repulsion distance (i.e. cluster centers further apart than 2 * delta_dist
     # are not longer repulsed)
-    repulsion_dist = 2 * delta_dist * (1 - torch.eye(C))
+    repulsion_dist = 2 * delta_dist * (1 - torch.eye(C, device=cluster_means.device))
     # 1xCxC
-    repulsion_dist = repulsion_dist.unsqueeze(0).to(cluster_means.device)
+    repulsion_dist = repulsion_dist.unsqueeze(0)
     # zero out distances grater than 2*delta_dist (NxCxC)
     hinged_dist = torch.clamp(repulsion_dist - dist_matrix, min=0) ** 2
     # sum all of the hinged pair-wise distances

@@ -1,3 +1,5 @@
+from warnings import warn
+
 import torch
 import torch.nn as nn
 from . import contrastive_impl as impl
@@ -17,6 +19,19 @@ def check_consecutive(labels):
 class ContrastiveLoss(nn.Module):
     """ Implementation of contrastive loss defined in https://arxiv.org/pdf/1708.02551.pdf
     'Semantic Instance Segmentation with a Discriminative Loss Function'
+
+    This class contians different implementations for the discrimnative loss:
+    - based on pure pytorch, expanding the instance dimension, this is not memory efficient
+    - based on pytorch_scatter (https://github.com/rusty1s/pytorch_scatter), this is memory efficient
+
+    Arguments:
+        delta_var [float] -
+        delta_dist [float] -
+        norm [str] -
+        aplpha [float] -
+        beta [float] -
+        gamma [float] -
+        impl [str] -
     """
     implementations = (None, 'scatter', 'expand')
 
@@ -32,6 +47,9 @@ class ContrastiveLoss(nn.Module):
         assert impl in self.implementations
         has_torch_scatter = self.has_torch_scatter()
         if impl is None:
+            if not has_torch_scatter:
+                pt_scatter = 'https://github.com/rusty1s/pytorch_scatter'
+                warn(f"ContrastiveLoss: using pure pytorch implementation. Install {pt_scatter} for memory efficiency.")
             self._contrastive_impl = self._scatter_impl_batch if has_torch_scatter else self._expand_impl_batch
         elif impl == 'scatter':
             assert has_torch_scatter
@@ -56,7 +74,7 @@ class ContrastiveLoss(nn.Module):
 
         # get number of instances in the batch
         instances = torch.unique(target_batch)
-        assert check_consecutive(instances)
+        assert check_consecutive(instances), f"{instances}"
         n_instances = instances.size()[0]
 
         # SPATIAL = D X H X W in 3d case, H X W in 2d case
@@ -67,9 +85,10 @@ class ContrastiveLoss(nn.Module):
                                                                              target_batch, ndim)
         variance_term = impl._compute_variance_term(cluster_means, embeddings_per_instance,
                                                     target_batch, ndim, self.norm, self.delta_var)
-        distance_term = impl._compute_distance_term(cluster_means, n_instances, ndim, self.norm, self.delta_dist)
-        regularization_term = impl._compute_regularizer_term(cluster_means, n_instances, ndim, self.norm)
-
+        distance_term = impl._compute_distance_term(cluster_means, n_instances,
+                                                    ndim, self.norm, self.delta_dist)
+        regularization_term = impl._compute_regularizer_term(cluster_means, n_instances,
+                                                             ndim, self.norm)
         # compute total loss
         return self.alpha * variance_term + self.beta * distance_term + self.gamma * regularization_term
 
