@@ -37,7 +37,7 @@ def get_loader(datasets, patch_shape,
 
 
 def get_model(large_model):
-    n_out = 8
+    n_out = 12
     if large_model:
         print("Using large model")
         model = AnisotropicUNet(
@@ -52,7 +52,7 @@ def get_model(large_model):
             out_channels=n_out,
             initial_features=128,
             gain=2,
-            final_activation='Sigmoid'
+            final_activation=None
         )
     else:
         print("Using vanilla model")
@@ -67,12 +67,12 @@ def get_model(large_model):
             out_channels=n_out,
             initial_features=64,
             gain=2,
-            final_activation='Sigmoid'
+            final_activation=None
         )
     return model
 
 
-def train_boundaries(args, datasets):
+def train_embeddings(args, datasets):
     large_model = bool(args.large_model)
     model = get_model(large_model)
 
@@ -102,8 +102,9 @@ def train_boundaries(args, datasets):
     )
 
     loss = torch_em.loss.ContrastiveLoss(
-        delta_var=1.,
-        delta_dist=2.
+        delta_var=.75,
+        delta_dist=2.,
+        impl='scatter'
     )
 
     tag = 'large' if large_model else 'default'
@@ -119,8 +120,7 @@ def train_boundaries(args, datasets):
         metric=loss,
         learning_rate=5e-5,
         mixed_precision=True,
-        log_image_interval=50,
-        logger=None
+        log_image_interval=50
     )
 
     if args.from_checkpoint:
@@ -144,7 +144,6 @@ def check(datasets, train=True, val=True, n_images=5):
         check_loader(loader, n_images)
 
 
-# TODO adapt visualisation for embeddings in tb / wandb
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--datasets', '-d', type=str, nargs='+', default=['human', 'rat'])
@@ -164,4 +163,4 @@ if __name__ == '__main__':
     if args.check:
         check(datasets, train=True, val=True)
     else:
-        train_boundaries(args, datasets)
+        train_embeddings(args, datasets)
