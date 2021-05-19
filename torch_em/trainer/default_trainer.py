@@ -1,6 +1,7 @@
 import os
 import time
 import warnings
+from importlib import import_module
 
 import numpy as np
 import torch
@@ -9,6 +10,7 @@ from tqdm import tqdm
 
 from .tensorboard_logger import TensorboardLogger
 from .wandb_logger import WandbLogger
+from ..util import get_constructor_arguments
 
 
 class DefaultTrainer:
@@ -54,6 +56,104 @@ class DefaultTrainer:
         self.logger_class = logger
         self.log_image_interval = log_image_interval
 
+    @property
+    def iteration(self):
+        return self._iteration
+
+    @property
+    def epoch(self):
+        return self._epoch
+
+    @classmethod
+    def from_checkpoint(cls, checkpoint_folder, name='best'):
+        save_path = os.path.join(checkpoint_folder, f'{name}.pt')
+        if not os.path.exists(save_path):
+            raise ValueError(f"Cannot find checkpoint {save_path}")
+        save_dict = torch.load(save_path)
+
+        init_data = save_dict['init']
+        model_p, model_m = init_data['model_class'].rsplit('.', 1)
+        model_class = getattr(import_module(model_p), model_m)
+        model = model_class(**init_data['model_kwargs'])
+
+        def _init(name, optional=False, only_class=False):
+            this_cls = init_data.get(f'{name}_class', None)
+            if this_cls is None and optional:
+                return None
+            elif this_cls is None and not optional:
+                raise RuntimeError(f"Could not find init data for {name} in {save_path}")
+            cls_p, cls_m = this_cls.rsplit('.', 1)
+            this_cls = getattr(import_module(cls_p), cls_m)
+            if only_class:
+                return this_cls
+            kwargs = init_data[f'{name}_kwargs']
+            if name == 'optimizer':
+                return this_cls(model.parameters(), **kwargs)
+            else:
+                return this_cls(**kwargs)
+
+        def _init_loader(name):
+            ds = init_data[f'{name}_dataset']
+            loader_kwargs = init_data[f'{name}_loader_kwargs']
+            loader = torch.utils.data.DataLoader(ds, **loader_kwargs)
+            # monkey patch shuffle attribute to the loader
+            loader.shuffle = loader_kwargs.get('shuffle', False)
+            return loader
+
+        trainer = cls(
+            name=os.path.split(checkpoint_folder)[1],
+            train_loader=_init_loader('train'),
+            val_loader=_init_loader('val'),
+            model=model,
+            loss=_init('loss'),
+            optimizer=_init('optimizer'),
+            metric=_init('metric'),
+            device=torch.device(init_data['device']),
+            lr_scheduler=_init('lr_scheduler', optional=True),
+            log_image_interval=init_data['log_image_interval'],
+            mixed_precision=init_data['mixed_precision'],
+            early_stopping=init_data['early_stopping'],
+            logger=_init('logger', only_class=True)
+        )
+
+        trainer._initialize(0, save_dict)
+        print(trainer._iteration, trainer._epoch)
+        return trainer
+
+    def _build_init(self):
+
+        def _full_class_path(obj):
+            return f'{obj.__class__.__module__}.{obj.__class__.__name__}'
+
+        def _update_loader(init_data, loader, name):
+            init_data.update({
+                f'{name}_dataset': loader.dataset,
+                f'{name}_loader_kwargs': get_constructor_arguments(loader)
+            })
+            return init_data
+
+        init_data = {
+            'model_class': _full_class_path(self.model),
+            'model_kwargs': get_constructor_arguments(self.model),
+            'loss_class': _full_class_path(self.loss),
+            'loss_kwargs': get_constructor_arguments(self.loss),
+            'optimizer_class': _full_class_path(self.optimizer),
+            'optimizer_kwargs': get_constructor_arguments(self.optimizer),
+            'metric_class': _full_class_path(self.metric),
+            'metric_kwargs': get_constructor_arguments(self.metric),
+            'device': self.device.type,
+            'log_image_interval': self.log_image_interval,
+            'mixed_precision': self.mixed_precision,
+            'early_stopping': self.early_stopping,
+            'logger_class': None if self.logger is None else _full_class_path(self.logger)
+        }
+        init_data = _update_loader(init_data, self.train_loader, 'train')
+        init_data = _update_loader(init_data, self.val_loader, 'val')
+        if self.lr_scheduler is not None:
+            init_data['lr_scheduler_class'] = _full_class_path(self.lr_scheduler)
+            init_data['lr_scheduler_kwargs'] = _full_class_path(self.lr_scheduler)
+        return init_data
+
     def _initialize(self, iterations, load_from_checkpoint):
         assert self.train_loader is not None
         assert self.val_loader is not None
@@ -82,8 +182,9 @@ class DefaultTrainer:
             os.makedirs(self.log_dir, exist_ok=True)
             self.logger = self.logger_class(self)
 
-        print("Start fitting for", self.max_iteration - self._iteration,
-              "iterations / ", self.max_epoch - self._epoch, "epochs")
+        # this saves all the information that is necessary
+        # to fully load the trainer from the checkpoint
+        self.init_data = self._build_init()
 
         best_metric = np.inf
         return best_metric
@@ -97,6 +198,7 @@ class DefaultTrainer:
             'best_metric': best_metric,
             'model_state': self.model.state_dict(),
             'optimizer_state': self.optimizer.state_dict(),
+            'init': self.init_data
         }
         if self.scaler is not None:
             save_dict.update({'scaler_state': self.scaler.state_dict()})
@@ -104,17 +206,21 @@ class DefaultTrainer:
             save_dict.update({'scheduler_state': self.lr_scheduler.state_dict()})
         torch.save(save_dict, save_path)
 
-    def load_checkpoint(self, name='best'):
-        save_path = os.path.join(self.checkpoint_folder, f'{name}.pt')
-        if not os.path.exists(save_path):
-            warnings.warn(f"Cannot load checkpoint. {save_path} does not exist.")
-            return
-
-        save_dict = torch.load(save_path)
+    def load_checkpoint(self, checkpoint='best'):
+        if isinstance(checkpoint, str):
+            save_path = os.path.join(self.checkpoint_folder, f'{checkpoint}.pt')
+            if not os.path.exists(save_path):
+                warnings.warn(f"Cannot load checkpoint. {save_path} does not exist.")
+                return
+            save_dict = torch.load(save_path)
+        elif isinstance(checkpoint, dict):
+            save_dict = checkpoint
+        else:
+            raise RuntimeError
 
         self._iteration = save_dict['iteration']
         self._epoch = save_dict['epoch']
-        self._ebest_poch = save_dict['best_epoch']
+        self._best_epoch = save_dict['best_epoch']
         self.best_metric = save_dict['best_metric']
 
         self.model.load_state_dict(save_dict['model_state'])
@@ -129,6 +235,8 @@ class DefaultTrainer:
 
     def fit(self, iterations, load_from_checkpoint=None):
         best_metric = self._initialize(iterations, load_from_checkpoint)
+        print("Start fitting for", self.max_iteration - self._iteration,
+              "iterations / ", self.max_epoch - self._epoch, "epochs")
 
         if self.mixed_precision:
             train_epoch = self._train_epoch_mixed

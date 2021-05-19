@@ -13,6 +13,7 @@ class LossWrapper(nn.Module):
         if not callable(transform):
             raise ValueError("transform has to be callable.")
         self.transform = transform
+        self.init_kwargs = {'loss': loss, 'transform': transform}
 
     def apply_transform(self, prediction, target):
         # check if the tensors (prediction and target are lists)

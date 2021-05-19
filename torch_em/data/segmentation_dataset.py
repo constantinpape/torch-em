@@ -38,8 +38,14 @@ class SegmentationDataset(torch.utils.data.Dataset):
         sampler=None,
         ndim=None
     ):
+        self.raw_path = raw_path
+        self.raw_key = raw_key
         self.raw = open_file(raw_path, mode='r')[raw_key]
+
+        self.label_path = label_path
+        self.label_key = label_key
         self.labels = open_file(label_path, mode='r')[label_key]
+
         assert self.raw.shape == self.labels.shape
         self._ndim = self.raw.ndim if ndim is None else ndim
         assert self._ndim in (2, 3)
@@ -130,3 +136,15 @@ class SegmentationDataset(torch.utils.data.Dataset):
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
         labels = ensure_tensor_with_channels(labels, ndim=self._ndim, dtype=self.label_dtype)
         return raw, labels
+
+    # need to overwrite pickle to support h5py
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['raw']
+        del state['labels']
+        return state
+
+    def __setstate__(self, state):
+        state['raw'] = open_file(state['raw_path'], mode='r')[state['raw_key']]
+        state['labels'] = open_file(state['label_path'], mode='r')[state['label_key']]
+        self.__dict__.update(state)
