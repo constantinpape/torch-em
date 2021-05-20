@@ -2,6 +2,7 @@ import os
 import time
 import warnings
 from importlib import import_module
+from typing import Optional
 
 import numpy as np
 import torch
@@ -18,7 +19,7 @@ class DefaultTrainer:
     """
     def __init__(
         self,
-        name,
+        name: Optional[str],
         train_loader=None,
         val_loader=None,
         model=None,
@@ -30,8 +31,11 @@ class DefaultTrainer:
         log_image_interval=100,
         mixed_precision=True,
         early_stopping=None,
-        logger=TensorboardLogger
+        logger=TensorboardLogger,
     ):
+        if name is None and not issubclass(logger, WandbLogger):
+            raise TypeError("Name cannot be None if not using the WandbLogger")
+
         self._generate_name = name is None
         self.name = name
         self.train_loader = train_loader
