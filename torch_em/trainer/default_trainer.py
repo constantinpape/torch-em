@@ -186,6 +186,8 @@ class DefaultTrainer:
         else:
             self.logger = self.logger_class(self)  # may set self.name if self.name is None
 
+        os.makedirs(self.checkpoint_folder, exist_ok=True)
+
         # this saves all the information that is necessary
         # to fully load the trainer from the checkpoint
         self.init_data = self._build_init()
