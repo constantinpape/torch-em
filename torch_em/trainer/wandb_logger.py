@@ -13,6 +13,8 @@ from .tensorboard_logger import normalize_im, make_grid_image
 
 class WandbLogger:
     def __init__(self, trainer):
+        self.log_dir = f"./logs"
+        os.makedirs(self.log_dir, exist_ok=True)
         if wandb is None:
             raise RuntimeError("WandbLogger is not available")
 
@@ -20,6 +22,7 @@ class WandbLogger:
         self.wand_run = wandb.init(
             project=project,
             name=trainer.name,
+            dir=self.log_dir,
             # config={
             # 'learning_rate': trainer.learning_rate, # TODO get learning rate from the optimizer
             # TODO parse more of the config from the trainer
