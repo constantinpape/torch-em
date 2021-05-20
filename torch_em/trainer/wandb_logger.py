@@ -15,12 +15,16 @@ class WandbLogger:
             raise RuntimeError("WandbLogger is not available")
 
         project = os.environ.get("WANDB_PROJECT", None)
-        wandb.init(project=project, config={
-            'name': trainer.name,
+        self.wand_run = wandb.init(
+            project=project,
+            name=trainer.name,
+            # config={
             # 'learning_rate': trainer.learning_rate, # TODO get learning rate from the optimizer
             # TODO parse more of the config from the trainer
-            # ''
-        })
+            # },
+        )
+        if trainer.name is None:
+            trainer.name = self.wand_run.name
 
         self.log_image_interval = trainer.log_image_interval
 
