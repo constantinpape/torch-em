@@ -1,4 +1,6 @@
 import os
+from datetime import datetime
+
 import numpy as np
 
 try:
@@ -11,16 +13,27 @@ from .tensorboard_logger import normalize_im, make_grid_image
 
 class WandbLogger:
     def __init__(self, trainer):
+        self.log_dir = "./logs"
+        os.makedirs(self.log_dir, exist_ok=True)
         if wandb is None:
             raise RuntimeError("WandbLogger is not available")
 
         project = os.environ.get("WANDB_PROJECT", None)
-        wandb.init(project=project, config={
-            'name': trainer.name,
+        self.wand_run = wandb.init(
+            project=project,
+            name=trainer.name,
+            dir=self.log_dir,
+            # config={
             # 'learning_rate': trainer.learning_rate, # TODO get learning rate from the optimizer
             # TODO parse more of the config from the trainer
-            # ''
-        })
+            # },
+        )
+
+        if trainer.name is None:
+            if os.environ["WANDB_MODE"] == "offline":
+                trainer.name = f"offline-{datetime.now()}"
+            else:
+                trainer.name = self.wand_run.name
 
         self.log_image_interval = trainer.log_image_interval
 
