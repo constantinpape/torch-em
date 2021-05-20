@@ -19,5 +19,10 @@ setup(
     author="Constantin Pape",
     install_requires=requires,
     url="https://github.com/constantinpape/torch-em",
-    license="MIT"
+    license="MIT",
+    entry_points={
+        "console_scripts": [
+            "torch_em.export_bioimageio_model = torch_em.util.modelzoo.main"
+        ]
+    }
 )

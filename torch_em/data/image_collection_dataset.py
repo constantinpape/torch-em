@@ -61,6 +61,10 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self._len
 
+    @property
+    def ndim(self):
+        return self._ndim
+
     def _sample_bounding_box(self, shape):
         if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
             raise NotImplementedError("Image padding is not supported yet.")

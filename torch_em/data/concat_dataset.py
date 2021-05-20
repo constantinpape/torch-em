@@ -5,6 +5,7 @@ from torch.utils.data import Dataset
 class ConcatDataset(Dataset):
     def __init__(self, *datasets):
         self.datasets = datasets
+        self.ndim = datasets[0].ndim
 
         # compute the number of samples for each volume
         self.ds_lens = [len(dataset) for dataset in self.datasets]
