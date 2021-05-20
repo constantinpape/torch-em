@@ -1,4 +1,6 @@
 import os
+from datetime import datetime
+
 import numpy as np
 
 try:
@@ -23,8 +25,12 @@ class WandbLogger:
             # TODO parse more of the config from the trainer
             # },
         )
+
         if trainer.name is None:
-            trainer.name = self.wand_run.name
+            if os.environ["WANDB_MODE"] == "offline":
+                trainer.name = f"offline-{datetime.now()}"
+            else:
+                trainer.name = self.wand_run.name
 
         self.log_image_interval = trainer.log_image_interval
 

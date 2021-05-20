@@ -58,6 +58,7 @@ class DefaultTrainer:
 
     @property  # because the logger may generate and set trainer.name on logger.__init__
     def checkpoint_folder(self):
+        assert self.name is not None
         return os.path.join("./checkpoints", self.name)
 
     @property
