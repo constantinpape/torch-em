@@ -31,8 +31,8 @@ def _get_model(trainer):
     model = trainer.model
     model.eval()
     model_kwargs = model.init_kwargs
-    # TODO warn if we strip any non-standard arguments
     # clear the kwargs of non builtins
+    # TODO warn if we strip any non-standard arguments
     model_kwargs = {k: v for k, v in model_kwargs.items()
                     if not isinstance(v, type)}
     return model, model_kwargs
@@ -65,11 +65,30 @@ def _write_depedencies(export_folder, dependencies):
         copyfile(dependencies, dep_path)
 
 
+def _get_normalizer(trainer):
+    dataset = trainer.train_loader.dataset
+    if isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset):
+        dataset = dataset.datasets[0]
+    # TODO the raw transform may contian multiple transformations beside the
+    # normalization functions. Try to parse this to only return the normalization.
+    preprocesser = dataset.raw_transform
+    return preprocesser
+
+
 def _write_data(input_data, model, trainer, export_folder):
-    test_input = _pad(input_data, trainer)
+    # normalize the input data if we have a normalization function
+    normalizer = _get_normalizer(trainer)
+    test_input = input_data if normalizer is None else normalizer(input_data)
+
+    # pad to 4d/5d
+    test_input = _pad(test_input, trainer)
+
+    # run prediction
     with torch.no_grad():
         test_tensor = torch.from_numpy(test_input).to(trainer.device)
         test_output = model(test_tensor).cpu().numpy()
+
+    # save the input / output
     test_in_path = os.path.join(export_folder, 'test_input.npy')
     np.save(test_in_path, test_input)
     test_out_path = os.path.join(export_folder, 'test_output.npy')
@@ -81,7 +100,7 @@ def _write_source(model, export_folder):
     # copy the model source file if it's a torch_em model
     # (for now only u-net). otherwise just put the full python class
     module = str(model.__class__.__module__)
-    cls_name = str(module.__class__.__name__)
+    cls_name = str(model.__class__.__name__)
     if module == 'torch_em.model.unet':
         source_path = os.path.join(
             os.path.split(__file__)[0],
@@ -98,6 +117,7 @@ def _write_source(model, export_folder):
 def _get_kwargs(trainer, name, description,
                 authors, tags,
                 license, documentation,
+                git_repo, cite,
                 export_folder, input_optional_parameters):
     if input_optional_parameters:
         print("Enter values for the optional parameters.")
@@ -121,6 +141,7 @@ def _get_kwargs(trainer, name, description,
             return f'./{fname}'
 
         if is_list and isinstance(val, str):
+            val = val.replace("'", '"')  # enable single quotes
             val = json.loads(val)
         if is_list:
             assert isinstance(val, (list, tuple))
@@ -141,10 +162,20 @@ def _get_kwargs(trainer, name, description,
 
         return [author]
 
+    def _default_repo():
+        try:
+            call_res = subprocess.run(['git', 'remote', '-v'], capture_output=True)
+            repo = call_res.stdout.decode('utf8').split('\n')[0].split()[1]
+            repo = repo if repo else None
+        except Exception:
+            repo = None
+        return repo
+
     # TODO derive better default values:
     # - description: derive something from trainer.ndim, trainer.loss, trainer.model, ...
     # - tags: derive something from trainer.ndim, trainer.loss, trainer.model, ...
     # - documentation: derive something from trainer.ndim, trainer.loss, trainer.model, ...
+    # - cite: make doi for torch_em and add it instead of url + derive citation from model
     kwargs = {
         'name': _get_kwarg('name', name, lambda: trainer.name),
         'description': _get_kwarg('description', name, lambda: trainer.name),
@@ -152,7 +183,11 @@ def _get_kwargs(trainer, name, description,
         'tags': _get_kwarg('tags', tags, lambda: [trainer.name], is_list=True),
         'license': _get_kwarg('license', license, lambda: 'MIT'),
         'documentation': _get_kwarg('documentation', documentation, lambda: trainer.name,
-                                    fname='documentation.md')
+                                    fname='documentation.md'),
+        'git_repo': _get_kwarg('git_repo', git_repo, _default_repo),
+        'cite': _get_kwarg('cite', cite,
+                           lambda: ['https://github.com/constantinpape/torch-em.git'],
+                           is_list=True)
     }
 
     return kwargs
@@ -257,11 +292,16 @@ def _write_covers(test_in_path, test_out_path, export_folder, covers):
 
 
 # TODO support conversion to onnx
+# TODO more options for the bioimageio export:
+# - preprocessing!
+# - variable input / output shapes, halo
+# - config for custom params (e.g. offsets for mws)
 def export_biomageio_model(trainer, input_data, export_folder,
                            dependencies=None, name=None,
                            description=None, authors=None,
                            tags=None, license=None,
                            documentation=None, covers=None,
+                           git_repo=None, cite=None,
                            input_optional_parameters=True):
     """
     """
@@ -295,6 +335,7 @@ def export_biomageio_model(trainer, input_data, export_folder,
     kwargs = _get_kwargs(trainer, name, description,
                          authors, tags,
                          license, documentation,
+                         git_repo, cite,
                          export_folder, input_optional_parameters)
 
     model_spec = build_spec(

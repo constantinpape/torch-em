@@ -91,9 +91,12 @@ def get_constructor_arguments(obj):
     def _get_args(obj, param_names):
         return {name: getattr(obj, name) for name in param_names}
 
-    # we don't need to find the constructor arguments for optimizers,
+    # we don't need to find the constructor arguments for optimizers or schedulers
     # because we deserialize the state later
-    if isinstance(obj, torch.optim.Optimizer):
+    if isinstance(obj, (torch.optim.Optimizer,
+                        torch.optim.lr_scheduler._LRScheduler,
+                        # ReduceLROnPlateau does not inherit from _LRScheduler
+                        torch.optim.lr_scheduler.ReduceLROnPlateau)):
         return {}
 
     # recover the arguments for torch dataloader

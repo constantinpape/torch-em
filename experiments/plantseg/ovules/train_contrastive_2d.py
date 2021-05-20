@@ -29,7 +29,7 @@ def get_loader(split, patch_shape, batch_size,
     label_key = 'label'
     paths = get_paths(split, patch_shape, raw_key)
 
-    sampler = torch_em.data.MinForegroundSampler(min_fraction=0.3, p_reject=1.)
+    sampler = torch_em.data.MinForegroundSampler(min_fraction=0.1, p_reject=1.)
     label_transform = partial(torch_em.transform.label.connected_components, ensure_zero=True)
 
     return torch_em.default_segmentation_loader(
@@ -62,7 +62,9 @@ def get_model():
 
 def train_contrastive(args):
     model = get_model()
-    patch_shape = [1, 384, 384]
+    patch_shape = [1, 736, 688]
+    # can train with larger batch sizes for scatter
+    batch_size = 4 if args.impl == 'scatter' else 1
 
     train_loader = get_loader(
         split='train',

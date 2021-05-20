@@ -22,7 +22,7 @@ setup(
     license="MIT",
     entry_points={
         "console_scripts": [
-            "torch_em.export_bioimageio_model = torch_em.util.modelzoo.main"
+            "torch_em.export_bioimageio_model = torch_em.util.modelzoo:main"
         ]
     }
 )
