@@ -76,6 +76,10 @@ class DefaultTrainer:
         model_class = getattr(import_module(model_p), model_m)
         model = model_class(**init_data['model_kwargs'])
 
+        optimizer_p, optimizer_m = init_data['optimizer_class'].rsplit('.', 1)
+        optimizer_class = getattr(import_module(optimizer_p), optimizer_m)
+        optimizer = optimizer_class(model.parameters(), **init_data['optimizer_kwargs'])
+
         def _init(name, optional=False, only_class=False):
             this_cls = init_data.get(f'{name}_class', None)
             if this_cls is None and optional:
@@ -87,8 +91,8 @@ class DefaultTrainer:
             if only_class:
                 return this_cls
             kwargs = init_data[f'{name}_kwargs']
-            if name == 'optimizer':
-                return this_cls(model.parameters(), **kwargs)
+            if name == 'lr_scheduler':
+                return this_cls(optimizer, **kwargs)
             else:
                 return this_cls(**kwargs)
 
@@ -106,7 +110,7 @@ class DefaultTrainer:
             val_loader=_init_loader('val'),
             model=model,
             loss=_init('loss'),
-            optimizer=_init('optimizer'),
+            optimizer=optimizer,
             metric=_init('metric'),
             device=torch.device(init_data['device']),
             lr_scheduler=_init('lr_scheduler', optional=True),
@@ -117,7 +121,6 @@ class DefaultTrainer:
         )
 
         trainer._initialize(0, save_dict)
-        print(trainer._iteration, trainer._epoch)
         return trainer
 
     def _build_init(self):
@@ -151,7 +154,7 @@ class DefaultTrainer:
         init_data = _update_loader(init_data, self.val_loader, 'val')
         if self.lr_scheduler is not None:
             init_data['lr_scheduler_class'] = _full_class_path(self.lr_scheduler)
-            init_data['lr_scheduler_kwargs'] = _full_class_path(self.lr_scheduler)
+            init_data['lr_scheduler_kwargs'] = get_constructor_arguments(self.lr_scheduler)
         return init_data
 
     def _initialize(self, iterations, load_from_checkpoint):

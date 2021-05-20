@@ -11,7 +11,13 @@ from torch_em.loss import DiceLoss
 from torch_em.model import UNet2d
 from torch_em.trainer import DefaultTrainer
 
+try:
+    import bioimageio
+except ImportError:
+    bioimageio = None
 
+
+@unittest.skipIf(bioimageio is None, "Need bioimageio package")
 class TestModelzoo(unittest.TestCase):
     data_path = './data.h5'
     checkpoint_folder = './checkpoints'
