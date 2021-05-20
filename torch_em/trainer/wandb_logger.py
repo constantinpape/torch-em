@@ -13,7 +13,7 @@ from .tensorboard_logger import normalize_im, make_grid_image
 
 class WandbLogger:
     def __init__(self, trainer):
-        self.log_dir = f"./logs"
+        self.log_dir = "./logs"
         os.makedirs(self.log_dir, exist_ok=True)
         if wandb is None:
             raise RuntimeError("WandbLogger is not available")
