@@ -7,7 +7,6 @@ name:
 dependencies:
     - cudatoolkit=10.2  # set correct cuda version for your system
     - elf
-    - numba <=0.50  # need to pin this due to skan dependency in elf
     - affogato
     - pip
     - pytorch
