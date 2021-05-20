@@ -86,6 +86,10 @@ class SegmentationDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self._len
 
+    @property
+    def ndim(self):
+        return self._ndim
+
     def _sample_bounding_box(self):
         bb_start = [
             np.random.randint(0, sh - psh) if sh - psh > 0 else 0

@@ -113,7 +113,7 @@ class DefaultTrainer:
             log_image_interval=init_data['log_image_interval'],
             mixed_precision=init_data['mixed_precision'],
             early_stopping=init_data['early_stopping'],
-            logger=_init('logger', only_class=True)
+            logger=_init('logger', only_class=True, optional=True)
         )
 
         trainer._initialize(0, save_dict)
