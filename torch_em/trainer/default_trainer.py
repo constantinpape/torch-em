@@ -32,6 +32,7 @@ class DefaultTrainer:
         early_stopping=None,
         logger=TensorboardLogger
     ):
+        self._generate_name = name is None
         self.name = name
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -51,10 +52,13 @@ class DefaultTrainer:
         self.early_stopping = early_stopping
 
         self.scaler = amp.GradScaler() if self.mixed_precision else None
-        self.checkpoint_folder = os.path.join('./checkpoints', self.name)
 
         self.logger_class = logger
         self.log_image_interval = log_image_interval
+
+    @property  # because the logger may generate and set trainer.name on logger.__init__
+    def checkpoint_folder(self):
+        return os.path.join("./checkpoints", self.name)
 
     @property
     def iteration(self):
@@ -176,14 +180,12 @@ class DefaultTrainer:
         self.model.to(self.device)
         self.loss.to(self.device)
 
-        os.makedirs(self.checkpoint_folder, exist_ok=True)
-
         if self.logger_class is None:
             self.logger = None
         else:
             self.log_dir = f'./logs/{self.name}'
             os.makedirs(self.log_dir, exist_ok=True)
-            self.logger = self.logger_class(self)
+            self.logger = self.logger_class(self)  # may set self.name if self.name is None
 
         # this saves all the information that is necessary
         # to fully load the trainer from the checkpoint
@@ -281,6 +283,10 @@ class DefaultTrainer:
 
         print(f"Finished training after {self._epoch} epochs / {self._iteration} iterations.")
         print(f"The best epoch is number {self._best_epoch}.")
+
+        if self._generate_name:
+            self.name = None
+
         # TODO save the model to wandb if we have the wandb logger
         if isinstance(self.logger, WandbLogger):
             self.logger.get_wandb().finish()
