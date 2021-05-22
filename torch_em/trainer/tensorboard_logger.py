@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import torch
 
@@ -76,10 +78,13 @@ def make_embedding_image(image, y, prediction, selection, gradients=None):
 
 class TensorboardLogger:
     def __init__(self, trainer):
+        self.log_dir = f'./logs/{trainer.name}'
+        os.makedirs(self.log_dir, exist_ok=True)
+
         if SummaryWriter is None:
             msg = "Need tensorboard package to use logger. Install it via 'conda install -c conda-forge tensorboard'"
             raise RuntimeError(msg)
-        self.tb = torch.utils.tensorboard.SummaryWriter(trainer.log_dir)
+        self.tb = torch.utils.tensorboard.SummaryWriter(self.log_dir)
         self.log_image_interval = trainer.log_image_interval
 
         # derive which visualisation method is appropriate, based on the loss function

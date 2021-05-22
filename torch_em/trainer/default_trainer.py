@@ -2,6 +2,7 @@ import os
 import time
 import warnings
 from importlib import import_module
+from typing import Optional
 
 import numpy as np
 import torch
@@ -18,7 +19,7 @@ class DefaultTrainer:
     """
     def __init__(
         self,
-        name,
+        name: Optional[str],
         train_loader=None,
         val_loader=None,
         model=None,
@@ -30,8 +31,12 @@ class DefaultTrainer:
         log_image_interval=100,
         mixed_precision=True,
         early_stopping=None,
-        logger=TensorboardLogger
+        logger=TensorboardLogger,
     ):
+        if name is None and not issubclass(logger, WandbLogger):
+            raise TypeError("Name cannot be None if not using the WandbLogger")
+
+        self._generate_name = name is None
         self.name = name
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -51,10 +56,14 @@ class DefaultTrainer:
         self.early_stopping = early_stopping
 
         self.scaler = amp.GradScaler() if self.mixed_precision else None
-        self.checkpoint_folder = os.path.join('./checkpoints', self.name)
 
         self.logger_class = logger
         self.log_image_interval = log_image_interval
+
+    @property  # because the logger may generate and set trainer.name on logger.__init__
+    def checkpoint_folder(self):
+        assert self.name is not None
+        return os.path.join("./checkpoints", self.name)
 
     @property
     def iteration(self):
@@ -177,14 +186,12 @@ class DefaultTrainer:
         self.model.to(self.device)
         self.loss.to(self.device)
 
-        os.makedirs(self.checkpoint_folder, exist_ok=True)
-
         if self.logger_class is None:
             self.logger = None
         else:
-            self.log_dir = f'./logs/{self.name}'
-            os.makedirs(self.log_dir, exist_ok=True)
-            self.logger = self.logger_class(self)
+            self.logger = self.logger_class(self)  # may set self.name if self.name is None
+
+        os.makedirs(self.checkpoint_folder, exist_ok=True)
 
         # this saves all the information that is necessary
         # to fully load the trainer from the checkpoint
@@ -282,6 +289,10 @@ class DefaultTrainer:
 
         print(f"Finished training after {self._epoch} epochs / {self._iteration} iterations.")
         print(f"The best epoch is number {self._best_epoch}.")
+
+        if self._generate_name:
+            self.name = None
+
         # TODO save the model to wandb if we have the wandb logger
         if isinstance(self.logger, WandbLogger):
             self.logger.get_wandb().finish()
