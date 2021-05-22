@@ -73,7 +73,12 @@ test_im = imageio.imread(glob("dsb2018/test/images/*.tif")[0])
 export_bioimageio_model("./checkpoints/dsb-boundary-model", test_im, "./bioimageio-model")
 ```
 
-Check out [expirements/platynereis/train_affinities.py](https://github.com/constantinpape/torch-em/blob/main/experiments/platynereis/mitochondria/train_affinities.py) for a more advanced example.
+Check out [expirements/platynereis/mitochondria/train_affinities.py](https://github.com/constantinpape/torch-em/blob/main/experiments/platynereis/mitochondria/train_affinities.py) for a more advanced example.
+
+
+## Command Line Scripts
+
+TODO
 
 
 ## Installation

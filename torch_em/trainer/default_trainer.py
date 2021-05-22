@@ -65,11 +65,11 @@ class DefaultTrainer:
         return self._epoch
 
     @classmethod
-    def from_checkpoint(cls, checkpoint_folder, name='best'):
+    def from_checkpoint(cls, checkpoint_folder, name='best', device=None):
         save_path = os.path.join(checkpoint_folder, f'{name}.pt')
         if not os.path.exists(save_path):
             raise ValueError(f"Cannot find checkpoint {save_path}")
-        save_dict = torch.load(save_path)
+        save_dict = torch.load(save_path, map_location=device)
 
         init_data = save_dict['init']
         model_p, model_m = init_data['model_class'].rsplit('.', 1)
@@ -104,6 +104,7 @@ class DefaultTrainer:
             loader.shuffle = loader_kwargs.get('shuffle', False)
             return loader
 
+        device = torch.device(init_data['device']) if device is None else torch.device(device)
         trainer = cls(
             name=os.path.split(checkpoint_folder)[1],
             train_loader=_init_loader('train'),
@@ -112,7 +113,7 @@ class DefaultTrainer:
             loss=_init('loss'),
             optimizer=optimizer,
             metric=_init('metric'),
-            device=torch.device(init_data['device']),
+            device=device,
             lr_scheduler=_init('lr_scheduler', optional=True),
             log_image_interval=init_data['log_image_interval'],
             mixed_precision=init_data['mixed_precision'],

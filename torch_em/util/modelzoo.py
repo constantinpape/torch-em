@@ -18,11 +18,15 @@ except ImportError:
 
 
 # try to load from filepath
-def _get_trainer(trainer):
+def _get_trainer(checkpoint, name='best', device=None):
     # try to load from file
-    if isinstance(trainer, str):
-        assert os.path.exists(trainer)
-        trainer = torch_em.trainer.DefaultTrainer.from_checkpoint(trainer)
+    if isinstance(checkpoint, str):
+        assert os.path.exists(checkpoint)
+        trainer = torch_em.trainer.DefaultTrainer.from_checkpoint(checkpoint,
+                                                                  name=name,
+                                                                  device=device)
+    else:
+        trainer = checkpoint
     assert isinstance(trainer, torch_em.trainer.DefaultTrainer)
     return trainer
 
@@ -296,7 +300,7 @@ def _write_covers(test_in_path, test_out_path, export_folder, covers):
 # - preprocessing!
 # - variable input / output shapes, halo
 # - config for custom params (e.g. offsets for mws)
-def export_biomageio_model(trainer, input_data, export_folder,
+def export_biomageio_model(checkpoint, input_data, export_folder,
                            dependencies=None, name=None,
                            description=None, authors=None,
                            tags=None, license=None,
@@ -312,7 +316,7 @@ def export_biomageio_model(trainer, input_data, export_folder,
         raise RuntimeError("Need bioimageio package")
 
     # load trainer and model
-    trainer = _get_trainer(trainer)
+    trainer = _get_trainer(checkpoint)
     model, model_kwargs = _get_model(trainer)
 
     # create the weights
