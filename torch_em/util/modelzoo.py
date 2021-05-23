@@ -1,7 +1,9 @@
-import os
+import functools
 import json
+import os
 import subprocess
 from shutil import copyfile
+from warnings import warn
 
 import imageio
 import numpy as np
@@ -73,10 +75,13 @@ def _get_normalizer(trainer):
     dataset = trainer.train_loader.dataset
     if isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset):
         dataset = dataset.datasets[0]
-    # TODO the raw transform may contian multiple transformations beside the
-    # normalization functions. Try to parse this to only return the normalization.
     preprocesser = dataset.raw_transform
-    return preprocesser
+    try:
+        normalizer = preprocesser.normalizer
+        return normalizer
+    except AttributeError:
+        warn("Could not parse the normalization function, 'preprocessing' field will be empty.")
+        return preprocesser
 
 
 def _write_data(input_data, model, trainer, export_folder):
@@ -206,7 +211,12 @@ def _write_weights(model, export_folder):
 
 def _create_cover(in_path, out_path):
     input_ = np.load(in_path)
+    axis = (0, 2, 3) if input_.ndim == 4 else (0, 2, 3, 4)
+    input_ = torch_em.transform.raw.normalize(input_, axis=axis)
+
     output = np.load(out_path)
+    axis = (0, 2, 3) if output.ndim == 4 else (0, 2, 3, 4)
+    output = torch_em.transform.raw.normalize(output, axis=axis)
 
     def _to_image(data):
         assert data.ndim in (4, 5)
@@ -242,7 +252,6 @@ def _create_cover(in_path, out_path):
         out[:, im1_indices] = im1[:, im1_indices]
         return out
 
-    # TODO double check if this works
     def _grid_im(im0, im1):
         ims_per_row = 3
         n_chan = im1.shape[0]
@@ -251,14 +260,14 @@ def _create_cover(in_path, out_path):
 
         n, m = im_shape
         x, y = ims_per_row * n, n_rows * m
-        out = np.zeros((3, x, y))
+        out = np.zeros((3, y, x))
         images = [im0] + [np.repeat(im1[i:i+1], 3, axis=0) for i in range(n_chan)]
 
         i, j = 0, 0
         for im in images:
             x0, x1 = i * n, (i + 1) * n
             y0, y1 = j * m, (j + 1) * m
-            out[:, x0:x1, y0:y1] = im
+            out[:, y0:y1, x0:x1] = im
 
             i += 1
             if i == ims_per_row:
@@ -295,9 +304,90 @@ def _write_covers(test_in_path, test_out_path, export_folder, covers):
     return cover_path
 
 
+def _get_preprocessing(trainer):
+    ndim = trainer.train_loader.dataset.ndim
+    normalizer = _get_normalizer(trainer)
+
+    if isinstance(normalizer, functools.partial):
+        kwargs = normalizer.keywords
+        normalizer = normalizer.func
+    else:
+        kwargs = {}
+
+    def _get_axes(axis):
+        if axis is None:
+            axes = "cyx" if ndim == 2 else "czyx"
+        else:
+            axes_labels = ['c', 'y', 'x'] if ndim == 2 else ['c', 'z', 'y', 'x']
+            axes = ''.join(axes_labels[i] for i in axis)
+        return axes
+
+    name = f"{normalizer.__module__}.{normalizer.__name__}"
+    if name == 'torch_em.transform.raw.normalize':
+
+        min_, max_ = kwargs.get('minval', None), kwargs.get('maxval', None)
+        axes = _get_axes(kwargs.get('axis', None))
+        assert (min_ is None) == (max_ is None)
+
+        if min_ is None:
+            preprocessing = {
+                "name": "scale_range",
+                "kwargs": {
+                    "mode": 'per_sample',
+                    "axes": axes,
+                    "min_percentile": 0.0,
+                    "max_percentile": 100.0
+                }
+            }
+        else:
+            preprocessing = {
+                "name": "scale_linear",
+                "kwargs": {
+                    "gain": 1. / max_,
+                    "offset": -min_,
+                    "axies": axes
+                }
+            }
+
+    elif name == 'torch_em.transform.raw.standardize':
+
+        mean, std = kwargs.get('mean', None), kwargs.get('std', None)
+        mode = 'fixed' if mean is None else 'per_sample'
+        axes = _get_axes(kwargs.get('axis', None))
+        preprocessing = {
+            "name": "zero_mean_unit_variance",
+            "kwargs": {
+                "mode": mode,
+                "axes": axes
+            }
+        }
+        if mean is not None:
+            preprocessing['kwargs']['mean'] = mean
+        if std is not None:
+            preprocessing['kwargs']['std'] = std
+
+    elif name == 'torch_em.transform.normalize_percentile':
+
+        lower, upper = kwargs.get('lower', 1.0), kwargs.get('upper', 99.0)
+        axes = _get_axes(kwargs.get('axis', None))
+        preprocessing = {
+            "name": "scale_range",
+            "kwargs": {
+                "mode": 'per_sample',
+                "axes": axes,
+                "min_percentile": lower,
+                "max_percentile": upper
+            }
+        }
+
+    else:
+        return None
+
+    return [preprocessing]
+
+
 # TODO support conversion to onnx
 # TODO more options for the bioimageio export:
-# - preprocessing!
 # - variable input / output shapes, halo
 # - config for custom params (e.g. offsets for mws)
 def export_biomageio_model(checkpoint, input_data, export_folder,
@@ -316,7 +406,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
         raise RuntimeError("Need bioimageio package")
 
     # load trainer and model
-    trainer = _get_trainer(checkpoint)
+    trainer = _get_trainer(checkpoint, device='cpu')
     model, model_kwargs = _get_model(trainer)
 
     # create the weights
@@ -341,6 +431,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
                          license, documentation,
                          git_repo, cite,
                          export_folder, input_optional_parameters)
+    preprocessing = _get_preprocessing(trainer)
 
     model_spec = build_spec(
         source=source,
@@ -352,6 +443,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
         root=export_folder,
         dependencies="conda:./environment.yaml",
         covers=cover_path,
+        preprocessing=preprocessing,
         **kwargs
     )
 
