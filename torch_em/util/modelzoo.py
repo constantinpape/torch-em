@@ -386,9 +386,52 @@ def _get_preprocessing(trainer):
     return [preprocessing]
 
 
+def _get_tensor_kwargs(model, model_kwargs):
+    module = str(model.__class__.__module__)
+    name = str(model.__class__.__name__)
+    # can derive tensor kwargs only for known torch_em models (only unet for now)
+    if module == 'torch_em.model.unet':
+        if name == "UNet2d":
+            depth = model_kwargs['depth']
+            step = [1, 1] + [2 ** depth] * 2
+            min_shape = [1, 1] + [2 ** (depth + 1)] * 2
+            halo = [1, 1] + [2 ** (depth - 1)] * 2
+        elif name == "UNet3d":
+            depth = model_kwargs['depth']
+            step = [1, 1] + [2 ** depth] * 3
+            min_shape = [1, 1] + [2 ** (depth + 1)] * 3
+            halo = [1, 1] + [2 ** (depth - 1)] * 3
+        elif name == "AnisotropicUNet":
+            scale_factors = model_kwargs['scale_factors']
+            scale_prod = [
+                int(np.prod(scale_factors[i][d] for i in range(len(scale_factors))))
+                for d in range(3)
+            ]
+            assert len(scale_prod) == 3
+            step = [1, 1] + scale_prod
+            min_shape = [1, 1] + [2 * sp for sp in scale_prod]
+            halo = [1, 1] + [sp // 2 for sp in scale_prod]
+        else:
+            raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
+
+        ref = "input"
+        scale = [1] * len(step)
+        offset = [0] * len(step)
+        tensor_kwargs = {
+            "input_step": step,
+            "input_min_shape": min_shape,
+            "output_reference": ref,
+            "output_scale": scale,
+            "output_offset": offset,
+            "halo": halo
+        }
+        return tensor_kwargs
+    else:
+        return {}
+
+
 # TODO support conversion to onnx
 # TODO more options for the bioimageio export:
-# - variable input / output shapes, halo
 # - config for custom params (e.g. offsets for mws)
 def export_biomageio_model(checkpoint, input_data, export_folder,
                            dependencies=None, name=None,
@@ -419,6 +462,9 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
     # create the model source file
     source = _write_source(model, export_folder)
 
+    # derive the tensor kwargs from the model and its kwargs
+    tensor_kwargs = _get_tensor_kwargs(model, model_kwargs)
+
     # create dependency file
     _write_depedencies(export_folder, dependencies)
 
@@ -431,6 +477,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
                          license, documentation,
                          git_repo, cite,
                          export_folder, input_optional_parameters)
+    kwargs.update(tensor_kwargs)
     preprocessing = _get_preprocessing(trainer)
 
     model_spec = build_spec(
@@ -438,8 +485,8 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
         model_kwargs=model_kwargs,
         weight_uri=weight_path,
         weight_type="pytorch_state_dict",
-        test_inputs=test_in_path,
-        test_outputs=test_out_path,
+        test_inputs=[test_in_path],
+        test_outputs=[test_out_path],
         root=export_folder,
         dependencies="conda:./environment.yaml",
         covers=cover_path,
