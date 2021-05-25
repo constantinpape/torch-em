@@ -121,15 +121,15 @@ class KorniaAugmentationPipeline(torch.nn.Module):
 # Try out:
 # - RandomPerspective
 AUGMENTATIONS = {
-    "RandomHorizontalFlip": {},
-    "RandomVerticalFlip": {},
-    "RandomAffine": {"degrees": 90,
-                     "scale": (0.9, 1.1)},
-    "RandomRotation": {"degrees": 90},
+    "RandomAffine": {"degrees": 90,"scale": (0.9, 1.1)},
+    "RandomAffine3D": {"degrees": (90, 90, 90), "scale": (0.0, 1.1)},
     "RandomDepthicalFlip3D": {},
+    "RandomHorizontalFlip": {},
+    "RandomHorizontalFlip3D": {},
+    "RandomRotation": {"degrees": 90},
     "RandomRotation3D": {"degrees": (90, 90, 90)},
-    "RandomAffine3D": {"degrees": (90, 90, 90),
-                       "scale": (0.0, 1.1)}
+    "RandomVerticalFlip": {},
+    "RandomVerticalFlip3D": {},
 }
 
 
