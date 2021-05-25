@@ -31,7 +31,7 @@ class WandbLogger:
 
         if trainer.name is None:
             if os.environ.get("WANDB_MODE") == "offline":
-                trainer.name = f"offline-{datetime.now()}"
+                trainer.name = f"offline_{datetime.now():%Y-%m-%d_%H-%M-%S}"
             else:
                 trainer.name = self.wand_run.name
 
