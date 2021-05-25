@@ -30,7 +30,7 @@ class WandbLogger:
         )
 
         if trainer.name is None:
-            if os.environ["WANDB_MODE"] == "offline":
+            if os.environ.get("WANDB_MODE") == "offline":
                 trainer.name = f"offline-{datetime.now()}"
             else:
                 trainer.name = self.wand_run.name
@@ -44,17 +44,13 @@ class WandbLogger:
         selection = np.s_[0] if x.ndim == 4 else np.s_[0, :, x.shape[2] // 2]
 
         image = normalize_im(x[selection].cpu())
-        grid_image = make_grid_image(image, y, prediction, selection, gradients)
+        grid_image, grid_name = make_grid_image(image, y, prediction, selection, gradients)
 
         # to numpy and channel last
         image = image.numpy().transpose((1, 2, 0))
-        wandb.log({f"images_{name}/input": [wandb.Image(image, caption='Input Data')]}, step=step)
+        wandb.log({f"images_{name}/input": [wandb.Image(image, caption="Input Data")]}, step=step)
 
         grid_image = grid_image.numpy().transpose((1, 2, 0))
-
-        grid_name = 'raw_targets_predictions'
-        if gradients is not None:
-            grid_name += '_gradients'
 
         wandb.log({f"images_{name}/{grid_name}": [wandb.Image(grid_image, caption=grid_name)]}, step=step)
 
@@ -62,8 +58,7 @@ class WandbLogger:
         wandb.log({"train/loss": loss}, step=step)
         if step % self.log_image_interval == 0:
             gradients = prediction.grad if log_gradients else None
-            self._log_images(step, x, y, prediction, 'train',
-                             gradients=gradients)
+            self._log_images(step, x, y, prediction, "train", gradients=gradients)
 
     def log_validation(self, step, metric, loss, x, y, prediction):
         wandb.log({"validation/loss": loss, "validation/metric": metric}, step=step)
