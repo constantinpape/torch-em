@@ -143,8 +143,8 @@ DEFAULT_3D_AUGMENTATIONS = [
     "RandomDepthicalFlip3D",
 ]
 DEFAULT_ANISOTROPIC_AUGMENTATIONS = [
-    "RandomHorizontalFlip",
-    "RandomVerticalFlip",
+    "RandomHorizontalFlip3D",
+    "RandomVerticalFlip3D",
     "RandomDepthicalFlip3D",
 ]
 
