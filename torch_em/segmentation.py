@@ -1,7 +1,7 @@
 import os
 from glob import glob
 
-import torch
+import torch.utils.data
 from elf.io import open_file
 
 from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
