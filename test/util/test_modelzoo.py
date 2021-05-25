@@ -62,17 +62,16 @@ class TestModelzoo(unittest.TestCase):
         from torch_em.util.modelzoo import export_biomageio_model
         self._create_checkpoint(n_channels)
 
-        export_biomageio_model(
+        success = export_biomageio_model(
             os.path.join(self.checkpoint_folder, self.name),
             np.random.rand(128, 128).astype('float32'),
             self.save_folder,
             input_optional_parameters=False
 
         )
+        self.assertTrue(success)
         self.assertTrue(os.path.exists(self.save_folder))
         self.assertTrue(os.path.exists(os.path.join(self.save_folder, f'{self.name}.model.yaml')))
-
-        # TODO more sophisticated tests
 
     def test_export_single_channel(self):
         self._test_export(1)

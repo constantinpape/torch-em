@@ -12,11 +12,29 @@ import torch_em
 from elf.io import open_file
 
 try:
-    from bioimageio.spec import schema
-    from bioimageio.spec.utils import yaml
-    from bioimageio.spec.utils.build_spec import build_spec
+    from bioimageio import spec
 except ImportError:
-    build_spec = None
+    spec = None
+
+
+#
+# general purpose functionality
+#
+
+
+def normalize_with_batch(data, normalizer):
+    if normalizer is None:
+        return data
+    normalized = np.concatenate(
+        [normalizer(da)[None] for da in data],
+        axis=0
+    )
+    return normalized
+
+
+#
+# utility functions for model export
+#
 
 
 # try to load from filepath
@@ -61,10 +79,10 @@ def _write_depedencies(export_folder, dependencies):
             "dependencies": "pytorch"
         }
         with open(dep_path, 'w') as f:
-            yaml.dump(dependencies, f)
+            spec.utils.yaml.dump(dependencies, f)
     else:
         assert os.path.exists(dependencies)
-        dep = yaml.load(dependencies)
+        dep = spec.utils.yaml.load(dependencies)
         assert "channels" in dep
         assert "name" in dep
         assert "dependencies" in dep
@@ -87,14 +105,15 @@ def _get_normalizer(trainer):
 def _write_data(input_data, model, trainer, export_folder):
     # normalize the input data if we have a normalization function
     normalizer = _get_normalizer(trainer)
-    test_input = input_data if normalizer is None else normalizer(input_data)
 
-    # pad to 4d/5d
-    test_input = _pad(test_input, trainer)
+    # pad to 4d/5d and normalize the input data
+    # NOTE we have to save the padded data, but without normalization
+    test_input = _pad(input_data, trainer)
+    normalized = normalize_with_batch(test_input, normalizer)
 
     # run prediction
     with torch.no_grad():
-        test_tensor = torch.from_numpy(test_input).to(trainer.device)
+        test_tensor = torch.from_numpy(normalized).to(trainer.device)
         test_output = model(test_tensor).cpu().numpy()
 
     # save the input / output
@@ -194,9 +213,7 @@ def _get_kwargs(trainer, name, description,
         'documentation': _get_kwarg('documentation', documentation, lambda: trainer.name,
                                     fname='documentation.md'),
         'git_repo': _get_kwarg('git_repo', git_repo, _default_repo),
-        'cite': _get_kwarg('cite', cite,
-                           lambda: ['https://github.com/constantinpape/torch-em.git'],
-                           is_list=True)
+        'cite': _get_kwarg('cite', cite, lambda: {'training library': 'https://github.com/constantinpape/torch-em.git'})
     }
 
     return kwargs
@@ -204,9 +221,10 @@ def _get_kwargs(trainer, name, description,
 
 def _write_weights(model, export_folder):
     weights = model.state_dict()
-    weight_path = os.path.join(export_folder, 'weights.pt')
+    weight_name = 'weights.pt'
+    weight_path = os.path.join(export_folder, weight_name)
     torch.save(weights, weight_path)
-    return weight_path
+    return f'./{weight_name}'
 
 
 def _create_cover(in_path, out_path):
@@ -345,14 +363,14 @@ def _get_preprocessing(trainer):
                 "kwargs": {
                     "gain": 1. / max_,
                     "offset": -min_,
-                    "axies": axes
+                    "axes": axes
                 }
             }
 
     elif name == 'torch_em.transform.raw.standardize':
 
         mean, std = kwargs.get('mean', None), kwargs.get('std', None)
-        mode = 'fixed' if mean is None else 'per_sample'
+        mode = 'per_sample' if mean is None else 'fixed'
         axes = _get_axes(kwargs.get('axis', None))
         preprocessing = {
             "name": "zero_mean_unit_variance",
@@ -391,16 +409,17 @@ def _get_tensor_kwargs(model, model_kwargs):
     name = str(model.__class__.__name__)
     # can derive tensor kwargs only for known torch_em models (only unet for now)
     if module == 'torch_em.model.unet':
+        inc, outc = model_kwargs['in_channels'], model_kwargs['out_channels']
         if name == "UNet2d":
             depth = model_kwargs['depth']
-            step = [1, 1] + [2 ** depth] * 2
-            min_shape = [1, 1] + [2 ** (depth + 1)] * 2
-            halo = [1, 1] + [2 ** (depth - 1)] * 2
+            step = [0, 0] + [2 ** depth] * 2
+            min_shape = [1, inc] + [2 ** (depth + 1)] * 2
+            halo = [0, 0] + [2 ** (depth - 1)] * 2
         elif name == "UNet3d":
             depth = model_kwargs['depth']
-            step = [1, 1] + [2 ** depth] * 3
-            min_shape = [1, 1] + [2 ** (depth + 1)] * 3
-            halo = [1, 1] + [2 ** (depth - 1)] * 3
+            step = [0, 0] + [2 ** depth] * 3
+            min_shape = [1, inc] + [2 ** (depth + 1)] * 3
+            halo = [0, 0] + [2 ** (depth - 1)] * 3
         elif name == "AnisotropicUNet":
             scale_factors = model_kwargs['scale_factors']
             scale_prod = [
@@ -408,15 +427,19 @@ def _get_tensor_kwargs(model, model_kwargs):
                 for d in range(3)
             ]
             assert len(scale_prod) == 3
-            step = [1, 1] + scale_prod
-            min_shape = [1, 1] + [2 * sp for sp in scale_prod]
-            halo = [1, 1] + [sp // 2 for sp in scale_prod]
+            step = [0, 0] + scale_prod
+            min_shape = [1, inc] + [2 * sp for sp in scale_prod]
+            halo = [0, 0] + [sp // 2 for sp in scale_prod]
         else:
             raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
 
         ref = "input"
-        scale = [1] * len(step)
-        offset = [0] * len(step)
+        if inc == outc:
+            scale = [1] * len(step)
+            offset = [0] * len(step)
+        else:
+            scale = [1, 0] + ([1] * (len(step) - 2))
+            offset = [0, outc] + ([0] * (len(step) - 2))
         tensor_kwargs = {
             "input_step": step,
             "input_min_shape": min_shape,
@@ -430,9 +453,28 @@ def _get_tensor_kwargs(model, model_kwargs):
         return {}
 
 
+def _validate_model(spec_path):
+    model, normalizer, bio_spec = import_bioimageio_model(spec_path, return_spec=True)
+
+    for test_in, test_out in zip(bio_spec.test_inputs, bio_spec.test_outputs):
+        input_, expected = np.load(test_in), np.load(test_out)
+        input_ = normalize_with_batch(input_, normalizer)
+        with torch.no_grad():
+            input_ = torch.from_numpy(input_)
+            output = model(input_).numpy()
+        if not np.allclose(expected, output):
+            return False
+
+    return True
+
+
+#
+# model export functionality
+#
+
+
 # TODO support conversion to onnx
-# TODO more options for the bioimageio export:
-# - config for custom params (e.g. offsets for mws)
+# TODO config: training details derived from loss and optimizer, custom params, e.g. offsets for mws
 def export_biomageio_model(checkpoint, input_data, export_folder,
                            dependencies=None, name=None,
                            description=None, authors=None,
@@ -445,7 +487,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
 
     # TODO update the error message to point
     # to the source for the bioimageio package
-    if build_spec is None:
+    if spec is None:
         raise RuntimeError("Need bioimageio package")
 
     # load trainer and model
@@ -480,13 +522,13 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
     kwargs.update(tensor_kwargs)
     preprocessing = _get_preprocessing(trainer)
 
-    model_spec = build_spec(
+    model_spec = spec.utils.build_spec(
         source=source,
         model_kwargs=model_kwargs,
         weight_uri=weight_path,
         weight_type="pytorch_state_dict",
-        test_inputs=[test_in_path],
-        test_outputs=[test_out_path],
+        test_inputs=[f'./{os.path.split(test_in_path)[1]}'],
+        test_outputs=[f'./{os.path.split(test_out_path)[1]}'],
         root=export_folder,
         dependencies="conda:./environment.yaml",
         covers=cover_path,
@@ -494,14 +536,22 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
         **kwargs
     )
 
-    serialized = schema.Model().dump(model_spec)
+    serialized = spec.schema.Model().dump(model_spec)
     name = trainer.name if name is None else name
     out_path = os.path.join(export_folder, f'{name}.model.yaml')
     with open(out_path, 'w') as f:
-        yaml.dump(serialized, f)
+        spec.utils.yaml.dump(serialized, f)
 
-    # TODO load and validate the model
-    # TODO print links for how to use the export
+    # load and validate the model
+    val_success = _validate_model(out_path)
+
+    if val_success:
+        # TODO print links for how to use the export
+        print(f"The model was successfully exported to '{export_folder}'.")
+    else:
+        warn(f"Validation of the bioimageio model exported to '{export_folder}' has failed. " +
+             "You can use this model, but it will probably yield incorrect results.")
+    return val_success
 
 
 # TODO support bounding boxes
@@ -534,3 +584,112 @@ def main():
     export_biomageio_model(
         args.path, _load_data(args.data, args.key), args.export_folder
     )
+
+
+#
+# model import functionality
+#
+
+def _load_model(bio_spec):
+    model = spec.utils.get_instance(bio_spec)
+    weights = bio_spec.weights["pytorch_state_dict"]
+    state = torch.load(weights.source, map_location='cpu')
+    model.load_state_dict(state)
+    model.eval()
+    return model
+
+
+def _load_normalizer(bio_spec):
+    inputs = bio_spec.inputs[0]
+    preprocessing = inputs.preprocessing
+    if len(preprocessing) == 0:
+        return None
+
+    ndim = len(inputs.axes) - 2
+    shape = inputs.shape
+    if hasattr(shape, 'min'):
+        shape = shape.min
+
+    conf = preprocessing[0]
+    name = conf.name
+    spec_kwargs = conf.kwargs
+
+    def _get_axis(axes):
+        label_to_id = {'c': 0, 'z': 1, 'y': 2, 'x': 3} if ndim == 3 else\
+            {'c': 0, 'y': 1, 'x': 2}
+        axis = tuple(label_to_id[ax] for ax in axes)
+
+        # is the axis full? Then we don't need to specify it.
+        if len(axis) == ndim + 1:
+            return None
+
+        # drop the channel axis if we have only a single channel
+        # (because torch_em squeezes the channel axis in this case)
+        if shape[1] == 1:
+            axis = tuple(ax - 1 for ax in axis if ax > 0)
+        return axis
+
+    if name == 'zero_mean_unit_variance':
+        mode = spec_kwargs['mode']
+        if mode == 'fixed':
+            kwargs = {'mean': spec_kwargs['mean'], 'std': spec_kwargs['std']}
+        else:
+            axis = _get_axis(spec_kwargs['axes'])
+            kwargs = {'axis': axis}
+        normalizer = functools.partial(
+            torch_em.transform.raw.standardize,
+            **kwargs
+        )
+
+    elif name == 'scale_linear':
+        axis = _get_axis(spec_kwargs['axes'])
+        min_ = -spec_kwargs['offset']
+        max_ = 1. / spec_kwargs['gain']
+        kwargs = {'axis': axis, 'minval': min_, 'maxval': max_}
+        normalizer = functools.partial(
+            torch_em.transform.raw.normalize,
+            **kwargs
+        )
+
+    elif name == 'scale_range':
+        assert spec_kwargs.mode == 'per_sample'  # can't parse the other modes right now
+        axis = _get_axis(spec_kwargs['axes'])
+        lower, upper = spec_kwargs['min_percentile'], spec_kwargs['max_percentile']
+        if np.isclose(lower, 0.0) and np.isclose(upper, 100.0):
+            normalizer = functools.partial(
+                torch_em.transform.raw.normalize,
+                axis=axis
+            )
+        else:
+            kwargs = {'axis': axis, 'lower': lower, 'upper': upper}
+            normalizer = functools.partial(
+                torch_em.transform.raw.normalize_percentile,
+                **kwargs
+            )
+
+    else:
+        msg = f"torch_em does not support the use of the biomageio preprocessing function {name}"
+        raise RuntimeError(msg)
+
+    return normalizer
+
+
+def import_bioimageio_model(spec_path, return_spec=False):
+    # TODO update the error message to point
+    # to the source for the bioimageio package
+    if spec is None:
+        raise RuntimeError("Need bioimageio package")
+    bio_spec = spec.load_and_resolve_spec(os.path.abspath(spec_path))
+
+    model = _load_model(bio_spec)
+    normalizer = _load_normalizer(bio_spec)
+
+    if return_spec:
+        return model, normalizer, bio_spec
+    else:
+        return model, normalizer
+
+
+# TODO
+def import_trainer_from_bioimageio_model(spec_path):
+    pass
