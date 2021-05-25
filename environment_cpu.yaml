@@ -9,7 +9,6 @@ dependencies:
     - cpuonly
     - elf
     - pip
-    - pytest
     - pytorch
     - tensorboard
     - tifffile
