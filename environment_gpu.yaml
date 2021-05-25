@@ -5,14 +5,15 @@ channels:
 name:
     torch-em
 dependencies:
+    - affogato
     - cudatoolkit=10.2  # set correct cuda version for your system
     - elf
-    - affogato
     - pip
+    - pytest
     - pytorch
     - tensorboard
-    - torchvision
     - tifffile
+    - torchvision
     - tqdm
     - pip:
         - kornia
