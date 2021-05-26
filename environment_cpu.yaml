@@ -5,9 +5,9 @@ channels:
 name:
     torch-em-cpu
 dependencies:
+    - affogato
     - cpuonly
     - elf
-    - affogato
     - pip
     - pytorch
     - tensorboard
