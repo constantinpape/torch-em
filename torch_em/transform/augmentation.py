@@ -138,9 +138,7 @@ class AugmentationPipeline(torch.nn.Module):
         for ti, (tensor, interpolate) in enumerate(zip(tensors, interpolatable)):
             for ai, aug in enumerate(self.augmentations):
                 self._configure_augmentation(aug, interpolatable)
-                tensor = aug((tensor, trans_matrices[ti]), all_params[ai])
-                if self.return_transform:
-                    tensor, trans_matrices[ti] = tensor
+                tensor, trans_matrices[ti] = aug((tensor, trans_matrices[ti]), all_params[ai])
 
                 if all_params[ai] is None:
                     all_params[ai] = aug._params
