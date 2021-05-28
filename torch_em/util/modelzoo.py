@@ -192,9 +192,12 @@ def _get_kwargs(trainer, name, description,
 
     def _default_repo():
         try:
-            call_res = subprocess.run(['git', 'remote', '-v'], capture_output=True)
-            repo = call_res.stdout.decode('utf8').split('\n')[0].split()[1]
-            repo = repo if repo else None
+            call_res = subprocess.run(["git", "remote", "-v"], capture_output=True)
+            repo = call_res.stdout.decode("utf8").split("\n")[0].split()[1]
+            if repo:
+                repo = repo.replace("git@github.com:", "https://github.com/")
+            else:
+                repo = None
         except Exception:
             repo = None
         return repo
