@@ -6,8 +6,15 @@ import numpy as np
 
 def create_segmentation_test_data(data_path, raw_key, label_key, shape, chunks):
     with h5py.File(data_path, 'a') as f:
-        f.create_dataset(raw_key, data=np.random.rand(*shape), chunks=chunks)
-        f.create_dataset(label_key, data=np.random.randint(0, 4, size=shape), chunks=chunks)
+        try:
+            f.create_dataset(raw_key, data=np.random.rand(*shape), chunks=chunks)
+        except ValueError:  # Unable to create dataset (name already exists)
+            pass
+
+        try:
+            f.create_dataset(label_key, data=np.random.randint(0, 4, size=shape), chunks=chunks)
+        except ValueError:  # Unable to create dataset (name already exists)
+            pass
 
 
 def create_image_collection_test_data(folder, n_images, min_shape, max_shape):
