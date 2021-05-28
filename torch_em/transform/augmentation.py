@@ -1,6 +1,7 @@
-import torch
+import kornia.augmentation.utils
 import numpy as np
-import kornia
+import torch
+from kornia.augmentation import AugmentationBase2D, AugmentationBase3D
 from skimage.transform import resize
 
 from ..util import ensure_tensor
@@ -9,18 +10,18 @@ from ..util import ensure_tensor
 # TODO RandomElastic3D ?
 
 
-class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
-    def __init__(self,
-                 control_point_spacing=1,
-                 sigma=(4., 4.),
-                 alpha=(32., 32.),
-                 resample=kornia.constants.Resample.BILINEAR,
-                 p=0.5,
-                 keepdim=False,
-                 same_on_batch=False):
-        super().__init__(p=p,  # keepdim=keepdim,
-                         same_on_batch=same_on_batch,
-                         return_transform=False)
+class RandomElasticDeformation(AugmentationBase2D):
+    def __init__(
+        self,
+        control_point_spacing: Union[int, Sequence[int]] = 1,
+        sigma=(4.0, 4.0),
+        alpha=(32.0, 32.0),
+        resample=kornia.constants.Resample.BILINEAR,
+        p=0.5,
+        keepdim=False,
+        same_on_batch=False,
+    ):
+        super().__init__(p=p, same_on_batch=same_on_batch, return_transform=False)  # keepdim=keepdim,
         if isinstance(control_point_spacing, int):
             self.control_point_spacing = [control_point_spacing] * 2
         else:
@@ -63,9 +64,9 @@ class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
 
 # TODO implement 'require_halo', and estimate the halo from the transformations
 # so that we can load a bigger block and cut it away
-class KorniaAugmentationPipeline(torch.nn.Module):
-    interpolatable_torch_tpyes = [torch.float16, torch.float32, torch.float64]
-    interpolatable_numpy_types = [np.dtype('float32'), np.dtype('float64')]
+class AugmentationPipeline(torch.nn.Module):
+    interpolatable_torch_types = [torch.float16, torch.float32, torch.float64]
+    interpolatable_numpy_types = [np.dtype("float32"), np.dtype("float64")]
 
     def __init__(self, *kornia_augmentations, dtype=torch.float32):
         super().__init__()

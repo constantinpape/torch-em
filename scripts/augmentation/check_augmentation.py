@@ -3,7 +3,7 @@ import numpy as np
 import h5py
 import kornia
 
-from torch_em.transform.augmentation import KorniaAugmentationPipeline, get_augmentations
+from torch_em.transform.augmentation import AugmentationPipeline, get_augmentations
 from torch_em.transform.augmentation import RandomElasticDeformation
 
 pr = '/g/schwab/hennies/project_segmentation_paper/ds_sbem-6dpf-1-whole/seg_210122_mito/seg_10nm/gt_cubes/gt000/raw_256.h5'
@@ -21,7 +21,7 @@ def check_kornia_augmentation():
         degrees=90., p=1.
     )
 
-    trafo = KorniaAugmentationPipeline(
+    trafo = AugmentationPipeline(
         rot
     )
 
