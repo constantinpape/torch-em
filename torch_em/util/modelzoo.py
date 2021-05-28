@@ -1,6 +1,7 @@
 import functools
 import json
 import os
+import pathlib
 import subprocess
 from shutil import copyfile
 from warnings import warn
@@ -682,7 +683,7 @@ def import_bioimageio_model(spec_path, return_spec=False):
     # to the source for the bioimageio package
     if spec is None:
         raise RuntimeError("Need bioimageio package")
-    bio_spec = spec.load_and_resolve_spec(os.path.abspath(spec_path))
+    bio_spec = spec.load_and_resolve_spec(pathlib.Path(spec_path).absolute())
 
     model = _load_model(bio_spec)
     normalizer = _load_normalizer(bio_spec)
