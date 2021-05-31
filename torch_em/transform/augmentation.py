@@ -99,7 +99,8 @@ class KorniaAugmentationPipeline(torch.nn.Module):
         else:
             return tensor.dtype in self.interpolatable_numpy_types
 
-    def _configure_augmentation(self, augmentation: KorniaAugmentation, interpolatable):
+    @staticmethod
+    def _configure_augmentation(augmentation: KorniaAugmentation, interpolatable):
         interpolating = "interpolation" in getattr(augmentation, "flags", [])
         if interpolating:
             resampler = kornia.constants.Resample.get("BILINEAR" if interpolatable else "NEAREST")
