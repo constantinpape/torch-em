@@ -12,17 +12,17 @@ from ..util import ensure_tensor
 
 
 class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
-    def __init__(
-        self,
-        control_point_spacing: Union[int, Sequence[int]] = 1,
-        sigma=(4.0, 4.0),
-        alpha=(32.0, 32.0),
-        resample=kornia.constants.Resample.BILINEAR,
-        p=0.5,
-        keepdim=False,
-        same_on_batch=False,
-    ):
-        super().__init__(p=p, same_on_batch=same_on_batch, return_transform=False)  # keepdim=keepdim,
+    def __init__(self,
+                 control_point_spacing: Union[int, Sequence[int]] = 1,
+                 sigma=(4.0, 4.0),
+                 alpha=(32.0, 32.0),
+                 resample=kornia.constants.Resample.BILINEAR,
+                 p=0.5,
+                 keepdim=False,
+                 same_on_batch=False):
+        super().__init__(p=p,  # keepdim=keepdim,
+                         same_on_batch=same_on_batch,
+                         return_transform=False)
         if isinstance(control_point_spacing, int):
             self.control_point_spacing = [control_point_spacing] * 2
         else:
