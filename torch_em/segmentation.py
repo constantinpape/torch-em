@@ -161,7 +161,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key,
     return ds
 
 
-def _get_default_transform(path, key, is_seg_dataset):
+def _get_default_transform(path, key, is_seg_dataset, return_transforms: bool = False):
     if is_seg_dataset:
         with open_file(path, mode='r') as f:
             shape = f[key].shape
@@ -173,7 +173,7 @@ def _get_default_transform(path, key, is_seg_dataset):
                 ndim = 'anisotropic' if shape[0] < shape[1] // 2 else 3
     else:
         ndim = 2
-    return get_augmentations(ndim)
+    return get_augmentations(ndim, return_transforms=return_transforms)
 
 
 def default_segmentation_loader(

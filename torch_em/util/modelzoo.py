@@ -1,6 +1,7 @@
 import functools
 import json
 import os
+import pathlib
 import subprocess
 from shutil import copyfile
 from warnings import warn
@@ -192,9 +193,12 @@ def _get_kwargs(trainer, name, description,
 
     def _default_repo():
         try:
-            call_res = subprocess.run(['git', 'remote', '-v'], capture_output=True)
-            repo = call_res.stdout.decode('utf8').split('\n')[0].split()[1]
-            repo = repo if repo else None
+            call_res = subprocess.run(["git", "remote", "-v"], capture_output=True)
+            repo = call_res.stdout.decode("utf8").split("\n")[0].split()[1]
+            if repo:
+                repo = repo.replace("git@github.com:", "https://github.com/")
+            else:
+                repo = None
         except Exception:
             repo = None
         return repo
@@ -679,7 +683,7 @@ def import_bioimageio_model(spec_path, return_spec=False):
     # to the source for the bioimageio package
     if spec is None:
         raise RuntimeError("Need bioimageio package")
-    bio_spec = spec.load_and_resolve_spec(os.path.abspath(spec_path))
+    bio_spec = spec.load_and_resolve_spec(pathlib.Path(spec_path).absolute())
 
     model = _load_model(bio_spec)
     normalizer = _load_normalizer(bio_spec)

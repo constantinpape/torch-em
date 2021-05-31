@@ -1,6 +1,8 @@
-import torch
+from typing import List, Optional, Sequence, Tuple, Union
+
+import kornia.augmentation.utils
 import numpy as np
-import kornia
+import torch
 from skimage.transform import resize
 
 from ..util import ensure_tensor
@@ -11,9 +13,9 @@ from ..util import ensure_tensor
 
 class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
     def __init__(self,
-                 control_point_spacing=1,
-                 sigma=(4., 4.),
-                 alpha=(32., 32.),
+                 control_point_spacing: Union[int, Sequence[int]] = 1,
+                 sigma=(4.0, 4.0),
+                 alpha=(32.0, 32.0),
                  resample=kornia.constants.Resample.BILINEAR,
                  p=0.5,
                  keepdim=False,
@@ -61,15 +63,22 @@ class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
         )
 
 
+KorniaAugmentation = Union[kornia.augmentation.AugmentationBase2D, kornia.augmentation.AugmentationBase3D]
+
 # TODO implement 'require_halo', and estimate the halo from the transformations
 # so that we can load a bigger block and cut it away
 class KorniaAugmentationPipeline(torch.nn.Module):
-    interpolatable_torch_tpyes = [torch.float16, torch.float32, torch.float64]
-    interpolatable_numpy_types = [np.dtype('float32'), np.dtype('float64')]
+    interpolatable_torch_types = [torch.float16, torch.float32, torch.float64]
+    interpolatable_numpy_types = [np.dtype("float32"), np.dtype("float64")]
 
-    def __init__(self, *kornia_augmentations, dtype=torch.float32):
+    def __init__(self, *augmentations: KorniaAugmentation, return_transform: bool = False, dtype=torch.float32):
         super().__init__()
-        self.augmentations = torch.nn.ModuleList(kornia_augmentations)
+        self.return_transform = return_transform
+        self.is3D = any(isinstance(aug, kornia.augmentation.AugmentationBase3D) for aug in augmentations)
+        for aug in augmentations:
+            aug.return_transform = return_transform
+
+        self.augmentations: Sequence[KorniaAugmentation] = torch.nn.ModuleList(augmentations)  # type: ignore
         self.dtype = dtype
         self.halo = self.compute_halo()
 
@@ -90,31 +99,74 @@ class KorniaAugmentationPipeline(torch.nn.Module):
         else:
             return tensor.dtype in self.interpolatable_numpy_types
 
-    def transform_tensor(self, augmentation, tensor, interpolatable, params=None):
-        interpolating = 'interpolation' in getattr(augmentation, 'flags', [])
+    @staticmethod
+    def _configure_augmentation(augmentation: KorniaAugmentation, interpolatable):
+        interpolating = "interpolation" in getattr(augmentation, "flags", [])
         if interpolating:
-            resampler = kornia.constants.Resample.get('BILINEAR' if interpolatable else 'NEAREST')
-            augmentation.flags['interpolation'] = torch.tensor(resampler.value)
+            resampler = kornia.constants.Resample.get("BILINEAR" if interpolatable else "NEAREST")
+            augmentation.flags["interpolation"] = torch.tensor(resampler.value)
 
-        transformed = augmentation(tensor, params)
-        return transformed, augmentation._params
+    def _get_eye(self, tensor: torch.Tensor):
+        return kornia.eye_like(4 if self.is3D else 3, tensor)
 
-    def forward(self, *tensors):
+    def ensure_batch_tensor(self, tensor: torch.Tensor):
+        ensure_batch = (
+            kornia.augmentation.utils.helpers._transform_input3d
+            if self.is3D
+            else kornia.augmentation.utils.helpers._transform_input
+        )
+        return ensure_batch(ensure_tensor(tensor, self.dtype))
+
+    def forward(
+        self, *tensors, trans_matrices: Optional[Sequence[torch.Tensor]] = None
+    ) -> Union[List[torch.Tensor], Tuple[List[torch.Tensor], List[torch.Tensor]]]:
         interpolatable = [self.is_interpolatable(tensor) for tensor in tensors]
-        tensors = [ensure_tensor(tensor, self.dtype) for tensor in tensors]
-        for aug in self.augmentations:
+        tensors = [self.ensure_batch_tensor(tensor) for tensor in tensors]
 
-            t0, params = self.transform_tensor(aug, tensors[0], interpolatable[0])
-            transformed_tensors = [t0]
-            for tensor, interpolate in zip(tensors[1:], interpolatable[1:]):
-                tensor, _ = self.transform_tensor(aug, tensor, interpolate, params=params)
-                transformed_tensors.append(tensor)
+        if trans_matrices is None:
+            trans_matrices = [self._get_eye(t) for t in tensors]
+        else:
+            trans_matrices = list(trans_matrices)
 
-            tensors = transformed_tensors
-        return tensors
+        assert len(trans_matrices) == len(tensors)
+        for ti, tensor in enumerate(tensors):
+            if trans_matrices[ti] is None:
+                trans_matrices[ti] = self._get_eye(tensor)
+
+        transformed_tensors = []
+        all_params = [None] * len(self.augmentations)
+        for ti, (tensor, interpolate) in enumerate(zip(tensors, interpolatable)):
+            for ai, aug in enumerate(self.augmentations):
+                self._configure_augmentation(aug, interpolatable)
+                tensor, trans_matrices[ti] = aug((tensor, trans_matrices[ti]), all_params[ai])
+
+                if all_params[ai] is None:
+                    all_params[ai] = aug._params
+                else:
+                    assert all_params[ai] == aug._params
+
+            transformed_tensors.append(tensor)
+
+        return (transformed_tensors, trans_matrices) if self.return_transform else transformed_tensors
 
     def halo(self, shape):
         return self.halo
+
+    def apply_inverse_affine(
+        self, *tensors: torch.Tensor, forward_transforms: Sequence[torch.Tensor], padding_mode="border"
+    ):
+        assert len(tensors) == len(forward_transforms)
+        trans_matrices = torch.linalg.inv(torch.stack(list(forward_transforms)))
+        return [
+            kornia.warp_affine3d(
+                src=t,
+                M=m,
+                dsize=t.shape[-3:],
+                flags="bliinear" if self.is_interpolatable(t) else "nearest",
+                padding_mode=padding_mode,
+            )
+            for t, m in zip(tensors, trans_matrices)
+        ]
 
 
 # TODO elastic deformation
@@ -133,25 +185,12 @@ AUGMENTATIONS = {
 }
 
 
-DEFAULT_2D_AUGMENTATIONS = [
-    "RandomHorizontalFlip",
-    "RandomVerticalFlip"
-]
-DEFAULT_3D_AUGMENTATIONS = [
-    "RandomHorizontalFlip3D",
-    "RandomVerticalFlip3D",
-    "RandomDepthicalFlip3D",
-]
-DEFAULT_ANISOTROPIC_AUGMENTATIONS = [
-    "RandomHorizontalFlip3D",
-    "RandomVerticalFlip3D",
-    "RandomDepthicalFlip3D",
-]
+DEFAULT_2D_AUGMENTATIONS = ["RandomHorizontalFlip", "RandomVerticalFlip"]
+DEFAULT_3D_AUGMENTATIONS = ["RandomHorizontalFlip3D", "RandomVerticalFlip3D", "RandomDepthicalFlip3D"]
+DEFAULT_ANISOTROPIC_AUGMENTATIONS = ["RandomHorizontalFlip3D", "RandomVerticalFlip3D", "RandomDepthicalFlip3D"]
 
 
-def get_augmentations(ndim=2,
-                      transforms=None,
-                      dtype=torch.float32):
+def get_augmentations(ndim=2, transforms=None, dtype=torch.float32, return_transforms: bool = False):
     if transforms is None:
         assert ndim in (2, 3, "anisotropic"), f"Expect ndim to be one of (2, 3, 'anisotropic'), got {ndim}"
         if ndim == 2:
@@ -160,15 +199,6 @@ def get_augmentations(ndim=2,
             transforms = DEFAULT_3D_AUGMENTATIONS
         else:
             transforms = DEFAULT_ANISOTROPIC_AUGMENTATIONS
-        transforms = [
-            getattr(kornia.augmentation, trafo)(**AUGMENTATIONS[trafo])
-            for trafo in transforms
-        ]
+        transforms = [getattr(kornia.augmentation, trafo)(**AUGMENTATIONS[trafo]) for trafo in transforms]
 
-    assert all(isinstance(trafo, kornia.augmentation.base._AugmentationBase)
-               for trafo in transforms)
-    augmentations = KorniaAugmentationPipeline(
-        *transforms,
-        dtype=dtype
-    )
-    return augmentations
+    return KorniaAugmentationPipeline(*transforms, dtype=dtype, return_transform=return_transforms)

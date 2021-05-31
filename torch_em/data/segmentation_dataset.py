@@ -1,14 +1,16 @@
-import torch
 import numpy as np
+import torch
 from elf.io import open_file
 from elf.wrapper import RoiWrapper
+from torch.utils.data import Dataset
 
 from ..util import ensure_tensor_with_channels
 
 
-class SegmentationDataset(torch.utils.data.Dataset):
+class SegmentationDataset(Dataset):
     """
     """
+
     max_sampling_attempts = 500
 
     @staticmethod
