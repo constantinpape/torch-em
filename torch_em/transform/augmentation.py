@@ -3,9 +3,6 @@ from typing import List, Optional, Sequence, Tuple, Union
 import kornia.augmentation.utils
 import numpy as np
 import torch
-from kornia import warp_affine3d
-from kornia.augmentation import AugmentationBase2D, AugmentationBase3D
-from kornia.augmentation.base import _AugmentationBase as Augmentation
 from skimage.transform import resize
 
 from ..util import ensure_tensor
@@ -14,7 +11,7 @@ from ..util import ensure_tensor
 # TODO RandomElastic3D ?
 
 
-class RandomElasticDeformation(AugmentationBase2D):
+class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
     def __init__(
         self,
         control_point_spacing: Union[int, Sequence[int]] = 1,
@@ -66,20 +63,22 @@ class RandomElasticDeformation(AugmentationBase2D):
         )
 
 
+KorniaAugmentation = Union[kornia.augmentation.AugmentationBase2D, kornia.augmentation.AugmentationBase3D]
+
 # TODO implement 'require_halo', and estimate the halo from the transformations
 # so that we can load a bigger block and cut it away
-class AugmentationPipeline(torch.nn.Module):
+class KorniaAugmentationPipeline(torch.nn.Module):
     interpolatable_torch_types = [torch.float16, torch.float32, torch.float64]
     interpolatable_numpy_types = [np.dtype("float32"), np.dtype("float64")]
 
-    def __init__(self, *augmentations: Augmentation, return_transform: bool = False, dtype=torch.float32):
+    def __init__(self, *augmentations: KorniaAugmentation, return_transform: bool = False, dtype=torch.float32):
         super().__init__()
         self.return_transform = return_transform
-        self.is3D = any(isinstance(aug, AugmentationBase3D) for aug in augmentations)
+        self.is3D = any(isinstance(aug, kornia.augmentation.AugmentationBase3D) for aug in augmentations)
         for aug in augmentations:
             aug.return_transform = return_transform
 
-        self.augmentations: Sequence[Augmentation] = torch.nn.ModuleList(augmentations)  # type: ignore
+        self.augmentations: Sequence[KorniaAugmentation] = torch.nn.ModuleList(augmentations)  # type: ignore
         self.dtype = dtype
         self.halo = self.compute_halo()
 
@@ -100,7 +99,7 @@ class AugmentationPipeline(torch.nn.Module):
         else:
             return tensor.dtype in self.interpolatable_numpy_types
 
-    def _configure_augmentation(self, augmentation: Augmentation, interpolatable):
+    def _configure_augmentation(self, augmentation: KorniaAugmentation, interpolatable):
         interpolating = "interpolation" in getattr(augmentation, "flags", [])
         if interpolating:
             resampler = kornia.constants.Resample.get("BILINEAR" if interpolatable else "NEAREST")
@@ -152,11 +151,13 @@ class AugmentationPipeline(torch.nn.Module):
     def halo(self, shape):
         return self.halo
 
-    def apply_inverse(self, *tensors: torch.Tensor, forward_transforms: Sequence[torch.Tensor], padding_mode="border"):
+    def apply_inverse_affine(
+        self, *tensors: torch.Tensor, forward_transforms: Sequence[torch.Tensor], padding_mode="border"
+    ):
         assert len(tensors) == len(forward_transforms)
         trans_matrices = torch.linalg.inv(torch.stack(list(forward_transforms)))
         return [
-            warp_affine3d(
+            kornia.warp_affine3d(
                 src=t,
                 M=m,
                 dsize=t.shape[-3:],
@@ -199,5 +200,4 @@ def get_augmentations(ndim=2, transforms=None, dtype=torch.float32, return_trans
             transforms = DEFAULT_ANISOTROPIC_AUGMENTATIONS
         transforms = [getattr(kornia.augmentation, trafo)(**AUGMENTATIONS[trafo]) for trafo in transforms]
 
-    assert all(isinstance(trafo, Augmentation) for trafo in transforms)
-    return AugmentationPipeline(*transforms, dtype=dtype, return_transform=return_transforms)
+    return KorniaAugmentationPipeline(*transforms, dtype=dtype, return_transform=return_transforms)
