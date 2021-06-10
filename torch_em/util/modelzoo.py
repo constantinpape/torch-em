@@ -15,6 +15,10 @@ try:
     from bioimageio import spec
 except ImportError:
     spec = None
+try:
+    from bioimageio import tools as biotools
+except ImportError:
+    biotools = None
 
 
 #
@@ -473,7 +477,6 @@ def _validate_model(spec_path):
 #
 
 
-# TODO support conversion to onnx
 # TODO config: training details derived from loss and optimizer, custom params, e.g. offsets for mws
 def export_biomageio_model(checkpoint, input_data, export_folder,
                            dependencies=None, name=None,
@@ -485,8 +488,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
     """
     """
 
-    # TODO update the error message to point
-    # to the source for the bioimageio package
+    # TODO update the error message to point to the source for the bioimageio package
     if spec is None:
         raise RuntimeError("Need bioimageio package")
 
@@ -693,3 +695,37 @@ def import_bioimageio_model(spec_path, return_spec=False):
 # TODO
 def import_trainer_from_bioimageio_model(spec_path):
     pass
+
+
+#
+# weight conversion
+#
+
+def convert_to_onnx(folder):
+    # TODO update the error message to point to the source for the bioimageio package
+    if biotools is None:
+        raise RuntimeError("Need biotools package")
+
+
+def convert_to_torchscript(folder):
+    # TODO update the error message to point to the source for the bioimageio package
+    if biotools is None:
+        raise RuntimeError("Need biotools package")
+
+
+def convert_main():
+    import argparse
+    parser = argparse.ArgumentParser(
+        "Convert weights from native pytorch format to onnx or torchscript"
+    )
+    parser.add_argument('-f', '--model_folder', required=True,
+                        help="")
+    parser.add_argument('-w', '--weight_format', required=True,
+                        help="")
+    args = parser.parse_args()
+    weight_format = args.weight_format
+    assert weight_format in ("onnx", "torch_script")
+    if weight_format == "onnx":
+        convert_to_onnx(args.model_folder)
+    else:
+        convert_to_torchscript(args.model_folder)
