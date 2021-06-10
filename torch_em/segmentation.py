@@ -264,6 +264,8 @@ def default_segmentation_trainer(
 
     if device is None:
         device = torch.device('cuda')
+    else:
+        device = torch.device(device)
 
     trainer = DefaultTrainer(
         name=name,
