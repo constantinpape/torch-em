@@ -2,6 +2,77 @@ import torch
 import torch.nn as nn
 
 
+# TODO enable torchscript everywhere
+
+#
+# Model Internal Post-processing
+#
+# Note: these are mainly for bioimage.io models, where postprocessing has to be done
+# inside of the model unless its defined in the general spec
+
+
+class AccumulateChannels(nn.Module):
+    def __init__(
+        self,
+        invariant_channels,
+        accumulate_channels,
+        accumulator
+    ):
+        super().__init__()
+        self.invariant_channels = invariant_channels
+        self.accumulate_channels = accumulate_channels
+        assert accumulator in ('mean', 'min', 'max')
+        self.accumulator = getattr(torch, accumulator)
+
+    def _accumulate(self, x, c0, c1):
+        res = self.accumulator(x[:, c0:c1], dim=1, keepdim=True)
+        if not torch.is_tensor(res):
+            res = res.values
+        assert torch.is_tensor(res)
+        return res
+
+    def forward(self, x):
+        if self.invariant_channels is None:
+            c0, c1 = self.accumulate_channels
+            return self._accumulate(x, c0, c1)
+        else:
+            i0, i1 = self.invariant_channels
+            c0, c1 = self.accumulate_channels
+            return torch.cat([x[:, i0:i1], self._accumulate(x, c0, c1)], dim=1)
+
+
+def affinities_to_boundaries(aff_channels, accumulator='max'):
+    return AccumulateChannels(None, aff_channels, accumulator)
+
+
+def affinities_with_foreground_to_boundaries(aff_channels, fg_channel=(0, 1), accumulator='max'):
+    return AccumulateChannels(fg_channel, aff_channels, accumulator)
+
+
+def affinities_to_boundaries2d():
+    return affinities_to_boundaries((0, 2))
+
+
+def affinities_with_foreground_to_boundaries2d():
+    return affinities_with_foreground_to_boundaries((1, 3))
+
+
+def affinities_to_boundaries3d():
+    return affinities_to_boundaries((0, 3))
+
+
+def affinities_with_foreground_to_boundaries3d():
+    return affinities_with_foreground_to_boundaries((1, 4))
+
+
+POSTPROCESSING = {
+    "affinities_to_boundaries2d": affinities_to_boundaries2d,
+    "affinities_with_foreground_to_boundaries2d": affinities_with_foreground_to_boundaries2d,
+    "affinities_to_boundaries3d": affinities_to_boundaries3d,
+    "affinities_with_foreground_to_boundaries3d": affinities_with_foreground_to_boundaries3d
+}
+
+
 #
 # Base Implementations
 #
@@ -15,7 +86,8 @@ class UNetBase(nn.Module):
         base,
         decoder,
         out_conv=None,
-        final_activation=None
+        final_activation=None,
+        postprocessing=None
     ):
         super().__init__()
         if len(encoder) != len(decoder):
@@ -39,6 +111,7 @@ class UNetBase(nn.Module):
         self.out_conv = out_conv
 
         self.final_activation = self._get_activation(final_activation)
+        self.postprocessing = self._get_postprocessing(postprocessing)
 
     @property
     def in_channels(self):
@@ -64,6 +137,16 @@ class UNetBase(nn.Module):
             raise ValueError(f"Invalid activation: {activation}")
         return return_activation()
 
+    def _get_postprocessing(self, postprocessing):
+        if postprocessing is None:
+            return None
+        elif isinstance(postprocessing, nn.Module):
+            return postprocessing
+        elif postprocessing in POSTPROCESSING:
+            return POSTPROCESSING[postprocessing]()
+        else:
+            raise ValueError(f"Invalid postprocessing: {postprocessing}")
+
     # load encoder / decoder / base states for pretraining
     def load_encoder_state(self, state):
         self.encoder.load_state_dict(state)
@@ -86,6 +169,8 @@ class UNetBase(nn.Module):
             x = self.out_conv(x)
         if self.final_activation is not None:
             x = self.final_activation(x)
+        if self.postprocessing is not None:
+            x = self.postprocessing(x)
 
         return x
 
@@ -100,6 +185,9 @@ class UNetBase(nn.Module):
         x = [x if conv is None else conv(xx) for xx, conv in zip(x, self.out_conv)]
         if self.final_activation is not None:
             x = [self.final_activation(xx) for xx in x]
+
+        if self.postprocessing is not None:
+            x = [self.postprocessing(xx) for xx in x]
 
         # we reverse the list to have the full shape output as first element
         return x[::-1]
@@ -334,6 +422,7 @@ class UNet2d(UNetBase):
         conv_block_impl=ConvBlock2d,
         pooler_impl=nn.MaxPool2d,
         sampler_impl=Upsampler2d,
+        postprocessing=None,
         **conv_block_kwargs
     ):
         features_encoder = [in_channels] + [initial_features * gain ** i for i in range(depth)]
@@ -371,13 +460,14 @@ class UNet2d(UNetBase):
                 **conv_block_kwargs
             ),
             out_conv=out_conv,
-            final_activation=final_activation
+            final_activation=final_activation,
+            postprocessing=postprocessing
         )
         self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'depth': depth,
                             'initial_features': initial_features, 'gain': gain,
                             'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
                             'conv_block_impl': conv_block_impl, 'pooler_impl': pooler_impl,
-                            'sampler_impl': sampler_impl, **conv_block_kwargs}
+                            'sampler_impl': sampler_impl, 'postprocessing': postprocessing, **conv_block_kwargs}
 
 
 #
@@ -409,6 +499,7 @@ class AnisotropicUNet(UNetBase):
         return_side_outputs=False,
         conv_block_impl=ConvBlock3d,
         anisotropic_kernel=False,  # TODO benchmark which option is better and set as default
+        postprocessing=None,
         **conv_block_kwargs
     ):
         depth = len(scale_factors)
@@ -448,13 +539,14 @@ class AnisotropicUNet(UNetBase):
                 **conv_block_kwargs
             ),
             out_conv=out_conv,
-            final_activation=final_activation
+            final_activation=final_activation,
+            postprocessing=postprocessing
         )
         self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'scale_factors': scale_factors,
                             'initial_features': initial_features, 'gain': gain,
                             'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
                             'conv_block_impl': conv_block_impl, 'anisotropic_kernel': anisotropic_kernel,
-                            **conv_block_kwargs}
+                            'postprocessing': postprocessing, **conv_block_kwargs}
 
 
 class UNet3d(AnisotropicUNet):
@@ -468,6 +560,7 @@ class UNet3d(AnisotropicUNet):
         final_activation=None,
         return_side_outputs=False,
         conv_block_impl=ConvBlock3d,
+        postprocessing=None,
         **conv_block_kwargs
     ):
         scale_factors = depth * [2]
@@ -476,8 +569,9 @@ class UNet3d(AnisotropicUNet):
                          final_activation=final_activation,
                          return_side_outputs=return_side_outputs,
                          anisotropic_kernel=False,
+                         postprocessing=postprocessing,
                          conv_block_impl=conv_block_impl, **conv_block_kwargs)
         self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'depth': depth,
                             'initial_features': initial_features, 'gain': gain,
                             'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
-                            'conv_block_impl': conv_block_impl, **conv_block_kwargs}
+                            'conv_block_impl': conv_block_impl, 'postprocessing': postprocessing, **conv_block_kwargs}

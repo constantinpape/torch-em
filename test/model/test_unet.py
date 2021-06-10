@@ -55,6 +55,22 @@ class TestUnet(unittest.TestCase):
         net = UNet2d(1, 1, depth=3, initial_features=4)
         net.to(torch.device('cpu'))
 
+    def test_postprocessing(self):
+        from torch_em.model import UNet2d
+
+        shape = (1, 1, 64, 64)
+        x = torch.rand(*shape)
+
+        net = UNet2d(1, 6, depth=3, initial_features=4,
+                     postprocessing='affinities_to_boundaries2d')
+        out = net(x)
+        self.assertEqual(tuple(out.shape), shape)
+
+        net = UNet2d(1, 6, depth=3, initial_features=4,
+                     postprocessing='affinities_with_foreground_to_boundaries2d')
+        out = net(x)
+        self.assertEqual(tuple(out.shape), (1, 2, 64, 64))
+
 
 if __name__ == '__main__':
     unittest.main()
