@@ -1,0 +1,44 @@
+import os
+import hashlib
+from shutil import copyfileobj
+from warnings import warn
+
+import requests
+
+
+def get_checksum(filename):
+    with open(filename, "rb") as f:
+        file_ = f.read()
+        checksum = hashlib.sha256(file_).hexdigest()
+    return checksum
+
+
+# TODO
+# - adapt this to also support zipped files (and unzip and remove the archive after download)
+# - allow for s3 links and use boto3 or s3fs to download
+def download_source(path, url, download, checksum=None):
+    if os.path.exists(path):
+        return
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    print("Download file fron", url, "to", path)
+    with requests.get(url, stream=True) as r:
+        with open(path, 'wb') as f:
+            copyfileobj(r.raw, f)
+
+    if checksum is not None:
+        this_checksum = get_checksum(path)
+        if this_checksum != checksum:
+            raise RuntimeError("The checksum of the download does not match the expected checksum.")
+        print("Download successfull and checksums agree.")
+    else:
+        warn("The file was downloaded, but no checksum was provided, so the file may be corrupted.")
+
+
+def update_kwargs(kwargs, key, value, msg=None):
+    if key in kwargs:
+        msg = f"{key} will be over-ridden in loader kwargs." if msg is None else msg
+        warn(msg)
+    kwargs[key] = value
+    return kwargs
