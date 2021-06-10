@@ -41,6 +41,11 @@ def normalize_with_batch(data, normalizer):
 #
 
 
+# TODO: make doi for torch_em and add it instead of url + derive citation from model
+def get_default_citations():
+    return {'training library': 'https://github.com/constantinpape/torch-em.git'}
+
+
 # try to load from filepath
 def _get_trainer(checkpoint, name='best', device=None):
     # try to load from file
@@ -55,7 +60,7 @@ def _get_trainer(checkpoint, name='best', device=None):
     return trainer
 
 
-def _get_model(trainer):
+def _get_model(trainer, postprocessing):
     model = trainer.model
     model.eval()
     model_kwargs = model.init_kwargs
@@ -63,6 +68,9 @@ def _get_model(trainer):
     # TODO warn if we strip any non-standard arguments
     model_kwargs = {k: v for k, v in model_kwargs.items()
                     if not isinstance(v, type)}
+    if postprocessing is None:
+        assert "postprocessing" in model_kwargs
+        model_kwargs["postprocessing"] = postprocessing
     return model, model_kwargs
 
 
@@ -207,7 +215,6 @@ def _get_kwargs(trainer, name, description,
     # - description: derive something from trainer.ndim, trainer.loss, trainer.model, ...
     # - tags: derive something from trainer.ndim, trainer.loss, trainer.model, ...
     # - documentation: derive something from trainer.ndim, trainer.loss, trainer.model, ...
-    # - cite: make doi for torch_em and add it instead of url + derive citation from model
     kwargs = {
         'name': _get_kwarg('name', name, lambda: trainer.name),
         'description': _get_kwarg('description', name, lambda: trainer.name),
@@ -217,7 +224,7 @@ def _get_kwargs(trainer, name, description,
         'documentation': _get_kwarg('documentation', documentation, lambda: trainer.name,
                                     fname='documentation.md'),
         'git_repo': _get_kwarg('git_repo', git_repo, _default_repo),
-        'cite': _get_kwarg('cite', cite, lambda: {'training library': 'https://github.com/constantinpape/torch-em.git'})
+        'cite': _get_kwarg('cite', cite, get_default_citations)
     }
 
     return kwargs
@@ -484,7 +491,8 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
                            tags=None, license=None,
                            documentation=None, covers=None,
                            git_repo=None, cite=None,
-                           input_optional_parameters=True):
+                           input_optional_parameters=True,
+                           model_postprocessing=None):
     """
     """
 
@@ -494,7 +502,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
 
     # load trainer and model
     trainer = _get_trainer(checkpoint, device='cpu')
-    model, model_kwargs = _get_model(trainer)
+    model, model_kwargs = _get_model(trainer, model_postprocessing)
 
     # create the weights
     os.makedirs(export_folder, exist_ok=True)
