@@ -2,6 +2,7 @@ import functools
 import json
 import os
 import subprocess
+from pathlib import Path
 from shutil import copyfile
 from warnings import warn
 
@@ -15,10 +16,11 @@ try:
     from bioimageio import spec
 except ImportError:
     spec = None
+
 try:
-    from bioimageio import tools as biotools
+    import bioimageio.weight_converter.torch as weight_converter
 except ImportError:
-    biotools = None
+    weight_converter = None
 
 
 #
@@ -200,7 +202,7 @@ def _get_kwargs(trainer, name, description,
         if author is None:
             author = os.uname()[1]
 
-        return [author]
+        return [{"name": author}]
 
     def _default_repo():
         try:
@@ -465,9 +467,9 @@ def _get_tensor_kwargs(model, model_kwargs):
 
 
 def _validate_model(spec_path):
-    model, normalizer, bio_spec = import_bioimageio_model(spec_path, return_spec=True)
+    model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True)
 
-    for test_in, test_out in zip(bio_spec.test_inputs, bio_spec.test_outputs):
+    for test_in, test_out in zip(model_spec.test_inputs, model_spec.test_outputs):
         input_, expected = np.load(test_in), np.load(test_out)
         input_ = normalize_with_batch(input_, normalizer)
         with torch.no_grad():
@@ -532,7 +534,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
     kwargs.update(tensor_kwargs)
     preprocessing = _get_preprocessing(trainer)
 
-    model_spec = spec.utils.build_spec(
+    model_spec = spec.build_spec(
         source=source,
         model_kwargs=model_kwargs,
         weight_uri=weight_path,
@@ -547,8 +549,7 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
     )
 
     serialized = spec.schema.Model().dump(model_spec)
-    name = trainer.name if name is None else name
-    out_path = os.path.join(export_folder, f'{name}.model.yaml')
+    out_path = os.path.join(export_folder, 'model.yaml')
     with open(out_path, 'w') as f:
         spec.utils.yaml.dump(serialized, f)
 
@@ -600,17 +601,17 @@ def main():
 # model import functionality
 #
 
-def _load_model(bio_spec):
-    model = spec.utils.get_instance(bio_spec)
-    weights = bio_spec.weights["pytorch_state_dict"]
+def _load_model(model_spec):
+    model = spec.utils.get_nn_instance(model_spec)
+    weights = model_spec.weights["pytorch_state_dict"]
     state = torch.load(weights.source, map_location='cpu')
     model.load_state_dict(state)
     model.eval()
     return model
 
 
-def _load_normalizer(bio_spec):
-    inputs = bio_spec.inputs[0]
+def _load_normalizer(model_spec):
+    inputs = model_spec.inputs[0]
     preprocessing = inputs.preprocessing
     if len(preprocessing) == 0:
         return None
@@ -689,13 +690,14 @@ def import_bioimageio_model(spec_path, return_spec=False):
     # to the source for the bioimageio package
     if spec is None:
         raise RuntimeError("Need bioimageio package")
-    bio_spec = spec.load_and_resolve_spec(os.path.abspath(spec_path))
+    root = Path(os.path.split(spec_path)[0])
+    model_spec = spec.load_model(os.path.abspath(spec_path), root)
 
-    model = _load_model(bio_spec)
-    normalizer = _load_normalizer(bio_spec)
+    model = _load_model(model_spec)
+    normalizer = _load_normalizer(model_spec)
 
     if return_spec:
-        return model, normalizer, bio_spec
+        return model, normalizer, model_spec
     else:
         return model, normalizer
 
@@ -709,16 +711,34 @@ def import_trainer_from_bioimageio_model(spec_path):
 # weight conversion
 #
 
-def convert_to_onnx(folder):
-    # TODO update the error message to point to the source for the bioimageio package
-    if biotools is None:
-        raise RuntimeError("Need biotools package")
+
+def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
+    root = os.path.split(spec_path)[0]
+    out_path = os.path.join(root, weight_name)
+
+    model_spec = spec.load_model(os.path.abspath(spec_path), Path(root))
+    converter(model_spec, out_path, **kwargs)
+    model_spec = spec.add_weights(model_spec, out_path, root=root, weight_type=weight_type, **kwargs)
+
+    serialized = spec.schema.Model().dump(model_spec)
+    with open(spec_path, 'w') as f:
+        spec.utils.yaml.dump(serialized, f)
 
 
-def convert_to_torchscript(folder):
+def convert_to_onnx(spec_path, opset_version=12):
     # TODO update the error message to point to the source for the bioimageio package
-    if biotools is None:
-        raise RuntimeError("Need biotools package")
+    if weight_converter is None:
+        raise RuntimeError("Need bioimageio.weight_converter package")
+    converter = weight_converter.convert_weights_to_onnx
+    _convert_impl(spec_path, "weights.onnx", converter, "onnx", opset_version=opset_version)
+
+
+def convert_to_torchscript(spec_path):
+    # TODO update the error message to point to the source for the bioimageio package
+    if weight_converter is None:
+        raise RuntimeError("Need bioimageio.weight_converter package")
+    converter = weight_converter.convert_weights_to_torchscript
+    _convert_impl(spec_path, "weights.torchscript", converter, "pytorch_script")
 
 
 def convert_main():
