@@ -3,12 +3,13 @@ import os
 
 import numpy as np
 from elf.io import open_file
-from torch_em.util import export_biomageio_model, get_default_citations
+from torch_em.util import (convert_to_onnx, convert_to_torchscript,
+                           export_biomageio_model, get_default_citations)
 
 
 def _load_data(input_, ndim):
     with open_file(input_, 'r') as f:
-        ds = f['raw']
+        ds = f['volumes/raw'] if 'volumes/raw' in f else f['raw']
         shape = ds.shape
         if ndim == 2:
             s0, s1 = shape[0] - 1, shape[0]
@@ -49,12 +50,9 @@ def _get_doc(is_aff_model, ndim):
     return doc
 
 
-# FIXME this fails with
-# ValidationError: {'authors': {0: {'affiliation': ['Missing data for
-#                   required field.'], 'name': ['Missing data for required field.']}}}
 # need to wait on the spec pr to fix this.
 # TODO write offsets and other mws params into the config if this is a affinity model
-def export_to_bioimageio(checkpoint, input_, output, affs_to_bd):
+def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_formats):
 
     ckpt_name = os.path.split(checkpoint)[1]
 
@@ -87,7 +85,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd):
     export_biomageio_model(
         checkpoint, input_data, output,
         name=name,
-        authors=['Constantin Pape; @constantinpape'],
+        authors=[{"name": "Constantin Pape; @constantinpape"}],
         tags=tags,
         license='CC-BY-4.0',
         documentation=doc,
@@ -96,6 +94,14 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd):
         model_postprocessing=postprocessing
     )
 
+    if additional_formats:
+        spec_path = os.path.join(output, "model.yaml")
+        for add_format in additional_formats:
+            if add_format == "onnx":
+                convert_to_onnx(spec_path)
+            elif add_format == "torchscript":
+                convert_to_torchscript(spec_path)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -103,40 +109,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--input', required=True)
     parser.add_argument('-o', '--output', required=True)
     parser.add_argument('-a', '--affs_to_bd', default=0, type=int)
+    parser.add_argument('-f', '--additional_formats', type=str, nargs="+")
     args = parser.parse_args()
     export_to_bioimageio(args.checkpoint, args.input, args.output,
-                         bool(args.affs_to_bd))
-
-
-#
-# This is the old onnx conversion code. This should be done with the weight
-# conversion functionality instead (WIP). I am leaving it here for reference until that is done.
-#
-
-# import argparse
-# import torch
-# import onnx
-# from train_affinities_2d import get_model
-#
-#
-# def export_model(ckpt, output, use_diagonal_offsets):
-#     model = get_model(use_diagonal_offsets=use_diagonal_offsets)
-#     state = torch.load(ckpt)['model_state']
-#     model.load_state_dict(state)
-#     model.eval()
-#
-#     dummy_input = torch.rand((1, 1, 256, 256))
-#     msg = torch.onnx.export(model, dummy_input, output,
-#                             verbose=True, opset_version=9)
-#     print(msg)
-#
-#     loaded_model = onnx.load(output)
-#
-#
-# if __name__ == '__main__':
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('-i', '--input', required=True)
-#     parser.add_argument('-o', '--output', required=True)
-#     parser.add_argument('-d', '--use_diagonal_offsets', type=int, default=0)
-#     args = parser.parse_args()
-#     export_model(args.input, args.output, bool(args.use_diagonal_offsets))
+                         bool(args.affs_to_bd), args.additional_formats)
