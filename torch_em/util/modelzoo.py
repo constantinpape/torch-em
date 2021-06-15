@@ -107,13 +107,12 @@ def _get_normalizer(trainer):
     dataset = trainer.train_loader.dataset
     if isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset):
         dataset = dataset.datasets[0]
-    preprocesser = dataset.raw_transform
-    try:
-        normalizer = preprocesser.normalizer
-        return normalizer
-    except AttributeError:
-        warn("Could not parse the normalization function, 'preprocessing' field will be empty.")
-        return preprocesser
+    preprocessor = dataset.raw_transform
+
+    if hasattr(preprocessor, "normalizer"):
+        return preprocessor.normalizer
+    else:
+        return preprocessor
 
 
 def _write_data(input_data, model, trainer, export_folder):
@@ -412,6 +411,7 @@ def _get_preprocessing(trainer):
         }
 
     else:
+        warn("Could not parse the normalization function, 'preprocessing' field will be empty.")
         return None
 
     return [preprocessing]
@@ -548,10 +548,8 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
         **kwargs
     )
 
-    serialized = spec.schema.Model().dump(model_spec)
     out_path = os.path.join(export_folder, 'model.yaml')
-    with open(out_path, 'w') as f:
-        spec.utils.yaml.dump(serialized, f)
+    spec.serialize_spec(model_spec, out_path)
 
     # load and validate the model
     val_success = _validate_model(out_path)
@@ -716,13 +714,14 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
     root = os.path.split(spec_path)[0]
     out_path = os.path.join(root, weight_name)
 
+    # here, we need the model with resolved nodes
     model_spec = spec.load_model(os.path.abspath(spec_path), Path(root))
     converter(model_spec, out_path, **kwargs)
+    # now, we need the model with raw nodes
+    model_spec = spec.load_raw_model(os.path.abspath(spec_path), Path(root))[0]
     model_spec = spec.add_weights(model_spec, out_path, root=root, weight_type=weight_type, **kwargs)
 
-    serialized = spec.schema.Model().dump(model_spec)
-    with open(spec_path, 'w') as f:
-        spec.utils.yaml.dump(serialized, f)
+    spec.serialize_spec(model_spec, spec_path)
 
 
 def convert_to_onnx(spec_path, opset_version=12):
@@ -733,18 +732,18 @@ def convert_to_onnx(spec_path, opset_version=12):
     _convert_impl(spec_path, "weights.onnx", converter, "onnx", opset_version=opset_version)
 
 
-def convert_to_torchscript(spec_path):
+def convert_to_pytorch_script(spec_path):
     # TODO update the error message to point to the source for the bioimageio package
     if weight_converter is None:
         raise RuntimeError("Need bioimageio.weight_converter package")
-    converter = weight_converter.convert_weights_to_torchscript
+    converter = weight_converter.convert_weights_to_pytorch_script
     _convert_impl(spec_path, "weights.torchscript", converter, "pytorch_script")
 
 
 def convert_main():
     import argparse
     parser = argparse.ArgumentParser(
-        "Convert weights from native pytorch format to onnx or torchscript"
+        "Convert weights from native pytorch format to onnx or pytorch_script"
     )
     parser.add_argument('-f', '--model_folder', required=True,
                         help="")
@@ -752,8 +751,8 @@ def convert_main():
                         help="")
     args = parser.parse_args()
     weight_format = args.weight_format
-    assert weight_format in ("onnx", "torch_script")
+    assert weight_format in ("onnx", "pytorch_script")
     if weight_format == "onnx":
         convert_to_onnx(args.model_folder)
     else:
-        convert_to_torchscript(args.model_folder)
+        convert_to_pytorch_script(args.model_folder)
