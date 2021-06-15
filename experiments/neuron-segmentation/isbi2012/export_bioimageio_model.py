@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 from elf.io import open_file
-from torch_em.util import (convert_to_onnx, convert_to_torchscript,
+from torch_em.util import (convert_to_onnx, convert_to_pytorch_script,
                            export_biomageio_model, get_default_citations)
 
 
@@ -100,7 +100,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
             if add_format == "onnx":
                 convert_to_onnx(spec_path)
             elif add_format == "torchscript":
-                convert_to_torchscript(spec_path)
+                convert_to_pytorch_script(spec_path)
 
 
 if __name__ == '__main__':
