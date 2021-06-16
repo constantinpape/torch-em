@@ -444,12 +444,10 @@ def _get_tensor_kwargs(model, model_kwargs):
             depth = model_kwargs['depth']
             step = [0, 0] + [2 ** depth] * 2
             min_shape = [1, inc] + [2 ** (depth + 1)] * 2
-            halo = [0, 0] + [2 ** (depth - 1)] * 2
         elif name == "UNet3d":
             depth = model_kwargs['depth']
             step = [0, 0] + [2 ** depth] * 3
             min_shape = [1, inc] + [2 ** (depth + 1)] * 3
-            halo = [0, 0] + [2 ** (depth - 1)] * 3
         elif name == "AnisotropicUNet":
             scale_factors = model_kwargs['scale_factors']
             scale_prod = [
@@ -459,9 +457,9 @@ def _get_tensor_kwargs(model, model_kwargs):
             assert len(scale_prod) == 3
             step = [0, 0] + scale_prod
             min_shape = [1, inc] + [2 * sp for sp in scale_prod]
-            halo = [0, 0] + [sp // 2 for sp in scale_prod]
         else:
             raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
+        halo = step
 
         ref = "input"
         if inc == outc:
