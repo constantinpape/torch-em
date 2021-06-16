@@ -246,6 +246,7 @@ def _write_weights(model, export_folder):
     return f'./{weight_name}'
 
 
+# TODO create better cover image for 3d data
 def _create_cover(in_path, out_path):
     input_ = np.load(in_path)
     axis = (0, 2, 3) if input_.ndim == 4 else (0, 2, 3, 4)
@@ -451,7 +452,7 @@ def _get_tensor_kwargs(model, model_kwargs):
         elif name == "AnisotropicUNet":
             scale_factors = model_kwargs['scale_factors']
             scale_prod = [
-                int(np.prod(scale_factors[i][d] for i in range(len(scale_factors))))
+                int(np.prod([scale_factors[i][d] for i in range(len(scale_factors))]))
                 for d in range(3)
             ]
             assert len(scale_prod) == 3
