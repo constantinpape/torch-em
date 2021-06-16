@@ -47,8 +47,7 @@ def get_loader(split, patch_shape, batch_size,
     )
 
 
-def get_model():
-    n_out = 12
+def get_model(n_out):
     model = UNet2d(
         in_channels=1,
         out_channels=n_out,
@@ -61,7 +60,7 @@ def get_model():
 
 
 def train_contrastive(args):
-    model = get_model()
+    model = get_model(args.embed_dim)
     patch_shape = [1, 736, 688]
     # can train with larger batch sizes for scatter
     batch_size = 4 if args.impl == 'scatter' else 1
@@ -85,7 +84,7 @@ def train_contrastive(args):
         impl=args.impl
     )
 
-    name = "embedding_model2d_" + args.impl
+    name = "embedding_model2d_" + args.impl + "_d" + str(args.embed_dim)
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
@@ -122,6 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--impl', '-i', default='scatter')
     parser.add_argument('--check', '-c', type=int, default=0)
     parser.add_argument('--iterations', '-n', type=int, default=int(1e5))
+    parser.add_argument('-d', '--embed_dim', type=int, default=12)
     parser.add_argument('--from_checkpoint', type=int, default=0)
 
     args = parser.parse_args()
