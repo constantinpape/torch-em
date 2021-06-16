@@ -70,9 +70,16 @@ def _get_model(trainer, postprocessing):
     # TODO warn if we strip any non-standard arguments
     model_kwargs = {k: v for k, v in model_kwargs.items()
                     if not isinstance(v, type)}
-    if postprocessing is None:
+
+    # set the in-model postprocessing if given
+    if postprocessing is not None:
         assert "postprocessing" in model_kwargs
         model_kwargs["postprocessing"] = postprocessing
+        state = model.state_dict()
+        model = model.__class__(**model_kwargs)
+        model.load_state_dict(state)
+        model.eval()
+
     return model, model_kwargs
 
 
@@ -276,10 +283,11 @@ def _create_cover(in_path, out_path):
         assert im0.shape[0] == im1.shape[0] == 3
         n, m = im_shape
         out = np.ones((3, n, m), dtype='uint8')
-        im0_indices = np.tril_indices(n=n, m=m)
-        im1_indices = np.triu_indices(n=n, m=m)
-        out[:, im0_indices] = im0[:, im0_indices]
-        out[:, im1_indices] = im1[:, im1_indices]
+        for c in range(3):
+            outc = np.tril(im0[c])
+            mask = outc == 0
+            outc[mask] = np.triu(im1[c])[mask]
+            out[c] = outc
         return out
 
     def _grid_im(im0, im1):
@@ -423,6 +431,15 @@ def _get_tensor_kwargs(model, model_kwargs):
     # can derive tensor kwargs only for known torch_em models (only unet for now)
     if module == 'torch_em.model.unet':
         inc, outc = model_kwargs['in_channels'], model_kwargs['out_channels']
+
+        postprocessing = model_kwargs.get('postprocessing', None)
+        if isinstance(postprocessing, str) and postprocessing.startswith("affinities_to_boundaries"):
+            outc = 1
+        elif isinstance(postprocessing, str) and postprocessing.startswith("affinities_with_foreground_to_boundaries"):
+            outc = 2
+        elif postprocessing is not None:
+            warn(f"The model has the post-processing {postprocessing} which cannot be interpreted")
+
         if name == "UNet2d":
             depth = model_kwargs['depth']
             step = [0, 0] + [2 ** depth] * 2
