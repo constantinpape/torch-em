@@ -1,5 +1,6 @@
 import os
 import hashlib
+import zipfile
 from shutil import copyfileobj
 from warnings import warn
 
@@ -14,7 +15,6 @@ def get_checksum(filename):
 
 
 # TODO
-# - adapt this to also support zipped files (and unzip and remove the archive after download)
 # - allow for s3 links and use boto3 or s3fs to download
 def download_source(path, url, download, checksum=None):
     if os.path.exists(path):
@@ -42,3 +42,10 @@ def update_kwargs(kwargs, key, value, msg=None):
         warn(msg)
     kwargs[key] = value
     return kwargs
+
+
+def unzip(zip_path, dst, remove=True):
+    with zipfile.ZipFile(zip_path, 'r') as f:
+        f.extractall(dst)
+    if remove:
+        os.remove(zip_path)
