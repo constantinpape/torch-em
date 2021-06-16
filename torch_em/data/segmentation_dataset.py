@@ -3,7 +3,7 @@ import numpy as np
 from elf.io import open_file
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_tensor_with_channels
+from ..util import ensure_spatial_array, ensure_tensor_with_channels
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
@@ -120,6 +120,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         raw, labels = self._get_sample(index)
+        initial_label_dtype = labels.dtype
 
         if self.raw_transform is not None:
             raw = self.raw_transform(raw)
@@ -135,6 +136,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         # support enlarging bounding box here as well (for affinity transform) ?
         if self.label_transform2 is not None:
+            labels = ensure_spatial_array(labels, self.ndim, dtype=initial_label_dtype)
             labels = self.label_transform2(labels)
 
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)

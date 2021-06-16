@@ -56,7 +56,10 @@ class AffinityTransform:
         self.add_mask = add_mask
 
     def __call__(self, labels):
-        labels = ensure_spatial_array(labels, self.ndim, dtype='uint64')
+        dtype = 'uint64'
+        if np.dtype(labels.dtype) in (np.dtype("int16"), np.dtype("int32"), np.dtype("int64")):
+            dtype = 'int64'
+        labels = ensure_spatial_array(labels, self.ndim, dtype=dtype)
         affs, mask = compute_affinities(labels, self.offsets,
                                         have_ignore_label=self.ignore_label is not None,
                                         ignore_label=0 if self.ignore_label is None else self.ignore_label)
