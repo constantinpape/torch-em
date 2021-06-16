@@ -69,6 +69,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
         is_aff_model = False
     name = _get_name(is_aff_model, ndim)
     tags = ["u-net", "neuron-segmentation", "segmentation", "volume-em"]
+    tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
 
     # eventually we should refactor the citation logic
     cite = get_default_citations()
@@ -91,7 +92,8 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
         documentation=doc,
         git_repo='https://github.com/constantinpape/torch-em.git',
         cite=cite,
-        model_postprocessing=postprocessing
+        model_postprocessing=postprocessing,
+        input_optional_parameters=False
     )
 
     if additional_formats:
