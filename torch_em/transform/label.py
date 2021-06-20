@@ -76,7 +76,7 @@ class AffinityTransform:
                 if self.ignore_label is None:
                     mask_for_bin = np.ones((1,) + labels.shape, dtype=mask.dtype)
                 else:
-                    mask_for_bin = (labels == self.ignore_label)[None].astype(mask.dtype)
+                    mask_for_bin = (labels != self.ignore_label)[None].astype(mask.dtype)
                 assert mask.ndim == mask_for_bin.ndim
                 mask = np.concatenate([mask_for_bin, mask], axis=0)
             assert affs.shape == mask.shape

@@ -73,7 +73,22 @@ def train_affinities(args):
         trainer.fit(args.n_iterations)
 
 
+def check(args, train=True, val=True, n_images=2):
+    from torch_em.util.debug import check_loader
+    if train:
+        print("Check train loader")
+        loader = get_loader(args.input, is_train=True, n_samples=100)
+        check_loader(loader, n_images)
+    if val:
+        print("Check val loader")
+        loader = get_loader(args.input, is_train=False, n_samples=100)
+        check_loader(loader, n_images)
+
+
 if __name__ == '__main__':
     parser = parser_helper()
     args = parser.parse_args()
-    train_affinities(args)
+    if args.check:
+        check(args)
+    else:
+        train_affinities(args)
