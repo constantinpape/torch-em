@@ -84,7 +84,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
     doc = _get_doc(is_aff_model, ndim)
 
     export_biomageio_model(
-        checkpoint, input_data, output,
+        checkpoint, output, input_data,
         name=name,
         authors=[{"name": "Constantin Pape; @constantinpape"}],
         tags=tags,

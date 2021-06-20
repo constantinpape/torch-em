@@ -11,6 +11,8 @@ import torch.nn as nn
 # inside of the model unless its defined in the general spec
 
 
+# TODO think about more (multicut-friendly) boundary postprocessing
+# e.g. max preserving smoothing: bd = np.maximum(bd, gaussian(bd, sigma=1))
 class AccumulateChannels(nn.Module):
     def __init__(
         self,
@@ -65,11 +67,16 @@ def affinities_with_foreground_to_boundaries3d():
     return affinities_with_foreground_to_boundaries((1, 4))
 
 
+def affinities_to_boundaries_anisotropic():
+    return AccumulateChannels(None, (1, 3), "max")
+
+
 POSTPROCESSING = {
+    "affinities_to_boundaries_anisotropic": affinities_to_boundaries_anisotropic,
     "affinities_to_boundaries2d": affinities_to_boundaries2d,
     "affinities_with_foreground_to_boundaries2d": affinities_with_foreground_to_boundaries2d,
     "affinities_to_boundaries3d": affinities_to_boundaries3d,
-    "affinities_with_foreground_to_boundaries3d": affinities_with_foreground_to_boundaries3d
+    "affinities_with_foreground_to_boundaries3d": affinities_with_foreground_to_boundaries3d,
 }
 
 

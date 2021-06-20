@@ -13,7 +13,6 @@ def _load_data(input_):
         halo = [16, 180, 180]
         bb = tuple(slice(sh // 2 - ha, sh // 2 + ha) for sh, ha in zip(shape, halo))
         raw = ds[bb]
-    print(raw.shape)
     return raw
 
 
@@ -48,15 +47,18 @@ an instance segmentation.
 
 
 # TODO write offsets and other mws params into the config if this is a affinity model
-def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_formats):
+def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_formats):
 
     ckpt_name = os.path.split(checkpoint)[1]
 
-    input_data = _load_data(input_)
+    if input_ is None:
+        input_data = None
+    else:
+        input_data = _load_data(input_)
 
     is_aff_model = 'affinity' in ckpt_name
     if is_aff_model and affs_to_bd:
-        postprocessing = 'affinities_to_boundaries3d'
+        postprocessing = 'affinities_to_boundaries_anisotropic'
     else:
         postprocessing = None
 
@@ -76,7 +78,8 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
     doc = _get_doc(is_aff_model)
 
     export_biomageio_model(
-        checkpoint, input_data, output,
+        checkpoint, output,
+        input_data=input_data,
         name=name,
         authors=[{"name": "Constantin Pape; @constantinpape"}],
         tags=tags,
@@ -100,10 +103,10 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--checkpoint', required=True)
-    parser.add_argument('-i', '--input', required=True)
     parser.add_argument('-o', '--output', required=True)
+    parser.add_argument('-i', '--input', required=True)
     parser.add_argument('-a', '--affs_to_bd', default=0, type=int)
     parser.add_argument('-f', '--additional_formats', type=str, nargs="+")
     args = parser.parse_args()
-    export_to_bioimageio(args.checkpoint, args.input, args.output,
+    export_to_bioimageio(args.checkpoint, args.output, args.input,
                          bool(args.affs_to_bd), args.additional_formats)
