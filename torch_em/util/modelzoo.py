@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch_em
 from elf.io import open_file
+from .util import get_trainer, get_normalizer
 
 try:
     from bioimageio import spec
@@ -48,20 +49,6 @@ def get_default_citations():
     return {'training library': 'https://github.com/constantinpape/torch-em.git'}
 
 
-# try to load from filepath
-def _get_trainer(checkpoint, name='best', device=None):
-    # try to load from file
-    if isinstance(checkpoint, str):
-        assert os.path.exists(checkpoint)
-        trainer = torch_em.trainer.DefaultTrainer.from_checkpoint(checkpoint,
-                                                                  name=name,
-                                                                  device=device)
-    else:
-        trainer = checkpoint
-    assert isinstance(trainer, torch_em.trainer.DefaultTrainer)
-    return trainer
-
-
 def _get_model(trainer, postprocessing):
     model = trainer.model
     model.eval()
@@ -94,10 +81,16 @@ def _pad(input_data, trainer):
 def _write_depedencies(export_folder, dependencies):
     dep_path = os.path.join(export_folder, 'environment.yaml')
     if dependencies is None:
+        ver = torch.__version__
+        major, minor = list(map(int, ver.split('.')[:2]))
+        assert major == 1
+        # the torch zip layout was changed in version 1.6, so files will no longer load
+        # in older versions
+        torch_min_version = '1.6' if minor >= 6 else '1.0'
         dependencies = {
             "channels": ["pytorch", "conda-forge"],
             "name": "torch-em-deploy",
-            "dependencies": "pytorch"
+            "dependencies": f"pytorch>={torch_min_version},<2.0"
         }
         with open(dep_path, 'w') as f:
             spec.utils.yaml.dump(dependencies, f)
@@ -110,21 +103,13 @@ def _write_depedencies(export_folder, dependencies):
         copyfile(dependencies, dep_path)
 
 
-def _get_normalizer(trainer):
-    dataset = trainer.train_loader.dataset
-    if isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset):
-        dataset = dataset.datasets[0]
-    preprocessor = dataset.raw_transform
-
-    if hasattr(preprocessor, "normalizer"):
-        return preprocessor.normalizer
-    else:
-        return preprocessor
-
-
 def _write_data(input_data, model, trainer, export_folder):
     # normalize the input data if we have a normalization function
-    normalizer = _get_normalizer(trainer)
+    normalizer = get_normalizer(trainer)
+
+    # if input_data is None:
+    #     gen = SampleGenerator(trainer, 1, False, 1)
+    #     input_data = next(gen)
 
     # pad to 4d/5d and normalize the input data
     # NOTE we have to save the padded data, but without normalization
@@ -345,7 +330,7 @@ def _write_covers(test_in_path, test_out_path, export_folder, covers):
 
 def _get_preprocessing(trainer):
     ndim = trainer.train_loader.dataset.ndim
-    normalizer = _get_normalizer(trainer)
+    normalizer = get_normalizer(trainer)
 
     if isinstance(normalizer, functools.partial):
         kwargs = normalizer.keywords
@@ -502,8 +487,9 @@ def _validate_model(spec_path):
 #
 
 
+# TODO support loading data from the val_loader of the trainer when input_data is None (SampleGenerator)
 # TODO config: training details derived from loss and optimizer, custom params, e.g. offsets for mws
-def export_biomageio_model(checkpoint, input_data, export_folder,
+def export_biomageio_model(checkpoint, export_folder, input_data=None,
                            dependencies=None, name=None,
                            description=None, authors=None,
                            tags=None, license=None,
@@ -514,12 +500,13 @@ def export_biomageio_model(checkpoint, input_data, export_folder,
     """
     """
 
+    assert input_data is not None
     # TODO update the error message to point to the source for the bioimageio package
     if spec is None:
         raise RuntimeError("Need bioimageio package")
 
     # load trainer and model
-    trainer = _get_trainer(checkpoint, device='cpu')
+    trainer = get_trainer(checkpoint, device='cpu')
     model, model_kwargs = _get_model(trainer, model_postprocessing)
 
     # create the weights

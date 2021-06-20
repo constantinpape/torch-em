@@ -1,6 +1,9 @@
+import os
 import warnings
+
 import numpy as np
 import torch
+import torch_em
 
 # torch doesn't support most unsigned types,
 # so we map them to their signed equivalent
@@ -116,3 +119,30 @@ def get_constructor_arguments(obj):
         "Hence, the trainer can probably not be correctly deserialized via 'DefaultTrainer.from_checkpoint'."
     )
     return {}
+
+
+def get_trainer(checkpoint, name='best', device=None):
+    """Load trainer from a checkpoint.
+    """
+    # try to load from file
+    if isinstance(checkpoint, str):
+        assert os.path.exists(checkpoint)
+        trainer = torch_em.trainer.DefaultTrainer.from_checkpoint(checkpoint,
+                                                                  name=name,
+                                                                  device=device)
+    else:
+        trainer = checkpoint
+    assert isinstance(trainer, torch_em.trainer.DefaultTrainer)
+    return trainer
+
+
+def get_normalizer(trainer):
+    dataset = trainer.train_loader.dataset
+    if isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset):
+        dataset = dataset.datasets[0]
+    preprocessor = dataset.raw_transform
+
+    if hasattr(preprocessor, "normalizer"):
+        return preprocessor.normalizer
+    else:
+        return preprocessor

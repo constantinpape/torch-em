@@ -3,3 +3,4 @@ checkpoints/
 logs/
 *.pyc
 *.egg-info/
+*.n5/
