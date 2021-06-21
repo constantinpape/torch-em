@@ -1,6 +1,7 @@
 import numpy as np
 import torch
-from ..util import ensure_tensor_with_channels, load_image, supports_memmap
+from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
+                    load_image, supports_memmap)
 
 
 # TODO pad images that are too small for the patch shape
@@ -97,6 +98,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         raw, labels = self._get_sample(index)
+        initial_label_dtype = labels.dtype
 
         if self.raw_transform is not None:
             raw = self.raw_transform(raw)
@@ -112,6 +114,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
         # support enlarging bounding box here as well (for affinity transform) ?
         if self.label_transform2 is not None:
+            labels = ensure_spatial_array(labels, self.ndim, dtype=initial_label_dtype)
             labels = self.label_transform2(labels)
 
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
