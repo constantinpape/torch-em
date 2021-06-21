@@ -16,8 +16,8 @@ def _load_data(input_):
     return raw
 
 
-def _get_name(is_aff):
-    name = "CREMI"
+def _get_name(is_aff, organelle):
+    name = f"Platyereis-{organelle}"
     if is_aff:
         name += "-AffinityModel"
     else:
@@ -25,14 +25,14 @@ def _get_name(is_aff):
     return name
 
 
-def _get_doc(is_aff_model):
+def _get_doc(is_aff_model, organelle):
     ndim = 3
     if is_aff_model:
         doc = f"""
 ## {ndim}D U-Net for Affinity Prediction
 
 This model was trained on data from a whole body EM volume of a Platynereis dumerilii larva.
-It predicts affinity maps that can be processed with the mutex watershed to obtain
+It predicts affinity maps for {organlle} segmentation. The affinities can be processed with the mutex watershed to obtain
 an instance segmentation.
         """
     else:
@@ -40,7 +40,7 @@ an instance segmentation.
 ## {ndim}D U-Net for Boundary Prediction
 
 This model was trained on data from a whole body EM volume of a Platynereis dumerilii larva.
-It predicts boundary maps that can be processed with multicut segmentation to obtain
+It predicts boundary maps for {organelle} semgentation. The boundaries can be processed with multicut segmentation to obtain
 an instance segmentation.
         """
     return doc
@@ -67,7 +67,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
 
     if is_aff_model and affs_to_bd:
         is_aff_model = False
-    name = _get_name(is_aff_model)
+    name = _get_name(is_aff_model, organelle)
     tags = ["u-net", f"{organelle}-segmentation", "segmentation", "volume-em", "platynereis", organelle]
     tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
 
@@ -78,7 +78,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     if is_aff_model:
         cite["segmentation algorithm"] = "10.1109/TPAMI.2020.2980827"
 
-    doc = _get_doc(is_aff_model)
+    doc = _get_doc(is_aff_model, organelle)
 
     export_biomageio_model(
         checkpoint, output,
