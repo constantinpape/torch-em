@@ -55,8 +55,9 @@ class SegmentationDataset(torch.utils.data.Dataset):
             self.raw = RoiWrapper(self.raw, roi)
             self.labels = RoiWrapper(self.labels, roi)
         self.roi = roi
-
-        assert len(patch_shape) == self.raw.ndim
+        
+        # it supports nD patches that results in a 3D or 2D images when squeezed
+        assert len(patch_shape) >= self.raw.ndim
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform
