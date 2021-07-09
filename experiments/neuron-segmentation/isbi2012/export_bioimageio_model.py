@@ -97,7 +97,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
     )
 
     if additional_formats:
-        spec_path = os.path.join(output, "model.yaml")
+        spec_path = os.path.join(output, "rdf.yaml")
         for add_format in additional_formats:
             if add_format == "onnx":
                 convert_to_onnx(spec_path)
