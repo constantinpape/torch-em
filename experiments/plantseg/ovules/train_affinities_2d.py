@@ -1,15 +1,20 @@
-import argparse
 import os
 from glob import glob
-from functools import partial
 
 import torch
 import torch_em
 from elf.io import open_file
 from torch_em.model import UNet2d
+from torch_em.util import parser_helper
 
 ROOT_TRAIN = '/g/kreshuk/wolny/Datasets/Ovules/GT2x/train'
 ROOT_VAL = '/g/kreshuk/wolny/Datasets/Ovules/GT2x/val'
+OFFSETS = [
+    [-1, 0], [0, -1],
+    [-3, 0], [0, -3],
+    [-9, 0], [0, -9],
+    [-27, 0], [0, -27]
+]
 
 
 # exclude the volumes that don't fit
@@ -23,6 +28,7 @@ def get_paths(split, patch_shape, raw_key):
     return paths
 
 
+# TODO implement and use plantseg datasets
 def get_loader(split, patch_shape, batch_size,
                n_samples=None, roi=None):
     raw_key = 'raw'
@@ -30,19 +36,21 @@ def get_loader(split, patch_shape, batch_size,
     paths = get_paths(split, patch_shape, raw_key)
 
     sampler = torch_em.data.MinForegroundSampler(min_fraction=0.1, p_reject=1.)
-    label_transform = partial(torch_em.transform.label.connected_components, ensure_zero=True)
-
+    label_transform = torch_em.transform.label.AffinityTransform(offsets=OFFSETS,
+                                                                 ignore_label=None,
+                                                                 add_binary_target=False,
+                                                                 add_mask=True)
     return torch_em.default_segmentation_loader(
         paths, raw_key,
         paths, label_key,
         batch_size=batch_size,
         patch_shape=patch_shape,
-        label_transform=label_transform,
+        label_transform2=label_transform,
         sampler=sampler,
         n_samples=n_samples,
         num_workers=8*batch_size,
         shuffle=True,
-        label_dtype=torch.int64,
+        label_dtype=torch.float32,
         ndim=2
     )
 
@@ -59,11 +67,11 @@ def get_model(n_out):
     return model
 
 
-def train_contrastive(args):
-    model = get_model(args.embed_dim)
+# TODO don't hard-code input but take values from command line
+def train_affinties(args):
+    model = get_model(len(OFFSETS))
     patch_shape = [1, 736, 688]
-    # can train with larger batch sizes for scatter
-    batch_size = 4 if args.impl == 'scatter' else 1
+    batch_size = 4
 
     train_loader = get_loader(
         split='train',
@@ -78,13 +86,12 @@ def train_contrastive(args):
         n_samples=100
     )
 
-    loss = torch_em.loss.ContrastiveLoss(
-        delta_var=.75,
-        delta_dist=2.,
-        impl=args.impl
+    loss = torch_em.loss.LossWrapper(
+        torch_em.loss.DiceLoss(),
+        transform=torch_em.loss.ApplyAndRemoveMask()
     )
 
-    name = "embedding_model2d_" + args.impl + "_d" + str(args.embed_dim)
+    name = "affinity_model2d"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
@@ -92,40 +99,18 @@ def train_contrastive(args):
         val_loader=val_loader,
         loss=loss,
         metric=loss,
-        learning_rate=5e-5,
+        learning_rate=1e-4,
         mixed_precision=True,
         log_image_interval=50
     )
 
     if args.from_checkpoint:
-        trainer.fit(args.iterations, 'latest')
+        trainer.fit(args.n_iterations, 'latest')
     else:
-        trainer.fit(args.iterations)
-
-
-def check(train=True, val=True, n_images=5):
-    from torch_em.util.debug import check_loader
-    patch_shape = [1, 512, 512]
-    if train:
-        print("Check train loader")
-        loader = get_loader('train', patch_shape, batch_size=1)
-        check_loader(loader, n_images)
-    if val:
-        print("Check val loader")
-        loader = get_loader('val', patch_shape, batch_size=1)
-        check_loader(loader, n_images)
+        trainer.fit(args.n_iterations)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--impl', '-i', default='scatter')
-    parser.add_argument('--check', '-c', type=int, default=0)
-    parser.add_argument('--iterations', '-n', type=int, default=int(1e5))
-    parser.add_argument('-d', '--embed_dim', type=int, default=12)
-    parser.add_argument('--from_checkpoint', type=int, default=0)
-
+    parser = parser_helper()
     args = parser.parse_args()
-    if args.check:
-        check(train=True, val=True)
-    else:
-        train_contrastive(args)
+    train_affinties(args)
