@@ -1,23 +1,13 @@
 import argparse
 import os
 
-from elf.io import open_file
+import imageio
 from torch_em.util import (convert_to_onnx, convert_to_pytorch_script,
                            export_biomageio_model, get_default_citations)
 
 
-def _load_data(input_):
-    with open_file(input_, 'r') as f:
-        ds = f['volumes/raw']
-        shape = ds.shape
-        halo = [16, 180, 180]
-        bb = tuple(slice(sh // 2 - ha, sh // 2 + ha) for sh, ha in zip(shape, halo))
-        raw = ds[bb]
-    return raw
-
-
 def _get_name(is_aff):
-    name = "CREMI"
+    name = "DSB-Nuclei"
     if is_aff:
         name += "-AffinityModel"
     else:
@@ -26,22 +16,24 @@ def _get_name(is_aff):
 
 
 def _get_doc(is_aff_model):
-    ndim = 3
+    ndim = 2
     if is_aff_model:
         doc = f"""
 ## {ndim}D U-Net for Affinity Prediction
 
-This model was trained on the data of the CREMI neuron segmentation challenge.
-It predicts affinity maps that can be processed with the mutex watershed to obtain
-an instance segmentation.
+This model was trained on data from the Data Science Bowl Nucleus Segmentation Challenge.
+It predicts affinity maps and foreground probabilities for nucleus segmentation in different
+light microscopy settings, mainly with DAPI staining.
+The affinities can be processed with the mutex watershed to obtain an instance segmentation.
         """
     else:
         doc = f"""
 ## {ndim}D U-Net for Boundary Prediction
 
-This model was trained on the data of the CREMI neuron segmentation challenge.
-It predicts boundary maps that can be processed with multicut segmentation to obtain
-an instance segmentation.
+This model was trained on data from the Data Science Bowl Nucleus Segmentation Challenge.
+It predicts boundary maps and foreground probabilities for nucleus segmentation in different
+light microscopy settings, mainly with DAPI staining.
+The boundaries can be processed with multicut segmentation to obtain an instance segmentation.
         """
     return doc
 
@@ -50,27 +42,26 @@ an instance segmentation.
 def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_formats):
 
     ckpt_name = os.path.split(checkpoint)[1]
-
     if input_ is None:
         input_data = None
     else:
-        input_data = _load_data(input_)
+        input_data = imageio.imread(input_)
 
     is_aff_model = 'affinity' in ckpt_name
     if is_aff_model and affs_to_bd:
-        postprocessing = 'affinities_to_boundaries_anisotropic'
+        postprocessing = 'affinities_with_foreground_to_boundaries2d'
     else:
         postprocessing = None
 
     if is_aff_model and affs_to_bd:
         is_aff_model = False
     name = _get_name(is_aff_model)
-    tags = ["u-net", "neuron-segmentation", "segmentation", "volume-em", "cremi", "connectomics"]
+    tags = ["u-net", "nucleus-segmentation", "segmentation", "volume-em", "platynereis", "nuclei"]
     tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
 
     # eventually we should refactor the citation logic
     cite = get_default_citations()
-    cite["data"] = "https://cremi.org"
+    cite["data"] = "https://www.nature.com/articles/s41592-019-0612-7"
     cite["architecture"] = "https://link.springer.com/chapter/10.1007/978-3-319-46723-8_49"
     if is_aff_model:
         cite["segmentation algorithm"] = "10.1109/TPAMI.2020.2980827"
@@ -101,6 +92,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
 
 
 if __name__ == '__main__':
+    # TODO refactor this into a parser helper
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--checkpoint', required=True)
     parser.add_argument('-o', '--output', required=True)

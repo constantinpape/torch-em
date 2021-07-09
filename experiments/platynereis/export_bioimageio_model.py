@@ -6,9 +6,13 @@ from torch_em.util import (convert_to_onnx, convert_to_pytorch_script,
                            export_biomageio_model, get_default_citations)
 
 
-def _load_data(input_):
+def _load_data(input_, organelle):
+    if organelle == "cells":
+        key = "volumes/raw/s1"
+    else:
+        key = "volumes/raw"
     with open_file(input_, 'r') as f:
-        ds = f['volumes/raw/s1']
+        ds = f[key]
         shape = ds.shape
         halo = [16, 128, 128]
         bb = tuple(slice(sh // 2 - ha, sh // 2 + ha) for sh, ha in zip(shape, halo))
@@ -32,15 +36,16 @@ def _get_doc(is_aff_model, organelle):
 ## {ndim}D U-Net for Affinity Prediction
 
 This model was trained on data from a whole body EM volume of a Platynereis dumerilii larva.
-It predicts affinity maps for {organlle} segmentation. The affinities can be processed with the mutex watershed to obtain
-an instance segmentation.
+It predicts affinity maps for {organelle} segmentation in SBEM volumes.
+The affinities can be processed with the mutex watershed to obtain an instance segmentation.
         """
     else:
         doc = f"""
 ## {ndim}D U-Net for Boundary Prediction
 
 This model was trained on data from a whole body EM volume of a Platynereis dumerilii larva.
-It predicts boundary maps for {organelle} semgentation. The boundaries can be processed with multicut segmentation to obtain
+It predicts boundary maps for {organelle} semgentation in SBEM volumes.
+The boundaries can be processed with multicut segmentation to obtain
 an instance segmentation.
         """
     return doc
@@ -56,12 +61,14 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     if input_ is None:
         input_data = None
     else:
-        input_data = _load_data(input_)
+        input_data = _load_data(input_, organelle)
 
     is_aff_model = 'affinity' in ckpt_name
     if is_aff_model and affs_to_bd:
-        # TODO adapt post-processing to organelel
-        postprocessing = 'affinities_to_boundaries_anisotropic'
+        if organelle in ("cells",):
+            postprocessing = 'affinities_to_boundaries_anisotropic'
+        elif organelle in ("nuclei", "mitochondria"):
+            postprocessing = 'affinities_with_foreground_to_boundaries3d'
     else:
         postprocessing = None
 
@@ -95,7 +102,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     )
 
     if additional_formats:
-        spec_path = os.path.join(output, "model.yaml")
+        spec_path = os.path.join(output, "rdf.yaml")
         for add_format in additional_formats:
             if add_format == "onnx":
                 convert_to_onnx(spec_path)

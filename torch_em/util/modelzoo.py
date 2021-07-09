@@ -453,7 +453,7 @@ def _get_tensor_kwargs(model, model_kwargs):
             offset = [0] * len(step)
         else:
             scale = [1, 0] + ([1] * (len(step) - 2))
-            offset = [0, outc] + ([0] * (len(step) - 2))
+            offset = [0, float(outc) / 2] + ([0] * (len(step) - 2))
         tensor_kwargs = {
             "input_step": step,
             "input_min_shape": min_shape,
@@ -551,7 +551,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
         **kwargs
     )
 
-    out_path = os.path.join(export_folder, 'model.yaml')
+    out_path = os.path.join(export_folder, 'rdf.yaml')
     spec.serialize_spec(model_spec, out_path)
 
     # load and validate the model
