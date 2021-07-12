@@ -1,6 +1,9 @@
 mkdir -p exported_models
 
 echo "Export covid-if model"
+cd covid-if
+python export_bioimageio_model.py -c checkpoints/covid-if-affinity-model -i /scratch/pape/covid-if/gt_image_000.h5 -o ../exported_models/covid_if_boundaries -a 1 -f torchscript
+cd ..
 
 echo "Export cremi model"
 
@@ -10,12 +13,15 @@ python export_bioimageio_model.py -c checkpoints/dsb-affinity-model -i /scratch/
 cd ..
 
 echo "Export isbi2012 model"
+cd neuron-segmentation/isbi2012
+python export_bioimageio_model.py -c checkpoints/affinity-model -i /g/kreshuk/data/isbi2012_challenge/isbi2012_test_volume.h5 -o ../../exported_models/isbi2012_boundaries -a 1 -f torchscript
+cd ../..
 
 echo "Export mito-em model"
 
 echo "Export plantseg models"
 cd plantseg
-# python export_bioimageio_model.py -c ovules/checkpoints/affinity_model2d -i /g/kreshuk/wolny/Datasets/Ovules/GT2x/val/N_420_ds2x.h5 -o ../exported_models/ovules_boundaries -a 1 -f torchscript
+python export_bioimageio_model.py -c ovules/checkpoints/affinity_model2d -i /g/kreshuk/wolny/Datasets/Ovules/GT2x/val/N_420_ds2x.h5 -o ../exported_models/ovules_boundaries -a 1 -f torchscript
 cd ..
 
 echo "Export platynereis models"
