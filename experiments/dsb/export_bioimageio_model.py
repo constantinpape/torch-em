@@ -79,16 +79,17 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         git_repo='https://github.com/constantinpape/torch-em.git',
         cite=cite,
         model_postprocessing=postprocessing,
-        input_optional_parameters=False
+        input_optional_parameters=False,
+        # need custom deepimagej fields if we have torchscript export
+        for_deepimagej="torchscript" in additional_formats
     )
 
-    if additional_formats:
-        spec_path = os.path.join(output, "rdf.yaml")
-        for add_format in additional_formats:
-            if add_format == "onnx":
-                convert_to_onnx(spec_path)
-            elif add_format == "torchscript":
-                convert_to_pytorch_script(spec_path)
+    spec_path = os.path.join(output, "rdf.yaml")
+    for add_format in additional_formats:
+        if add_format == "onnx":
+            convert_to_onnx(spec_path)
+        elif add_format == "torchscript":
+            convert_to_pytorch_script(spec_path)
 
 
 if __name__ == '__main__':

@@ -328,7 +328,8 @@ def _write_covers(test_in_path, test_out_path, export_folder, covers):
     return cover_path
 
 
-def _get_preprocessing(trainer):
+# TODO add deepimagej macros if for_deepimagej is True
+def _get_preprocessing(trainer, for_deepimagej):
     ndim = trainer.train_loader.dataset.ndim
     normalizer = get_normalizer(trainer)
 
@@ -482,6 +483,19 @@ def _validate_model(spec_path):
     return True
 
 
+def _write_sample_data(test_in_path, test_out_path, export_folder):
+
+    inp = np.load(test_in_path).squeeze()
+    sample_in_path = os.path.join(export_folder, 'sample_input.tif')
+    imageio.imwrite(sample_in_path, inp) if inp.ndim == 2 else imageio.volwrite(sample_in_path, inp)
+
+    outp = np.load(test_out_path).squeeze()
+    sample_out_path = os.path.join(export_folder, 'sample_output.tif')
+    imageio.imwrite(sample_out_path, outp) if outp.ndim == 2 else imageio.volwrite(sample_out_path, outp)
+
+    return os.path.split(sample_in_path)[1], os.path.split(sample_out_path)[1]
+
+
 #
 # model export functionality
 #
@@ -496,7 +510,8 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
                            documentation=None, covers=None,
                            git_repo=None, cite=None,
                            input_optional_parameters=True,
-                           model_postprocessing=None):
+                           model_postprocessing=None,
+                           for_deepimagej=False):
     """
     """
 
@@ -535,7 +550,15 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
                          git_repo, cite,
                          export_folder, input_optional_parameters)
     kwargs.update(tensor_kwargs)
-    preprocessing = _get_preprocessing(trainer)
+    preprocessing = _get_preprocessing(trainer, for_deepimagej)
+
+    # deepimagej needs sample images in tif format
+    if for_deepimagej:
+        sample_in_path, sample_out_path = _write_sample_data(test_in_path, test_out_path, export_folder)
+        kwargs.update({
+            "sample_inputs": [sample_in_path],
+            "sample_outputs": [sample_out_path]
+        })
 
     model_spec = spec.build_spec(
         source=source,
