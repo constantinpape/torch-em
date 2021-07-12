@@ -126,7 +126,7 @@ def get_trainer(checkpoint, name='best', device=None):
     """
     # try to load from file
     if isinstance(checkpoint, str):
-        assert os.path.exists(checkpoint)
+        assert os.path.exists(checkpoint), checkpoint
         trainer = torch_em.trainer.DefaultTrainer.from_checkpoint(checkpoint,
                                                                   name=name,
                                                                   device=device)

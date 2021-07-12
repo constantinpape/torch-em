@@ -6,12 +6,16 @@ from torch_em.util import (convert_to_onnx, convert_to_pytorch_script,
                            export_biomageio_model, get_default_citations)
 
 
-def _load_data(input_):
+def _load_data(input_, is2d):
     with open_file(input_, 'r') as f:
         ds = f['raw']
         shape = ds.shape
-        halo = [16, 128, 128]
-        bb = tuple(slice(sh // 2 - ha, sh // 2 + ha) for sh, ha in zip(shape, halo))
+        if is2d:
+            halo = [256, 256]
+            bb = (shape[0] // 2,) + tuple(slice(sh // 2 - ha, sh // 2 + ha) for sh, ha in zip(shape[1:], halo))
+        else:
+            halo = [16, 128, 128]
+            bb = tuple(slice(sh // 2 - ha, sh // 2 + ha) for sh, ha in zip(shape, halo))
         raw = ds[bb]
     return raw
 
@@ -53,10 +57,11 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     specimen = os.path.split(root)[0]
     assert specimen in ("ovules", "roots"), specimen
 
+    is2d = checkpoint.endswith('2d')
     if input_ is None:
         input_data = None
     else:
-        input_data = _load_data(input_)
+        input_data = _load_data(input_, is2d)
 
     is_aff_model = "affinity" in ckpt_name
     if is_aff_model and affs_to_bd:
@@ -94,16 +99,17 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         git_repo='https://github.com/constantinpape/torch-em.git',
         cite=cite,
         model_postprocessing=postprocessing,
-        input_optional_parameters=False
+        input_optional_parameters=False,
+        # need custom deepimagej fields if we have torchscript export
+        for_deepimagej="torchscript" in additional_formats
     )
 
-    if additional_formats:
-        spec_path = os.path.join(output, "model.yaml")
-        for add_format in additional_formats:
-            if add_format == "onnx":
-                convert_to_onnx(spec_path)
-            elif add_format == "torchscript":
-                convert_to_pytorch_script(spec_path)
+    spec_path = os.path.join(output, "rdf.yaml")
+    for add_format in additional_formats:
+        if add_format == "onnx":
+            convert_to_onnx(spec_path)
+        elif add_format == "torchscript":
+            convert_to_pytorch_script(spec_path)
 
 
 if __name__ == '__main__':
