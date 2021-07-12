@@ -6,13 +6,9 @@ from torch_em.util import (convert_to_onnx, convert_to_pytorch_script,
                            export_biomageio_model, get_default_citations)
 
 
-def _load_data(input_, organelle):
-    if organelle == "cells":
-        key = "volumes/raw/s1"
-    else:
-        key = "volumes/raw"
+def _load_data(input_):
     with open_file(input_, 'r') as f:
-        ds = f[key]
+        ds = f['raw']
         shape = ds.shape
         halo = [16, 128, 128]
         bb = tuple(slice(sh // 2 - ha, sh // 2 + ha) for sh, ha in zip(shape, halo))
@@ -20,8 +16,8 @@ def _load_data(input_, organelle):
     return raw
 
 
-def _get_name(is_aff, organelle):
-    name = f"Platyereis-{organelle}"
+def _get_name(is_aff, specimen):
+    name = f"Arabidopsis-{specimen}"
     if is_aff:
         name += "-AffinityModel"
     else:
@@ -29,22 +25,24 @@ def _get_name(is_aff, organelle):
     return name
 
 
-def _get_doc(is_aff_model, organelle):
+def _get_doc(is_aff_model, specimen):
     ndim = 3
     if is_aff_model:
         doc = f"""
 ## {ndim}D U-Net for Affinity Prediction
 
-This model was trained on data from a whole body EM volume of a Platynereis dumerilii larva.
-It predicts affinity maps for {organelle} segmentation in SBEM volumes.
-The affinities can be processed with the mutex watershed to obtain an instance segmentation."""
+This model was trained on data from light microscopy data of Arabidopsis thaliana {specimen}.
+It predicts affinity maps for {specimen} segmentation.
+The affinities can be processed with the mutex watershed to obtain an instance segmentation.
+        """
     else:
         doc = f"""
 ## {ndim}D U-Net for Boundary Prediction
 
-This model was trained on data from a whole body EM volume of a Platynereis dumerilii larva.
-It predicts boundary maps for {organelle} semgentation in SBEM volumes.
-The boundaries can be processed with multicut segmentation to obtain an instance segmentation."""
+This model was trained on data from light microscopy data of Arabidopsis thaliana {specimen}.
+It predicts boundary maps for {specimen} segmentation.
+The boundaries can be processed with multicut segmentation to obtain an instance segmentation.
+        """
     return doc
 
 
@@ -52,37 +50,38 @@ The boundaries can be processed with multicut segmentation to obtain an instance
 def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_formats):
 
     root, ckpt_name = os.path.split(checkpoint)
-    organelle = os.path.split(root)[0]
-    assert organelle in ('cells', 'mitochondria', 'nuclei'), organelle
+    specimen = os.path.split(root)[0]
+    assert specimen in ("ovules", "roots"), specimen
 
     if input_ is None:
         input_data = None
     else:
-        input_data = _load_data(input_, organelle)
+        input_data = _load_data(input_)
 
-    is_aff_model = 'affinity' in ckpt_name
+    is_aff_model = "affinity" in ckpt_name
     if is_aff_model and affs_to_bd:
-        if organelle in ('cells',):
-            postprocessing = 'affinities_to_boundaries_anisotropic'
-        elif organelle in ('mitochondria', 'nuclei'):
-            postprocessing = 'affinities_with_foreground_to_boundaries3d'
+        postprocessing = "affinities_to_boundaries3d"
     else:
         postprocessing = None
 
     if is_aff_model and affs_to_bd:
         is_aff_model = False
-    name = _get_name(is_aff_model, organelle)
-    tags = ["u-net", f"{organelle}-segmentation", "segmentation", "volume-em", "platynereis", organelle]
+    name = _get_name(is_aff_model, specimen)
+    tags = ["u-net", f"{specimen}-segmentation", "segmentation", "light-microscopy", "arabidopsis"]
+    if specimen == "ovules":
+        tags += ["ovules", "confocal-microscopy"]
+    else:
+        tags += ["primordial-root", "light-sheet-microscopy"]
     tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
 
     # eventually we should refactor the citation logic
     cite = get_default_citations()
-    cite["data"] = "https://doi.org/10.1101/2020.02.26.961037"
+    cite["data"] = "https://doi.org/10.7554/eLife.57613.sa2"
     cite["architecture"] = "https://link.springer.com/chapter/10.1007/978-3-319-46723-8_49"
     if is_aff_model:
         cite["segmentation algorithm"] = "10.1109/TPAMI.2020.2980827"
 
-    doc = _get_doc(is_aff_model, organelle)
+    doc = _get_doc(is_aff_model, specimen)
 
     export_biomageio_model(
         checkpoint, output,
@@ -99,7 +98,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     )
 
     if additional_formats:
-        spec_path = os.path.join(output, "rdf.yaml")
+        spec_path = os.path.join(output, "model.yaml")
         for add_format in additional_formats:
             if add_format == "onnx":
                 convert_to_onnx(spec_path)
