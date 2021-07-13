@@ -560,7 +560,7 @@ def _get_deepimagej_preprocessing(name, kwargs, export_folder):
          "kwargs": macro}
     ]
 
-    return preprocess, {"macro": [macro]}
+    return preprocess, {"files": [macro]}
 
 
 def _get_deepimagej_config(export_folder,
@@ -908,7 +908,13 @@ def convert_to_pytorch_script(spec_path):
     if weight_converter is None:
         raise RuntimeError("Need bioimageio.weight_converter package")
     converter = weight_converter.convert_weights_to_pytorch_script
-    _convert_impl(spec_path, "weights-torchscript.pt", converter, "pytorch_script")
+    weight_name = "weights-torchscript.pt"
+    _convert_impl(spec_path, weight_name, converter, "pytorch_script")
+
+    # check that we can actually load it again
+    root = os.path.split(spec_path)[0]
+    weight_path = os.path.join(root, weight_name)
+    torch.jit.load(weight_path)
 
 
 def convert_main():
