@@ -745,7 +745,7 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
     converter(model_spec, out_path, **kwargs)
     # now, we need the model with raw nodes
     model_spec = spec.load_raw_model(os.path.abspath(spec_path), Path(root))[0]
-    model_spec = spec.add_weights(model_spec, out_path, root=root, weight_type=weight_type, **kwargs)
+    model_spec = spec.add_weights(model_spec, f"./{weight_name}", root=root, weight_type=weight_type, **kwargs)
 
     spec.serialize_spec(model_spec, spec_path)
 
@@ -763,7 +763,7 @@ def convert_to_pytorch_script(spec_path):
     if weight_converter is None:
         raise RuntimeError("Need bioimageio.weight_converter package")
     converter = weight_converter.convert_weights_to_pytorch_script
-    _convert_impl(spec_path, "weights.torchscript", converter, "pytorch_script")
+    _convert_impl(spec_path, "weights-torchscript.pt", converter, "pytorch_script")
 
 
 def convert_main():
