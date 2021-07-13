@@ -18,6 +18,9 @@ python export_bioimageio_model.py -c checkpoints/affinity-model -i /g/kreshuk/da
 cd ../..
 
 echo "Export mito-em model"
+cd mito-em
+python export_bioimageio_model.py -c checkpoints/affinity_model_default_human_rat -i /scratch/pape/mito_em/data/human_test.n5 -o ../exported_models/mito_em_boundaries -a 1 -f torchscript
+cd ..
 
 echo "Export plantseg models"
 cd plantseg

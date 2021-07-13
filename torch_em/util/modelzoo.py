@@ -8,13 +8,16 @@ from warnings import warn
 
 import imageio
 import numpy as np
+import requests
 import torch
 import torch_em
 from elf.io import open_file
+from ruamel.yaml import YAML
 from .util import get_trainer, get_normalizer
 
 try:
     from bioimageio import spec
+    from marshmallow import missing
 except ImportError:
     spec = None
 
@@ -80,6 +83,7 @@ def _pad(input_data, trainer):
 
 def _write_depedencies(export_folder, dependencies):
     dep_path = os.path.join(export_folder, 'environment.yaml')
+    yaml = YAML(typ="safe")
     if dependencies is None:
         ver = torch.__version__
         major, minor = list(map(int, ver.split('.')[:2]))
@@ -93,10 +97,10 @@ def _write_depedencies(export_folder, dependencies):
             "dependencies": f"pytorch>={torch_min_version},<2.0"
         }
         with open(dep_path, 'w') as f:
-            spec.utils.yaml.dump(dependencies, f)
+            yaml.dump(dependencies, f)
     else:
         assert os.path.exists(dependencies)
-        dep = spec.utils.yaml.load(dependencies)
+        dep = yaml.load(dependencies)
         assert "channels" in dep
         assert "name" in dep
         assert "dependencies" in dep
@@ -328,8 +332,7 @@ def _write_covers(test_in_path, test_out_path, export_folder, covers):
     return cover_path
 
 
-# TODO add deepimagej macros if for_deepimagej is True
-def _get_preprocessing(trainer, for_deepimagej):
+def _get_preprocessing(trainer):
     ndim = trainer.train_loader.dataset.ndim
     normalizer = get_normalizer(trainer)
 
@@ -398,7 +401,7 @@ def _get_preprocessing(trainer, for_deepimagej):
         preprocessing = {
             "name": "scale_range",
             "kwargs": {
-                "mode": 'per_sample',
+                "mode": "per_sample",
                 "axes": axes,
                 "min_percentile": lower,
                 "max_percentile": upper
@@ -491,9 +494,129 @@ def _write_sample_data(test_in_path, test_out_path, export_folder):
 
     outp = np.load(test_out_path).squeeze()
     sample_out_path = os.path.join(export_folder, 'sample_output.tif')
-    imageio.imwrite(sample_out_path, outp) if outp.ndim == 2 else imageio.volwrite(sample_out_path, outp)
+    if outp.ndim == 2:
+        imageio.imwrite(sample_out_path, outp)
+    elif outp.ndim == 3:
+        imageio.volwrite(sample_out_path, outp)
+    else:
+        # FIXME
+        # can't write multi-channel outputs like this, so we only write the first channel
+        # this should be fixed; I am sure it's possible with a bit more fancy tif functionality
+        assert outp.ndim == 4
+        imageio.volwrite(sample_out_path, outp[0])
 
     return os.path.split(sample_in_path)[1], os.path.split(sample_out_path)[1]
+
+
+def _get_deepimagej_preprocessing(name, kwargs, export_folder):
+    # these are the only preprocessings we currently use
+    assert name in ("scale_linear", "scale_range", "zero_mean_unit_variance")
+    if name == "scale_linear":
+        macro = "scale_linear.ijm"
+
+        replace = {"gain": kwargs["gain"], "offset": kwargs["offset"]}
+    elif name == "scale_range":
+        macro = "per_sample_scale_range.ijm"
+        replace = {"min_precentile": kwargs["min_percentile"], "max_percentile": kwargs["max_percentile"]}
+
+    elif name == "zero_mean_unit_variance":
+        mode = kwargs["mode"]
+        if mode == "fixed":
+            macro = "fixed_zero_mean_unit_variance.ijm"
+            replace = {"paramMean": kwargs["mean"], "paramStd": kwargs["std"]}
+        else:
+            macro = "zero_mean_unit_variance.ijm"
+            replace = {}
+
+    macro = f"{name}.ijm"
+    url = f"https://raw.githubusercontent.com/deepimagej/imagej-macros/master/bioimage.io/{macro}"
+
+    path = os.path.join(export_folder, macro)
+    with requests.get(url, stream=True) as r:
+        with open(path, 'w') as f:
+            f.write(r.text)
+
+    # replace the kwargs in the macro file
+    if replace:
+        lines = []
+        with open(path) as f:
+            for line in f:
+                kwarg = [kwarg for kwarg in replace if line.startswith(kwarg)]
+                if kwarg:
+                    assert len(kwarg) == 1
+                    kwarg = kwarg[0]
+                    # each kwarg should only be replaced ones
+                    val = replace.pop(kwarg)
+                    lines.append(f"{kwarg} = {val};\n")
+                else:
+                    lines.append(line)
+
+        with open(path, 'w') as f:
+            for line in lines:
+                f.write(line)
+
+    preprocess = [
+        {"spec": "ij.IJ::runMacroFile",
+         "kwargs": macro}
+    ]
+
+    return preprocess, {"macro": [macro]}
+
+
+def _get_deepimagej_config(export_folder,
+                           sample_in_path, sample_out_path,
+                           test_in_path, test_out_path,
+                           preprocessing):
+
+    if preprocessing:
+        assert len(preprocessing) == 1
+        name = preprocessing[0]["name"]
+        kwargs = preprocessing[0]["kwargs"]
+        preprocess, attachments = _get_deepimagej_preprocessing(name, kwargs, export_folder)
+    else:
+        preprocess = [{"spec": None}]
+        attachments = None
+
+    # we currently don't implement any postprocessing
+    postprocess = [{"spec": None}]
+
+    def _get_size(path):
+        # load shape and get rid of batchdim
+        shape = np.load(path).shape[1:]
+        # reverse the shape; deepij expexts xyzc
+        shape = shape[::-1]
+        # add singleton z axis if we have 2d data
+        if len(shape) == 3:
+            shape = shape[:2] + (1,) + shape[-1:]
+        assert len(shape) == 4
+        return " x ".join(map(str, shape))
+
+    # TODO get the pixel size info from somewhere
+    test_info = {
+        "inputs": [
+            {"name": sample_in_path,
+             "size": _get_size(test_in_path),
+             "pixel_size": {"x": 1.0, "y": 1.0, "z": 1.0}}
+        ],
+        "outputs": [
+            {"name": sample_out_path,
+             "type": "image",
+             "size": _get_size(test_out_path)}
+        ],
+        "memory_peak": None,
+        "runtime": None
+    }
+
+    config = {
+        "preprocess": preprocess,
+        "postprocess": postprocess,
+        "test_information": test_info,
+        # other stuff deepimagej needs
+        "pyramidal_model": False,
+        "allow_tiling": True,
+        "model_keys": None
+    }
+    return {"deepimagej": config}, attachments
 
 
 #
@@ -550,15 +673,29 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
                          git_repo, cite,
                          export_folder, input_optional_parameters)
     kwargs.update(tensor_kwargs)
-    preprocessing = _get_preprocessing(trainer, for_deepimagej)
+    preprocessing = _get_preprocessing(trainer)
+
+    # the apps to link with this model, by default ilastik
+    links = ["ilastik/ilastik"]
 
     # deepimagej needs sample images in tif format
+    # and we add it to the linked apps
     if for_deepimagej:
-        sample_in_path, sample_out_path = _write_sample_data(test_in_path, test_out_path, export_folder)
+        sample_in_path, sample_out_path = _write_sample_data(test_in_path,
+                                                             test_out_path,
+                                                             export_folder)
+        config, attachments = _get_deepimagej_config(export_folder,
+                                                     sample_in_path, sample_out_path,
+                                                     test_in_path, test_out_path,
+                                                     preprocessing)
         kwargs.update({
             "sample_inputs": [sample_in_path],
-            "sample_outputs": [sample_out_path]
+            "sample_outputs": [sample_out_path],
+            "config": config
         })
+        if attachments is not None:
+            kwargs.update({"attachments": attachments})
+        links.append("deepimagej/deepimagej")
 
     model_spec = spec.build_spec(
         source=source,
@@ -571,6 +708,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
         dependencies="conda:./environment.yaml",
         covers=cover_path,
         preprocessing=preprocessing,
+        links=links,
         **kwargs
     )
 
@@ -626,7 +764,14 @@ def main():
 #
 
 def _load_model(model_spec):
-    model = spec.utils.get_nn_instance(model_spec)
+
+    # NOTE: copied from tiktorch; this should go into python-bioimageio and then we use it from there
+    def get_nn_instance(node, **kwargs):
+        joined_kwargs = {} if node.kwargs is missing else dict(node.kwargs)  # type: ignore
+        joined_kwargs.update(kwargs)
+        return node.source(**joined_kwargs)
+
+    model = get_nn_instance(model_spec)
     weights = model_spec.weights["pytorch_state_dict"]
     state = torch.load(weights.source, map_location='cpu')
     model.load_state_dict(state)
@@ -715,7 +860,7 @@ def import_bioimageio_model(spec_path, return_spec=False):
     if spec is None:
         raise RuntimeError("Need bioimageio package")
     root = Path(os.path.split(spec_path)[0])
-    model_spec = spec.load_model(os.path.abspath(spec_path), root)
+    model_spec = spec.load_node(os.path.abspath(spec_path), root)
 
     model = _load_model(model_spec)
     normalizer = _load_normalizer(model_spec)
@@ -741,10 +886,10 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
     out_path = os.path.join(root, weight_name)
 
     # here, we need the model with resolved nodes
-    model_spec = spec.load_model(os.path.abspath(spec_path), Path(root))
+    model_spec = spec.load_node(os.path.abspath(spec_path), Path(root))
     converter(model_spec, out_path, **kwargs)
     # now, we need the model with raw nodes
-    model_spec = spec.load_raw_model(os.path.abspath(spec_path), Path(root))[0]
+    model_spec = spec.load_raw_node(os.path.abspath(spec_path), Path(root))
     model_spec = spec.add_weights(model_spec, f"./{weight_name}", root=root, weight_type=weight_type, **kwargs)
 
     spec.serialize_spec(model_spec, spec_path)
