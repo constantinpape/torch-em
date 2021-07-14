@@ -11,13 +11,7 @@ from torch_em.loss import DiceLoss
 from torch_em.model import UNet2d
 from torch_em.trainer import DefaultTrainer
 
-try:
-    import bioimageio
-except ImportError:
-    bioimageio = None
 
-
-@unittest.skipIf(bioimageio is None, "Need bioimageio package")
 class TestModelzoo(unittest.TestCase):
     data_path = './data.h5'
     checkpoint_folder = './checkpoints'
@@ -64,14 +58,14 @@ class TestModelzoo(unittest.TestCase):
 
         success = export_biomageio_model(
             os.path.join(self.checkpoint_folder, self.name),
-            np.random.rand(128, 128).astype('float32'),
             self.save_folder,
+            input_data=np.random.rand(128, 128).astype('float32'),
             input_optional_parameters=False
 
         )
         self.assertTrue(success)
         self.assertTrue(os.path.exists(self.save_folder))
-        self.assertTrue(os.path.exists(os.path.join(self.save_folder, f'{self.name}.model.yaml')))
+        self.assertTrue(os.path.exists(os.path.join(self.save_folder, 'rdf.yaml')))
 
     def test_export_single_channel(self):
         self._test_export(1)

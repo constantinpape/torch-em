@@ -6,6 +6,7 @@ name:
     torch-em
 dependencies:
     - affogato
+    - bioimageio.spec
     - cudatoolkit=10.2  # set correct cuda version for your system
     - elf
     - pip
