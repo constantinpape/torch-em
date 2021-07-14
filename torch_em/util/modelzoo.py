@@ -608,8 +608,10 @@ def _get_deepimagej_config(export_folder,
     }
 
     config = {
-        "preprocess": preprocess,
-        "postprocess": postprocess,
+        "prediction": {
+            "preprocess": preprocess,
+            "postprocess": postprocess,
+        },
         "test_information": test_info,
         # other stuff deepimagej needs
         "pyramidal_model": False,
