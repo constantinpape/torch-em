@@ -24,6 +24,7 @@ Design:
 import torch
 import torch_em
 from torch_em.model import UNet2d
+from torc_em.data.datasets import get_dsb_loader
 
 model = UNet2d(in_channels=1, out_channels=2)
 
@@ -34,19 +35,21 @@ label_transform = torch_em.transform.BoundaryTransform(
 )
 
 # training and validation data loader
-train_loader = torch_em.default_segmentation_loader(
-    "dsb2018/train/images", "*.tif",
-    "dsb2018/train/masks", "*.tif",
-    batch_size=8, patch_shape=(1, 256, 256),
-    label_transform=label_transform,
-    n_samples=250
+data_path = "./dsb"  # the training data will be downloaded and saved here
+train_loader = get_dsb_loader(
+    data_path, 
+    patch_shape=(1, 256, 256),
+    batch_size=8
+    split="train",
+    download=True,
+    label_transform=label_transform
 )
-val_loader = torch_em.default_segmentation_loader(
-    "dsb2018/test/images", "*.tif",  # misusing the test data for validation ;)
-    "dsb2018/test/masks", "*.tif",
-    batch_size=8, patch_shape=(1, 256, 256),
-    label_transform=label_transform,
-    n_samples=25
+val_loader = get_dsb_loader(
+    data_path, 
+    patch_shape=(1, 256, 256),
+    batch_size=8
+    split="test",
+    label_transform=label_transform
 )
 
 # the trainer object that handles the training details
@@ -68,7 +71,7 @@ import imageio
 from torch_em.util import export_bioimageio_model
 
 # load one of the images to use as reference image image
-test_im = imageio.imread(glob("dsb2018/test/images/*.tif")[0])
+test_im = imageio.imread(glob(f"{data_path}/test/images/*.tif")[0])
 
 export_bioimageio_model("./checkpoints/dsb-boundary-model", "./bioimageio-model", test_im)
 ```
