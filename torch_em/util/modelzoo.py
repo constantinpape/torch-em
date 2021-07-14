@@ -1,3 +1,4 @@
+import argparse
 import functools
 import json
 import os
@@ -47,9 +48,37 @@ def normalize_with_batch(data, normalizer):
 #
 
 
-# TODO: make doi for torch_em and add it instead of url + derive citation from model
-def get_default_citations():
-    return {'training library': 'https://github.com/constantinpape/torch-em.git'}
+def get_default_citations(model=None, model_output=None):
+    # TODO: make doi for torch_em and use it insted of the url
+    citations = {
+        "training library": "https://github.com/constantinpape/torch-em.git"
+    }
+
+    # try to derive the correct network citation from the model class
+    if model is not None:
+        if isinstance(model, str):
+            model_name = model
+        else:
+            model_name = str(model.__class__.__name__)
+
+        if model_name.lower() in ("unet2d", "unet_2d", "unet"):
+            citations["architecture"] = "https://doi.org/10.1007/978-3-319-24574-4_28"
+        elif model_name.lower() in ("unet3d", "unet_3d", "anisotropicunet"):
+            citations["architecture"] = "https://doi.org/10.1007/978-3-319-46723-8_49"
+        else:
+            warn("No citation for architecture {model_name} found.")
+
+    # try to derive the correct segmentation algo citation from the model output type
+    if model_output is not None:
+        msg = f"No segmentation algorithm for output {model_output} known. 'affinities' and 'boundaries' are supported."
+        if model_output == "affinities":
+            citations["segmentation algorithm"] = "https://doi.org/10.1109/TPAMI.2020.2980827"
+        elif model_output == "boundaries":
+            citations["segmentation algorithm"] = "https://doi.org/10.1038/nmeth.4151"
+        else:
+            warn(msg)
+
+    return citations
 
 
 def _get_model(trainer, postprocessing):
@@ -498,12 +527,11 @@ def _write_sample_data(test_in_path, test_out_path, export_folder):
         imageio.imwrite(sample_out_path, outp)
     elif outp.ndim == 3:
         imageio.volwrite(sample_out_path, outp)
+    elif outp.ndim == 4:
+        # we need to have channel last to write 4d tifs
+        imageio.volwrite(sample_out_path, outp.T)
     else:
-        # FIXME
-        # can't write multi-channel outputs like this, so we only write the first channel
-        # this should be fixed; I am sure it's possible with a bit more fancy tif functionality
-        assert outp.ndim == 4
-        imageio.volwrite(sample_out_path, outp[0])
+        raise RuntimeError("Only support wrting up to 4d sample data, got {outp.ndim}d.")
 
     return os.path.split(sample_in_path)[1], os.path.split(sample_out_path)[1]
 
@@ -636,7 +664,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
                            git_repo=None, cite=None,
                            input_optional_parameters=True,
                            model_postprocessing=None,
-                           for_deepimagej=False):
+                           for_deepimagej=False, links=[]):
     """
     """
 
@@ -678,7 +706,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
     preprocessing = _get_preprocessing(trainer)
 
     # the apps to link with this model, by default ilastik
-    links = ["ilastik/ilastik"]
+    links.append("ilastik/ilastik")
 
     # deepimagej needs sample images in tif format
     # and we add it to the linked apps
@@ -699,6 +727,8 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
             kwargs.update({"attachments": attachments})
         links.append("deepimagej/deepimagej")
 
+    # make sure links are unique
+    links = list(set(links))
     model_spec = spec.build_spec(
         source=source,
         model_kwargs=model_kwargs,
@@ -919,6 +949,15 @@ def convert_to_pytorch_script(spec_path):
     torch.jit.load(weight_path)
 
 
+def add_weight_formats(export_folder, additional_formats):
+    spec_path = os.path.join(export_folder, "rdf.yaml")
+    for add_format in additional_formats:
+        if add_format == "onnx":
+            convert_to_onnx(spec_path)
+        elif add_format == "torchscript":
+            convert_to_pytorch_script(spec_path)
+
+
 def convert_main():
     import argparse
     parser = argparse.ArgumentParser(
@@ -935,3 +974,17 @@ def convert_main():
         convert_to_onnx(args.model_folder)
     else:
         convert_to_pytorch_script(args.model_folder)
+
+
+#
+# misc functionality
+#
+
+def export_parser_helper():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--checkpoint', required=True)
+    parser.add_argument('-i', '--input', required=True)
+    parser.add_argument('-o', '--output', required=True)
+    parser.add_argument('-a', '--affs_to_bd', default=0, type=int)
+    parser.add_argument('-f', '--additional_formats', type=str, nargs="+")
+    return parser

@@ -6,6 +6,21 @@ from warnings import warn
 
 import requests
 
+BIOIMAGEIO_IDS = {
+    "covid_if": "",
+    "cremi": "",
+    "dsb": "",
+    "isbi2012": "",
+    "mitoem": "",
+    "ovules": "",
+    "platynereis": ""
+}
+
+
+def get_bioimageio_dataset_id(dataset_name):
+    assert dataset_name in BIOIMAGEIO_IDS
+    return BIOIMAGEIO_IDS[dataset_name]
+
 
 def get_checksum(filename):
     with open(filename, "rb") as f:

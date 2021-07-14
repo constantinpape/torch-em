@@ -86,6 +86,10 @@ def create_covid_if_rdf():
     pass
 
 
+def create_dsb_rdf():
+    pass
+
+
 if __name__ == '__main__':
     os.makedirs("./rdfs", exist_ok=True)
     create_isbi2012_rdf()
