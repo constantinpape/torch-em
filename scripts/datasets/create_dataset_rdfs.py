@@ -1,7 +1,63 @@
 # create dataset rdfs to create bioimage.io datasets
+
 import os
+from shutil import rmtree, make_archive
+
+import imageio
+import numpy as np
 from ruamel.yaml import YAML
+from skimage.transform import resize
+
 yaml = YAML(typ="safe")
+
+
+def _resize(im, max_size):
+    if im.ndim == 2:
+        size = float(im.size)
+        factor = max_size / size
+        new_shape = tuple(int(sh * factor) for sh in im.shape)
+        im = resize(im, new_shape)
+    else:
+        assert im.ndim == 3
+        size = float(np.prod(im.shape[:-1]))
+        factor = np.sqrt(max_size / size)
+        new_shape = tuple(int(sh * factor) for sh in im.shape[:-1]) + im.shape[-1:]
+        im = resize(im, new_shape)
+    return im
+
+
+def _package_rdf(rdf, name):
+    max_size = 256 * 256
+
+    if os.path.exists("tmp"):
+        rmtree("tmp")
+    os.makedirs("tmp")
+
+    covers = rdf["covers"]
+    new_covers = []
+    for ii, cover in enumerate(covers):
+        im = imageio.imread(cover)
+        size = im.size if im.ndim == 2 else np.prod(im.shape[:-1])
+        if size > max_size:
+            im = _resize(im, max_size)
+
+        try:
+            out = f"./tmp/cover{ii}.jpg"
+            imageio.imwrite(out, im)
+            new_covers.append(f"cover{ii}.jpg")
+        except OSError:  # this is raised if trying to save an ARGB jpg
+            os.remove(f"./tmp/cover{ii}.jpg")
+            out = f"./tmp/cover{ii}.png"
+            imageio.imwrite(out, im)
+            new_covers.append(f"cover{ii}.png")
+
+    rdf["covers"] = new_covers
+    with open("./tmp/rdf.yaml", "w") as f:
+        yaml.dump(rdf, f)
+
+    make_archive(f"./rdfs/{name}", "zip", "tmp")
+    if os.path.exists("tmp"):
+        rmtree("tmp")
 
 
 def create_isbi2012_rdf():
@@ -20,13 +76,13 @@ def create_isbi2012_rdf():
         "source": "http://brainiac2.mit.edu/isbi_challenge/home",
         "covers": [
             "http://brainiac2.mit.edu/isbi_challenge/sites/default/files/Challenge-ISBI-2012-sample-image.png",
-            "http://brainiac2.mit.edu/isbi_challenge/sites/default/files/Challenge-ISBI-2012-Animation-Input-Labels.gif"
+            # not sure if we support gifs
+            # "http://brainiac2.mit.edu/isbi_challenge/sites/default/files/Challenge-ISBI-2012-Animation-Input-Labels.gif"
         ],
         "type": "dataset",
         "license": "CC-BY-4.0"
     }
-    with open("./rdfs/isbi2012.yaml", "w") as f:
-        yaml.dump(rdf, f)
+    _package_rdf(rdf, "isbi2012")
 
 
 def create_cremi_rdf():
@@ -51,8 +107,7 @@ def create_cremi_rdf():
         "type": "dataset",
         "license": "CC-BY-4.0"
     }
-    with open("./rdfs/cremi.yaml", "w") as f:
-        yaml.dump(rdf, f)
+    _package_rdf(rdf, "cremi")
 
 
 def create_mitoem_rdf():
@@ -76,8 +131,7 @@ def create_mitoem_rdf():
         "type": "dataset",
         "license": "CC-BY-4.0"
     }
-    with open("./rdfs/mito_em.yaml", "w") as f:
-        yaml.dump(rdf, f)
+    _package_rdf(rdf, "mitoem")
 
 
 def create_ovules_rdf():

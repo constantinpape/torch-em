@@ -12,15 +12,12 @@ import numpy as np
 import requests
 import torch
 import torch_em
+
+from bioimageio import spec
 from elf.io import open_file
+from marshmallow import missing
 from ruamel.yaml import YAML
 from .util import get_trainer, get_normalizer
-
-try:
-    from bioimageio import spec
-    from marshmallow import missing
-except ImportError:
-    spec = None
 
 try:
     import bioimageio.weight_converter.torch as weight_converter
@@ -667,11 +664,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
                            for_deepimagej=False, links=[]):
     """
     """
-
     assert input_data is not None
-    # TODO update the error message to point to the source for the bioimageio package
-    if spec is None:
-        raise RuntimeError("Need bioimageio package")
 
     # load trainer and model
     trainer = get_trainer(checkpoint, device='cpu')
@@ -887,10 +880,6 @@ def _load_normalizer(model_spec):
 
 
 def import_bioimageio_model(spec_path, return_spec=False):
-    # TODO update the error message to point
-    # to the source for the bioimageio package
-    if spec is None:
-        raise RuntimeError("Need bioimageio package")
     root = Path(os.path.split(spec_path)[0])
     model_spec = spec.load_node(os.path.abspath(spec_path), root)
 
