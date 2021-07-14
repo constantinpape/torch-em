@@ -10,8 +10,8 @@ BIOIMAGEIO_IDS = {
     "covid_if": "",
     "cremi": "",
     "dsb": "",
-    "isbi2012": "",
-    "mitoem": "",
+    "isbi2012": "10.5072/zenodo.881019",
+    "mitoem": "10.5072/zenodo.881021",
     "ovules": "",
     "platynereis": ""
 }
