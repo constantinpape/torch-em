@@ -24,7 +24,7 @@ Design:
 import torch
 import torch_em
 from torch_em.model import UNet2d
-from torc_em.data.datasets import get_dsb_loader
+from torch_em.data.datasets import get_dsb_loader
 
 model = UNet2d(in_channels=1, out_channels=2)
 
