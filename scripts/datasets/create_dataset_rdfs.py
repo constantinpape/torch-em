@@ -20,7 +20,8 @@ def create_isbi2012_rdf():
         "covers": [
             "http://brainiac2.mit.edu/isbi_challenge/sites/default/files/Challenge-ISBI-2012-sample-image.png",
             "http://brainiac2.mit.edu/isbi_challenge/sites/default/files/Challenge-ISBI-2012-Animation-Input-Labels.gif"
-        ]
+        ],
+        "type": "dataset"
     }
     with open("./rdfs/isbi2012.yaml", "w") as f:
         yaml.dump(rdf, f)
@@ -43,7 +44,8 @@ def create_cremi_rdf():
             "https://cremi.org/static/img/sample_A_preview.png",
             "https://cremi.org/static/img/sample_B_preview.png",
             "https://cremi.org/static/img/sample_C_preview.png"
-        ]
+        ],
+        "type": "dataset"
     }
     with open("./rdfs/cremi.yaml", "w") as f:
         yaml.dump(rdf, f)
@@ -65,7 +67,8 @@ def create_mitoem_rdf():
         "covers": [
             "https://grand-challenge-public-prod.s3.amazonaws.com/b/566/banner.x10.jpeg",
             "https://grand-challenge-public-prod.s3.amazonaws.com/i/2020/10/27/mitoEM_teaser.png"
-        ]
+        ],
+        "type": "dataset"
     }
     with open("./rdfs/mito_em.yaml", "w") as f:
         yaml.dump(rdf, f)
