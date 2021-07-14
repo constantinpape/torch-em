@@ -4,13 +4,13 @@
 
 Deep-learning based semantic and instance segmentation for 3D Electron Microscopy and other bioimage analysis problems based on pytorch.
 
-This library is in a very early state, so don't expect a stable API, no bugs and there be dragons ;). Early feedback is highly appreciated, just open an issue!
+This library is in anearly state, so don't expect a stable API, no bugs and there be dragons ;). Early feedback is highly appreciated, just open an issue!
 
 Highlights:
 - Functional API with sensible defaults to train a state-of-the-art segmentation model with a few lines of code.
 - Differentiable augmentations on GPU and CPU thanks to [kornia](https://github.com/kornia/kornia).
 - Off-the-shelf logging with [tensorboard](https://www.tensorflow.org/tensorboard) or [wandb](https://wandb.ai/site).
-- Export trained models to [bioimage.io](https://bioimage.io/#/) model format with one function call.
+- Export trained models to [bioimage.io](https://bioimage.io/#/) model format with one function call to deploy them in [ilastik](https://www.ilastik.org/documentation/nn/nn) or [deepimageJ](https://deepimagej.github.io/deepimagej/).
 
 Design:
 - All parameters are specified in code, no configuration files.
@@ -70,7 +70,7 @@ from torch_em.util import export_bioimageio_model
 # load one of the images to use as reference image image
 test_im = imageio.imread(glob("dsb2018/test/images/*.tif")[0])
 
-export_bioimageio_model("./checkpoints/dsb-boundary-model", test_im, "./bioimageio-model")
+export_bioimageio_model("./checkpoints/dsb-boundary-model", "./bioimageio-model", test_im)
 ```
 
 Check out [expirements/platynereis/mitochondria/train_affinities.py](https://github.com/constantinpape/torch-em/blob/main/experiments/platynereis/mitochondria/train_affinities.py) for a more advanced example.
