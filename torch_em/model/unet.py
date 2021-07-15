@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 
 
-# TODO enable torchscript everywhere
-
 #
 # Model Internal Post-processing
 #
@@ -307,13 +305,16 @@ class Decoder(nn.Module):
     def __len__(self):
         return len(self.blocks)
 
+    # FIXME this prevents traces from being valid for other input sizes, need to find
+    # a solution to traceable cropping
     def _crop(self, x, shape):
-        xshape = x.shape
-        if shape == xshape:
-            return x
-        shape_diff = [(xsh - sh) // 2 for xsh, sh in zip(xshape, shape)]
-        crop = tuple(slice(sd, xsh - sd) for sd, xsh in zip(shape_diff, xshape))
+        shape_diff = [(xsh - sh) // 2 for xsh, sh in zip(x.shape, shape)]
+        crop = tuple([slice(sd, xsh - sd) for sd, xsh in zip(shape_diff, x.shape)])
         return x[crop]
+        # # Implementation with torch.narrow, does not fix the tracing warnings!
+        # for dim, (sh, sd) in enumerate(zip(shape, shape_diff)):
+        #     x = torch.narrow(x, dim, sd, sh)
+        # return x
 
     def _concat(self, x1, x2):
         return torch.cat([x1, self._crop(x2, x1.shape)], dim=1)

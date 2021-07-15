@@ -63,7 +63,6 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
             "segmentation", "mito-em", "mitochondria"]
     tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
 
-    # eventually we should refactor the citation logic
     cite = get_default_citations(
         model="AnisotropicUNet",
         model_output="affinities" if is_aff_model else "boundaries"
