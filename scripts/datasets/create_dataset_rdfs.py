@@ -135,23 +135,105 @@ def create_mitoem_rdf():
 
 
 def create_ovules_rdf():
-    pass
+    rdf = {
+        "name": "Arabidopsis thaliana ovules - confocal",
+        "description": "Ovules - confocal volumetric stacks with voxel size: (0.235x0.075x0.075 µm^3) (ZYX). Courtesy of Kay Schneitz lab, School of Life Sciences, Technical University of Munich, Germany.",
+        "cite": [
+            {"doi": "https://doi.org/10.7554/eLife.57613",
+             "text": "Adrian Wolny et al."}
+        ],
+        "authors": [
+            {"name": "Constantin Pape"}
+        ],
+        "documentation": "https://osf.io/uzq3w/wiki/home/",
+        "tags": ["confocal", "lm-segmentation", "arabidopsis", "arabidopsis thaliana", "ovules", "plants"],
+        "source": "https://osf.io/w38uf/",
+        "covers": [
+            "https://raw.githubusercontent.com/hci-unihd/plant-seg/master/Documentation-GUI/images/main_figure_nologo.png"
+        ],
+        "type": "dataset",
+        "license": "CC-BY-4.0"
+    }
+    _package_rdf(rdf, "ovules")
 
 
 def create_platy_rdf():
-    pass
+    rdf = {
+        "name": "Platynereis EM traning data",
+        "description": "Training data for EM cell, nuclei and organelle segmentation in Platynereis dumerilii. Contains training data for cellular membranes, nuclei, cuticle and cilia.",
+        "cite": [
+            {"url": "https://www.biorxiv.org/content/10.1101/2020.02.26.961037v1.abstract",
+             "text": "Vergara, Pape, Meechan et al."}
+        ],
+        "authors": [
+            {"name": "Constantin Pape"}
+        ],
+        "documentation": "https://www.biorxiv.org/content/10.1101/2020.02.26.961037v1.abstract",
+        "tags": ["em-segmentation", "platynereis", "platynereis dumerilii", "cell-segmentation", "cilia-segmentation", "nucleus-segmentation"],
+        "source": "https://osf.io/w38uf/",
+        "covers": [
+            "./fig2_compact_300.png"
+        ],
+        "type": "dataset",
+        "license": "CC-BY-4.0"
+    }
+    _package_rdf(rdf, "platy")
 
 
 def create_covid_if_rdf():
-    pass
+    rdf = {
+        "name": "CovidIf training data",
+        "description": "Training data for cell, nucleus and infection classification in IF data of Covid-19 infected cells.",
+        "cite": [
+            {"doi": "https://doi.org/10.1002/bies.202000257",
+             "text": "Pape, Remme et al."}
+        ],
+        "authors": [
+            {"name": "Constantin Pape"}
+        ],
+        "documentation": "https://onlinelibrary.wiley.com/doi/full/10.1002/bies.202000257",
+        "tags": ["cell-segmentation", "nucleus-segmentation", "high-througput-microscopy", "covid-19", "sars-cov-2"],
+        "source": "https://zenodo.org/record/5092850#.YPBInTqxVH4",
+        "covers": [
+            "bies202000257-fig-0001-m.jpg",
+            "bies202000257-fig-0002-m.jpg",
+            "bies202000257-fig-0003-m.jpg"
+        ],
+        "type": "dataset",
+        "license": "CC-BY-4.0"
+    }
+    _package_rdf(rdf, "covid-if")
 
 
 def create_dsb_rdf():
-    pass
+    rdf = {
+        "name": "DSB Nucleus Segmentation Training Data",
+        "description": "Subset of the nucleus segmentation training data provided by the 2018 Kaggle Data Science Bowl.",
+        "cite": [
+            {"url": "https://www.nature.com/articles/s41592-019-0612-7#Ack1",
+             "text": "Caicedo et al."}
+        ],
+        "authors": [
+            {"name": "Constantin Pape"}
+        ],
+        "documentation": "https://www.kaggle.com/c/data-science-bowl-2018",
+        "tags": ["nucleus-segmentation", "dsb", "dsb2018"],
+        "source": "",
+        "covers": [
+            "https://storage.googleapis.com/kaggle-media/competitions/dsb-2018/dsb.jpg"
+        ],
+        "type": "dataset",
+        "license": "CC-BY-4.0"
+    }
+    _package_rdf(rdf, "dsb")
 
 
 if __name__ == '__main__':
     os.makedirs("./rdfs", exist_ok=True)
-    create_isbi2012_rdf()
-    create_cremi_rdf()
-    create_mitoem_rdf()
+    # create_isbi2012_rdf()
+    # create_cremi_rdf()
+    # create_mitoem_rdf()
+    # create_covid_if_rdf()
+    # create_platy_rdf()
+    # create_ovules_rdf()
+    create_dsb_rdf()
