@@ -1,9 +1,9 @@
-import argparse
 import os
 
 from elf.io import open_file
-from torch_em.util import (convert_to_onnx, convert_to_pytorch_script,
-                           export_biomageio_model, get_default_citations)
+from torch_em.data.datasets import get_bioimageio_dataset_id
+from torch_em.util import (add_weight_formats, export_biomageio_model,
+                           get_default_citations, export_parser_helper)
 
 
 def _load_data(input_, is2d):
@@ -80,11 +80,12 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
 
     # eventually we should refactor the citation logic
-    cite = get_default_citations()
-    cite["data"] = "https://doi.org/10.7554/eLife.57613.sa2"
-    cite["architecture"] = "https://link.springer.com/chapter/10.1007/978-3-319-46723-8_49"
-    if is_aff_model:
-        cite["segmentation algorithm"] = "10.1109/TPAMI.2020.2980827"
+    plantseg_pub = "https://doi.org/10.7554/eLife.57613.sa2"
+    cite = get_default_citations(
+        model="UNet2d" if is2d else "UNet3d", model_output="affinities" if is_aff_model else "boundaries"
+    )
+    cite["data"] = plantseg_pub
+    cite["segmentation algorithm"] = plantseg_pub
 
     doc = _get_doc(is_aff_model, specimen)
 
@@ -101,24 +102,14 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         model_postprocessing=postprocessing,
         input_optional_parameters=False,
         # need custom deepimagej fields if we have torchscript export
-        for_deepimagej="torchscript" in additional_formats
+        for_deepimagej="torchscript" in additional_formats,
+        links=[get_bioimageio_dataset_id("ovules")]
     )
-
-    spec_path = os.path.join(output, "rdf.yaml")
-    for add_format in additional_formats:
-        if add_format == "onnx":
-            convert_to_onnx(spec_path)
-        elif add_format == "torchscript":
-            convert_to_pytorch_script(spec_path)
+    add_weight_formats(output, additional_formats)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--checkpoint', required=True)
-    parser.add_argument('-o', '--output', required=True)
-    parser.add_argument('-i', '--input', required=True)
-    parser.add_argument('-a', '--affs_to_bd', default=0, type=int)
-    parser.add_argument('-f', '--additional_formats', type=str, nargs="+")
+    parser = export_parser_helper()
     args = parser.parse_args()
     export_to_bioimageio(args.checkpoint, args.output, args.input,
                          bool(args.affs_to_bd), args.additional_formats)

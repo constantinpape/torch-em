@@ -482,8 +482,8 @@ def _get_tensor_kwargs(model, model_kwargs):
             scale = [1] * len(step)
             offset = [0] * len(step)
         else:
-            scale = [1, 0] + ([1] * (len(step) - 2))
-            offset = [0, float(outc) / 2] + ([0] * (len(step) - 2))
+            scale = [1, float(outc) / inc] + ([1] * (len(step) - 2))
+            offset = [0, 0] + ([0] * (len(step) - 2))
         tensor_kwargs = {
             "input_step": step,
             "input_min_shape": min_shape,
@@ -922,12 +922,15 @@ def convert_to_onnx(spec_path, opset_version=12):
         raise RuntimeError("Need bioimageio.weight_converter package")
     converter = weight_converter.convert_weights_to_onnx
     _convert_impl(spec_path, "weights.onnx", converter, "onnx", opset_version=opset_version)
+    # TODO check the exported model and return exception if it fails
+    return None
 
 
 def convert_to_pytorch_script(spec_path):
     # TODO update the error message to point to the source for the bioimageio package
     if weight_converter is None:
         raise RuntimeError("Need bioimageio.weight_converter package")
+    # converter = functools.partial(weight_converter.convert_weights_to_pytorch_script, use_tracing=False)
     converter = weight_converter.convert_weights_to_pytorch_script
     weight_name = "weights-torchscript.pt"
     _convert_impl(spec_path, weight_name, converter, "pytorch_script")
@@ -935,16 +938,26 @@ def convert_to_pytorch_script(spec_path):
     # check that we can actually load it again
     root = os.path.split(spec_path)[0]
     weight_path = os.path.join(root, weight_name)
-    torch.jit.load(weight_path)
+    try:
+        torch.jit.load(weight_path)
+        return None
+    except Exception as e:
+        return e
 
 
 def add_weight_formats(export_folder, additional_formats):
     spec_path = os.path.join(export_folder, "rdf.yaml")
     for add_format in additional_formats:
+
         if add_format == "onnx":
-            convert_to_onnx(spec_path)
+            ret = convert_to_onnx(spec_path)
         elif add_format == "torchscript":
-            convert_to_pytorch_script(spec_path)
+            ret = convert_to_pytorch_script(spec_path)
+
+        if ret is None:
+            print("Successfully added", add_format, "weights")
+        else:
+            warn(f"Added {add_format} weights, but got exception {ret} when loading the weights again.")
 
 
 def convert_main():
