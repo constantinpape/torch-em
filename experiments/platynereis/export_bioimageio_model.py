@@ -95,6 +95,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         cite=cite,
         model_postprocessing=postprocessing,
         input_optional_parameters=False,
+        for_deepimagej="torchscript" in additional_formats,
         links=[get_bioimageio_dataset_id("platynereis")]
     )
     add_weight_formats(output, additional_formats)
