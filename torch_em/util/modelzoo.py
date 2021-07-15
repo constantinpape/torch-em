@@ -46,9 +46,8 @@ def normalize_with_batch(data, normalizer):
 
 
 def get_default_citations(model=None, model_output=None):
-    # TODO: make doi for torch_em and use it insted of the url
     citations = {
-        "training library": "https://github.com/constantinpape/torch-em.git"
+        "training library": "https://doi.org/10.5281/zenodo.5108853"
     }
 
     # try to derive the correct network citation from the model class
