@@ -198,6 +198,8 @@ class UNetBase(nn.Module):
         return x[::-1]
 
     def forward(self, x):
+        # cast input data to float, hotfix for modelzoo deployment issues, leaving it here for reference
+        # x = x.float()
         if self.return_decoder_outputs:
             return self._apply_with_side_outputs(x)
         else:
