@@ -20,8 +20,8 @@ def _load_data(input_, is2d):
     return raw
 
 
-def _get_name(is_aff, specimen):
-    name = f"Arabidopsis-{specimen}"
+def _get_name(is_aff, specimen, ndim):
+    name = f"Arabidopsis-{specimen}-{ndim}D"
     if is_aff:
         name += "-AffinityModel"
     else:
@@ -29,8 +29,7 @@ def _get_name(is_aff, specimen):
     return name
 
 
-def _get_doc(is_aff_model, specimen):
-    ndim = 3
+def _get_doc(is_aff_model, specimen, ndim):
     if is_aff_model:
         doc = f"""
 ## {ndim}D U-Net for Affinity Prediction
@@ -58,6 +57,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     assert specimen in ("ovules", "roots"), specimen
 
     is2d = checkpoint.endswith('2d')
+    ndim = 2 if is2d else 3
     if input_ is None:
         input_data = None
     else:
@@ -71,7 +71,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
 
     if is_aff_model and affs_to_bd:
         is_aff_model = False
-    name = _get_name(is_aff_model, specimen)
+    name = _get_name(is_aff_model, specimen, ndim)
     tags = ["u-net", f"{specimen}-segmentation", "segmentation", "light-microscopy", "arabidopsis"]
     if specimen == "ovules":
         tags += ["ovules", "confocal-microscopy"]
@@ -87,7 +87,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     cite["data"] = plantseg_pub
     cite["segmentation algorithm"] = plantseg_pub
 
-    doc = _get_doc(is_aff_model, specimen)
+    doc = _get_doc(is_aff_model, specimen, ndim)
 
     export_biomageio_model(
         checkpoint, output,
