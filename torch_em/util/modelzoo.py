@@ -13,16 +13,14 @@ import requests
 import torch
 import torch_em
 
-from bioimageio import spec
+import bioimageio.spec as spec
+import bioimageio.core.build_spec as build_spec
+import bioimageio.core.weight_converter.torch as weight_converter
+from bioimageio.spec.shared import yaml
+
 from elf.io import open_file
 from marshmallow import missing
-from ruamel.yaml import YAML
 from .util import get_trainer, get_normalizer
-
-try:
-    import bioimageio.weight_converter.torch as weight_converter
-except ImportError:
-    weight_converter = None
 
 
 #
@@ -108,7 +106,6 @@ def _pad(input_data, trainer):
 
 def _write_depedencies(export_folder, dependencies):
     dep_path = os.path.join(export_folder, 'environment.yaml')
-    yaml = YAML(typ="safe")
     if dependencies is None:
         ver = torch.__version__
         major, minor = list(map(int, ver.split('.')[:2]))
@@ -660,7 +657,8 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
                            git_repo=None, cite=None,
                            input_optional_parameters=True,
                            model_postprocessing=None,
-                           for_deepimagej=False, links=[]):
+                           for_deepimagej=False, links=[],
+                           config={}):
     """
     """
     assert input_data is not None
@@ -706,10 +704,11 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
         sample_in_path, sample_out_path = _write_sample_data(test_in_path,
                                                              test_out_path,
                                                              export_folder)
-        config, attachments = _get_deepimagej_config(export_folder,
-                                                     sample_in_path, sample_out_path,
-                                                     test_in_path, test_out_path,
-                                                     preprocessing)
+        ij_config, attachments = _get_deepimagej_config(export_folder,
+                                                        sample_in_path, sample_out_path,
+                                                        test_in_path, test_out_path,
+                                                        preprocessing)
+        config.update(ij_config)
         kwargs.update({
             "sample_inputs": [sample_in_path],
             "sample_outputs": [sample_out_path],
@@ -721,7 +720,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
 
     # make sure links are unique
     links = list(set(links))
-    model_spec = spec.build_spec(
+    model_spec = build_spec.build_model(
         source=source,
         model_kwargs=model_kwargs,
         weight_uri=weight_path,
@@ -737,7 +736,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
     )
 
     out_path = os.path.join(export_folder, 'rdf.yaml')
-    spec.serialize_spec(model_spec, out_path)
+    spec.save_raw_node(model_spec, out_path)
 
     # load and validate the model
     val_success = _validate_model(out_path)
@@ -912,13 +911,10 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
     model_spec = spec.load_raw_node(os.path.abspath(spec_path), Path(root))
     model_spec = spec.add_weights(model_spec, f"./{weight_name}", root=root, weight_type=weight_type, **kwargs)
 
-    spec.serialize_spec(model_spec, spec_path)
+    spec.save_raw_node(model_spec, spec_path)
 
 
 def convert_to_onnx(spec_path, opset_version=12):
-    # TODO update the error message to point to the source for the bioimageio package
-    if weight_converter is None:
-        raise RuntimeError("Need bioimageio.weight_converter package")
     converter = weight_converter.convert_weights_to_onnx
     _convert_impl(spec_path, "weights.onnx", converter, "onnx", opset_version=opset_version)
     # TODO check the exported model and return exception if it fails
@@ -926,9 +922,6 @@ def convert_to_onnx(spec_path, opset_version=12):
 
 
 def convert_to_pytorch_script(spec_path):
-    # TODO update the error message to point to the source for the bioimageio package
-    if weight_converter is None:
-        raise RuntimeError("Need bioimageio.weight_converter package")
     # converter = functools.partial(weight_converter.convert_weights_to_pytorch_script, use_tracing=False)
     converter = weight_converter.convert_weights_to_pytorch_script
     weight_name = "weights-torchscript.pt"
