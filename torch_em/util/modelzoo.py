@@ -494,8 +494,10 @@ def _get_tensor_kwargs(model, model_kwargs):
 
 
 def _validate_model(spec_path):
-    model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True)
+    if not os.path.exists(spec_path):
+        return False
 
+    model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True)
     for test_in, test_out in zip(model_spec.test_inputs, model_spec.test_outputs):
         input_, expected = np.load(test_in), np.load(test_out)
         input_ = normalize_with_batch(input_, normalizer)
@@ -720,7 +722,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
 
     # make sure links are unique
     links = list(set(links))
-    model_spec = build_spec.build_model(
+    build_spec.build_model(
         source=source,
         model_kwargs=model_kwargs,
         weight_uri=weight_path,
@@ -728,24 +730,21 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
         test_inputs=[f'./{os.path.split(test_in_path)[1]}'],
         test_outputs=[f'./{os.path.split(test_out_path)[1]}'],
         root=export_folder,
-        dependencies="conda:./environment.yaml",
+        dependencies="environment.yaml",
         covers=cover_path,
         preprocessing=preprocessing,
         links=links,
         **kwargs
     )
 
-    out_path = os.path.join(export_folder, 'rdf.yaml')
-    spec.save_raw_node(model_spec, out_path)
-
     # load and validate the model
+    out_path = os.path.join(export_folder, "rdf.yaml")
     val_success = _validate_model(out_path)
 
     if val_success:
-        # TODO print links for how to use the export
         print(f"The model was successfully exported to '{export_folder}'.")
     else:
-        warn(f"Validation of the bioimageio model exported to '{export_folder}' has failed. " +
+        warn(f"Validation of the bioimageio model exported to '{export_folder}' has failed." +
              "You can use this model, but it will probably yield incorrect results.")
     return val_success
 
@@ -878,8 +877,8 @@ def _load_normalizer(model_spec):
 
 
 def import_bioimageio_model(spec_path, return_spec=False):
-    root = Path(os.path.split(spec_path)[0])
-    model_spec = spec.load_node(os.path.abspath(spec_path), root)
+    # root = Path(os.path.split(spec_path)[0])
+    model_spec = spec.load_resource_description(spec_path)
 
     model = _load_model(model_spec)
     normalizer = _load_normalizer(model_spec)
@@ -901,17 +900,19 @@ def import_trainer_from_bioimageio_model(spec_path):
 
 
 def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
-    root = os.path.split(spec_path)[0]
+    root = Path(os.path.split(spec_path)[0])
+    if isinstance(spec_path, str):
+        spec_path = Path(spec_path)
     out_path = os.path.join(root, weight_name)
 
     # here, we need the model with resolved nodes
-    model_spec = spec.load_node(os.path.abspath(spec_path), Path(root))
+    model_spec = spec.load_resource_description(spec_path)
     converter(model_spec, out_path, **kwargs)
-    # now, we need the model with raw nodes
-    model_spec = spec.load_raw_node(os.path.abspath(spec_path), Path(root))
-    model_spec = spec.add_weights(model_spec, f"./{weight_name}", root=root, weight_type=weight_type, **kwargs)
 
-    spec.save_raw_node(model_spec, spec_path)
+    # now, we need the model with raw nodes
+    model_spec = spec.load_raw_resource_description(spec_path, root)
+    model_spec = build_spec.add_weights(model_spec, f"./{weight_name}", root=root, weight_type=weight_type, **kwargs)
+    spec.save_raw_resource_description(model_spec, spec_path)
 
 
 def convert_to_onnx(spec_path, opset_version=12):
