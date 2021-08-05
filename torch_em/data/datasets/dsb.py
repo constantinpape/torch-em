@@ -19,8 +19,8 @@ def _download_dsb(path, source, download):
     url = DSB_URLS[source]
     checksum = CHECKSUMS[source]
 
-    train_out_path = os.path.join(path, 'train')
-    test_out_path = os.path.join(path, 'test')
+    train_out_path = os.path.join(path, "train")
+    test_out_path = os.path.join(path, "test")
 
     if os.path.exists(train_out_path) and os.path.exists(test_out_path):
         return
@@ -29,14 +29,14 @@ def _download_dsb(path, source, download):
     download_source(zip_path, url, download, checksum)
     unzip(zip_path, path, True)
 
-    move(os.path.join(path, 'dsb2018', 'train'), train_out_path)
-    move(os.path.join(path, 'dsb2018', 'test'), test_out_path)
+    move(os.path.join(path, "dsb2018", "train"), train_out_path)
+    move(os.path.join(path, "dsb2018", "test"), test_out_path)
 
 
 def get_dsb_loader(path, patch_shape, split, download=False,
                    offsets=None, boundaries=False, binary=False,
                    source="reduced", **kwargs):
-    assert split in ('test', 'train'), split
+    assert split in ("test", "train"), split
     _download_dsb(path, source, download)
 
     image_path = os.path.join(path, split, "images")
