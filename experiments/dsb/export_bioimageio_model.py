@@ -38,7 +38,6 @@ The boundaries can be processed with multicut segmentation to obtain an instance
     return doc
 
 
-# TODO write offsets and other mws params into the config if this is a affinity model
 def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_formats):
 
     ckpt_name = os.path.split(checkpoint)[1]
@@ -57,7 +56,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         is_aff_model = False
     name = _get_name(is_aff_model)
     tags = ["u-net", "nucleus-segmentation", "segmentation", "volume-em", "platynereis", "nuclei"]
-    tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
+    tags += ["affinity-prediction"] if is_aff_model else ["boundary-prediction"]
 
     # eventually we should refactor the citation logic
     cite = get_default_citations(
@@ -66,6 +65,16 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     cite["data"] = "https://www.nature.com/articles/s41592-019-0612-7"
 
     doc = _get_doc(is_aff_model)
+    if is_aff_model:
+        offsets = [
+            [-1, 0], [0, -1],
+            [-3, 0], [0, -3],
+            [-9, 0], [0, -9],
+            [-27, 0], [0, -27]
+        ]
+        config = {"mws": {"offsets": offsets}}
+    else:
+        config = {}
 
     export_biomageio_model(
         checkpoint, output,
@@ -81,7 +90,8 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         input_optional_parameters=False,
         # need custom deepimagej fields if we have torchscript export
         for_deepimagej="torchscript" in additional_formats,
-        links=[get_bioimageio_dataset_id("dsb")]
+        links=[get_bioimageio_dataset_id("dsb")],
+        config=config
     )
     add_weight_formats(output, additional_formats)
 
