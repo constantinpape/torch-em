@@ -3,6 +3,7 @@ import functools
 import json
 import os
 import subprocess
+import warnings
 from pathlib import Path
 from shutil import copyfile
 from warnings import warn
@@ -13,7 +14,7 @@ import requests
 import torch
 import torch_em
 
-import bioimageio.spec as spec
+import bioimageio.core as core
 import bioimageio.core.build_spec as build_spec
 import bioimageio.core.weight_converter.torch as weight_converter
 from bioimageio.spec.shared import yaml
@@ -130,29 +131,39 @@ def _write_depedencies(export_folder, dependencies):
 
 
 def _write_data(input_data, model, trainer, export_folder):
-    # normalize the input data if we have a normalization function
-    normalizer = get_normalizer(trainer)
-
     # if input_data is None:
     #     gen = SampleGenerator(trainer, 1, False, 1)
     #     input_data = next(gen)
+    if isinstance(input_data, np.ndarray):
+        input_data = [input_data]
+
+    # normalize the input data if we have a normalization function
+    normalizer = get_normalizer(trainer)
 
     # pad to 4d/5d and normalize the input data
     # NOTE we have to save the padded data, but without normalization
-    test_input = _pad(input_data, trainer)
-    normalized = normalize_with_batch(test_input, normalizer)
+    test_inputs = [_pad(input_, trainer) for input_ in input_data]
+    normalized = [normalize_with_batch(input_, normalizer) for input_ in test_inputs]
 
     # run prediction
     with torch.no_grad():
-        test_tensor = torch.from_numpy(normalized).to(trainer.device)
-        test_output = model(test_tensor).cpu().numpy()
+        test_tensors = [torch.from_numpy(norm).to(trainer.device) for norm in normalized]
+        test_outputs = model(*test_tensors)
+        if torch.is_tensor(test_outputs):
+            test_outputs = [test_outputs]
+        test_outputs = [out.cpu().numpy() for out in test_outputs]
 
     # save the input / output
-    test_in_path = os.path.join(export_folder, 'test_input.npy')
-    np.save(test_in_path, test_input)
-    test_out_path = os.path.join(export_folder, 'test_output.npy')
-    np.save(test_out_path, test_output)
-    return test_in_path, test_out_path
+    test_in_paths, test_out_paths = [], []
+    for i, input_ in enumerate(test_inputs):
+        test_in_path = os.path.join(export_folder, f'test_input_{i}.npy')
+        np.save(test_in_path, input_)
+        test_in_paths.append(test_in_path)
+    for i, out in enumerate(test_outputs):
+        test_out_path = os.path.join(export_folder, f'test_output_{i}.npy')
+        np.save(test_out_path, out)
+        test_out_paths.append(test_out_path)
+    return test_in_paths, test_out_paths
 
 
 def _write_source(model, export_folder):
@@ -169,7 +180,7 @@ def _write_source(model, export_folder):
         copyfile(source_path, source_target_path)
         source = f'./unet.py::{cls_name}'
     else:
-        source = f"{source}.{cls_name}"
+        source = f"{module}.{cls_name}"
     return source
 
 
@@ -340,8 +351,8 @@ def _create_cover(in_path, out_path):
 
 def _write_covers(test_in_path, test_out_path, export_folder, covers):
     if covers is None:  # generate a cover from the test input/output
-        cover_path = ['./cover.jpg']
-        cover_out = os.path.join(export_folder, 'cover.jpg')
+        cover_path = ["./cover.jpg"]
+        cover_out = os.path.join(export_folder, "cover.jpg")
         cover_im = _create_cover(test_in_path, test_out_path)
         imageio.imwrite(cover_out, cover_im)
     else:  # cover images were passed, copy them to the export folder
@@ -350,7 +361,7 @@ def _write_covers(test_in_path, test_out_path, export_folder, covers):
             assert os.path.exists(path)
             fname = os.path.split(path)[1]
             copyfile(path, os.path.join(export_folder, fname))
-            cover_path.append(f'./{fname}')
+            cover_path.append(f"./{fname}")
     return cover_path
 
 
@@ -498,15 +509,19 @@ def _validate_model(spec_path):
         return False
 
     model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True)
-    for test_in, test_out in zip(model_spec.test_inputs, model_spec.test_outputs):
-        input_, expected = np.load(test_in), np.load(test_out)
-        input_ = normalize_with_batch(input_, normalizer)
-        with torch.no_grad():
-            input_ = torch.from_numpy(input_)
-            output = model(input_).numpy()
-        if not np.allclose(expected, output):
-            return False
+    inputs = [normalize_with_batch(np.load(test_in), normalizer) for test_in in model_spec.test_inputs]
+    expected = [np.load(test_out) for test_out in model_spec.test_outputs]
 
+    with torch.no_grad():
+        inputs = [torch.from_numpy(input_) for input_ in inputs]
+        outputs = model(*inputs)
+        if torch.is_tensor(outputs):
+            outputs = [outputs]
+        outputs = [out.numpy() for out in outputs]
+
+    for out, exp in zip(outputs, expected):
+        if not np.allclose(out, exp):
+            return False
     return True
 
 
@@ -674,7 +689,11 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
     weight_path = _write_weights(model, export_folder)
 
     # create the test input/output file
-    test_in_path, test_out_path = _write_data(input_data, model, trainer, export_folder)
+    test_in_paths, test_out_paths = _write_data(input_data, model, trainer, export_folder)
+    if len(test_in_paths) > 1 or len(test_out_paths) > 1:
+        warnings.warn("Got a model with more than one in/output tensor; some auto-generated data may be incorrect")
+    # select the first input / output to create the cover and sample data
+    test_in_path, test_out_path = test_in_paths[0], test_out_paths[0]
 
     # create the model source file
     source = _write_source(model, export_folder)
@@ -725,10 +744,10 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
     build_spec.build_model(
         source=source,
         model_kwargs=model_kwargs,
-        weight_uri=weight_path,
+        weight_uri=Path(weight_path),
         weight_type="pytorch_state_dict",
-        test_inputs=[f'./{os.path.split(test_in_path)[1]}'],
-        test_outputs=[f'./{os.path.split(test_out_path)[1]}'],
+        test_inputs=[f"./{os.path.split(test_in)[1]}" for test_in in test_in_paths],
+        test_outputs=[f"./{os.path.split(test_out)[1]}" for test_out in test_out_paths],
         root=export_folder,
         dependencies="environment.yaml",
         covers=cover_path,
@@ -877,8 +896,7 @@ def _load_normalizer(model_spec):
 
 
 def import_bioimageio_model(spec_path, return_spec=False):
-    # root = Path(os.path.split(spec_path)[0])
-    model_spec = spec.load_resource_description(spec_path)
+    model_spec = core.load_resource_description(spec_path)
 
     model = _load_model(model_spec)
     normalizer = _load_normalizer(model_spec)
@@ -906,13 +924,13 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
     out_path = os.path.join(root, weight_name)
 
     # here, we need the model with resolved nodes
-    model_spec = spec.load_resource_description(spec_path)
+    model_spec = core.load_resource_description(spec_path)
     converter(model_spec, out_path, **kwargs)
 
     # now, we need the model with raw nodes
-    model_spec = spec.load_raw_resource_description(spec_path, root)
+    model_spec = core.load_raw_resource_description(spec_path, root)
     model_spec = build_spec.add_weights(model_spec, f"./{weight_name}", root=root, weight_type=weight_type, **kwargs)
-    spec.save_raw_resource_description(model_spec, spec_path)
+    core.save_raw_resource_description(model_spec, spec_path)
 
 
 def convert_to_onnx(spec_path, opset_version=12):
