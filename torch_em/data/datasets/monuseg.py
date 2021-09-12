@@ -29,7 +29,7 @@ def get_monuseg_loader(path, patch_shape, download=False, roi=None,
     image_path = os.path.join(path, "images")
     label_path = os.path.join(path, "labels")
 
-    assert sum((offsets is None, boundaries, binary)) <= 1
+    assert sum((offsets is not None, boundaries, binary)) <= 1
     if offsets is not None:
         # we add a binary target channel for foreground background segmentation
         label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,

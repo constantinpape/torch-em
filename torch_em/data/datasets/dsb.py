@@ -42,7 +42,7 @@ def get_dsb_loader(path, patch_shape, split, download=False,
     image_path = os.path.join(path, split, "images")
     label_path = os.path.join(path, split, "masks")
 
-    assert sum((offsets is None, boundaries, binary)) <= 1
+    assert sum((offsets is not None, boundaries, binary)) <= 1
     if offsets is not None:
         # we add a binary target channel for foreground background segmentation
         label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
