@@ -928,7 +928,7 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
     converter(model_spec, out_path, **kwargs)
 
     # now, we need the model with raw nodes
-    model_spec = core.load_raw_resource_description(spec_path, root)
+    model_spec = core.load_raw_resource_description(spec_path)
     model_spec = build_spec.add_weights(model_spec, f"./{weight_name}", root=root, weight_type=weight_type, **kwargs)
     core.save_raw_resource_description(model_spec, spec_path)
 

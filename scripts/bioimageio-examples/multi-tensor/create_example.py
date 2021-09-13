@@ -94,7 +94,7 @@ def train_model():
 def export_model():
     import imageio
     import h5py
-    from torch_em.util import export_biomageio_model, get_default_citations
+    from torch_em.util import add_weight_formats, export_biomageio_model, get_default_citations
     from bioimageio.spec.shared import yaml
 
     with h5py.File("./data/gt_image_000.h5", "r") as f:
@@ -120,6 +120,7 @@ def export_model():
         covers=["./cover.jpg"],
         input_optional_parameters=False
     )
+    add_weight_formats("./exported", ["onnx", "torchscript"])
 
     rdf_path = "./exported/rdf.yaml"
     with open(rdf_path, "r") as f:

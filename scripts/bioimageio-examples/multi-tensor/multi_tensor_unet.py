@@ -80,6 +80,9 @@ class UNetBase(nn.Module):
 
     def forward(self, *x):
         assert isinstance(x, (list, tuple)), type(x)
+        # fix issue in onnx export
+        if isinstance(x[0], list) and len(x) == 1:
+            x = x[0]
         assert len(x) == self.in_channels, f"{len(x)}, {self.in_channels}"
         x = torch.cat(x, dim=1)
         out = self._apply_default(x)
@@ -233,7 +236,7 @@ def get_norm_layer(norm, dim, channels, n_groups=32):
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dim,
-                 kernel_size=3, padding=1, norm='InstanceNorm'):
+                 kernel_size=3, padding=1, norm=None):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
