@@ -256,7 +256,8 @@ def default_segmentation_trainer(
     early_stopping=None,
     logger=TensorboardLogger,
     scheduler_kwargs=DEFAULT_SCHEDULER_KWARGS,
-    optimizer_kwargs={}
+    optimizer_kwargs={},
+    trainer_class=DefaultTrainer
 ):
     optimizer = torch.optim.Adam(model.parameters(),
                                  lr=learning_rate,
@@ -274,7 +275,7 @@ def default_segmentation_trainer(
     else:
         device = torch.device(device)
 
-    trainer = DefaultTrainer(
+    trainer = trainer_class(
         name=name,
         model=model,
         train_loader=train_loader,
