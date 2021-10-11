@@ -150,6 +150,11 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
     if isinstance(raw_paths, str):
         raw_paths, label_paths = _get_paths(raw_paths, raw_key, label_paths, label_key, roi)
         ds = ImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape, **kwargs)
+    elif raw_key is None:
+        assert label_key is None
+        assert isinstance(raw_paths, (list, tuple)) and isinstance(label_paths, (list, tuple))
+        assert len(raw_paths) == len(label_paths)
+        ds = ImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape, **kwargs)
     else:
         ds = []
         n_samples = kwargs.pop('n_samples', None)
@@ -271,9 +276,13 @@ def default_segmentation_trainer(
     metric = DiceLoss() if metric is None else metric
 
     if device is None:
-        device = torch.device('cuda')
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     else:
         device = torch.device(device)
+
+    # cpu does not support mixed precision training
+    if device.type == "cpu":
+        mixed_precision = False
 
     trainer = trainer_class(
         name=name,
