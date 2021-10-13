@@ -7,6 +7,7 @@ import warnings
 from pathlib import Path
 from shutil import copyfile
 from warnings import warn
+from zipfile import ZipFile
 
 import imageio
 import numpy as np
@@ -106,20 +107,20 @@ def _pad(input_data, trainer):
 
 
 def _write_depedencies(export_folder, dependencies):
-    dep_path = os.path.join(export_folder, 'environment.yaml')
+    dep_path = os.path.join(export_folder, "environment.yaml")
     if dependencies is None:
         ver = torch.__version__
-        major, minor = list(map(int, ver.split('.')[:2]))
+        major, minor = list(map(int, ver.split(".")[:2]))
         assert major == 1
         # the torch zip layout was changed in version 1.6, so files will no longer load
         # in older versions
-        torch_min_version = '1.6' if minor >= 6 else '1.0'
+        torch_min_version = "1.6" if minor >= 6 else "1.0"
         dependencies = {
             "channels": ["pytorch", "conda-forge"],
             "name": "torch-em-deploy",
             "dependencies": f"pytorch>={torch_min_version},<2.0"
         }
-        with open(dep_path, 'w') as f:
+        with open(dep_path, "w") as f:
             yaml.dump(dependencies, f)
     else:
         assert os.path.exists(dependencies)
@@ -156,29 +157,29 @@ def _write_data(input_data, model, trainer, export_folder):
     # save the input / output
     test_in_paths, test_out_paths = [], []
     for i, input_ in enumerate(test_inputs):
-        test_in_path = os.path.join(export_folder, f'test_input_{i}.npy')
+        test_in_path = os.path.join(export_folder, f"test_input_{i}.npy")
         np.save(test_in_path, input_)
         test_in_paths.append(test_in_path)
     for i, out in enumerate(test_outputs):
-        test_out_path = os.path.join(export_folder, f'test_output_{i}.npy')
+        test_out_path = os.path.join(export_folder, f"test_output_{i}.npy")
         np.save(test_out_path, out)
         test_out_paths.append(test_out_path)
     return test_in_paths, test_out_paths
 
 
 def _write_source(model, export_folder):
-    # copy the model source file if it's a torch_em model
+    # copy the model source file if it"s a torch_em model
     # (for now only u-net). otherwise just put the full python class
     module = str(model.__class__.__module__)
     cls_name = str(model.__class__.__name__)
-    if module == 'torch_em.model.unet':
+    if module == "torch_em.model.unet":
         source_path = os.path.join(
             os.path.split(__file__)[0],
-            '../model/unet.py'
+            "../model/unet.py"
         )
-        source_target_path = os.path.join(export_folder, 'unet.py')
+        source_target_path = os.path.join(export_folder, "unet.py")
         copyfile(source_path, source_target_path)
-        source = f'./unet.py::{cls_name}'
+        source = f"./unet.py::{cls_name}"
     else:
         source = f"{module}.{cls_name}"
     return source
@@ -195,7 +196,7 @@ def _get_kwargs(trainer, name, description,
         print("Please enter lists using json syntax.")
 
     def _get_kwarg(kwarg_name, val, default, is_list=False, fname=None):
-        # if we don't have a value, we either ask user for input (offering the default)
+        # if we don"t have a value, we either ask user for input (offering the default)
         # or just use the default if input_optional_parameters is False
         if val is None and input_optional_parameters:
             default_val = default()
@@ -206,12 +207,12 @@ def _get_kwargs(trainer, name, description,
 
         if fname is not None:
             save_path = os.path.join(export_folder, fname)
-            with open(save_path, 'w') as f:
+            with open(save_path, "w") as f:
                 f.write(val)
-            return f'./{fname}'
+            return f"./{fname}"
 
         if is_list and isinstance(val, str):
-            val = val.replace("'", '"')  # enable single quotes
+            val = val.replace(""", """)  # enable single quotes
             val = json.loads(val)
         if is_list:
             assert isinstance(val, (list, tuple))
@@ -220,8 +221,8 @@ def _get_kwargs(trainer, name, description,
     def _default_authors():
         # first try to derive the author name from git
         try:
-            call_res = subprocess.run(['git', 'config', 'user.name'], capture_output=True)
-            author = call_res.stdout.decode('utf8').rstrip('\n')
+            call_res = subprocess.run(["git", "config", "user.name"], capture_output=True)
+            author = call_res.stdout.decode("utf8").rstrip("\n")
             author = author if author else None  # in case there was no error, but output is empty
         except Exception:
             author = None
@@ -234,8 +235,8 @@ def _get_kwargs(trainer, name, description,
 
     def _default_repo():
         try:
-            call_res = subprocess.run(['git', 'remote', '-v'], capture_output=True)
-            repo = call_res.stdout.decode('utf8').split('\n')[0].split()[1]
+            call_res = subprocess.run(["git", "remote", "-v"], capture_output=True)
+            repo = call_res.stdout.decode("utf8").split("\n")[0].split()[1]
             repo = repo if repo else None
         except Exception:
             repo = None
@@ -246,15 +247,15 @@ def _get_kwargs(trainer, name, description,
     # - tags: derive something from trainer.ndim, trainer.loss, trainer.model, ...
     # - documentation: derive something from trainer.ndim, trainer.loss, trainer.model, ...
     kwargs = {
-        'name': _get_kwarg('name', name, lambda: trainer.name),
-        'description': _get_kwarg('description', name, lambda: trainer.name),
-        'authors': _get_kwarg('authors', authors, _default_authors, is_list=True),
-        'tags': _get_kwarg('tags', tags, lambda: [trainer.name], is_list=True),
-        'license': _get_kwarg('license', license, lambda: 'MIT'),
-        'documentation': _get_kwarg('documentation', documentation, lambda: trainer.name,
-                                    fname='documentation.md'),
-        'git_repo': _get_kwarg('git_repo', git_repo, _default_repo),
-        'cite': _get_kwarg('cite', cite, get_default_citations)
+        "name": _get_kwarg("name", name, lambda: trainer.name),
+        "description": _get_kwarg("description", name, lambda: trainer.name),
+        "authors": _get_kwarg("authors", authors, _default_authors, is_list=True),
+        "tags": _get_kwarg("tags", tags, lambda: [trainer.name], is_list=True),
+        "license": _get_kwarg("license", license, lambda: "MIT"),
+        "documentation": _get_kwarg("documentation", documentation, lambda: trainer.name,
+                                    fname="documentation.md"),
+        "git_repo": _get_kwarg("git_repo", git_repo, _default_repo),
+        "cite": _get_kwarg("cite", cite, get_default_citations)
     }
 
     return kwargs
@@ -262,10 +263,10 @@ def _get_kwargs(trainer, name, description,
 
 def _write_weights(model, export_folder):
     weights = model.state_dict()
-    weight_name = 'weights.pt'
+    weight_name = "weights.pt"
     weight_path = os.path.join(export_folder, weight_name)
     torch.save(weights, weight_path)
-    return f'./{weight_name}'
+    return f"./{weight_name}"
 
 
 # TODO create better cover image for 3d data
@@ -285,7 +286,7 @@ def _create_cover(in_path, out_path):
             data = data[0, :, z0]
         else:
             data = data[0, :]
-        data = (data * 255).astype('uint8')
+        data = (data * 255).astype("uint8")
         return data
 
     input_ = _to_image(input_)
@@ -299,13 +300,13 @@ def _create_cover(in_path, out_path):
         input_ = np.repeat(input_[0:1], 3, axis=0)
 
     im_shape = input_.shape[1:]
-    if im_shape != output.shape[1:]:  # just return the input image if shapes don't agree
+    if im_shape != output.shape[1:]:  # just return the input image if shapes don"t agree
         return input_
 
     def _diagonal_split(im0, im1):
         assert im0.shape[0] == im1.shape[0] == 3
         n, m = im_shape
-        out = np.ones((3, n, m), dtype='uint8')
+        out = np.ones((3, n, m), dtype="uint8")
         for c in range(3):
             outc = np.tril(im0[c])
             mask = outc == 0
@@ -379,22 +380,21 @@ def _get_preprocessing(trainer):
         if axis is None:
             axes = "cyx" if ndim == 2 else "czyx"
         else:
-            axes_labels = ['c', 'y', 'x'] if ndim == 2 else ['c', 'z', 'y', 'x']
-            axes = ''.join(axes_labels[i] for i in axis)
+            axes_labels = ["c", "y", "x"] if ndim == 2 else ["c", "z", "y", "x"]
+            axes = "".join(axes_labels[i] for i in axis)
         return axes
 
     name = f"{normalizer.__module__}.{normalizer.__name__}"
-    if name == 'torch_em.transform.raw.normalize':
+    if name == "torch_em.transform.raw.normalize":
 
-        min_, max_ = kwargs.get('minval', None), kwargs.get('maxval', None)
-        axes = _get_axes(kwargs.get('axis', None))
+        min_, max_ = kwargs.get("minval", None), kwargs.get("maxval", None)
+        axes = _get_axes(kwargs.get("axis", None))
         assert (min_ is None) == (max_ is None)
 
         if min_ is None:
             preprocessing = {
-                "name": "scale_range",
-                "kwargs": {
-                    "mode": 'per_sample',
+                "scale_range": {
+                    "mode": "per_sample",
                     "axes": axes,
                     "min_percentile": 0.0,
                     "max_percentile": 100.0
@@ -402,38 +402,35 @@ def _get_preprocessing(trainer):
             }
         else:
             preprocessing = {
-                "name": "scale_linear",
-                "kwargs": {
+                "scale_linear": {
                     "gain": 1. / max_,
                     "offset": -min_,
                     "axes": axes
                 }
             }
 
-    elif name == 'torch_em.transform.raw.standardize':
+    elif name == "torch_em.transform.raw.standardize":
 
-        mean, std = kwargs.get('mean', None), kwargs.get('std', None)
-        mode = 'per_sample' if mean is None else 'fixed'
-        axes = _get_axes(kwargs.get('axis', None))
+        mean, std = kwargs.get("mean", None), kwargs.get("std", None)
+        mode = "per_sample" if mean is None else "fixed"
+        axes = _get_axes(kwargs.get("axis", None))
         preprocessing = {
-            "name": "zero_mean_unit_variance",
-            "kwargs": {
+            "zero_mean_unit_variance": {
                 "mode": mode,
                 "axes": axes
             }
         }
         if mean is not None:
-            preprocessing['kwargs']['mean'] = mean
+            preprocessing["zero_mean_unit_variance"]["mean"] = mean
         if std is not None:
-            preprocessing['kwargs']['std'] = std
+            preprocessing["zero_mean_unit_variance"]["std"] = std
 
-    elif name == 'torch_em.transform.normalize_percentile':
+    elif name == "torch_em.transform.normalize_percentile":
 
-        lower, upper = kwargs.get('lower', 1.0), kwargs.get('upper', 99.0)
-        axes = _get_axes(kwargs.get('axis', None))
+        lower, upper = kwargs.get("lower", 1.0), kwargs.get("upper", 99.0)
+        axes = _get_axes(kwargs.get("axis", None))
         preprocessing = {
-            "name": "scale_range",
-            "kwargs": {
+            "scale_range": {
                 "mode": "per_sample",
                 "axes": axes,
                 "min_percentile": lower,
@@ -452,10 +449,10 @@ def _get_tensor_kwargs(model, model_kwargs):
     module = str(model.__class__.__module__)
     name = str(model.__class__.__name__)
     # can derive tensor kwargs only for known torch_em models (only unet for now)
-    if module == 'torch_em.model.unet':
-        inc, outc = model_kwargs['in_channels'], model_kwargs['out_channels']
+    if module == "torch_em.model.unet":
+        inc, outc = model_kwargs["in_channels"], model_kwargs["out_channels"]
 
-        postprocessing = model_kwargs.get('postprocessing', None)
+        postprocessing = model_kwargs.get("postprocessing", None)
         if isinstance(postprocessing, str) and postprocessing.startswith("affinities_to_boundaries"):
             outc = 1
         elif isinstance(postprocessing, str) and postprocessing.startswith("affinities_with_foreground_to_boundaries"):
@@ -464,15 +461,15 @@ def _get_tensor_kwargs(model, model_kwargs):
             warn(f"The model has the post-processing {postprocessing} which cannot be interpreted")
 
         if name == "UNet2d":
-            depth = model_kwargs['depth']
+            depth = model_kwargs["depth"]
             step = [0, 0] + [2 ** depth] * 2
             min_shape = [1, inc] + [2 ** (depth + 1)] * 2
         elif name == "UNet3d":
-            depth = model_kwargs['depth']
+            depth = model_kwargs["depth"]
             step = [0, 0] + [2 ** depth] * 3
             min_shape = [1, inc] + [2 ** (depth + 1)] * 3
         elif name == "AnisotropicUNet":
-            scale_factors = model_kwargs['scale_factors']
+            scale_factors = model_kwargs["scale_factors"]
             scale_prod = [
                 int(np.prod([scale_factors[i][d] for i in range(len(scale_factors))]))
                 for d in range(3)
@@ -492,12 +489,12 @@ def _get_tensor_kwargs(model, model_kwargs):
             scale = [1, float(outc) / inc] + ([1] * (len(step) - 2))
             offset = [0, 0] + ([0] * (len(step) - 2))
         tensor_kwargs = {
-            "input_step": step,
-            "input_min_shape": min_shape,
-            "output_reference": ref,
-            "output_scale": scale,
-            "output_offset": offset,
-            "halo": halo
+            "input_step": [step],
+            "input_min_shape": [min_shape],
+            "output_reference": [ref],
+            "output_scale": [scale],
+            "output_offset": [offset],
+            "halo": [halo]
         }
         return tensor_kwargs
     else:
@@ -528,11 +525,11 @@ def _validate_model(spec_path):
 def _write_sample_data(test_in_path, test_out_path, export_folder):
 
     inp = np.load(test_in_path).squeeze()
-    sample_in_path = os.path.join(export_folder, 'sample_input.tif')
+    sample_in_path = os.path.join(export_folder, "sample_input.tif")
     imageio.imwrite(sample_in_path, inp) if inp.ndim == 2 else imageio.volwrite(sample_in_path, inp)
 
     outp = np.load(test_out_path).squeeze()
-    sample_out_path = os.path.join(export_folder, 'sample_output.tif')
+    sample_out_path = os.path.join(export_folder, "sample_output.tif")
     if outp.ndim == 2:
         imageio.imwrite(sample_out_path, outp)
     elif outp.ndim == 3:
@@ -571,7 +568,7 @@ def _get_deepimagej_preprocessing(name, kwargs, export_folder):
 
     path = os.path.join(export_folder, macro)
     with requests.get(url, stream=True) as r:
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             f.write(r.text)
 
     # replace the kwargs in the macro file
@@ -589,7 +586,7 @@ def _get_deepimagej_preprocessing(name, kwargs, export_folder):
                 else:
                     lines.append(line)
 
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             for line in lines:
                 f.write(line)
 
@@ -608,14 +605,14 @@ def _get_deepimagej_config(export_folder,
 
     if preprocessing:
         assert len(preprocessing) == 1
-        name = preprocessing[0]["name"]
-        kwargs = preprocessing[0]["kwargs"]
+        name = list(preprocessing[0].keys())[0]
+        kwargs = preprocessing[0][name]
         preprocess, attachments = _get_deepimagej_preprocessing(name, kwargs, export_folder)
     else:
         preprocess = [{"spec": None}]
         attachments = None
 
-    # we currently don't implement any postprocessing
+    # we currently don"t implement any postprocessing
     postprocess = [{"spec": None}]
 
     def _get_size(path):
@@ -659,6 +656,12 @@ def _get_deepimagej_config(export_folder,
     return {"deepimagej": config}, attachments
 
 
+def _extract_from_zip(zip_path, out_path, name):
+    with ZipFile(zip_path) as z:
+        with open(out_path, "w") as f:
+            f.write(z.read(name).decode("utf-8"))
+
+
 #
 # model export functionality
 #
@@ -681,7 +684,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
     assert input_data is not None
 
     # load trainer and model
-    trainer = get_trainer(checkpoint, device='cpu')
+    trainer = get_trainer(checkpoint, device="cpu")
     model, model_kwargs = _get_model(trainer, model_postprocessing)
 
     # create the weights
@@ -741,29 +744,41 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
 
     # make sure links are unique
     links = list(set(links))
-    build_spec.build_model(
-        source=source,
-        model_kwargs=model_kwargs,
-        weight_uri=Path(weight_path),
-        weight_type="pytorch_state_dict",
-        test_inputs=[f"./{os.path.split(test_in)[1]}" for test_in in test_in_paths],
-        test_outputs=[f"./{os.path.split(test_out)[1]}" for test_out in test_out_paths],
-        root=export_folder,
-        dependencies="environment.yaml",
-        covers=cover_path,
-        preprocessing=preprocessing,
-        links=links,
-        **kwargs
-    )
+
+    zip_path = os.path.join(export_folder, f"{name}.zip")
+    # change the working directory to the export_folder to avoid issues with relative paths
+    cwd = os.getcwd()
+    os.chdir(export_folder)
+    try:
+        build_spec.build_model(
+            source=source,
+            model_kwargs=model_kwargs,
+            weight_uri=weight_path,
+            weight_type="pytorch_state_dict",
+            test_inputs=[f"./{os.path.split(test_in)[1]}" for test_in in test_in_paths],
+            test_outputs=[f"./{os.path.split(test_out)[1]}" for test_out in test_out_paths],
+            root=".",
+            output_path=f"{name}.zip",
+            dependencies="environment.yaml",
+            covers=cover_path,
+            preprocessing=preprocessing,
+            links=links,
+            **kwargs
+        )
+    except Exception as e:
+        raise e
+    finally:
+        os.chdir(cwd)
 
     # load and validate the model
-    out_path = os.path.join(export_folder, "rdf.yaml")
-    val_success = _validate_model(out_path)
+    rdf_path = os.path.join(export_folder, "rdf.yaml")
+    _extract_from_zip(zip_path, rdf_path, "rdf.yaml")
+    val_success = _validate_model(rdf_path)
 
     if val_success:
         print(f"The model was successfully exported to '{export_folder}'.")
     else:
-        warn(f"Validation of the bioimageio model exported to '{export_folder}' has failed." +
+        warn(f"Validation of the bioimageio model exported to '{export_folder}' has failed. " +
              "You can use this model, but it will probably yield incorrect results.")
     return val_success
 
@@ -772,12 +787,12 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
 def _load_data(path, key):
     if key is None:
         ext = os.path.splitext(path)[-1]
-        if ext == '.npy':
+        if ext == ".npy":
             return np.load(path)
         else:
             return imageio.imread(path)
     else:
-        return open_file(path, mode='r')[key][:]
+        return open_file(path, mode="r")[key][:]
 
 
 def main():
@@ -785,13 +800,13 @@ def main():
     parser = argparse.ArgumentParser(
         "Export model trained with torch_em to biomage.io model format"
     )
-    parser.add_argument('-p', '--path', required=True,
+    parser.add_argument("-p", "--path", required=True,
                         help="Path to the checkpoint")
-    parser.add_argument('-d', '--data', required=True,
+    parser.add_argument("-d", "--data", required=True,
                         help="")
-    parser.add_argument('-f', '--export_folder', required=True,
+    parser.add_argument("-f", "--export_folder", required=True,
                         help="")
-    parser.add_argument('-k', '--key', default=None,
+    parser.add_argument("-k", "--key", default=None,
                         help="")
 
     args = parser.parse_args()
@@ -814,7 +829,7 @@ def _load_model(model_spec):
 
     model = get_nn_instance(model_spec)
     weights = model_spec.weights["pytorch_state_dict"]
-    state = torch.load(weights.source, map_location='cpu')
+    state = torch.load(weights.source, map_location="cpu")
     model.load_state_dict(state)
     model.eval()
     return model
@@ -828,7 +843,7 @@ def _load_normalizer(model_spec):
 
     ndim = len(inputs.axes) - 2
     shape = inputs.shape
-    if hasattr(shape, 'min'):
+    if hasattr(shape, "min"):
         shape = shape.min
 
     conf = preprocessing[0]
@@ -836,11 +851,11 @@ def _load_normalizer(model_spec):
     spec_kwargs = conf.kwargs
 
     def _get_axis(axes):
-        label_to_id = {'c': 0, 'z': 1, 'y': 2, 'x': 3} if ndim == 3 else\
-            {'c': 0, 'y': 1, 'x': 2}
+        label_to_id = {"c": 0, "z": 1, "y": 2, "x": 3} if ndim == 3 else\
+            {"c": 0, "y": 1, "x": 2}
         axis = tuple(label_to_id[ax] for ax in axes)
 
-        # is the axis full? Then we don't need to specify it.
+        # is the axis full? Then we don"t need to specify it.
         if len(axis) == ndim + 1:
             return None
 
@@ -850,39 +865,39 @@ def _load_normalizer(model_spec):
             axis = tuple(ax - 1 for ax in axis if ax > 0)
         return axis
 
-    if name == 'zero_mean_unit_variance':
-        mode = spec_kwargs['mode']
-        if mode == 'fixed':
-            kwargs = {'mean': spec_kwargs['mean'], 'std': spec_kwargs['std']}
+    if name == "zero_mean_unit_variance":
+        mode = spec_kwargs["mode"]
+        if mode == "fixed":
+            kwargs = {"mean": spec_kwargs["mean"], "std": spec_kwargs["std"]}
         else:
-            axis = _get_axis(spec_kwargs['axes'])
-            kwargs = {'axis': axis}
+            axis = _get_axis(spec_kwargs["axes"])
+            kwargs = {"axis": axis}
         normalizer = functools.partial(
             torch_em.transform.raw.standardize,
             **kwargs
         )
 
-    elif name == 'scale_linear':
-        axis = _get_axis(spec_kwargs['axes'])
-        min_ = -spec_kwargs['offset']
-        max_ = 1. / spec_kwargs['gain']
-        kwargs = {'axis': axis, 'minval': min_, 'maxval': max_}
+    elif name == "scale_linear":
+        axis = _get_axis(spec_kwargs["axes"])
+        min_ = -spec_kwargs["offset"]
+        max_ = 1. / spec_kwargs["gain"]
+        kwargs = {"axis": axis, "minval": min_, "maxval": max_}
         normalizer = functools.partial(
             torch_em.transform.raw.normalize,
             **kwargs
         )
 
-    elif name == 'scale_range':
-        assert spec_kwargs.mode == 'per_sample'  # can't parse the other modes right now
-        axis = _get_axis(spec_kwargs['axes'])
-        lower, upper = spec_kwargs['min_percentile'], spec_kwargs['max_percentile']
+    elif name == "scale_range":
+        assert spec_kwargs.mode == "per_sample"  # can"t parse the other modes right now
+        axis = _get_axis(spec_kwargs["axes"])
+        lower, upper = spec_kwargs["min_percentile"], spec_kwargs["max_percentile"]
         if np.isclose(lower, 0.0) and np.isclose(upper, 100.0):
             normalizer = functools.partial(
                 torch_em.transform.raw.normalize,
                 axis=axis
             )
         else:
-            kwargs = {'axis': axis, 'lower': lower, 'upper': upper}
+            kwargs = {"axis": axis, "lower": lower, "upper": upper}
             normalizer = functools.partial(
                 torch_em.transform.raw.normalize_percentile,
                 **kwargs
@@ -921,16 +936,20 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
     root = Path(os.path.split(spec_path)[0])
     if isinstance(spec_path, str):
         spec_path = Path(spec_path)
-    out_path = os.path.join(root, weight_name)
+    weight_path = os.path.join(root, weight_name)
 
     # here, we need the model with resolved nodes
     model_spec = core.load_resource_description(spec_path)
-    converter(model_spec, out_path, **kwargs)
+    converter(model_spec, weight_path, **kwargs)
 
     # now, we need the model with raw nodes
     model_spec = core.load_raw_resource_description(spec_path)
-    model_spec = build_spec.add_weights(model_spec, f"./{weight_name}", root=root, weight_type=weight_type, **kwargs)
-    core.save_raw_resource_description(model_spec, spec_path)
+    zip_path = os.path.join(root, f"{model_spec.name}.zip")
+    model_spec = build_spec.add_weights(
+        model_spec, weight_path, weight_type=weight_type, output_path=zip_path, **kwargs
+    )
+    rdf_path = os.path.join(root, "rdf.yaml")
+    _extract_from_zip(zip_path, rdf_path, "rdf.yaml")
 
 
 def convert_to_onnx(spec_path, opset_version=12):
@@ -976,9 +995,9 @@ def convert_main():
     parser = argparse.ArgumentParser(
         "Convert weights from native pytorch format to onnx or pytorch_script"
     )
-    parser.add_argument('-f', '--model_folder', required=True,
+    parser.add_argument("-f", "--model_folder", required=True,
                         help="")
-    parser.add_argument('-w', '--weight_format', required=True,
+    parser.add_argument("-w", "--weight_format", required=True,
                         help="")
     args = parser.parse_args()
     weight_format = args.weight_format
@@ -995,9 +1014,9 @@ def convert_main():
 
 def export_parser_helper():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--checkpoint', required=True)
-    parser.add_argument('-i', '--input', required=True)
-    parser.add_argument('-o', '--output', required=True)
-    parser.add_argument('-a', '--affs_to_bd', default=0, type=int)
-    parser.add_argument('-f', '--additional_formats', type=str, nargs="+")
+    parser.add_argument("-c", "--checkpoint", required=True)
+    parser.add_argument("-i", "--input", required=True)
+    parser.add_argument("-o", "--output", required=True)
+    parser.add_argument("-a", "--affs_to_bd", default=0, type=int)
+    parser.add_argument("-f", "--additional_formats", type=str, nargs="+")
     return parser
