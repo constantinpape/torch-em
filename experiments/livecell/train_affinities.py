@@ -32,8 +32,8 @@ def train_affinities(args):
     )
 
     # the trainer object that handles the training details
-    # the model checkpoints will be saved in "checkpoints/dsb-boundary-model"
-    # the tensorboard logs will be saved in "logs/dsb-boundary-model"
+    # the model checkpoints will be saved in "checkpoints/livecell-affinity-model"
+    # the tensorboard logs will be saved in "logs/livecell-affinity-model"
     trainer = torch_em.default_segmentation_trainer(
         name="livecell-affinity-model",
         model=model,
