@@ -202,6 +202,7 @@ class EMDefectAugmentation:
         return raw
 
     def __call__(self, raw):
+        raw = raw.astype("float32")  # needs to be floating point to avoid errors
         for z in range(raw.shape[0]):
             r = np.random.rand()
             if r < self.p_drop_slice:
