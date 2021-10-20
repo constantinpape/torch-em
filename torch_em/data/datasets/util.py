@@ -31,14 +31,14 @@ def get_checksum(filename):
 
 # TODO
 # - allow for s3 links and use boto3 or s3fs to download
-def download_source(path, url, download, checksum=None):
+def download_source(path, url, download, checksum=None, verify=True):
     if os.path.exists(path):
         return
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
 
     print("Download file fron", url, "to", path)
-    with requests.get(url, stream=True) as r:
+    with requests.get(url, stream=True, verify=verify) as r:
         with open(path, 'wb') as f:
             copyfileobj(r.raw, f)
 

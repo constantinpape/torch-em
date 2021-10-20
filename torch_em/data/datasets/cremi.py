@@ -22,11 +22,13 @@ CHECKSUMS = {
 
 
 # TODO add support for realigned volumes
-# TODO more sophisticated defect augmentations
 def get_cremi_loader(path, patch_shape, samples=("A", "B", "C"),
                      use_realigned=False, download=False,
                      offsets=None, boundaries=False, rois={},
-                     defect_augmentation_kwargs={'p_drop_slice': 0.025},
+                     defect_augmentation_kwargs={"p_drop_slice": 0.025,
+                                                 "p_low_contrast": 0.025,
+                                                 "p_deform_slice": 0.0,
+                                                 "deformation_mode": "compress"},
                      **kwargs):
     """
     """
@@ -49,13 +51,14 @@ def get_cremi_loader(path, patch_shape, samples=("A", "B", "C"),
         url = urls[name]
         checksum = checksums[name]
         data_path = os.path.join(path, f"sample{name}.h5")
-        download_source(data_path, url, download, checksum)
+        # CREMI SSL certificates expired, so we need to disable verification
+        download_source(data_path, url, download, checksum, verify=False)
         data_paths.append(data_path)
         data_rois.append(rois.get(name, np.s_[:, :, :]))
 
-    kwargs = update_kwargs(kwargs, 'patch_shape', patch_shape)
-    kwargs = update_kwargs(kwargs, 'ndim', 3)
-    kwargs = update_kwargs(kwargs, 'rois', data_rois)
+    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
+    kwargs = update_kwargs(kwargs, "ndim", 3)
+    kwargs = update_kwargs(kwargs, "rois", data_rois)
 
     raw_key = "volumes/raw"
     label_key = "volumes/labels/neuron_ids"
