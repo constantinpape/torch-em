@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import Literal, Optional
 
 import numpy as np
 
@@ -12,7 +13,13 @@ from .tensorboard_logger import normalize_im, make_grid_image
 
 
 class WandbLogger:
-    def __init__(self, trainer):
+    def __init__(
+        self,
+        trainer,
+        log_model: Optional[Literal["gradients", "parameters", "all"]] = "all",
+        log_model_freq: int = 1,
+        log_model_graph: bool = True,
+    ):
         if wandb is None:
             raise RuntimeError("WandbLogger is not available")
 
@@ -38,7 +45,7 @@ class WandbLogger:
 
         self.log_image_interval = trainer.log_image_interval
 
-        wandb.watch(trainer.model)
+        wandb.watch(trainer.model, log=log_model, log_freq=log_model_freq, log_graph=log_model_graph)
 
     def _log_images(self, step, x, y, prediction, name, gradients=None):
 
