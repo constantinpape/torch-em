@@ -195,6 +195,45 @@ def default_segmentation_loader(
     is_seg_dataset=None,
     **loader_kwargs,
 ):
+    ds = default_segmentation_dataset(
+        raw_paths=raw_paths,
+        raw_key=raw_key,
+        label_paths=label_paths,
+        label_key=label_key,
+        patch_shape=patch_shape,
+        label_transform=label_transform,
+        label_transform2=label_transform2,
+        raw_transform=raw_transform,
+        transform=transform,
+        dtype=dtype,
+        label_dtype=label_dtype,
+        rois=rois,
+        n_samples=n_samples,
+        sampler=sampler,
+        ndim=ndim,
+        is_seg_dataset=is_seg_dataset,
+    )
+    return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
+
+
+def default_segmentation_dataset(
+    raw_paths,
+    raw_key,
+    label_paths,
+    label_key,
+    patch_shape,
+    label_transform=None,
+    label_transform2=None,
+    raw_transform=None,
+    transform=None,
+    dtype=torch.float32,
+    label_dtype=torch.float32,
+    rois=None,
+    n_samples=None,
+    sampler=None,
+    ndim=None,
+    is_seg_dataset=None,
+):
     check_paths(raw_paths, label_paths)
     if is_seg_dataset is None:
         is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
@@ -243,7 +282,11 @@ def default_segmentation_loader(
             sampler=sampler,
         )
 
-    loader = torch.utils.data.DataLoader(ds, batch_size=batch_size, **loader_kwargs)
+    return ds
+
+
+def get_data_loader(dataset: torch.utils.data.Dataset, batch_size, **loader_kwargs) -> torch.utils.data.DataLoader:
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, **loader_kwargs)
     # monkey patch shuffle attribute to the loader
     loader.shuffle = loader_kwargs.get("shuffle", False)
     return loader
