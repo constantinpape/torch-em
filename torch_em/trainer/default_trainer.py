@@ -192,7 +192,7 @@ class DefaultTrainer:
         if self.logger_class is None:
             self.logger = None
         else:
-            self.logger = self.logger_class(self, **self.logger_kwargs)  # may set self.name if self.name is None
+            self.logger = self.logger_class(self, **(self.logger_kwargs or {}))  # may set self.name if self.name is None
 
         os.makedirs(self.checkpoint_folder, exist_ok=True)
 
