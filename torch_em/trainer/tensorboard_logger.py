@@ -80,9 +80,10 @@ def make_embedding_image(image, y, prediction, selection, gradients=None):
     return im, name
 
 
-class TensorboardLogger:
-    def __init__(self, trainer):
-        self.log_dir = f'./logs/{trainer.name}'
+class TensorboardLogger(TorchEmLogger):
+    def __init__(self, trainer, **unused_kwargs):
+        super().__init__(trainer)
+        self.log_dir = f"./logs/{trainer.name}"
         os.makedirs(self.log_dir, exist_ok=True)
 
         if SummaryWriter is None:
