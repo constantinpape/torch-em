@@ -7,6 +7,8 @@ from elf.segmentation.embeddings import embedding_pca
 from skimage.segmentation import mark_boundaries
 from torchvision.utils import make_grid
 
+from .logger_base import TorchEmLogger
+
 # tensorboard import only works if tensobard package is available, so
 # we wrap this in a try except
 try:
