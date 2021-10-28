@@ -2,7 +2,7 @@ import os
 import time
 import warnings
 from importlib import import_module
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
@@ -32,7 +32,7 @@ class DefaultTrainer:
         mixed_precision=True,
         early_stopping=None,
         logger=TensorboardLogger,
-        logger_kwargs: Optional[Dict[str]] = None,
+        logger_kwargs: Optional[Dict[str, Any]] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
