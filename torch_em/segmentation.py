@@ -13,11 +13,7 @@ from .transform import get_augmentations, get_raw_transform
 
 
 # TODO add a heuristic to estimate this from the number of epochs
-DEFAULT_SCHEDULER_KWARGS = {
-    'mode': 'min',
-    'factor': .5,
-    'patience': 5
-}
+DEFAULT_SCHEDULER_KWARGS = {"mode": "min", "factor": 0.5, "patience": 5}
 
 
 #
@@ -26,15 +22,14 @@ DEFAULT_SCHEDULER_KWARGS = {
 
 # TODO implement balanced and make it the default
 # def samples_to_datasets(n_samples, raw_paths, raw_key, split='balanced'):
-def samples_to_datasets(n_samples, raw_paths, raw_key, split='uniform'):
-    assert split in ('balanced', 'uniform')
+def samples_to_datasets(n_samples, raw_paths, raw_key, split="uniform"):
+    assert split in ("balanced", "uniform")
     n_datasets = len(raw_paths)
-    if split == 'uniform':
+    if split == "uniform":
         # even distribution of samples to datasets
         samples_per_ds = n_samples // n_datasets
         divider = n_samples % n_datasets
-        return [samples_per_ds + 1 if ii < divider else samples_per_ds
-                for ii in range(n_datasets)]
+        return [samples_per_ds + 1 if ii < divider else samples_per_ds for ii in range(n_datasets)]
     else:
         # distribution of samples to dataset based on the dataset lens
         raise NotImplementedError
@@ -59,14 +54,13 @@ def check_paths(raw_paths, label_paths):
             _check_path(lp)
 
 
-def is_segmentation_dataset(raw_paths, raw_key,
-                            label_paths, label_key):
+def is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key):
     """ Check if we can load the data as SegmentationDataset
     """
 
     def _can_open(path, key):
         try:
-            open_file(path, mode='r')[key]
+            open_file(path, mode="r")[key]
             return True
         except Exception:
             return False
@@ -91,40 +85,34 @@ def is_segmentation_dataset(raw_paths, raw_key,
     return can_open_raw
 
 
-def _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
-                               **kwargs):
-    rois = kwargs.pop('rois', None)
+def _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key, **kwargs):
+    rois = kwargs.pop("rois", None)
     if isinstance(raw_paths, str):
         if rois is not None:
             assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
-        ds = SegmentationDataset(raw_paths, raw_key,
-                                 label_paths, label_key,
-                                 roi=rois, **kwargs)
+        ds = SegmentationDataset(raw_paths, raw_key, label_paths, label_key, roi=rois, **kwargs)
     else:
         assert len(raw_paths) > 0
         if rois is not None:
             assert len(rois) == len(label_paths)
             assert all(isinstance(roi, tuple) for roi in rois)
-        n_samples = kwargs.pop('n_samples', None)
+        n_samples = kwargs.pop("n_samples", None)
 
-        samples_per_ds = [None] * len(raw_paths) if n_samples is None else samples_to_datasets(n_samples,
-                                                                                               raw_paths,
-                                                                                               raw_key)
+        samples_per_ds = (
+            [None] * len(raw_paths) if n_samples is None else samples_to_datasets(n_samples, raw_paths, raw_key)
+        )
         ds = []
         for i, (raw_path, label_path) in enumerate(zip(raw_paths, label_paths)):
             roi = None if rois is None else rois[i]
-            dset = SegmentationDataset(raw_path, raw_key,
-                                       label_path, label_key,
-                                       roi=roi, n_samples=samples_per_ds[i],
-                                       **kwargs)
+            dset = SegmentationDataset(
+                raw_path, raw_key, label_path, label_key, roi=roi, n_samples=samples_per_ds[i], **kwargs
+            )
             ds.append(dset)
         ds = ConcatDataset(*ds)
     return ds
 
 
-def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, roi,
-                                   **kwargs):
-
+def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, roi, **kwargs):
     def _get_paths(rpath, rkey, lpath, lkey, this_roi):
         rpath = glob(os.path.join(rpath, rkey))
         rpath.sort()
@@ -140,7 +128,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
 
         return rpath, lpath
 
-    patch_shape = kwargs.pop('patch_shape')
+    patch_shape = kwargs.pop("patch_shape")
     if len(patch_shape) == 3:
         if patch_shape[0] != 1:
             raise ValueError(f"Image collection dataset expects 2d patch shape, got {patch_shape}")
@@ -157,17 +145,16 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
         ds = ImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape, **kwargs)
     else:
         ds = []
-        n_samples = kwargs.pop('n_samples', None)
-        samples_per_ds = [None] * len(raw_paths) if n_samples is None else samples_to_datasets(n_samples,
-                                                                                               raw_paths,
-                                                                                               raw_key)
+        n_samples = kwargs.pop("n_samples", None)
+        samples_per_ds = (
+            [None] * len(raw_paths) if n_samples is None else samples_to_datasets(n_samples, raw_paths, raw_key)
+        )
         if roi is None:
             roi = len(raw_paths) * [None]
         assert len(roi) == len(raw_paths)
         for i, (raw_path, label_path, this_roi) in enumerate(zip(raw_paths, label_paths, roi)):
             rpath, lpath = _get_paths(raw_path, raw_key, label_path, label_key, this_roi)
-            dset = ImageCollectionDataset(rpath, lpath, patch_shape=patch_shape,
-                                          n_samples=samples_per_ds[i], **kwargs)
+            dset = ImageCollectionDataset(rpath, lpath, patch_shape=patch_shape, n_samples=samples_per_ds[i], **kwargs)
             ds.append(dset)
         ds = ConcatDataset(*ds)
     return ds
@@ -175,14 +162,14 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
 
 def _get_default_transform(path, key, is_seg_dataset):
     if is_seg_dataset:
-        with open_file(path, mode='r') as f:
+        with open_file(path, mode="r") as f:
             shape = f[key].shape
             if len(shape) == 2:
                 ndim = 2
             else:
                 # heuristics to figure out whether to use default 3d
                 # or default anisotropic augmentations
-                ndim = 'anisotropic' if shape[0] < shape[1] // 2 else 3
+                ndim = "anisotropic" if shape[0] < shape[1] // 2 else 3
     else:
         ndim = 2
     return get_augmentations(ndim)
@@ -206,12 +193,11 @@ def default_segmentation_loader(
     sampler=None,
     ndim=None,
     is_seg_dataset=None,
-    **loader_kwargs
+    **loader_kwargs,
 ):
     check_paths(raw_paths, label_paths)
     if is_seg_dataset is None:
-        is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key,
-                                                 label_paths, label_key)
+        is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
 
     # we always use a raw transform in the convenience function
     if raw_transform is None:
@@ -219,26 +205,47 @@ def default_segmentation_loader(
 
     # we always use augmentations in the convenience function
     if transform is None:
-        transform = _get_default_transform(raw_paths if isinstance(raw_paths, str) else raw_paths[0],
-                                           raw_key, is_seg_dataset)
+        transform = _get_default_transform(
+            raw_paths if isinstance(raw_paths, str) else raw_paths[0], raw_key, is_seg_dataset
+        )
 
     if is_seg_dataset:
-        ds = _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
-                                        patch_shape=patch_shape,
-                                        raw_transform=raw_transform, label_transform=label_transform,
-                                        label_transform2=label_transform2, transform=transform,
-                                        rois=rois, n_samples=n_samples, sampler=sampler,
-                                        ndim=ndim, dtype=dtype, label_dtype=label_dtype)
+        ds = _load_segmentation_dataset(
+            raw_paths,
+            raw_key,
+            label_paths,
+            label_key,
+            patch_shape=patch_shape,
+            raw_transform=raw_transform,
+            label_transform=label_transform,
+            label_transform2=label_transform2,
+            transform=transform,
+            rois=rois,
+            n_samples=n_samples,
+            sampler=sampler,
+            ndim=ndim,
+            dtype=dtype,
+            label_dtype=label_dtype,
+        )
     else:
-        ds = _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, roi=rois,
-                                            patch_shape=patch_shape, label_transform=label_transform,
-                                            raw_transform=raw_transform,
-                                            label_transform2=label_transform2, transform=transform,
-                                            n_samples=n_samples, sampler=sampler)
+        ds = _load_image_collection_dataset(
+            raw_paths,
+            raw_key,
+            label_paths,
+            label_key,
+            roi=rois,
+            patch_shape=patch_shape,
+            label_transform=label_transform,
+            raw_transform=raw_transform,
+            label_transform2=label_transform2,
+            transform=transform,
+            n_samples=n_samples,
+            sampler=sampler,
+        )
 
     loader = torch.utils.data.DataLoader(ds, batch_size=batch_size, **loader_kwargs)
     # monkey patch shuffle attribute to the loader
-    loader.shuffle = loader_kwargs.get('shuffle', False)
+    loader.shuffle = loader_kwargs.get("shuffle", False)
     return loader
 
 
@@ -262,15 +269,10 @@ def default_segmentation_trainer(
     logger=TensorboardLogger,
     scheduler_kwargs=DEFAULT_SCHEDULER_KWARGS,
     optimizer_kwargs={},
-    trainer_class=DefaultTrainer
+    trainer_class=DefaultTrainer,
 ):
-    optimizer = torch.optim.Adam(model.parameters(),
-                                 lr=learning_rate,
-                                 **optimizer_kwargs)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        **scheduler_kwargs
-    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, **optimizer_kwargs)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)
 
     loss = DiceLoss() if loss is None else loss
     metric = DiceLoss() if metric is None else metric
@@ -297,6 +299,6 @@ def default_segmentation_trainer(
         mixed_precision=mixed_precision,
         early_stopping=early_stopping,
         log_image_interval=log_image_interval,
-        logger=logger
+        logger=logger,
     )
     return trainer
