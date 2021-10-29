@@ -78,7 +78,7 @@ def get_cremi_dataset(
         "deformation_mode": "compress",
     },
     **kwargs,
-) -> Tuple[Dataset, dict]:
+):
     assert len(patch_shape) == 3
     if rois is not None:
         assert isinstance(rois, dict)
