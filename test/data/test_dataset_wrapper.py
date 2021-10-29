@@ -22,10 +22,10 @@ class TestDatasetWrapper(unittest.TestCase):
 
         patch_shape = (32, 32, 32)
         ds = SegmentationDataset(self.path, self.raw_key, self.path, self.label_key, patch_shape=patch_shape)
-        wrapped_ds = DatasetWrapper(ds, lambda x, y: (x[:10, :10, :10], y[:20, :20, :20]))
+        wrapped_ds = DatasetWrapper(ds, lambda xy: (xy[0][:, :10, :10, :10], xy[1][:, :20, :20, :20]))
 
-        expected_shape_x = (10,) * 3
-        expected_shape_y = (20,) * 3
+        expected_shape_x = (1, 10, 10, 10)
+        expected_shape_y = (1, 20, 20, 20)
         for i in range(3):
             x, y = wrapped_ds[i]
             self.assertEqual(x.shape, expected_shape_x)
