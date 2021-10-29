@@ -1,28 +1,48 @@
 import os
 from datetime import datetime
+from typing import Optional
 
 import numpy as np
+
+from .logger_base import TorchEmLogger
+from .tensorboard_logger import make_grid_image, normalize_im
 
 try:
     import wandb
 except ImportError:
     wandb = None
 
-from .tensorboard_logger import normalize_im, make_grid_image
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal  # type: ignore
 
 
-class WandbLogger:
-    def __init__(self, trainer):
-        self.log_dir = "./logs"
-        os.makedirs(self.log_dir, exist_ok=True)
+class WandbLogger(TorchEmLogger):
+    def __init__(
+        self,
+        trainer,
+        *,
+        project_name: Optional[str] = None,
+        log_model: Optional[Literal["gradients", "parameters", "all"]] = "all",
+        log_model_freq: int = 1,
+        log_model_graph: bool = True,
+        mode: Literal["online", "offline", "disabled"] = "online",
+        **unused_kwargs,
+    ):
         if wandb is None:
             raise RuntimeError("WandbLogger is not available")
 
-        project = os.environ.get("WANDB_PROJECT", None)
+        super().__init__(trainer)
+
+        self.log_dir = "./logs"
+        os.makedirs(self.log_dir, exist_ok=True)
+
         self.wand_run = wandb.init(
-            project=project,
+            project=project_name,
             name=trainer.name,
             dir=self.log_dir,
+            mode=mode,
             # config={
             # 'learning_rate': trainer.learning_rate, # TODO get learning rate from the optimizer
             # TODO parse more of the config from the trainer
@@ -30,14 +50,16 @@ class WandbLogger:
         )
 
         if trainer.name is None:
-            if os.environ.get("WANDB_MODE") == "offline":
+            if wandb_mode == "run":
+                trainer.name = self.wand_run.name
+            elif wandb_mode == "offline":
                 trainer.name = f"offline_{datetime.now():%Y-%m-%d_%H-%M-%S}"
             else:
-                trainer.name = self.wand_run.name
+                raise ValueError(wandb_mode)
 
         self.log_image_interval = trainer.log_image_interval
 
-        wandb.watch(trainer.model)
+        wandb.watch(trainer.model, log=log_model, log_freq=log_model_freq, log_graph=log_model_graph)
 
     def _log_images(self, step, x, y, prediction, name, gradients=None):
 
@@ -52,7 +74,7 @@ class WandbLogger:
 
         grid_image = grid_image.numpy().transpose((1, 2, 0))
 
-        wandb.log({f"images_{name}/{grid_name}": [wandb.Image(grid_image, caption=grid_name)]}, step=step)
+        wandb.log({grid_name: [wandb.Image(grid_image, caption=grid_name)]}, step=step)
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
         wandb.log({"train/loss": loss}, step=step)

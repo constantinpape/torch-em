@@ -2,7 +2,7 @@ import os
 import time
 import warnings
 from importlib import import_module
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
@@ -32,6 +32,7 @@ class DefaultTrainer:
         mixed_precision=True,
         early_stopping=None,
         logger=TensorboardLogger,
+        logger_kwargs: Optional[Dict[str, Any]] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
@@ -58,6 +59,7 @@ class DefaultTrainer:
         self.scaler = amp.GradScaler() if self.mixed_precision else None
 
         self.logger_class = logger
+        self.logger_kwargs = logger_kwargs
         self.log_image_interval = log_image_interval
 
     @property  # because the logger may generate and set trainer.name on logger.__init__
@@ -158,7 +160,8 @@ class DefaultTrainer:
             'log_image_interval': self.log_image_interval,
             'mixed_precision': self.mixed_precision,
             'early_stopping': self.early_stopping,
-            'logger_class': None if self.logger is None else _full_class_path(self.logger)
+            'logger_class': None if self.logger is None else _full_class_path(self.logger),
+            'logger_kwargs': self.logger_kwargs,
         }
         init_data = _update_loader(init_data, self.train_loader, 'train')
         init_data = _update_loader(init_data, self.val_loader, 'val')
@@ -189,7 +192,7 @@ class DefaultTrainer:
         if self.logger_class is None:
             self.logger = None
         else:
-            self.logger = self.logger_class(self)  # may set self.name if self.name is None
+            self.logger = self.logger_class(self, **(self.logger_kwargs or {}))  # may set self.name if self.name is None
 
         os.makedirs(self.checkpoint_folder, exist_ok=True)
 
