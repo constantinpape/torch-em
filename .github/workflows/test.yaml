@@ -22,6 +22,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: torch-em-cpu
+          mamba-version: "*"
           auto-update-conda: true
           environment-file: environment_cpu.yaml
           python-version: ${{ matrix.python-version }}
