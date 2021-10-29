@@ -7,6 +7,8 @@ from elf.segmentation.embeddings import embedding_pca
 from skimage.segmentation import mark_boundaries
 from torchvision.utils import make_grid
 
+from .logger_base import TorchEmLogger
+
 # tensorboard import only works if tensobard package is available, so
 # we wrap this in a try except
 try:
@@ -80,9 +82,10 @@ def make_embedding_image(image, y, prediction, selection, gradients=None):
     return im, name
 
 
-class TensorboardLogger:
-    def __init__(self, trainer):
-        self.log_dir = f'./logs/{trainer.name}'
+class TensorboardLogger(TorchEmLogger):
+    def __init__(self, trainer, **unused_kwargs):
+        super().__init__(trainer)
+        self.log_dir = f"./logs/{trainer.name}"
         os.makedirs(self.log_dir, exist_ok=True)
 
         if SummaryWriter is None:
