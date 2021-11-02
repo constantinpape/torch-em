@@ -50,12 +50,12 @@ class WandbLogger(TorchEmLogger):
         )
 
         if trainer.name is None:
-            if wandb_mode == "run":
+            if mode == "online":
                 trainer.name = self.wand_run.name
-            elif wandb_mode == "offline":
-                trainer.name = f"offline_{datetime.now():%Y-%m-%d_%H-%M-%S}"
+            elif mode in ("offline", "disabled"):
+                trainer.name = f"{mode}_{datetime.now():%Y-%m-%d_%H-%M-%S}"
             else:
-                raise ValueError(wandb_mode)
+                raise ValueError(mode)
 
         self.log_image_interval = trainer.log_image_interval
 
