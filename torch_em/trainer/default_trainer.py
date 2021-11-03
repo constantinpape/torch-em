@@ -161,7 +161,7 @@ class DefaultTrainer:
             'log_image_interval': self.log_image_interval,
             'mixed_precision': self.mixed_precision,
             'early_stopping': self.early_stopping,
-            'logger_class': None if self.logger is None else _full_class_path(self.logger),
+            'logger_class': self.logger_class,
             'logger_kwargs': self.logger_kwargs,
         }
         init_data = _update_loader(init_data, self.train_loader, 'train')
