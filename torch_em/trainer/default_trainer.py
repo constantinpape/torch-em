@@ -129,7 +129,8 @@ class DefaultTrainer:
             log_image_interval=init_data['log_image_interval'],
             mixed_precision=init_data['mixed_precision'],
             early_stopping=init_data['early_stopping'],
-            logger=_init('logger', only_class=True, optional=True)
+            logger=_init('logger', only_class=True, optional=True),
+            logger_kwargs=init_data.get("logger_kwargs"),
         )
 
         trainer._initialize(0, save_dict)
@@ -189,16 +190,16 @@ class DefaultTrainer:
         self.model.to(self.device)
         self.loss.to(self.device)
 
-        if self.logger_class is None:
-            self.logger = None
-        else:
-            self.logger = self.logger_class(self, **(self.logger_kwargs or {}))  # may set self.name if self.name is None
-
         os.makedirs(self.checkpoint_folder, exist_ok=True)
 
         # this saves all the information that is necessary
         # to fully load the trainer from the checkpoint
         self.init_data = self._build_init()
+
+        if self.logger_class is None:
+            self.logger = None
+        else:
+            self.logger = self.logger_class(self, **(self.logger_kwargs or {}))  # may set self.name if self.name is None
 
         best_metric = np.inf
         return best_metric
