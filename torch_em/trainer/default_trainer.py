@@ -193,8 +193,6 @@ class DefaultTrainer:
         self.model.to(self.device)
         self.loss.to(self.device)
 
-        os.makedirs(self.checkpoint_folder, exist_ok=True)
-
         # this saves all the information that is necessary
         # to fully load the trainer from the checkpoint
         self.init_data = self._build_init()
@@ -203,6 +201,8 @@ class DefaultTrainer:
             self.logger = None
         else:
             self.logger = self.logger_class(self, **(self.logger_kwargs or {}))  # may set self.name if self.name is None
+
+        os.makedirs(self.checkpoint_folder, exist_ok=True)
 
         best_metric = np.inf
         return best_metric
