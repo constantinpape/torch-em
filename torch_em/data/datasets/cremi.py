@@ -42,6 +42,7 @@ def get_cremi_loader(
         "deformation_mode": "compress",
     },
     batch_size=1,
+    num_workers: int = 0,
     loader_kwargs=None,
     **dataset_kwargs,
 ):
@@ -59,7 +60,7 @@ def get_cremi_loader(
         defect_augmentation_kwargs=defect_augmentation_kwargs,
         **dataset_kwargs,
     )
-    return torch_em.get_data_loader(ds, batch_size=batch_size, **(loader_kwargs or {}))
+    return torch_em.get_data_loader(ds, batch_size=batch_size, num_workers=num_workers, **(loader_kwargs or {}))
 
 
 def get_cremi_dataset(
