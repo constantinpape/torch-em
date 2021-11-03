@@ -71,17 +71,19 @@ class WandbLogger(TorchEmLogger):
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
         wandb.log({"train/loss": loss}, step=step)
+        if loss < self.wand_run.summary.get("train/loss", np.inf):
+            self.wand_run.summary["train/loss"] = loss
+
         if step % self.log_image_interval == 0:
             gradients = prediction.grad if log_gradients else None
             self._log_images(step, x, y, prediction, "train", gradients=gradients)
 
     def log_validation(self, step, metric, loss, x, y, prediction):
         wandb.log({"validation/loss": loss, "validation/metric": metric}, step=step)
-        if loss < self.wand_run.summary["validation/loss"]:
+        if loss < self.wand_run.summary.get("validation/loss", np.inf):
             self.wand_run.summary["validation/loss"] = loss
 
-        # like for loss, we consider smaller metrics better
-        if metric < self.wand_run.summary["validation/metric"]:
+        if metric > self.wand_run.summary.get("validation/metric", np.inf):
             self.wand_run.summary["validation/metric"] = metric
 
         self._log_images(step, x, y, prediction, "validation")
