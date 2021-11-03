@@ -141,6 +141,9 @@ class DefaultTrainer:
         def _full_class_path(obj):
             return f'{obj.__class__.__module__}.{obj.__class__.__name__}'
 
+        def _full_class_path_of_class(obj):
+            return f'{obj.__module__}.{obj.__name__}'
+
         def _update_loader(init_data, loader, name):
             init_data.update({
                 f'{name}_dataset': loader.dataset,
@@ -161,7 +164,7 @@ class DefaultTrainer:
             'log_image_interval': self.log_image_interval,
             'mixed_precision': self.mixed_precision,
             'early_stopping': self.early_stopping,
-            'logger_class': self.logger_class,
+            'logger_class': None if self.logger_class is None else _full_class_path_of_class(self.logger_class),
             'logger_kwargs': self.logger_kwargs,
         }
         init_data = _update_loader(init_data, self.train_loader, 'train')
