@@ -1,5 +1,6 @@
 import os
 from glob import glob
+from typing import Any, Dict, Optional
 
 import torch
 import torch.utils.data
@@ -310,6 +311,7 @@ def default_segmentation_trainer(
     mixed_precision=True,
     early_stopping=None,
     logger=TensorboardLogger,
+    logger_kwargs: Optional[Dict[str, Any]] = None,
     scheduler_kwargs=DEFAULT_SCHEDULER_KWARGS,
     optimizer_kwargs={},
     trainer_class=DefaultTrainer,
@@ -343,5 +345,6 @@ def default_segmentation_trainer(
         early_stopping=early_stopping,
         log_image_interval=log_image_interval,
         logger=logger,
+        logger_kwargs=logger_kwargs
     )
     return trainer
