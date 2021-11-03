@@ -39,14 +39,7 @@ class WandbLogger(TorchEmLogger):
         os.makedirs(self.log_dir, exist_ok=True)
 
         self.wand_run = wandb.init(
-            project=project_name,
-            name=trainer.name,
-            dir=self.log_dir,
-            mode=mode,
-            # config={
-            # 'learning_rate': trainer.learning_rate, # TODO get learning rate from the optimizer
-            # TODO parse more of the config from the trainer
-            # },
+            project=project_name, name=trainer.name, dir=self.log_dir, mode=mode, config=trainer.init_data
         )
 
         if trainer.name is None:
@@ -74,16 +67,25 @@ class WandbLogger(TorchEmLogger):
 
         grid_image = grid_image.numpy().transpose((1, 2, 0))
 
-        wandb.log({grid_name: [wandb.Image(grid_image, caption=grid_name)]}, step=step)
+        wandb.log({f"images_{name}/{grid_name}": [wandb.Image(grid_image, caption=grid_name)]}, step=step)
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
         wandb.log({"train/loss": loss}, step=step)
+        if loss < self.wand_run.summary.get("train/loss", np.inf):
+            self.wand_run.summary["train/loss"] = loss
+
         if step % self.log_image_interval == 0:
             gradients = prediction.grad if log_gradients else None
             self._log_images(step, x, y, prediction, "train", gradients=gradients)
 
     def log_validation(self, step, metric, loss, x, y, prediction):
         wandb.log({"validation/loss": loss, "validation/metric": metric}, step=step)
+        if loss < self.wand_run.summary.get("validation/loss", np.inf):
+            self.wand_run.summary["validation/loss"] = loss
+
+        if metric > self.wand_run.summary.get("validation/metric", np.inf):
+            self.wand_run.summary["validation/metric"] = metric
+
         self._log_images(step, x, y, prediction, "validation")
 
     def get_wandb(self):
