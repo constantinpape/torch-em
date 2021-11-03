@@ -129,7 +129,8 @@ class DefaultTrainer:
             log_image_interval=init_data['log_image_interval'],
             mixed_precision=init_data['mixed_precision'],
             early_stopping=init_data['early_stopping'],
-            logger=_init('logger', only_class=True, optional=True)
+            logger=_init('logger', only_class=True, optional=True),
+            logger_kwargs=init_data.get("logger_kwargs"),
         )
 
         trainer._initialize(0, save_dict)
@@ -139,6 +140,9 @@ class DefaultTrainer:
 
         def _full_class_path(obj):
             return f'{obj.__class__.__module__}.{obj.__class__.__name__}'
+
+        def _full_class_path_of_class(obj):
+            return f'{obj.__module__}.{obj.__name__}'
 
         def _update_loader(init_data, loader, name):
             init_data.update({
@@ -160,7 +164,7 @@ class DefaultTrainer:
             'log_image_interval': self.log_image_interval,
             'mixed_precision': self.mixed_precision,
             'early_stopping': self.early_stopping,
-            'logger_class': None if self.logger is None else _full_class_path(self.logger),
+            'logger_class': None if self.logger_class is None else _full_class_path_of_class(self.logger_class),
             'logger_kwargs': self.logger_kwargs,
         }
         init_data = _update_loader(init_data, self.train_loader, 'train')
@@ -189,16 +193,16 @@ class DefaultTrainer:
         self.model.to(self.device)
         self.loss.to(self.device)
 
-        if self.logger_class is None:
-            self.logger = None
-        else:
-            self.logger = self.logger_class(self, **(self.logger_kwargs or {}))  # may set self.name if self.name is None
-
         os.makedirs(self.checkpoint_folder, exist_ok=True)
 
         # this saves all the information that is necessary
         # to fully load the trainer from the checkpoint
         self.init_data = self._build_init()
+
+        if self.logger_class is None:
+            self.logger = None
+        else:
+            self.logger = self.logger_class(self, **(self.logger_kwargs or {}))  # may set self.name if self.name is None
 
         best_metric = np.inf
         return best_metric
