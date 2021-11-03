@@ -67,7 +67,7 @@ class WandbLogger(TorchEmLogger):
 
         grid_image = grid_image.numpy().transpose((1, 2, 0))
 
-        wandb.log({grid_name: [wandb.Image(grid_image, caption=grid_name)]}, step=step)
+        wandb.log({f"images_{name}/{grid_name}": [wandb.Image(grid_image, caption=grid_name)]}, step=step)
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
         wandb.log({"train/loss": loss}, step=step)
