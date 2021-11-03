@@ -39,14 +39,7 @@ class WandbLogger(TorchEmLogger):
         os.makedirs(self.log_dir, exist_ok=True)
 
         self.wand_run = wandb.init(
-            project=project_name,
-            name=trainer.name,
-            dir=self.log_dir,
-            mode=mode,
-            # config={
-            # 'learning_rate': trainer.learning_rate, # TODO get learning rate from the optimizer
-            # TODO parse more of the config from the trainer
-            # },
+            project=project_name, name=trainer.name, dir=self.log_dir, mode=mode, config=trainer.init_data
         )
 
         if trainer.name is None:
@@ -84,6 +77,12 @@ class WandbLogger(TorchEmLogger):
 
     def log_validation(self, step, metric, loss, x, y, prediction):
         wandb.log({"validation/loss": loss, "validation/metric": metric}, step=step)
+        if loss < self.wand_run.summary["validation/loss"]:
+            self.wand_run.summary["validation/loss"] = loss
+
+        if metric > self.wand_run.summary["validation/metric"]:
+            self.wand_run.summary["validation/metric"] = metric
+
         self._log_images(step, x, y, prediction, "validation")
 
     def get_wandb(self):
