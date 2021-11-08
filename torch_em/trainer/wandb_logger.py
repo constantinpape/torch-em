@@ -28,6 +28,7 @@ class WandbLogger(TorchEmLogger):
         log_model_freq: int = 1,
         log_model_graph: bool = True,
         mode: Literal["online", "offline", "disabled"] = "online",
+        config: Optional[dict] = None,
         **unused_kwargs,
     ):
         if wandb is None:
@@ -38,8 +39,10 @@ class WandbLogger(TorchEmLogger):
         self.log_dir = "./logs"
         os.makedirs(self.log_dir, exist_ok=True)
 
+        config = dict(config or {})
+        config.update(trainer.init_data)
         self.wand_run = wandb.init(
-            project=project_name, name=trainer.name, dir=self.log_dir, mode=mode, config=trainer.init_data
+            project=project_name, name=trainer.name, dir=self.log_dir, mode=mode, config=config
         )
 
         if trainer.name is None:
