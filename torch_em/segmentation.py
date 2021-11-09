@@ -346,6 +346,7 @@ def default_segmentation_trainer(
         early_stopping=early_stopping,
         log_image_interval=log_image_interval,
         logger=logger,
-        logger_kwargs=logger_kwargs
+        logger_kwargs=logger_kwargs,
+        id_=id_,
     )
     return trainer
