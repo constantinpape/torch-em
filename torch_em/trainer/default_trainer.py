@@ -39,6 +39,7 @@ class DefaultTrainer:
 
         self._generate_name = name is None
         self.name = name
+        self.id = name
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.model = model
@@ -62,10 +63,10 @@ class DefaultTrainer:
         self.logger_kwargs = logger_kwargs
         self.log_image_interval = log_image_interval
 
-    @property  # because the logger may generate and set trainer.name on logger.__init__
+    @property  # because the logger may generate and set trainer.id on logger.__init__
     def checkpoint_folder(self):
-        assert self.name is not None
-        return os.path.join("./checkpoints", self.name)
+        assert self.id is not None
+        return os.path.join("./checkpoints", self.id)
 
     @property
     def iteration(self):
