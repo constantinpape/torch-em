@@ -33,13 +33,14 @@ class DefaultTrainer:
         early_stopping=None,
         logger=TensorboardLogger,
         logger_kwargs: Optional[Dict[str, Any]] = None,
+        id_: Optional[str] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
 
         self._generate_name = name is None
         self.name = name
-        self.id = name
+        self.id_ = id_ or name
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.model = model
@@ -65,8 +66,8 @@ class DefaultTrainer:
 
     @property  # because the logger may generate and set trainer.id on logger.__init__
     def checkpoint_folder(self):
-        assert self.id is not None
-        return os.path.join("./checkpoints", self.id)
+        assert self.id_ is not None
+        return os.path.join("./checkpoints", self.id_)
 
     @property
     def iteration(self):
