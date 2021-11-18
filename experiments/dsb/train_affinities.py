@@ -13,7 +13,8 @@ OFFSETS = [
 
 def train_affinties(args):
     n_out = len(OFFSETS) + 1
-    model = UNet2d(in_channels=1, out_channels=n_out, initial_features=64)
+    model = UNet2d(in_channels=1, out_channels=n_out, initial_features=64,
+                   final_activation="Sigmoid")
 
     patch_shape = (1, 256, 256)
     train_loader = get_dsb_loader(

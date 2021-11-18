@@ -1,7 +1,7 @@
 import torch
 try:
     from torch_scatter import scatter_mean
-except ImportError:
+except Exception:
     scatter_mean = None
 
 #
