@@ -1,15 +1,13 @@
 channels:
     - pytorch
     - conda-forge
-    - cpape
 name:
     torch-em-cpu
 dependencies:
     - affogato
     - bioimageio.core
-    - bioimageio.spec
     - cpuonly
-    - elf
+    - python-elf
     - pip
     - pytorch
     - tensorboard

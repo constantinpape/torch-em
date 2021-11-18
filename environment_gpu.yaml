@@ -1,15 +1,13 @@
 channels:
     - pytorch
     - conda-forge
-    - cpape
 name:
     torch-em
 dependencies:
     - affogato
     - bioimageio.core
-    - bioimageio.spec
-    - cudatoolkit>=11  # set correct cuda version for your system
-    - elf
+    - cudatoolkit>=11,<12  # set correct cuda version for your system
+    - python-elf
     - pip
     - pytorch
     - tensorboard
