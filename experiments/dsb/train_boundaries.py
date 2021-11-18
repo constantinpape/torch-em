@@ -5,7 +5,7 @@ from torch_em.data.datasets import get_dsb_loader
 
 
 def train_affinties(args):
-    model = UNet2d(in_channels=1, out_channels=2, initial_features=64)
+    model = UNet2d(in_channels=1, out_channels=2, initial_features=64, final_activation="Sigmoid")
 
     patch_shape = (1, 256, 256)
     train_loader = get_dsb_loader(
