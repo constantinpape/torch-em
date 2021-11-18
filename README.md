@@ -4,7 +4,6 @@
 # Torch'em
 
 Deep-learning based semantic and instance segmentation for 3D Electron Microscopy and other bioimage analysis problems based on pytorch.
-
 This library is in anearly state, so don't expect a stable API, no bugs and there be dragons ;). Early feedback is highly appreciated, just open an issue!
 
 Highlights:
@@ -80,19 +79,20 @@ export_bioimageio_model("./checkpoints/dsb-boundary-model", "./bioimageio-model"
 Check out [expirements/platynereis/mitochondria/train_affinities.py](https://github.com/constantinpape/torch-em/blob/main/experiments/platynereis/mitochondria/train_affinities.py) for a more advanced example.
 
 
-## Command Line Scripts
-
-TODO
-
-
 ## Installation
 
+It's recommmended to set up a conda environment for using `torch_em`.
 Two conda environment files are provided: `environment_cpu.yaml` for a pure cpu set-up and `environment_gpu.yaml` for a gpu set-up.
-If you want to use the gpu version, make sure to set the correct cuda version for your system in the environment file.
+If you want to use the gpu version, make sure to set the correct cuda version for your system in the environment file, by modifiying [this-line](https://github.com/constantinpape/torch-em/blob/main/environment_gpu.yaml#L9).
 
-You can set up a conda environment with all necessary dependencies like this:
+You can set up a conda environment using one of these files like this:
 ```sh
 conda env create -f <ENV>.yaml -n <ENV_NAME>
 conda activate <ENV_NAME>
 pip install -e .
 ```
+where <ENV>.yaml is either `environment_cpu.yaml` or `environment_gpu.yaml`.
+
+## Command Line Scripts
+
+TODO
