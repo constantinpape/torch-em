@@ -42,6 +42,23 @@ class TestSegmentationDataset(unittest.TestCase):
             self.assertEqual(x.shape, expected_shape)
             self.assertEqual(y.shape, expected_shape)
 
+    def test_dataset_2d(self):
+        from torch_em.data import SegmentationDataset
+        patch_shape = (1, 32, 32)
+        ds = SegmentationDataset(self.path, self.raw_key,
+                                 self.path, self.label_key,
+                                 patch_shape=patch_shape,
+                                 ndim=2)
+        self.assertEqual(ds.raw.shape, self.shape)
+        self.assertEqual(ds.labels.shape, self.shape)
+        self.assertEqual(ds._ndim, 2)
+
+        expected_shape = patch_shape
+        for i in range(10):
+            x, y = ds[i]
+            self.assertEqual(x.shape, expected_shape)
+            self.assertEqual(y.shape, expected_shape)
+
     def test_roi(self):
         from torch_em.data import SegmentationDataset
         patch_shape = (32, 32, 32)
@@ -66,7 +83,8 @@ class TestSegmentationDataset(unittest.TestCase):
         patch_shape = (32, 32, 32)
         ds = SegmentationDataset(self.path, self.channel_key,
                                  self.path, self.label_key,
-                                 patch_shape=patch_shape, ndim=3)
+                                 patch_shape=patch_shape, ndim=3,
+                                 with_channels=True)
         self.assertEqual(ds._ndim, 3)
         expected_raw_shape = (3,) + patch_shape
         expected_label_shape = (1,) + patch_shape

@@ -36,7 +36,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
         label_dtype=torch.float32,
         n_samples=None,
         sampler=None,
-        ndim=None
+        ndim=None,
+        with_channels=False,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -46,23 +47,19 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.label_key = label_key
         self.labels = open_file(label_path, mode="r")[label_key]
 
+        self._with_channels = with_channels
         if ndim is None:
-            assert self.raw.shape == self.labels.shape, f"{self.raw.shape}, {self.labels.shape}"
-            self._ndim = self.raw.ndim
-            self._with_channels = False
+            self._ndim = self.labels.ndim
         else:
             self._ndim = ndim
-            # check if the raw data has channels
-            if self.raw.ndim == ndim + 1:
-                assert self.raw.shape[1:] == self.labels.shape, f"{self.raw.shape[1:]}, {self.labels.shape}"
-                self._with_channels = True
-            elif self.raw.ndim == ndim:
-                assert self.raw.shape == self.labels.shape, f"{self.raw.shape}, {self.labels.shape}"
-                self._with_channels = False
-            else:
-                raise ValueError(f"Invalid raw data dimensionality {self.raw.ndim} for ndim={ndim}.")
-
         assert self._ndim in (2, 3), "Invalid data dimensionality: {self._ndim}. Only 2d or 3d data is supported"
+
+        if self._with_channels:
+            assert self.raw.shape[1:] == self.labels.shape, f"{self.raw.shape[1:]}, {self.labels.shape}"
+            if self._ndim < self.labels.ndim:
+                raise NotImplementedError("Using channels and smapling 2d slcies from 3d data is not supported yet")
+        else:
+            assert self.raw.shape == self.labels.shape, f"{self.raw.shape}, {self.labels.shape}"
 
         if roi is not None:
             assert len(roi) == self._ndim
@@ -72,7 +69,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.shape = self.labels.shape
         self.roi = roi
 
-        assert len(patch_shape) == self._ndim
+        assert len(patch_shape) == self.labels.ndim
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform
