@@ -196,6 +196,7 @@ def default_segmentation_loader(
     sampler=None,
     ndim=None,
     is_seg_dataset=None,
+    with_channels=False,
     **loader_kwargs,
 ):
     ds = default_segmentation_dataset(
@@ -215,6 +216,7 @@ def default_segmentation_loader(
         sampler=sampler,
         ndim=ndim,
         is_seg_dataset=is_seg_dataset,
+        with_channels=with_channels,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -236,6 +238,7 @@ def default_segmentation_dataset(
     sampler=None,
     ndim=None,
     is_seg_dataset=None,
+    with_channels=False,
 ):
     check_paths(raw_paths, label_paths)
     if is_seg_dataset is None:
@@ -268,8 +271,10 @@ def default_segmentation_dataset(
             ndim=ndim,
             dtype=dtype,
             label_dtype=label_dtype,
+            with_channels=with_channels,
         )
     else:
+        # TODO implement with channels for image collection
         ds = _load_image_collection_dataset(
             raw_paths,
             raw_key,
