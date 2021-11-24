@@ -161,8 +161,8 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
     return ds
 
 
-def _get_default_transform(path, key, is_seg_dataset):
-    if is_seg_dataset:
+def _get_default_transform(path, key, is_seg_dataset, ndim):
+    if is_seg_dataset and ndim is None:
         with open_file(path, mode="r") as f:
             shape = f[key].shape
             if len(shape) == 2:
@@ -171,6 +171,8 @@ def _get_default_transform(path, key, is_seg_dataset):
                 # heuristics to figure out whether to use default 3d
                 # or default anisotropic augmentations
                 ndim = "anisotropic" if shape[0] < shape[1] // 2 else 3
+    elif is_seg_dataset and ndim is not None:
+        pass
     else:
         ndim = 2
     return get_augmentations(ndim)
@@ -246,7 +248,7 @@ def default_segmentation_dataset(
     # we always use augmentations in the convenience function
     if transform is None:
         transform = _get_default_transform(
-            raw_paths if isinstance(raw_paths, str) else raw_paths[0], raw_key, is_seg_dataset
+            raw_paths if isinstance(raw_paths, str) else raw_paths[0], raw_key, is_seg_dataset, ndim
         )
 
     if is_seg_dataset:
