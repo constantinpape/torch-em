@@ -43,7 +43,7 @@ def export_boundary_models(export_affinities, force_export, include_models):
         os.makedirs("exported_models", exist_ok=True)
 
     models = [
-        ("covid_if", "checkpoints/covid-if-affinity-model",
+        ("covid-if", "checkpoints/covid-if-affinity-model",
          "/scratch/pape/covid-if/gt_image_000.h5"),
         ("neuron-segmentation/cremi", "checkpoints/affinity_model_default",
          "/scratch/pape/cremi/sample_C_20160501.hdf"),
