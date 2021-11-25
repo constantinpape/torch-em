@@ -733,15 +733,12 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
                                                         test_in_path, test_out_path,
                                                         preprocessing)
         config.update(ij_config)
-        kwargs.update({
-            "sample_inputs": [sample_in_path],
-            "sample_outputs": [sample_out_path],
-            "config": config
-        })
+        kwargs.update({"sample_inputs": [sample_in_path], "sample_outputs": [sample_out_path]})
         if attachments is not None:
             kwargs.update({"attachments": attachments})
         links.append("deepimagej/deepimagej")
 
+    kwargs.update({"config": config})
     # make sure links are unique
     links = list(set(links))
 
