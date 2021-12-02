@@ -3,7 +3,6 @@ import functools
 import json
 import os
 import subprocess
-import warnings
 from pathlib import Path
 from shutil import copyfile
 from warnings import warn
@@ -16,11 +15,11 @@ import torch_em
 
 import bioimageio.core as core
 import bioimageio.core.build_spec as build_spec
+from bioimageio.core.prediction_pipeline._model_adapters._pytorch_model_adapter import PytorchModelAdapter
 import bioimageio.core.weight_converter.torch as weight_converter
 from bioimageio.spec.shared import yaml
 
 from elf.io import open_file
-from marshmallow import missing
 from .util import get_trainer, get_normalizer
 
 
@@ -347,11 +346,22 @@ def _get_preprocessing(trainer):
     return [preprocessing]
 
 
-def _get_tensor_kwargs(model, model_kwargs):
+def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
+
+    def get_ax(tensor):
+        ndim = np.load(tensor).ndim
+        assert ndim in (4, 5)
+        return "bcyx" if ndim == 4 else "bczyx"
+
+    tensor_kwargs = {
+        "input_axes": [get_ax(tensor) for tensor in input_tensors],
+        "output_axes": [get_ax(tensor) for tensor in output_tensors]
+    }
     module = str(model.__class__.__module__)
     name = str(model.__class__.__name__)
     # can derive tensor kwargs only for known torch_em models (only unet for now)
     if module == "torch_em.model.unet":
+        assert len(input_tensors) == len(output_tensors) == 1
         inc, outc = model_kwargs["in_channels"], model_kwargs["out_channels"]
 
         postprocessing = model_kwargs.get("postprocessing", None)
@@ -390,17 +400,15 @@ def _get_tensor_kwargs(model, model_kwargs):
         else:
             scale = [1, float(outc) / inc] + ([1] * (len(step) - 2))
             offset = [0, 0] + ([0] * (len(step) - 2))
-        tensor_kwargs = {
+        tensor_kwargs.update({
             "input_step": [step],
             "input_min_shape": [min_shape],
             "output_reference": [ref],
             "output_scale": [scale],
             "output_offset": [offset],
             "halo": [halo]
-        }
-        return tensor_kwargs
-    else:
-        return {}
+        })
+    return tensor_kwargs
 
 
 def _validate_model(spec_path):
@@ -459,16 +467,12 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
     os.makedirs(export_folder, exist_ok=True)
     weight_path = _write_weights(model, export_folder)
 
-    # create the test input/output file
+    # create the test input/output file and derive the tensor kwargs from the model and its kwargs
     test_in_paths, test_out_paths = _write_data(input_data, model, trainer, export_folder)
-    if len(test_in_paths) > 1 or len(test_out_paths) > 1:
-        warnings.warn("Got a model with more than one in/output tensor; some auto-generated data may be incorrect")
+    tensor_kwargs = _get_tensor_kwargs(model, model_kwargs, test_in_paths, test_out_paths)
 
     # create the model source file
     source = _write_source(model, export_folder)
-
-    # derive the tensor kwargs from the model and its kwargs
-    tensor_kwargs = _get_tensor_kwargs(model, model_kwargs)
 
     # create dependency file
     _write_depedencies(export_folder, dependencies)
@@ -492,8 +496,6 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
     os.chdir(export_folder)
     try:
         build_spec.build_model(
-            source=source,
-            model_kwargs=model_kwargs,
             weight_uri=weight_path,
             weight_type="pytorch_state_dict",
             test_inputs=[f"./{os.path.split(test_in)[1]}" for test_in in test_in_paths],
@@ -502,6 +504,8 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
             output_path=f"{name}.zip",
             dependencies="environment.yaml",
             preprocessing=preprocessing,
+            architecture=source,
+            model_kwargs=model_kwargs,
             **kwargs
         )
     except Exception as e:
@@ -559,14 +563,7 @@ def main():
 #
 
 def _load_model(model_spec):
-
-    # NOTE: copied from tiktorch; this should go into python-bioimageio and then we use it from there
-    def get_nn_instance(node, **kwargs):
-        joined_kwargs = {} if node.kwargs is missing else dict(node.kwargs)  # type: ignore
-        joined_kwargs.update(kwargs)
-        return node.source(**joined_kwargs)
-
-    model = get_nn_instance(model_spec)
+    model = PytorchModelAdapter.get_nn_instance(model_spec)
     weights = model_spec.weights["pytorch_state_dict"]
     state = torch.load(weights.source, map_location="cpu")
     model.load_state_dict(state)
@@ -698,11 +695,10 @@ def convert_to_onnx(spec_path, opset_version=12):
     return None
 
 
-def convert_to_pytorch_script(spec_path):
-    # converter = functools.partial(weight_converter.convert_weights_to_pytorch_script, use_tracing=False)
-    converter = weight_converter.convert_weights_to_pytorch_script
+def convert_to_torchscript(spec_path):
+    converter = weight_converter.convert_weights_to_torchscript
     weight_name = "weights-torchscript.pt"
-    _convert_impl(spec_path, weight_name, converter, "pytorch_script")
+    _convert_impl(spec_path, weight_name, converter, "torchscript")
 
     # check that we can actually load it again
     root = os.path.split(spec_path)[0]
@@ -721,7 +717,7 @@ def add_weight_formats(export_folder, additional_formats):
         if add_format == "onnx":
             ret = convert_to_onnx(spec_path)
         elif add_format == "torchscript":
-            ret = convert_to_pytorch_script(spec_path)
+            ret = convert_to_torchscript(spec_path)
 
         if ret is None:
             print("Successfully added", add_format, "weights")
@@ -732,7 +728,7 @@ def add_weight_formats(export_folder, additional_formats):
 def convert_main():
     import argparse
     parser = argparse.ArgumentParser(
-        "Convert weights from native pytorch format to onnx or pytorch_script"
+        "Convert weights from native pytorch format to onnx or torchscript"
     )
     parser.add_argument("-f", "--model_folder", required=True,
                         help="")
@@ -740,11 +736,11 @@ def convert_main():
                         help="")
     args = parser.parse_args()
     weight_format = args.weight_format
-    assert weight_format in ("onnx", "pytorch_script")
+    assert weight_format in ("onnx", "torchscript")
     if weight_format == "onnx":
         convert_to_onnx(args.model_folder)
     else:
-        convert_to_pytorch_script(args.model_folder)
+        convert_to_torchscript(args.model_folder)
 
 
 #
