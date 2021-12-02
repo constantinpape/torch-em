@@ -1,7 +1,7 @@
 from .image import load_image, supports_memmap
 from .modelzoo import (add_weight_formats,
                        convert_to_onnx,
-                       convert_to_pytorch_script,
+                       convert_to_torchscript,
                        export_biomageio_model,
                        export_parser_helper,
                        get_default_citations,
