@@ -5,7 +5,7 @@ name:
     torch-em-cpu
 dependencies:
     - affogato
-    - bioimageio.core
+    - bioimageio.core >=0.4.6
     - cpuonly
     - python-elf
     - pip
