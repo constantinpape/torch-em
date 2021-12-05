@@ -3,39 +3,25 @@ import torch_em
 from torch_em.model import UNet2d
 from torch_em.data.datasets import get_livecell_loader
 
-OFFSETS = [
-    [-1, 0], [0, -1],
-    [-3, 0], [0, -3],
-    [-9, 0], [0, -9],
-    [-27, 0], [0, -27]
-]
 
-
-def train_affinities(args):
-    n_out = len(OFFSETS) + 1
+def train_boundaries(args):
+    n_out = 2
     model = UNet2d(in_channels=1, out_channels=n_out, initial_features=64,
                    final_activation="Sigmoid")
 
     patch_shape = (512, 512)
     train_loader = get_livecell_loader(
         args.input, patch_shape, "train",
-        download=True, offsets=OFFSETS, batch_size=args.batch_size
+        download=True, boundaries=True, batch_size=args.batch_size
     )
     val_loader = get_livecell_loader(
         args.input, patch_shape, "val",
-        offsets=OFFSETS, batch_size=args.batch_size
+        boundaries=True, batch_size=args.batch_size
     )
+    loss = torch_em.loss.DiceLoss()
 
-    loss = torch_em.loss.LossWrapper(
-        torch_em.loss.DiceLoss(),
-        transform=torch_em.loss.ApplyAndRemoveMask()
-    )
-
-    # the trainer object that handles the training details
-    # the model checkpoints will be saved in "checkpoints/livecell-affinity-model"
-    # the tensorboard logs will be saved in "logs/livecell-affinity-model"
     trainer = torch_em.default_segmentation_trainer(
-        name="livecell-affinity-model",
+        name="livecell-boundary-model",
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -54,4 +40,4 @@ if __name__ == '__main__':
         default_batch_size=8
     )
     args = parser.parse_args()
-    train_affinities(args)
+    train_boundaries(args)
