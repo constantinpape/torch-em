@@ -410,7 +410,7 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
             raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
         halo = step
 
-        ref = "input"
+        ref = "input0"
         if inc == outc:
             scale = [1] * len(step)
             offset = [0] * len(step)
