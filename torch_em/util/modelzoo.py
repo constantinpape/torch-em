@@ -187,6 +187,7 @@ def _get_kwargs(trainer, name, description,
                 authors, tags,
                 license, documentation,
                 git_repo, cite,
+                maintainers,
                 export_folder, input_optional_parameters):
     if input_optional_parameters:
         print("Enter values for the optional parameters.")
@@ -213,7 +214,7 @@ def _get_kwargs(trainer, name, description,
             val = val.replace(""", """)  # enable single quotes
             val = json.loads(val)
         if is_list:
-            assert isinstance(val, (list, tuple))
+            assert isinstance(val, (list, tuple)), type(val)
         return val
 
     def _default_authors():
@@ -240,6 +241,21 @@ def _get_kwargs(trainer, name, description,
             repo = None
         return repo
 
+    def _default_maintainers():
+        # first try to derive the maintainer name from git
+        try:
+            call_res = subprocess.run(["git", "config", "user.name"], capture_output=True)
+            maintainer = call_res.stdout.decode("utf8").rstrip("\n")
+            maintainer = maintainer if maintainer else None  # in case there was no error, but output is empty
+        except Exception:
+            maintainer = None
+
+        # otherwise use the username
+        if maintainer is None:
+            maintainer = os.uname()[1]
+
+        return [{"github_user": maintainer}]
+
     # TODO derive better default values:
     # - description: derive something from trainer.ndim, trainer.loss, trainer.model, ...
     # - tags: derive something from trainer.ndim, trainer.loss, trainer.model, ...
@@ -253,7 +269,8 @@ def _get_kwargs(trainer, name, description,
         "documentation": _get_kwarg("documentation", documentation, lambda: trainer.name,
                                     fname="documentation.md"),
         "git_repo": _get_kwarg("git_repo", git_repo, _default_repo),
-        "cite": _get_kwarg("cite", cite, get_default_citations)
+        "cite": _get_kwarg("cite", cite, get_default_citations),
+        "maintainers": _get_kwarg("maintainers", maintainers, _default_maintainers, is_list=True),
     }
 
     return kwargs
@@ -445,16 +462,17 @@ def _extract_from_zip(zip_path, out_path, name):
 
 # TODO support loading data from the val_loader of the trainer when input_data is None (SampleGenerator)
 # TODO config: training details derived from loss and optimizer, custom params, e.g. offsets for mws
-def export_biomageio_model(checkpoint, export_folder, input_data=None,
-                           dependencies=None, name=None,
-                           description=None, authors=None,
-                           tags=None, license=None,
-                           documentation=None, covers=None,
-                           git_repo=None, cite=None,
-                           input_optional_parameters=True,
-                           model_postprocessing=None,
-                           for_deepimagej=False, links=[],
-                           config={}):
+def export_bioimageio_model(checkpoint, export_folder, input_data=None,
+                            dependencies=None, name=None,
+                            description=None, authors=None,
+                            tags=None, license=None,
+                            documentation=None, covers=None,
+                            git_repo=None, cite=None,
+                            input_optional_parameters=True,
+                            model_postprocessing=None,
+                            for_deepimagej=False, links=[],
+                            maintainers=None,
+                            config={}):
     """
     """
     assert input_data is not None
@@ -482,6 +500,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
                          authors, tags,
                          license, documentation,
                          git_repo, cite,
+                         maintainers,
                          export_folder, input_optional_parameters)
     kwargs.update(tensor_kwargs)
     preprocessing = _get_preprocessing(trainer)
@@ -506,6 +525,7 @@ def export_biomageio_model(checkpoint, export_folder, input_data=None,
             preprocessing=preprocessing,
             architecture=source,
             model_kwargs=model_kwargs,
+            add_deepimagej_config=for_deepimagej,
             **kwargs
         )
     except Exception as e:
@@ -553,7 +573,7 @@ def main():
                         help="")
 
     args = parser.parse_args()
-    export_biomageio_model(
+    export_bioimageio_model(
         args.path, _load_data(args.data, args.key), args.export_folder
     )
 

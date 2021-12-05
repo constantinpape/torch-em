@@ -53,10 +53,10 @@ class TestModelzoo(unittest.TestCase):
         trainer.fit(10)
 
     def _test_export(self, n_channels):
-        from torch_em.util.modelzoo import export_biomageio_model
+        from torch_em.util.modelzoo import export_bioimageio_model
         self._create_checkpoint(n_channels)
 
-        success = export_biomageio_model(
+        success = export_bioimageio_model(
             os.path.join(self.checkpoint_folder, self.name),
             self.save_folder,
             input_data=np.random.rand(128, 128).astype('float32'),
