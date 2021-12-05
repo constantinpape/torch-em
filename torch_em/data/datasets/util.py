@@ -9,7 +9,7 @@ import requests
 BIOIMAGEIO_IDS = {
     "covid_if": "10.5072/zenodo.881843",
     "cremi": "10.5072/zenodo.881917",
-    "dsb": "10.5072/zenodo.881915",
+    "dsb": "stardist_dsb_training_data",
     "isbi2012": "10.5072/zenodo.881019",
     "mitoem": "10.5072/zenodo.881021",
     "ovules": "10.5072/zenodo.881893",
