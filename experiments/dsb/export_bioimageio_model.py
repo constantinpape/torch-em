@@ -2,39 +2,48 @@ import os
 
 import imageio
 from torch_em.data.datasets import get_bioimageio_dataset_id
-from torch_em.util import (add_weight_formats, export_biomageio_model,
+from torch_em.util import (add_weight_formats, export_bioimageio_model,
                            get_default_citations, export_parser_helper)
 
 
-def _get_name(is_aff):
-    name = "DSB-Nuclei"
+def _get_name_and_description(is_aff):
+    name = "NucleiSegmentation"
     if is_aff:
-        name += "-AffinityModel"
+        name += "AffinityModel"
     else:
-        name += "-BoundaryModel"
-    return name
+        name += "BoundaryModel"
+    description = "Nucleus segmentation for fluorescence microscopy."
+    return name, description
 
 
-def _get_doc(is_aff_model):
-    ndim = 2
+def _get_doc(is_aff_model, name):
     if is_aff_model:
-        doc = f"""
-## {ndim}D U-Net for Affinity Prediction
-
-This model was trained on data from the Data Science Bowl Nucleus Segmentation Challenge.
-It predicts affinity maps and foreground probabilities for nucleus segmentation in different
-light microscopy settings, mainly with DAPI staining.
-The affinities can be processed with the mutex watershed to obtain an instance segmentation.
-        """
+        pred_type = "affinity maps"
+        pp = "The affinities can be processed with the Mutex Watershed to obtain an instance segmentation."
     else:
-        doc = f"""
-## {ndim}D U-Net for Boundary Prediction
+        pred_type = "boundary maps"
+        pp = "The boundaries can be processed with Multicut or Watershed to obtain an instance segmentation."
 
-This model was trained on data from the Data Science Bowl Nucleus Segmentation Challenge.
-It predicts boundary maps and foreground probabilities for nucleus segmentation in different
-light microscopy settings, mainly with DAPI staining.
-The boundaries can be processed with multicut segmentation to obtain an instance segmentation.
-        """
+    model_tag = name.lower()
+    doc = f"""
+# U-Net for Nucleus Segmentation
+
+This model segments nuclei in fluorescence microscopy images.
+It predicts {pred_type} and foreground probabilities for nucleus segmentation in
+different light microscopy modalities, mainly with DAPI staining.
+{pp}
+
+## Training
+
+The network was trained on data from the Data Science Bowl Nucleus Segmentation Challenge.
+The training script can be found [here](https://github.com/constantinpape/torch-em/tree/main/experiments/dsb).
+
+## Contact
+
+For questions or issues with this models, please reach out by:
+- opening a topic with tags bioimageio and {model_tag} on [image.sc](https://forum.image.sc/)
+- or creating an issue in https://github.com/constantinpape/torch-em
+"""
     return doc
 
 
@@ -54,9 +63,8 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
 
     if is_aff_model and affs_to_bd:
         is_aff_model = False
-    name = _get_name(is_aff_model)
-    tags = ["u-net", "nucleus-segmentation", "segmentation", "volume-em", "platynereis", "nuclei"]
-    tags += ["affinity-prediction"] if is_aff_model else ["boundary-prediction"]
+    name, description = _get_name_and_description(is_aff_model)
+    tags = ["fluorescence-light-microscopy", "nuclei", "UNet", "instance-segmentation"]
 
     # eventually we should refactor the citation logic
     cite = get_default_citations(
@@ -64,7 +72,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     )
     cite["data"] = "https://www.nature.com/articles/s41592-019-0612-7"
 
-    doc = _get_doc(is_aff_model)
+    doc = _get_doc(is_aff_model, name)
     if is_aff_model:
         offsets = [
             [-1, 0], [0, -1],
@@ -76,27 +84,29 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     else:
         config = {}
 
-    export_biomageio_model(
+    export_bioimageio_model(
         checkpoint, output,
         input_data=input_data,
         name=name,
-        authors=[{"name": "Constantin Pape; @constantinpape"}],
+        authors=[{"name": "Constantin Pape", "affiliation": "EMBL Heidelberg"}],
         tags=tags,
-        license='CC-BY-4.0',
+        license="CC-BY-4.0",
         documentation=doc,
-        git_repo='https://github.com/constantinpape/torch-em.git',
+        git_repo="https://github.com/constantinpape/torch-em.git",
         cite=cite,
         model_postprocessing=postprocessing,
         input_optional_parameters=False,
+        description=description,
         # need custom deepimagej fields if we have torchscript export
         for_deepimagej="torchscript" in additional_formats,
         links=[get_bioimageio_dataset_id("dsb")],
-        config=config
+        config=config,
+        maintainers=[{"github_user": "constantinpape"}],
     )
     add_weight_formats(output, additional_formats)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = export_parser_helper()
     args = parser.parse_args()
     export_to_bioimageio(args.checkpoint, args.output, args.input,

@@ -4,7 +4,7 @@ from torch_em.model import UNet2d
 from torch_em.data.datasets import get_dsb_loader
 
 
-def train_affinties(args):
+def train_boundaries(args):
     model = UNet2d(in_channels=1, out_channels=2, initial_features=64, final_activation="Sigmoid")
 
     patch_shape = (1, 256, 256)
@@ -16,11 +16,7 @@ def train_affinties(args):
         args.input, patch_shape, split="test",
         boundaries=True, batch_size=args.batch_size
     )
-
-    loss = torch_em.loss.LossWrapper(
-        torch_em.loss.DiceLoss(),
-        transform=torch_em.loss.ApplyAndRemoveMask()
-    )
+    loss = torch_em.loss.DiceLoss()
 
     # the trainer object that handles the training details
     # the model checkpoints will be saved in "checkpoints/dsb-boundary-model"
@@ -45,4 +41,4 @@ if __name__ == '__main__':
         default_batch_size=8
     )
     args = parser.parse_args()
-    train_affinties(args)
+    train_boundaries(args)
