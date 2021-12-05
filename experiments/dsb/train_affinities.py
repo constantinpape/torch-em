@@ -11,7 +11,7 @@ OFFSETS = [
 ]
 
 
-def train_affinties(args):
+def train_affinities(args):
     n_out = len(OFFSETS) + 1
     model = UNet2d(in_channels=1, out_channels=n_out, initial_features=64,
                    final_activation="Sigmoid")
@@ -54,4 +54,4 @@ if __name__ == '__main__':
         default_batch_size=8
     )
     args = parser.parse_args()
-    train_affinties(args)
+    train_affinities(args)
