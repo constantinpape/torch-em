@@ -31,14 +31,19 @@ def make_grid_image(image, y, prediction, selection, gradients=None):
     target_image = normalize_im(y[selection].cpu())
     pred_image = normalize_im(prediction[selection].detach().cpu())
 
-    # TODO support rgb images?
     if image.shape[0] > 1:
         image = image[0:1]
 
-    n_channels = target_image.shape[0]
-    if n_channels == 1:
+    n_channels = pred_image.shape[0]
+    n_channels_target = target_image.shape[0]
+    if n_channels_target == n_channels == 1:
         nrow = 8
         images = [image, target_image, pred_image]
+    elif n_channels_target == 1:
+        nrow = n_channels
+        images = nrow * [image]
+        images += (nrow * [target_image])
+        images += [channel.unsqueeze(0) for channel in pred_image]
     else:
         nrow = n_channels
         images = nrow * [image]

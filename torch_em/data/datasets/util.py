@@ -39,7 +39,7 @@ def download_source(path, url, download, checksum=None, verify=True):
 
     print("Download file fron", url, "to", path)
     with requests.get(url, stream=True, verify=verify) as r:
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             copyfileobj(r.raw, f)
 
     if checksum is not None:
@@ -60,7 +60,7 @@ def update_kwargs(kwargs, key, value, msg=None):
 
 
 def unzip(zip_path, dst, remove=True):
-    with zipfile.ZipFile(zip_path, 'r') as f:
+    with zipfile.ZipFile(zip_path, "r") as f:
         f.extractall(dst)
     if remove:
         os.remove(zip_path)
