@@ -62,7 +62,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
             assert self.raw.shape == self.labels.shape, f"{self.raw.shape}, {self.labels.shape}"
 
         if roi is not None:
-            assert len(roi) == self._ndim
+            assert len(roi) == self.labels.ndim, f"{roi}, {self.labels.ndim}"
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
             self.labels = RoiWrapper(self.labels, roi)
 
