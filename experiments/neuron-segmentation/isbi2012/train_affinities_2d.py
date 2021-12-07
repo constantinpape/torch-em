@@ -36,12 +36,12 @@ def get_model(use_diagonal_offsets):
     model = UNet2d(
         in_channels=1,
         out_channels=n_out,
-        final_activation='Sigmoid'
+        final_activation="Sigmoid"
     )
     return model
 
 
-def train_affinties(input_path, n_iterations, device, use_diagonal_offsets):
+def train_affinities(input_path, n_iterations, device, use_diagonal_offsets):
 
     model = get_model(use_diagonal_offsets)
     offsets = get_offsets(use_diagonal_offsets)
@@ -86,9 +86,9 @@ def train_affinties(input_path, n_iterations, device, use_diagonal_offsets):
         transform=torch_em.loss.ApplyAndRemoveMask()
     )
 
-    name = 'affinity-model'
+    name = "affinity-model"
     if use_diagonal_offsets:
-        name += '_diagonal_offsets'
+        name += "_diagonal_offsets"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
@@ -109,12 +109,12 @@ def print_the_offsets(use_diagonal_offsets):
     print(offs)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = parser_helper()
-    parser.add_argument('-d', '--use_diagonal_offsets', type=int, default=0)
-    parser.add_argument('-p', '--print_offsets', default=0)
+    parser.add_argument("-d", "--use_diagonal_offsets", type=int, default=0)
+    parser.add_argument("-p", "--print_offsets", default=0)
     args = parser.parse_args()
     if bool(args.print_offsets):
         print_the_offsets(bool(args.use_diagonal_offsets))
     else:
-        train_affinties(args.input, args.n_iterations, args.device, bool(args.use_diagonal_offsets))
+        train_affinities(args.input, args.n_iterations, args.device, bool(args.use_diagonal_offsets))
