@@ -262,7 +262,7 @@ def _get_kwargs(trainer, name, description,
     # - documentation: derive something from trainer.ndim, trainer.loss, trainer.model, ...
     kwargs = {
         "name": _get_kwarg("name", name, lambda: trainer.name),
-        "description": _get_kwarg("description", name, lambda: trainer.name),
+        "description": _get_kwarg("description", description, lambda: trainer.name),
         "authors": _get_kwarg("authors", authors, _default_authors, is_list=True),
         "tags": _get_kwarg("tags", tags, lambda: [trainer.name], is_list=True),
         "license": _get_kwarg("license", license, lambda: "MIT"),
