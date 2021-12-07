@@ -6,14 +6,17 @@ from warnings import warn
 
 import requests
 
+# TODO update the links once available on bioimageio
 BIOIMAGEIO_IDS = {
-    "covid_if": "10.5072/zenodo.881843",
-    "cremi": "10.5072/zenodo.881917",
-    "dsb": "stardist_dsb_training_data",
-    "isbi2012": "10.5072/zenodo.881019",
-    "mitoem": "10.5072/zenodo.881021",
-    "ovules": "10.5072/zenodo.881893",
-    "platynereis": "10.5072/zenodo.881899"
+    "covid_if": "",
+    "cremi": "",
+    "dsb": "ilastik/stardist_dsb_training_data",
+    "isbi2012": "",
+    "livcell": "",
+    "mitoem": "",
+    "monuseg": "deepimagej/monuseg_digital_pathology_miccai2018",
+    "ovules": "",
+    "platynereis": ""
 }
 
 
