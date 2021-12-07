@@ -12,12 +12,12 @@ def get_model():
     model = UNet2d(
         in_channels=1,
         out_channels=n_out,
-        final_activation='Sigmoid'
+        final_activation="Sigmoid"
     )
     return model
 
 
-def train_affinties(input_path, n_iterations, device):
+def train_boundaries(input_path, n_iterations, device):
     model = get_model()
 
     batch_size = 1
@@ -56,7 +56,7 @@ def train_affinties(input_path, n_iterations, device):
 
     loss = torch_em.loss.DiceLoss()
 
-    name = 'boundary-model'
+    name = "boundary-model"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
@@ -73,7 +73,7 @@ def train_affinties(input_path, n_iterations, device):
     trainer.fit(n_iterations)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = parser_helper()
     args = parser.parse_args()
-    train_affinties(args.input, args.n_iterations, args.device)
+    train_boundaries(args.input, args.n_iterations, args.device)
