@@ -6,6 +6,7 @@ from .modelzoo import (add_weight_formats,
                        export_parser_helper,
                        get_default_citations,
                        import_bioimageio_model)
+from .reporting import get_training_summary
 from .training import parser_helper
 from .util import (ensure_array, ensure_spatial_array,
                    ensure_tensor, ensure_tensor_with_channels,

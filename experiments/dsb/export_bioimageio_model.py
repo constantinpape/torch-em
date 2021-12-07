@@ -2,8 +2,8 @@ import os
 
 import imageio
 from torch_em.data.datasets import get_bioimageio_dataset_id
-from torch_em.util import (add_weight_formats, export_bioimageio_model,
-                           get_default_citations, export_parser_helper)
+from torch_em.util import (add_weight_formats, export_bioimageio_model, export_parser_helper,
+                           get_default_citations, get_training_summary)
 
 
 def _get_name_and_description(is_aff):
@@ -16,17 +16,17 @@ def _get_name_and_description(is_aff):
     return name, description
 
 
-def _get_doc(is_aff_model, name):
+def _get_doc(is_aff_model, ckpt, name):
     if is_aff_model:
         pred_type = "affinity maps"
         pp = "The affinities can be processed with the Mutex Watershed to obtain an instance segmentation."
     else:
         pred_type = "boundary maps"
-        pp = "The boundaries can be processed with Multicut or Watershed to obtain an instance segmentation."
+        pp = "The boundaries can be processed e.g. with Multicut or Watershed to obtain an instance segmentation."
 
+    training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
     model_tag = name.lower()
-    doc = f"""
-# U-Net for Nucleus Segmentation
+    doc = f"""# U-Net for Nucleus Segmentation
 
 This model segments nuclei in fluorescence microscopy images.
 It predicts {pred_type} and foreground probabilities for nucleus segmentation in
@@ -37,13 +37,29 @@ different light microscopy modalities, mainly with DAPI staining.
 
 The network was trained on data from the Data Science Bowl Nucleus Segmentation Challenge.
 The training script can be found [here](https://github.com/constantinpape/torch-em/tree/main/experiments/dsb).
+This folder also includes example usages of this model.
+
+### Training Data
+
+- Imaging modality: different fluorescence light microscopy modalities.
+- Dimensionality: 2D
+- Source: DSB Kaggle Challenge
+
+### Recommended Validation
+
+It is recommended to validate the instance segmentation obtained from this model using intersection-over-union.
+See [the validation script](https://github.com/constantinpape/torch-em/tree/main/experiments/dsb/validate_model.py).
+This model can also be used in ilastik, deepimageJ or other software that supports the bioimage.io model format.
+
+### Training Schedule
+
+{training_summary}
 
 ## Contact
 
 For questions or issues with this models, please reach out by:
 - opening a topic with tags bioimageio and {model_tag} on [image.sc](https://forum.image.sc/)
-- or creating an issue in https://github.com/constantinpape/torch-em
-"""
+- or creating an issue in https://github.com/constantinpape/torch-em"""
     return doc
 
 
@@ -55,9 +71,9 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     else:
         input_data = imageio.imread(input_)
 
-    is_aff_model = 'affinity' in ckpt_name
+    is_aff_model = "affinity" in ckpt_name
     if is_aff_model and affs_to_bd:
-        postprocessing = 'affinities_with_foreground_to_boundaries2d'
+        postprocessing = "affinities_with_foreground_to_boundaries2d"
     else:
         postprocessing = None
 
@@ -72,7 +88,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     )
     cite["data"] = "https://www.nature.com/articles/s41592-019-0612-7"
 
-    doc = _get_doc(is_aff_model, name)
+    doc = _get_doc(is_aff_model, checkpoint, name)
     if is_aff_model:
         offsets = [
             [-1, 0], [0, -1],
@@ -83,6 +99,9 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         config = {"mws": {"offsets": offsets}}
     else:
         config = {}
+
+    if additional_formats is None:
+        additional_formats = []
 
     export_bioimageio_model(
         checkpoint, output,
