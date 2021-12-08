@@ -1,16 +1,8 @@
 import numpy as np
 import torch_em
 from torch_em.model import AnisotropicUNet
-from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask
 from torch_em.data.datasets import get_cremi_loader
 from torch_em.util import parser_helper
-
-OFFSETS = [
-    [-1, 0, 0], [0, -1, 0], [0, 0, -1],
-    [-2, 0, 0], [0, -3, 0], [0, 0, -3],
-    [-3, 0, 0], [0, -9, 0], [0, 0, -9],
-    [-4, 0, 0], [0, -27, 0], [0, 0, -27]
-]
 
 
 def get_rois(all_samples, is_train):
@@ -37,7 +29,7 @@ def get_loader(input_path, all_samples, is_train, patch_shape, batch_size=1, n_s
         patch_shape=patch_shape,
         batch_size=batch_size,
         rois=rois,
-        offsets=OFFSETS,
+        boundaries=True,
         n_samples=n_samples,
         num_workers=8*batch_size,
         shuffle=True,
@@ -46,7 +38,7 @@ def get_loader(input_path, all_samples, is_train, patch_shape, batch_size=1, n_s
 
 
 def get_model(large_model):
-    n_out = len(OFFSETS)
+    n_out = 2
     if large_model:
         print("Using large model")
         model = AnisotropicUNet(
@@ -89,7 +81,7 @@ def normalize_samples(samples):
     return samples, prefix
 
 
-def train_affinities(args):
+def train_boundaries(args):
     large_model = bool(args.large_model)
     model = get_model(large_model)
     # patch shapes:
@@ -114,20 +106,15 @@ def train_affinities(args):
         n_samples=100
     )
 
-    loss = LossWrapper(loss=DiceLoss(),
-                       transform=ApplyAndRemoveMask())
-
     tag = "large" if large_model else "default"
     if prefix is not None:
         tag += f"_{prefix}"
-    name = f"affinity_model_{tag}"
+    name = f"boundary_model_{tag}"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        loss=loss,
-        metric=loss,
         learning_rate=1e-4,
         mixed_precision=True,
         log_image_interval=50
@@ -168,4 +155,4 @@ if __name__ == "__main__":
     if args.check:
         check(args, train=True, val=True)
     else:
-        train_affinities(args)
+        train_boundaries(args)
