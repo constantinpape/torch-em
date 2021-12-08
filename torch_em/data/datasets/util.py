@@ -48,7 +48,10 @@ def download_source(path, url, download, checksum=None, verify=True):
     if checksum is not None:
         this_checksum = get_checksum(path)
         if this_checksum != checksum:
-            raise RuntimeError("The checksum of the download does not match the expected checksum.")
+            raise RuntimeError(
+                "The checksum of the download does not match the expected checksum."
+                f"Expected: {checksum}, got: {this_checksum}"
+            )
         print("Download successfull and checksums agree.")
     else:
         warn("The file was downloaded, but no checksum was provided, so the file may be corrupted.")

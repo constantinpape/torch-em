@@ -1,8 +1,5 @@
 import os
-from typing import Tuple
-
 import numpy as np
-from torch.utils.data import Dataset
 
 import torch_em
 from .util import download_source, update_kwargs
@@ -14,6 +11,7 @@ CREMI_URLS = {
         "C": "https://cremi.org/static/data/sample_C_20160501.hdf",
     },
     "realigned": {},
+    "defects": "https://zenodo.org/record/5767036/files/sample_ABC_padded_defects.h5"
 }
 CHECKSUMS = {
     "original": {
@@ -22,6 +20,7 @@ CHECKSUMS = {
         "C": "2874496f224d222ebc29d0e4753e8c458093e1d37bc53acd1b69b19ed1ae7052",
     },
     "realigned": {},
+    "defects": "7b06ffa34733b2c32956ea5005e0cf345e7d3a27477f42f7c905701cdc947bd0"
 }
 
 
@@ -106,6 +105,19 @@ def get_cremi_dataset(
         download_source(data_path, url, download, checksum, verify=False)
         data_paths.append(data_path)
         data_rois.append(rois.get(name, np.s_[:, :, :]))
+
+    if "artifact_source" not in defect_augmentation_kwargs:
+        # download the defect volume
+        url = CREMI_URLS["defects"]
+        checksum = CHECKSUMS["defects"]
+        defect_path = os.path.join(path, "cremi_defects.h5")
+        download_source(defect_path, url, download, checksum)
+        defect_patch_shape = (1,) + tuple(patch_shape[1:])
+        artifact_source = torch_em.transform.get_artifact_source(defect_path, defect_patch_shape,
+                                                                 min_mask_fraction=0.75,
+                                                                 raw_key="defect_sections/raw",
+                                                                 mask_key="defect_sections/mask")
+        defect_augmentation_kwargs.update({"artifact_source": artifact_source})
 
     kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
     kwargs = update_kwargs(kwargs, "ndim", 3)
