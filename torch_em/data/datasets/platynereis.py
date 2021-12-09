@@ -35,7 +35,7 @@ def _require_platy_data(path, name, download):
 
     zip_path = os.path.join(path, "data.zip")
     download_source(zip_path, url, download=download, checksum=checksum)
-    unzip(zip_path, path, remove=False)
+    unzip(zip_path, path, remove=True)
 
 
 def _check_data(path, prefix, extension, n_files):
@@ -71,8 +71,8 @@ def get_platynereis_cell_loader(path, patch_shape,
         )
         data_rois.append(rois.get(sample, np.s_[:, :, :]))
 
-    kwargs = update_kwargs(kwargs, 'patch_shape', patch_shape)
-    kwargs = update_kwargs(kwargs, 'rois', data_rois)
+    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
+    kwargs = update_kwargs(kwargs, "rois", data_rois)
     # set ndim to 3 if not otherwise specified
     if "ndim" not in kwargs:
         kwargs["ndim"] = 3
@@ -85,11 +85,11 @@ def get_platynereis_cell_loader(path, patch_shape,
                                                                      add_binary_target=False,
                                                                      add_mask=True)
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
     elif boundaries:
         label_transform = torch_em.transform.label.BoundaryTransform()
         msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
     raw_key = "volumes/raw/s1"
     label_key = "volumes/labels/segmentation/s1"
@@ -125,13 +125,13 @@ def get_platynereis_nuclei_loader(path, patch_shape,
         )
         data_rois.append(rois.get(sample, np.s_[:, :, :]))
 
-    kwargs = update_kwargs(kwargs, 'patch_shape', patch_shape)
-    kwargs = update_kwargs(kwargs, 'rois', data_rois)
+    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
+    kwargs = update_kwargs(kwargs, "rois", data_rois)
     # set ndim to 3 if not otherwise specified
     if "ndim" not in kwargs:
         kwargs["ndim"] = 3
 
-    assert sum((offsets is None, boundaries, binary)) <= 1
+    assert sum((offsets is not None, boundaries, binary)) <= 1
     if offsets is not None:
         # we add a binary target channel for foreground background segmentation
         label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
@@ -139,15 +139,15 @@ def get_platynereis_nuclei_loader(path, patch_shape,
                                                                      add_binary_target=True,
                                                                      add_mask=True)
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
     elif boundaries:
         label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
         msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
     elif binary:
         label_transform = torch_em.transform.label.labels_to_binary
         msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
     raw_key = "volumes/raw"
     label_key = "volumes/labels/nucleus_instance_labels"

@@ -1,20 +1,14 @@
+import numpy as np
 import torch_em
 from torch_em.model import AnisotropicUNet
-from torch_em.data.datasets import get_platynereis_nuclei_loader
-
-OFFSETS = [
-    [-1, 0, 0], [0, -1, 0], [0, 0, -1],
-    [-4, 0, 0], [0, -4, 0], [0, 0, -4],
-    [-8, 0, 0], [0, -8, 0], [0, 0, -8],
-    [-16, 0, 0], [0, -16, 0], [0, 0, -16]
-]
+from torch_em.data.datasets import get_platynereis_cell_loader
 
 
 def get_model():
     model = AnisotropicUNet(
         scale_factors=4*[[2, 2, 2]],
         in_channels=1,
-        out_channels=len(OFFSETS) + 1,
+        out_channels=1,
         initial_features=32,
         gain=2,
         final_activation="Sigmoid"
@@ -24,14 +18,17 @@ def get_model():
 
 def get_loader(path, is_train, n_samples):
     batch_size = 1
-    patch_shape = [48, 256, 256]
+    patch_shape = [32, 256, 256]
     if is_train:
-        sample_ids = [1, 3, 6, 7, 8, 9, 10, 11, 12]
+        sample_ids = list(range(1, 10))
+        rois = {9: np.s_[:, :600, :]}
     else:
-        sample_ids = [2, 4]
-    loader = get_platynereis_nuclei_loader(
+        sample_ids = [9]
+        rois = {9: np.s_[:, 600:, :]}
+    loader = get_platynereis_cell_loader(
         path, patch_shape, sample_ids,
-        offsets=OFFSETS,
+        boundaries=True,
+        rois=rois,
         batch_size=batch_size,
         n_samples=n_samples,
         download=True,
@@ -41,20 +38,17 @@ def get_loader(path, is_train, n_samples):
     return loader
 
 
-def train_affinities(args):
+def train_boundaries(args):
     model = get_model()
     train_loader = get_loader(args.input, True, n_samples=1000)
     val_loader = get_loader(args.input, False, n_samples=100)
-    loss = torch_em.loss.LossWrapper(loss=torch_em.loss.DiceLoss(), transform=torch_em.loss.ApplyAndRemoveMask())
 
-    name = "affinity_model"
+    name = "boundary_model"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        loss=loss,
-        metric=loss,
         learning_rate=1e-4,
         mixed_precision=True,
         log_image_interval=50,
@@ -85,4 +79,4 @@ if __name__ == "__main__":
     if args.check:
         check(args)
     else:
-        train_affinities(args)
+        train_boundaries(args)

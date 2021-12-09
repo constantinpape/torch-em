@@ -20,7 +20,7 @@ def get_model():
         out_channels=len(OFFSETS),
         initial_features=32,
         gain=2,
-        final_activation='Sigmoid'
+        final_activation="Sigmoid"
     )
     return model
 
@@ -68,7 +68,7 @@ def train_affinities(args):
     )
 
     if args.from_checkpoint:
-        trainer.fit(args.n_iterations, 'latest')
+        trainer.fit(args.n_iterations, "latest")
     else:
         trainer.fit(args.n_iterations)
 
@@ -85,7 +85,7 @@ def check(args, train=True, val=True, n_images=2):
         check_loader(loader, n_images)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = parser_helper()
     args = parser.parse_args()
     if args.check:
