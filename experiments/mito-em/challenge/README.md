@@ -2,7 +2,7 @@
 
 Experiments for the [MitoEM Challenge](https://mitoem.grand-challenge.org/).
 
-The scripts `train_affinities.py` / `train_boundaries.py` are used to train an affinity model / boundary model for mitochondria instance segmentation.
+The scripts `train_affinities.py` / `train_boundaries.py` in the top-level folder are used to train an affinity model / boundary model for mitochondria instance segmentation.
 They take different arguments for training models of different size and training / validating on different splits of the data.
 The script `segment_and_submit.py` performs instance segmentation for the test volumes based on the affinity / boundary predictions and creates the segmentation in submission format.
 
