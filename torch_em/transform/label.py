@@ -24,7 +24,7 @@ def labels_to_binary(labels, background_label=0):
 
 # TODO ignore label + mask, smoothing
 class BoundaryTransform:
-    def __init__(self, mode='thick', add_binary_target=False, ndim=None):
+    def __init__(self, mode="thick", add_binary_target=False, ndim=None):
         self.mode = mode
         self.add_binary_target = add_binary_target
         self.ndim = ndim
@@ -69,14 +69,14 @@ class AffinityTransform:
         return affs, mask
 
     def __call__(self, labels):
-        dtype = 'uint64'
+        dtype = "uint64"
         if np.dtype(labels.dtype) in (np.dtype("int16"), np.dtype("int32"), np.dtype("int64")):
-            dtype = 'int64'
+            dtype = "int64"
         labels = ensure_spatial_array(labels, self.ndim, dtype=dtype)
         affs, mask = compute_affinities(labels, self.offsets,
                                         have_ignore_label=self.ignore_label is not None,
                                         ignore_label=0 if self.ignore_label is None else self.ignore_label)
-        # we use the 'disaffinity' convention for training; i.e. 1 means repulsive, 0 attractive
+        # we use the "disaffinity" convention for training; i.e. 1 means repulsive, 0 attractive
         affs = 1. - affs
 
         # remove transitions to the ignore label from the mask

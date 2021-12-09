@@ -6,10 +6,10 @@ import torch_em
 from .util import download_source, update_kwargs, unzip
 
 URLS = {
-    "cells": "https://zenodo.org/record/3675220/files/membrane.zip?download=1",
-    "nuclei": "https://zenodo.org/record/3675220/files/nuclei.zip?download=1",
-    "cilia": "https://zenodo.org/record/3675220/files/cuticle.zip?download=1",
-    "cuticle": "https://zenodo.org/record/3675220/files/cuticle.zip?download=1"
+    "cells": "https://zenodo.org/record/3675220/files/membrane.zip",
+    "nuclei": "https://zenodo.org/record/3675220/files/nuclei.zip",
+    "cilia": "https://zenodo.org/record/3675220/files/cuticle.zip",
+    "cuticle": "https://zenodo.org/record/3675220/files/cuticle.zip"
 }
 
 CHECKSUMS = {
@@ -33,7 +33,7 @@ def _require_platy_data(path, name, download):
     url = URLS[name]
     checksum = CHECKSUMS[name]
 
-    zip_path = os.path.join(path, 'data.zip')
+    zip_path = os.path.join(path, "data.zip")
     download_source(zip_path, url, download=download, checksum=checksum)
     unzip(zip_path, path, remove=False)
 
