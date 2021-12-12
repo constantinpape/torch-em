@@ -5,6 +5,7 @@ from shutil import copyfileobj
 from warnings import warn
 
 import requests
+from tqdm import tqdm
 
 # TODO update the links once available on bioimageio
 BIOIMAGEIO_IDS = {
@@ -32,18 +33,24 @@ def get_checksum(filename):
     return checksum
 
 
-# TODO
-# - allow for s3 links and use boto3 or s3fs to download
+# this needs to be extended to support download from s3 via boto,
+# if we get a resource that is available via s3 without support for http
 def download_source(path, url, download, checksum=None, verify=True):
     if os.path.exists(path):
         return
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
 
-    print("Download file fron", url, "to", path)
     with requests.get(url, stream=True, verify=verify) as r:
-        with open(path, "wb") as f:
-            copyfileobj(r.raw, f)
+        if r.status_code != 200:
+            r.raise_for_status()
+            raise RuntimeError(f"Request to {url} returned status code {r.status_code}")
+        file_size = int(r.headers.get("Content-Length", 0))
+        desc = f"Download {url} to {path}"
+        if file_size == 0:
+            desc += " (unknown file size)"
+        with tqdm.wrapattr(r.raw, "read", total=file_size, desc=desc) as r_raw, open(path, "wb") as f:
+            copyfileobj(r_raw, f)
 
     if checksum is not None:
         this_checksum = get_checksum(path)
