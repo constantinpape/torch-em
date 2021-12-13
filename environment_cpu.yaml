@@ -8,11 +8,9 @@ dependencies:
     - bioimageio.core >=0.4.6
     - cpuonly
     - python-elf
-    - pip
     - pytorch
     - tensorboard
     - tifffile
     - torchvision
     - tqdm
-    - pip:
-        - kornia
+    - kornia
