@@ -7,17 +7,16 @@ from warnings import warn
 import requests
 from tqdm import tqdm
 
-# TODO update the links once available on bioimageio
 BIOIMAGEIO_IDS = {
-    "covid_if": "",
-    "cremi": "",
+    "covid_if": "ilastik/covid_if_training_data",
+    "cremi": "ilastik/cremi_training_data",
     "dsb": "ilastik/stardist_dsb_training_data",
-    "isbi2012": "",
-    "livcell": "",
-    "mitoem": "",
+    "isbi2012": "ilastik/isbi2012_neuron_segmentation_challenge",
+    "livcell": "ilastik/livecell_dataset",
+    "mitoem": "ilastik/mitoem_segmentation_challenge",
     "monuseg": "deepimagej/monuseg_digital_pathology_miccai2018",
-    "ovules": "",
-    "platynereis": ""
+    "ovules": "",  # not on bioimageio yet
+    "platynereis": "ilastik/platynereis_em_training_data"
 }
 
 
