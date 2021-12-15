@@ -58,6 +58,7 @@ def _package_rdf(rdf, name, doc):
             imageio.imwrite(out, im)
             new_covers.append(f"https://raw.githubusercontent.com/ilastik/bioimage-io-models/main/dataset_src/{name}-cover{ii}.png")
 
+    rdf["format_version"] = "0.2.1"
     with open(f"{out_folder}/{name}.md", "w") as f:
         f.write(doc)
     rdf["covers"] = new_covers
