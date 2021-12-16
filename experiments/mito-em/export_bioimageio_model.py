@@ -42,20 +42,20 @@ This model segments mitochondria in electron microscopy images. It predicts {pre
 
 ## Training
 
-The network was trained on data from the [MitoEM Segmentation Challenge](TODO).
-The training script can be found [here](https://github.com/constantinpape/torch-em/tree/main/experiments/livecell).
+The network was trained on data from the [MitoEM Segmentation Challenge](https://mitoem.grand-challenge.org/).
+The training script can be found [here](https://github.com/constantinpape/torch-em/tree/main/experiments/mito-em).
 This folder also includes example usages of this model.
 
 ### Training Data
 
-- Imaging modality: phase-contrast microscopy
-- Dimensionality: 2D
-- Source: https://doi.org/10.1038/s41592-021-01249-6
+- Imaging modality: serial blockface electron microscopy
+- Dimensionality: 3D
+- Source: https://mitoem.grand-challenge.org/
 
 ### Recommended Validation
 
 It is recommended to validate the instance segmentation obtained from this model using intersection-over-union.
-See [the validation script](https://github.com/constantinpape/torch-em/tree/main/experiments/livecell/validate_model.py).
+See [the validation script](https://github.com/constantinpape/torch-em/tree/main/experiments/mito-em/validate_model.py).
 This model can also be used in ilastik, deepimageJ or other software that supports the bioimage.io model format.
 
 ### Training Schedule
@@ -70,7 +70,6 @@ For questions or issues with this models, please reach out by:
     return doc
 
 
-# TODO write offsets and other mws params into the config if this is a affinity model
 def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_formats):
 
     root, ckpt_name = os.path.split(checkpoint)
@@ -79,51 +78,57 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
     else:
         input_data = _load_data(input_)
 
-    is_aff_model = 'affinity' in ckpt_name
+    is_aff_model = "affinity" in ckpt_name
     if is_aff_model and affs_to_bd:
-        postprocessing = 'affinities_with_foreground_to_boundaries3d'
+        postprocessing = "affinities_with_foreground_to_boundaries3d"
     else:
         postprocessing = None
 
     if is_aff_model and affs_to_bd:
         is_aff_model = False
 
+    name, desc = _get_name_and_description(is_aff)
     if is_aff_model:
-        name = "EM-Mitochondria-AffinityModel"
+        offsets = [
+            [-1, 0, 0], [0, -1, 0], [0, 0, -1],
+            [-2, 0, 0], [0, -3, 0], [0, 0, -3],
+            [-3, 0, 0], [0, -9, 0], [0, 0, -9]
+        ]
+        config = {"mws": {"offsets": offsets}}
     else:
-        name = "EM-Mitochondria-BoundaryModel"
-
-    tags = ["u-net", "mitochondria-segmentation",
-            "segmentation", "mito-em", "mitochondria"]
-    tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
+        config = {}
 
     cite = get_default_citations(
         model="AnisotropicUNet",
         model_output="affinities" if is_aff_model else "boundaries"
     )
     cite["data"] = "https://doi.org/10.1007/978-3-030-59722-1_7"
+    tags = ["3D", "electron-microscopy", "mitochondria", "instance-segmentation", "UNet"]
 
-    doc = _get_doc(is_aff_model)
+    doc = _get_doc(is_aff_model, checkpoint, name)
 
     export_biomageio_model(
         checkpoint, output,
         input_data=input_data,
         name=name,
+        description=desc,
         authors=[{"name": "Constantin Pape; @constantinpape"}],
         tags=tags,
-        license='CC-BY-4.0',
+        license="CC-BY-4.0",
         documentation=doc,
-        git_repo='https://github.com/constantinpape/torch-em.git',
+        git_repo="https://github.com/constantinpape/torch-em.git",
         cite=cite,
         model_postprocessing=postprocessing,
         input_optional_parameters=False,
         for_deepimagej="torchscript" in additional_formats,
-        links=[get_bioimageio_dataset_id("mitoem")]
+        links=[get_bioimageio_dataset_id("mitoem")],
+        maintainers=[{"github_user": "constantinpape"}],
+        config=config,
     )
     add_weight_formats(output, additional_formats)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = export_parser_helper()
     args = parser.parse_args()
     export_to_bioimageio(args.checkpoint, args.input, args.output,

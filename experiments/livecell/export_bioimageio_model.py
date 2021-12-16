@@ -81,8 +81,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     if is_aff_model and affs_to_bd:
         is_aff_model = False
     name, description = _get_name_and_description(is_aff_model)
-    tags = ["u-net", "cell-segmentation", "segmentation", "phase-contrast", "livecell"]
-    tags += ["affinity-prediction"] if is_aff_model else ["boundary-prediction"]
+    tags = ["2D", "transmission-light-microscopy", "label-free", "cells", "instance-segmentation", "UNet"]
 
     # eventually we should refactor the citation logic
     cite = get_default_citations(
