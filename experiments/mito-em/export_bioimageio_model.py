@@ -6,6 +6,16 @@ from torch_em.util import (add_weight_formats, export_parser_helper,
                            export_biomageio_model, get_default_citations)
 
 
+def _get_name_and_description(is_aff):
+    name = "MitochondriaEMSegmentation"
+    if is_aff:
+        name += "AffinityModel"
+    else:
+        name += "BoundaryModel"
+    description = "Mitochondria segmentation for electron microscopy."
+    return name, description
+
+
 def _load_data(input_):
     with open_file(input_, 'r') as f:
         ds = f['raw']
@@ -16,23 +26,47 @@ def _load_data(input_):
     return raw
 
 
-def _get_doc(is_aff_model):
-    training_url = "https://github.com/constantinpape/torch-em/tree/main/experiments/neuron-segmentation/mito-em"
+def _get_doc(is_aff_model, ckpt, name):
     if is_aff_model:
-        title = "3D U-Net for Affinity Prediction"
-        output_name = "affinity maps"
-        seg = "with the mutex watershed "
+        pred_type = "affinity maps"
+        pp = "The affinities can be processed with the Mutex Watershed to obtain an instance segmentation."
     else:
-        title = "3D U-Net for Boundary Prediction"
-        output_name = "boundary maps"
-        seg = "multicut segmentation"
+        pred_type = "boundary maps"
+        pp = "The boundaries can be processed with Multicut to obtain an instance segmentation."
 
-    doc = f"""
-## {title}
+    training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
+    model_tag = name.lower()
+    doc = f"""# U-Net for Mitochondria Segmentation
 
-This model was trained on the data of the MitoEM dataset to perform mitochondria segmentaiton in EM.
-It predicts {output_name} that can be processed {seg} to obtain an instance segmentation.
-For more details, check out [the training scripts]({training_url})."""
+This model segments mitochondria in electron microscopy images. It predicts {pred_type} and foreground probabilities. {pp}
+
+## Training
+
+The network was trained on data from the [MitoEM Segmentation Challenge](TODO).
+The training script can be found [here](https://github.com/constantinpape/torch-em/tree/main/experiments/livecell).
+This folder also includes example usages of this model.
+
+### Training Data
+
+- Imaging modality: phase-contrast microscopy
+- Dimensionality: 2D
+- Source: https://doi.org/10.1038/s41592-021-01249-6
+
+### Recommended Validation
+
+It is recommended to validate the instance segmentation obtained from this model using intersection-over-union.
+See [the validation script](https://github.com/constantinpape/torch-em/tree/main/experiments/livecell/validate_model.py).
+This model can also be used in ilastik, deepimageJ or other software that supports the bioimage.io model format.
+
+### Training Schedule
+
+{training_summary}
+
+## Contact
+
+For questions or issues with this models, please reach out by:
+- opening a topic with tags bioimageio and {model_tag} on [image.sc](https://forum.image.sc/)
+- or creating an issue in https://github.com/constantinpape/torch-em"""
     return doc
 
 
