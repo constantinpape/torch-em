@@ -12,7 +12,7 @@ BIOIMAGEIO_IDS = {
     "cremi": "ilastik/cremi_training_data",
     "dsb": "ilastik/stardist_dsb_training_data",
     "isbi2012": "ilastik/isbi2012_neuron_segmentation_challenge",
-    "livcell": "ilastik/livecell_dataset",
+    "livecell": "ilastik/livecell_dataset",
     "mitoem": "ilastik/mitoem_segmentation_challenge",
     "monuseg": "deepimagej/monuseg_digital_pathology_miccai2018",
     "ovules": "",  # not on bioimageio yet

@@ -22,7 +22,7 @@ DEFAULT_SCHEDULER_KWARGS = {"mode": "min", "factor": 0.5, "patience": 5}
 #
 
 # TODO implement balanced and make it the default
-# def samples_to_datasets(n_samples, raw_paths, raw_key, split='balanced'):
+# def samples_to_datasets(n_samples, raw_paths, raw_key, split="balanced"):
 def samples_to_datasets(n_samples, raw_paths, raw_key, split="uniform"):
     assert split in ("balanced", "uniform")
     n_datasets = len(raw_paths)

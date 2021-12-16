@@ -3,7 +3,7 @@ import os
 import imageio
 from torch_em.data.datasets import get_bioimageio_dataset_id
 from torch_em.util import (add_weight_formats,
-                           export_biomageio_model,
+                           export_bioimageio_model,
                            export_parser_helper,
                            get_default_citations,
                            get_training_summary)
@@ -90,7 +90,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     )
     cite["data"] = "https://www.nature.com/articles/s41592-021-01249-6"
 
-    doc = _get_doc(is_aff_model)
+    doc = _get_doc(is_aff_model, checkpoint, name)
     if is_aff_model:
         offsets = [
             [-1, 0], [0, -1],
@@ -102,7 +102,10 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     else:
         config = {}
 
-    export_biomageio_model(
+    if additional_formats is None:
+        additional_formats = []
+
+    export_bioimageio_model(
         checkpoint, output,
         input_data=input_data,
         name=name,
