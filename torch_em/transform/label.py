@@ -31,7 +31,7 @@ class BoundaryTransform:
 
     def __call__(self, labels):
         labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
-        boundaries = skimage.segmentation.find_boundaries(labels)[None]
+        boundaries = skimage.segmentation.find_boundaries(labels, mode=self.mode)[None]
         if self.add_binary_target:
             binary = labels_to_binary(labels)[None].astype(boundaries.dtype)
             target = np.concatenate([binary, boundaries], axis=0)
