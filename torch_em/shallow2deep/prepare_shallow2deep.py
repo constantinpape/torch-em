@@ -186,6 +186,32 @@ def _get_filters(ndim, filter_config):
     return filters_and_sigmas
 
 
+def _apply_filters(raw, filters_and_sigmas):
+    features = []
+    for filter_, sigma in filters_and_sigmas:
+        response = filter_(raw, sigma)
+        if response.ndim > raw.ndim:
+            for c in range(response.shape[-1]):
+                features.append(response[..., c].flatten())
+        else:
+            features.append(response.flatten())
+    features = np.concatenate([ff[:, None] for ff in features], axis=1)
+    return features
+
+
+def _apply_filters_with_mask(raw, filters_and_sigmas, mask):
+    features = []
+    for filter_, sigma in filters_and_sigmas:
+        response = filter_(raw, sigma)
+        if response.ndim > raw.ndim:
+            for c in range(response.shape[-1]):
+                features.append(response[..., c][mask])
+        else:
+            features.append(response[mask])
+    features = np.concatenate([ff[:, None] for ff in features], axis=1)
+    return features
+
+
 def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels):
     # find the mask for where we compute filters and labels
     # by default we exclude everything that has label -1
@@ -207,20 +233,9 @@ def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels):
         discard_mask = tuple(pos[discard_ids] for pos in max_label_pos)
         mask[discard_mask] = False
         assert mask.sum() == 2 * n_labels
-
     labels = labels[mask]
     assert labels.ndim == 1
-
-    features = []
-    for filter_, sigma in filters_and_sigmas:
-        response = filter_(raw, sigma)
-        if response.ndim > raw.ndim:
-            for c in range(response.shape[-1]):
-                features.append(response[..., c][mask])
-        else:
-            features.append(response[mask])
-
-    features = np.concatenate([ff[:, None] for ff in features], axis=1)
+    features = _apply_filters_with_mask(raw, filters_and_sigmas, mask)
     assert features.ndim == 2
     assert len(features) == len(labels)
     return features, labels
