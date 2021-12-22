@@ -13,7 +13,7 @@ from ..util import ensure_tensor_with_channels
 
 class Shallow2DeepDataset(RawDataset):
     _rf_paths = None
-    _feature_config = None
+    _filter_config = None
 
     @property
     def rf_paths(self):
@@ -24,36 +24,45 @@ class Shallow2DeepDataset(RawDataset):
         self._rf_paths = value
 
     @property
-    def feature_config(self):
-        return self._feature_config
+    def filter_config(self):
+        return self._filter_config
 
-    @feature_config.setter
-    def _feature_config(self, value):
-        self._feature_config = value
+    @filter_config.setter
+    def filter_config(self, value):
+        self._filter_config = value
 
     def _predict_rf(self, raw):
         n_rfs = len(self._rf_paths)
         rf_path = self._rf_paths[np.random.randint(0, n_rfs)]
-        filters_and_sigmas = _get_filters(self._feature_config)
         with open(rf_path, "rb") as f:
             rf = pickle.load(f)
-        filters_and_sigmas = _get_filters(self._feature_config)
+        filters_and_sigmas = _get_filters(self.ndim, self._filter_config)
         features = _apply_filters(raw, filters_and_sigmas)
-        prediction = rf.predict_proba(features).reshape(raw.shape)
+        assert rf.n_features_in_ == features.shape[1]
+        # NOTE: we always select the predictions for the foreground class here.
+        # for multi-class training where we need multiple predictions this would need to be changed
+        prediction = rf.predict_proba(features)[:, 1]
+        prediction = prediction.reshape(raw.shape)
         return prediction
 
     def __getitem__(self, index):
         assert self._rf_paths is not None
-        assert self._feature_config is not None
         raw = self._get_sample(index)
-        prediction = self._predict_rf(raw)
         if self.raw_transform is not None:
             raw = self.raw_transform(raw)
         if self.transform is not None:
             raw = self.transform(raw)
             if self.trafo_halo is not None:
                 raw = self.crop(raw)
+        if isinstance(raw, (list, tuple)):  # this can be a list or tuple due to transforms
+            assert len(raw) == 1
+            raw = raw[0]
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
+        if raw.shape[0] > 1:
+            raise NotImplementedError(
+                f"Shallow2Deep training not implemented for multi-channel input yet; got {raw.shape[0]} channels"
+            )
+        prediction = self._predict_rf(raw[0].numpy())
         prediction = ensure_tensor_with_channels(prediction, ndim=self._ndim, dtype=self.dtype)
         return raw, prediction
 
@@ -170,7 +179,7 @@ def get_shallow2deep_loader(
     rf_paths,
     batch_size,
     patch_shape,
-    feature_config=None,
+    filter_config=None,
     raw_transform=None,
     transform=None,
     rois=None,

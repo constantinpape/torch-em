@@ -45,7 +45,7 @@ def get_isbi_loader(args, split, rf_folder):
         batch_size=args.batch_size, patch_shape=patch_shape, rois=roi,
         raw_transform=raw_transform,
         n_samples=n_samples, ndim=2, is_raw_dataset=True, shuffle=True,
-        n_workers=8
+        num_workers=8
     )
     return loader
 
