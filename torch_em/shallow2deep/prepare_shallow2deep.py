@@ -5,10 +5,14 @@ from glob import glob
 
 import numpy as np
 import torch_em
-import vigra
 from sklearn.ensemble import RandomForestClassifier
 from torch_em.segmentation import check_paths, is_segmentation_dataset, samples_to_datasets
 from tqdm import tqdm
+
+try:
+    import fastfilters as filter_impl
+except ImportError:
+    import vigra.filters as filter_impl
 
 
 class RFSegmentationDataset(torch_em.data.SegmentationDataset):
@@ -178,7 +182,7 @@ def _load_rf_image_collection_dataset(
 def _get_filters(ndim, filter_config):
     if filter_config is None:  # default filters
         # TODO ask Alex what he is using as default filters and sigmas here
-        filters = [vigra.filters.gaussianSmoothing, vigra.filters.laplacianOfGaussian, vigra.filters.hessianOfGaussian]
+        filters = [filter_impl.gaussianSmoothing, filter_impl.laplacianOfGaussian, filter_impl.hessianOfGaussian]
         sigmas = [1.6, 2.6, 4.8]
         filters_and_sigmas = [(filt, sigma) for filt in filters for sigma in sigmas]
     else:

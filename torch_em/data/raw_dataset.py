@@ -48,13 +48,13 @@ class RawDataset(torch.utils.data.Dataset):
         if self._with_channels:
             assert self.raw.ndim == self._ndim + 1, f"{self.raw.ndim}, {self._ndim}"
 
+        raw_ndim = self.raw.ndim - 1 if self._with_channels else self.raw.ndim
         if roi is not None:
-            assert len(roi) == self._ndim, f"{roi}, {self._ndim}"
+            assert len(roi) == raw_ndim, f"{roi}, {raw_ndim}"
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
         self.roi = roi
         self.shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
 
-        raw_ndim = self.raw.ndim - 1 if self._with_channels else self.raw.ndim
         assert len(patch_shape) == raw_ndim, f"{patch_shape}, {raw_ndim}"
         self.patch_shape = patch_shape
 
