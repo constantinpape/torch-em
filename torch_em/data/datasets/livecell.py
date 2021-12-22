@@ -113,6 +113,7 @@ def _livecell_segmentation_loader(
     label_transform2=None,
     raw_transform=None,
     transform=None,
+    label_dtype=torch.float32,
     dtype=torch.float32,
     n_samples=None,
     **loader_kwargs
@@ -131,6 +132,7 @@ def _livecell_segmentation_loader(
                                               raw_transform=raw_transform,
                                               label_transform=label_transform,
                                               label_transform2=label_transform2,
+                                              label_dtype=label_dtype,
                                               transform=transform,
                                               n_samples=n_samples)
 
@@ -149,6 +151,7 @@ def get_livecell_loader(path, patch_shape, split, download=False,
     image_paths, seg_paths = _download_livecell_annotations(path, split, download)
 
     assert sum((offsets is not None, boundaries, binary)) <= 1
+    label_dtype = torch.int64
     if offsets is not None:
         # we add a binary target channel for foreground background segmentation
         label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
@@ -156,14 +159,17 @@ def get_livecell_loader(path, patch_shape, split, download=False,
                                                                      add_mask=True)
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
         kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
+        label_dtype = torch.float32
     elif boundaries:
         label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
         msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
         kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        label_dtype = torch.float32
     elif binary:
         label_transform = torch_em.transform.label.labels_to_binary
         msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
         kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        label_dtype = torch.float32
 
     kwargs.update({"patch_shape": patch_shape})
-    return _livecell_segmentation_loader(image_paths, seg_paths, **kwargs)
+    return _livecell_segmentation_loader(image_paths, seg_paths, label_dtype=label_dtype, **kwargs)
