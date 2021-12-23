@@ -233,6 +233,7 @@ def _get_kwargs(trainer, name, description,
         return [{"name": author}]
 
     def _default_repo():
+        return None
         try:
             call_res = subprocess.run(["git", "remote", "-v"], capture_output=True)
             repo = call_res.stdout.decode("utf8").split("\n")[0].split()[1]
