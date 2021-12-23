@@ -40,11 +40,14 @@ def get_isbi_loader(args, split, rf_folder):
     else:
         raise ValueError(f"Wrong split: {split}")
     raw_transform = torch_em.transform.raw.normalize
+    label_transform = torch_em.transform.labels_to_binary
     loader = shallow2deep.get_shallow2deep_loader(
-        raw_paths=args.input, raw_key="volumes/raw", rf_paths=rf_paths,
+        raw_paths=args.input, raw_key="volumes/raw",
+        label_paths=args.input, label_key="volumes/labels/neuron_ids_3d",
+        rf_paths=rf_paths,
         batch_size=args.batch_size, patch_shape=patch_shape, rois=roi,
-        raw_transform=raw_transform,
-        n_samples=n_samples, ndim=2, is_raw_dataset=True, shuffle=True,
+        raw_transform=raw_transform, label_transform=label_transform,
+        n_samples=n_samples, ndim=2, is_seg_dataset=True, shuffle=True,
         num_workers=8
     )
     return loader
@@ -76,7 +79,7 @@ def train_shallow2deep(args):
 
 if __name__ == "__main__":
     parser = torch_em.util.parser_helper()
-    parser.add_argument("--n_rfs", type=int, default=8)  # TODO more rfs
-    parser.add_argument("--n_threads", type=int, default=8)
+    parser.add_argument("--n_rfs", type=int, default=500)
+    parser.add_argument("--n_threads", type=int, default=32)
     args = parser.parse_args()
     train_shallow2deep(args)
