@@ -2,10 +2,11 @@ import os
 import pickle
 
 import h5py
-import numpy as np
+import torch
 import torch_em
 import torch_em.shallow2deep as shallow2deep
 from torch_em.shallow2deep.prepare_shallow2deep import _get_filters, _apply_filters
+from torch_em.util.util import get_trainer
 from tqdm import trange
 
 TEST_OUT = "./test_data"
@@ -27,7 +28,7 @@ def _predict_rf(path, rf_path):
     out_path = os.path.join(TEST_OUT, "data.h5")
     with h5py.File(out_path, "a") as f:
         if "rf_pred" in f:
-            return
+            return out_path
     print("Run prediction with rf...")
     filters_and_sigmas = _get_filters(ndim=2, filter_config=None)
     with h5py.File(path, "r") as f:
@@ -42,18 +43,52 @@ def _predict_rf(path, rf_path):
             feats = _apply_filters(inp, filters_and_sigmas)
             pred = rf.predict_proba(feats)[:, 1].reshape(inp.shape)
             ds_out[z] = pred
+    return out_path
 
+
+def _predict_enhancer(path):
+    with torch.no_grad():
+        model = get_trainer("./checkpoints/isbi2d").model
+        model.eval()
+        model.to("cpu")
+        with h5py.File(path, "a") as f:
+            assert "rf_pred" in f
+            ds_rf = f["rf_pred"]
+            ds_out = f.require_dataset("enhancer_pred", shape=ds_rf.shape, dtype="float32", chunks=(1, 512, 512))
+            for z in trange(ds_rf.shape[0], desc="Predict enhancer"):
+                inp = ds_rf[z][:1024, :1024]
+                inp = torch.from_numpy(inp[None, None])
+                pred = model(inp)
+                ds_out[z, :1024, :1024] = pred
 
 
 def predict_s2d(path, rf_path):
-    _predict_rf(path, rf_path)
+    test_path = _predict_rf(path, rf_path)
+    _predict_enhancer(test_path)
+    return test_path
+
+
+def check_prediction(path, test_path):
+    with h5py.File(path, "r") as f:
+        raw = f["volumes/raw"][:]
+    with h5py.File(test_path, "r") as f:
+        rf = f["rf_pred"][:]
+        enhancer = f["enhancer_pred"][:]
+
+    import napari
+    v = napari.Viewer()
+    v.add_image(raw)
+    v.add_image(rf)
+    v.add_image(enhancer)
+    napari.run()
 
 
 def main():
     os.makedirs(TEST_OUT, exist_ok=True)
     path = "/scratch/pape/cremi/sampleA.h5"
     rf_path = require_rf(path)
-    predict_s2d(path, rf_path)
+    test_path = predict_s2d(path, rf_path)
+    check_prediction(path, test_path)
 
 
 if __name__ == "__main__":
