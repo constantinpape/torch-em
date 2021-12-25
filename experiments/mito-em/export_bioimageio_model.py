@@ -3,7 +3,8 @@ import os
 from elf.io import open_file
 from torch_em.data.datasets import get_bioimageio_dataset_id
 from torch_em.util import (add_weight_formats, export_parser_helper,
-                           export_biomageio_model, get_default_citations)
+                           export_bioimageio_model, get_default_citations,
+                           get_training_summary)
 
 
 def _get_name_and_description(is_aff):
@@ -87,7 +88,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
     if is_aff_model and affs_to_bd:
         is_aff_model = False
 
-    name, desc = _get_name_and_description(is_aff)
+    name, desc = _get_name_and_description(is_aff_model)
     if is_aff_model:
         offsets = [
             [-1, 0, 0], [0, -1, 0], [0, 0, -1],
@@ -107,7 +108,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
 
     doc = _get_doc(is_aff_model, checkpoint, name)
 
-    export_biomageio_model(
+    export_bioimageio_model(
         checkpoint, output,
         input_data=input_data,
         name=name,
