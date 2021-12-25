@@ -47,6 +47,9 @@ def _predict_rf(path, rf_path):
 
 
 def _predict_enhancer(path):
+    with h5py.File(path, "r") as f:
+        if "enhancer_pred" in f:
+            return
     with torch.no_grad():
         model = get_trainer("./checkpoints/isbi2d").model
         model.eval()

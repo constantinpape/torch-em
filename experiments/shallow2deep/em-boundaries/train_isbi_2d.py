@@ -32,15 +32,15 @@ def get_isbi_loader(args, split, rf_folder):
     with h5py.File(args.input, "r") as f:
         nz = f["volumes/raw"].shape[0]
     if split == "train":
-        n_samples = 50
+        n_samples = 100
         roi = np.s_[:nz-2, :, :]
     elif split == "val":
-        n_samples = 2
+        n_samples = 5
         roi = np.s_[nz-2:, :, :]
     else:
         raise ValueError(f"Wrong split: {split}")
     raw_transform = torch_em.transform.raw.normalize
-    label_transform = torch_em.transform.labels_to_binary
+    label_transform = torch_em.transform.BoundaryTransform(ndim=2)
     loader = shallow2deep.get_shallow2deep_loader(
         raw_paths=args.input, raw_key="volumes/raw",
         label_paths=args.input, label_key="volumes/labels/neuron_ids_3d",
@@ -77,9 +77,18 @@ def train_shallow2deep(args):
     trainer.fit(args.n_iterations)
 
 
+def check_loader(args, n=4):
+    from torch_em.util.debug import check_loader
+    loader = get_isbi_loader(args, "train", "./checkpoints/isbi2d/rfs")
+    check_loader(loader, n)
+
+
 if __name__ == "__main__":
     parser = torch_em.util.parser_helper()
     parser.add_argument("--n_rfs", type=int, default=500)
     parser.add_argument("--n_threads", type=int, default=32)
     args = parser.parse_args()
-    train_shallow2deep(args)
+    if args.check:
+        check_loader(args)
+    else:
+        train_shallow2deep(args)

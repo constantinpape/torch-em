@@ -82,7 +82,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
     if isinstance(raw_paths, str):
         if rois is not None:
             assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
-        ds = SegmentationDataset(raw_paths, raw_key, label_paths, label_key, roi=rois, **kwargs)
+        ds = Shallow2DeepDataset(raw_paths, raw_key, label_paths, label_key, roi=rois, **kwargs)
         ds.rf_paths = rf_paths
     else:
         assert len(raw_paths) > 0
@@ -97,7 +97,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
         ds = []
         for i, (raw_path, label_path) in enumerate(zip(raw_paths, label_paths)):
             roi = None if rois is None else rois[i]
-            dset = SegmentationDataset(
+            dset = Shallow2DeepDataset(
                 raw_path, raw_key, label_path, label_key, roi=roi, n_samples=samples_per_ds[i], **kwargs
             )
             dset.rf_paths = rf_paths
