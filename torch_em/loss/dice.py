@@ -54,7 +54,7 @@ class DiceLoss(nn.Module):
         self.eps = eps
 
         # all torch_em classes should store init kwargs to easily recreate the init call
-        self.init_kwargs = {'channelwise': channelwise, 'eps': self.eps}
+        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps}
 
     def forward(self, input_, target):
         return dice_score(input_, target,
@@ -69,7 +69,7 @@ class DiceLossWithLogits(nn.Module):
         self.eps = eps
 
         # all torch_em classes should store init kwargs to easily recreate the init call
-        self.init_kwargs = {'channelwise': channelwise, 'eps': self.eps}
+        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps}
 
     def forward(self, input_, target):
         return dice_score(
@@ -92,8 +92,7 @@ class BCEDiceLossWithLogits(nn.Module):
         self.eps = eps
 
         # all torch_em classes should store init kwargs to easily recreate the init call
-        self.init_kwargs = {'alpha': alpha, 'beta': beta,
-                            'channelwise': channelwise, 'eps': self.eps}
+        self.init_kwargs = {"alpha": alpha, "beta": beta, "channelwise": channelwise, "eps": self.eps}
 
     def forward(self, input_, target):
         loss_dice = dice_score(
