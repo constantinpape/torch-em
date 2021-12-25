@@ -74,6 +74,7 @@ class Shallow2DeepDataset(SegmentationDataset):
 
         prediction = self._predict_rf(raw[0].numpy())
         prediction = ensure_tensor_with_channels(prediction, ndim=self._ndim, dtype=self.dtype)
+        labels = ensure_tensor_with_channels(labels, ndim=self._ndim, dtype=self.label_dtype)
         return prediction, labels
 
 

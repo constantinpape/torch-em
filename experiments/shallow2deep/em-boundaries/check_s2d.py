@@ -22,6 +22,7 @@ def require_rf(path):
                                       patch_shape_min=(1, 1000, 1000), patch_shape_max=(1, 1024, 1024), n_forests=1,
                                       n_threads=1, output_folder=TEST_OUT, raw_transform=raw_trafo,
                                       label_transform=label_trafo, is_seg_dataset=True, ndim=2)
+    return rf_path
 
 
 def _predict_rf(path, rf_path):
