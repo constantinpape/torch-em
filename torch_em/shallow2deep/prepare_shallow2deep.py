@@ -2,6 +2,7 @@ import os
 import pickle
 from concurrent import futures
 from glob import glob
+from functools import partial
 
 import numpy as np
 import torch_em
@@ -178,15 +179,28 @@ def _load_rf_image_collection_dataset(
     return ds
 
 
-# TODO keep aniso in mind!
 def _get_filters(ndim, filter_config):
-    if filter_config is None:  # default filters
-        # TODO ask Alex what he is using as default filters and sigmas here
-        filters = [filter_impl.gaussianSmoothing, filter_impl.laplacianOfGaussian, filter_impl.hessianOfGaussian]
-        sigmas = [1.6, 2.6, 4.8]
-        filters_and_sigmas = [(filt, sigma) for filt in filters for sigma in sigmas]
-    else:
-        raise NotImplementedError  # TODO implement filter syntax
+    # subset of ilastik default features
+    if filter_config is None:
+        filters = [filter_impl.gaussianSmoothing,
+                   filter_impl.laplacianOfGaussian,
+                   filter_impl.gaussianGradientMagnitude,
+                   filter_impl.hessianOfGaussianEigenvalues,
+                   filter_impl.structureTensorEigenvalues]
+        sigmas = [0.7, 1.6, 3.5, 5.0]
+        filters_and_sigmas = [
+            (filt, sigma) if i != len(filters) - 1 else (partial(filt, outerScale=2*sigma), sigma)
+            for i, filt in enumerate(filters) for sigma in sigmas
+        ]
+    # validate the filter config
+    assert isinstance(filters_and_sigmas, (list, tuple))
+    for filt_and_sig in filters_and_sigmas:
+        filt, sig = filt_and_sig
+        assert callable(filt)
+        assert isinstance(sig, (float, tuple))
+        if isinstance(sig, tuple):
+            assert ndim is not None and len(sig) == ndim
+            assert all(isinstance(sigg, float) for sigg in sig)
     return filters_and_sigmas
 
 
