@@ -37,7 +37,7 @@ class Shallow2DeepDataset(SegmentationDataset):
             rf = pickle.load(f)
         filters_and_sigmas = _get_filters(self.ndim, self._filter_config)
         features = _apply_filters(raw, filters_and_sigmas)
-        assert rf.n_features_in_ == features.shape[1]
+        assert rf.n_features_in_ == features.shape[1], f"{rf.n_features_in_}, {features.shape[1]}"
         # NOTE: we always select the predictions for the foreground class here.
         # for multi-class training where we need multiple predictions this would need to be changed
         prediction = rf.predict_proba(features)[:, 1]
@@ -80,15 +80,17 @@ class Shallow2DeepDataset(SegmentationDataset):
 
 def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_paths, **kwargs):
     rois = kwargs.pop("rois", None)
+    filter_config = kwargs.pop("filter_config", None)
     if isinstance(raw_paths, str):
         if rois is not None:
             assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
         ds = Shallow2DeepDataset(raw_paths, raw_key, label_paths, label_key, roi=rois, **kwargs)
         ds.rf_paths = rf_paths
+        ds.filter_config = filter_config
     else:
         assert len(raw_paths) > 0
         if rois is not None:
-            assert len(rois) == len(label_paths)
+            assert len(rois) == len(label_paths), f"{len(rois)}, {len(label_paths)}"
             assert all(isinstance(roi, tuple) for roi in rois)
         n_samples = kwargs.pop("n_samples", None)
 
@@ -102,6 +104,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
                 raw_path, raw_key, label_path, label_key, roi=roi, n_samples=samples_per_ds[i], **kwargs
             )
             dset.rf_paths = rf_paths
+            dset.filter_config = filter_config
             ds.append(dset)
         ds = ConcatDataset(*ds)
     return ds
@@ -124,6 +127,7 @@ def get_shallow2deep_dataset(
     ndim=None,
     is_seg_dataset=None,
     with_channels=False,
+    filter_config=None,
 ):
     check_paths(raw_paths, label_paths)
     if is_seg_dataset is None:
@@ -157,6 +161,7 @@ def get_shallow2deep_dataset(
             ndim=ndim,
             dtype=dtype,
             with_channels=with_channels,
+            filter_config=filter_config,
         )
     else:
         raise NotImplementedError("Image collection dataset for shallow2deep not implemented yet.")
@@ -197,5 +202,6 @@ def get_shallow2deep_loader(
         ndim=ndim,
         is_seg_dataset=is_seg_dataset,
         with_channels=with_channels,
+        filter_config=filter_config,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
