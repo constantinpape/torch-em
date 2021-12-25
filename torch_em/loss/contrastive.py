@@ -6,7 +6,7 @@ from . import contrastive_impl as impl
 
 
 def check_consecutive(labels):
-    """ Check that the input labels are consecutive and start at zero.
+    """Check that the input labels are consecutive and start at zero.
     """
     diff = labels[1:] - labels[:-1]
     return (labels[0] == 0) and (diff == 1).all()
@@ -16,8 +16,8 @@ def check_consecutive(labels):
 # - ignore_dist: ignored in distance term
 # - ignore_var: ignored in variance term
 class ContrastiveLoss(nn.Module):
-    """ Implementation of contrastive loss defined in https://arxiv.org/pdf/1708.02551.pdf
-    'Semantic Instance Segmentation with a Discriminative Loss Function'
+    """Implementation of contrastive loss defined in https://arxiv.org/pdf/1708.02551.pdf
+    Semantic Instance Segmentation with a Discriminative Loss Function
 
     This class contians different implementations for the discrimnative loss:
     - based on pure pytorch, expanding the instance dimension, this is not memory efficient
@@ -33,9 +33,9 @@ class ContrastiveLoss(nn.Module):
         ignore_label [int] -
         impl [str] -
     """
-    implementations = (None, 'scatter', 'expand')
+    implementations = (None, "scatter", "expand")
 
-    def __init__(self, delta_var, delta_dist, norm='fro',
+    def __init__(self, delta_var, delta_dist, norm="fro",
                  alpha=1., beta=1., gamma=0.001,
                  ignore_label=None, impl=None):
         assert ignore_label is None, "Not implemented"  # TODO
@@ -52,19 +52,19 @@ class ContrastiveLoss(nn.Module):
         has_torch_scatter = self.has_torch_scatter()
         if impl is None:
             if not has_torch_scatter:
-                pt_scatter = 'https://github.com/rusty1s/pytorch_scatter'
+                pt_scatter = "https://github.com/rusty1s/pytorch_scatter"
                 warn(f"ContrastiveLoss: using pure pytorch implementation. Install {pt_scatter} for memory efficiency.")
             self._contrastive_impl = self._scatter_impl_batch if has_torch_scatter else self._expand_impl_batch
-        elif impl == 'scatter':
+        elif impl == "scatter":
             assert has_torch_scatter
             self._contrastive_impl = self._scatter_impl_batch
-        elif impl == 'expand':
+        elif impl == "expand":
             self._contrastive_impl = self._expand_impl_batch
 
         # all torch_em classes should store init kwargs to easily recreate the init call
-        self.init_kwargs = {'detal_var': delta_var, 'delta_dist': delta_dist, 'norm': norm,
-                            'alpha': alpha, 'beta': beta, 'gamma': gamma, 'ignore_label': ignore_label,
-                            'impl': impl}
+        self.init_kwargs = {"delta_var": delta_var, "delta_dist": delta_dist, "norm": norm,
+                            "alpha": alpha, "beta": beta, "gamma": gamma, "ignore_label": ignore_label,
+                            "impl": impl}
 
     @staticmethod
     def has_torch_scatter():

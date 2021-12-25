@@ -76,10 +76,7 @@ def make_embedding_image(image, y, prediction, selection, gradients=None):
     pca = embedding_pca(pred)
 
     image = np.repeat(image, 3, axis=0)  # to rgb
-
-    images = [
-        torch.from_numpy(im) for im in (image, seg, pca)
-    ]
+    images = [torch.from_numpy(im) for im in (image, seg, pca)]
     im = make_grid(images, padding=4)
     name = "raw_segmentation_embedding"
     if gradients is not None:
@@ -126,7 +123,10 @@ class TensorboardLogger(TorchEmLogger):
 
         # the embedding visualisation function currently doesn't support gradients,
         # so we can't log them even if log_gradients is true
-        log_grads = log_gradients and self.have_embeddings
+        log_grads = log_gradients
+        if self.have_embeddings:
+            log_grads = False
+
         if step % self.log_image_interval == 0:
             gradients = prediction.grad if log_grads else None
             self.log_images(step, x, y, prediction, "train", gradients=gradients)

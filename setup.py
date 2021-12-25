@@ -23,7 +23,8 @@ setup(
     entry_points={
         "console_scripts": [
             "torch_em.export_bioimageio_model = torch_em.util.modelzoo:main",
-            "torch_em.validate_checkpoint = torch_em.util.validation:main"
+            "torch_em.validate_checkpoint = torch_em.util.validation:main",
+            "torch_em.submit_slurm = torch_em.util.submit_slurm:main",
         ]
     }
 )

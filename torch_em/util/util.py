@@ -8,9 +8,9 @@ import torch_em
 # torch doesn't support most unsigned types,
 # so we map them to their signed equivalent
 DTYPE_MAP = {
-    np.dtype('uint16'): np.int16,
-    np.dtype('uint32'): np.int32,
-    np.dtype('uint64'): np.int64
+    np.dtype("uint16"): np.int16,
+    np.dtype("uint32"): np.int32,
+    np.dtype("uint64"): np.int64
 }
 
 
@@ -88,8 +88,8 @@ def get_constructor_arguments(obj):
 
     # all relevant torch_em classes have 'init_kwargs' to
     # directly recover the init call
-    if hasattr(obj, 'init_kwargs'):
-        return getattr(obj, 'init_kwargs')
+    if hasattr(obj, "init_kwargs"):
+        return getattr(obj, "init_kwargs")
 
     def _get_args(obj, param_names):
         return {name: getattr(obj, name) for name in param_names}
@@ -105,11 +105,11 @@ def get_constructor_arguments(obj):
     # recover the arguments for torch dataloader
     elif isinstance(obj, torch.utils.data.DataLoader):
         # These are all the "simple" arguements.
-        # 'sampler', 'batch_sampler' and 'worker_init_fn' are more complicated
+        # "sampler", "batch_sampler" and "worker_init_fn" are more complicated
         # and generally not used in torch_em
-        return _get_args(obj, ['batch_size', 'shuffle', 'num_workers',
-                               'pin_memory', 'drop_last', 'persistent_workers',
-                               'prefetch_factor', 'timeout'])
+        return _get_args(obj, ["batch_size", "shuffle", "num_workers",
+                               "pin_memory", "drop_last", "persistent_workers",
+                               "prefetch_factor", "timeout"])
 
     # TODO support common torch losses (e.g. CrossEntropy, BCE)
 
@@ -121,7 +121,7 @@ def get_constructor_arguments(obj):
     return {}
 
 
-def get_trainer(checkpoint, name='best', device=None):
+def get_trainer(checkpoint, name="best", device=None):
     """Load trainer from a checkpoint.
     """
     # try to load from file
