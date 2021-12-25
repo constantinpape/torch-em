@@ -179,9 +179,9 @@ def _load_rf_image_collection_dataset(
     return ds
 
 
-def _get_filters(ndim, filter_config):
+def _get_filters(ndim, filters_and_sigmas):
     # subset of ilastik default features
-    if filter_config is None:
+    if filters_and_sigmas is None:
         filters = [filter_impl.gaussianSmoothing,
                    filter_impl.laplacianOfGaussian,
                    filter_impl.gaussianGradientMagnitude,
@@ -303,9 +303,10 @@ def prepare_shallow2deep(
     def _train_rf(rf_id):
         # sample random patch with dataset
         raw, labels = ds[rf_id]
-        assert raw.ndim == labels.ndim == ndim + 2
-        # cast to numpy and remove channel and batch axis
-        raw, labels = raw[0, 0].numpy(), labels[0, 0].numpy().astype("int8")
+        # cast to numpy and remove channel axis
+        # need to update this to support multi-channel input data and/or multi class prediction
+        raw, labels = raw.numpy().squeeze(), labels.numpy().astype("int8").squeeze()
+        assert raw.ndim == labels.ndim == ndim, f"{raw.ndim}, {labels.ndim}, {ndim}"
         features, labels = _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels)
         rf = RandomForestClassifier(**rf_kwargs)
         rf.fit(features, labels)
