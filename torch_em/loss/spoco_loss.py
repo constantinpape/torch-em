@@ -5,7 +5,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 from elf.evaluation import matching
-from torch_scatter import scatter_mean
+try:
+    from torch_scatter import scatter_mean
+except ImportError:
+    scatter_mean = None
 
 # TODO refactor this function and use the functionality from contrastive impl
 # from . import contrastive_impl as cimpl
@@ -23,6 +26,7 @@ def compute_cluster_means(embeddings, target, n_instances):
         target: one-hot encoded target instances, shape: SPATIAL
         n_instances: number of instances
     """
+    assert scatter_mean is not None, "torch_scatter is required"
     embeddings = embeddings.flatten(1)
     target = target.flatten()
     mean_embeddings = scatter_mean(embeddings, target, dim_size=n_instances)
@@ -611,5 +615,5 @@ class SPOCOMetric(nn.Module):
         for prd, trgt in zip(pred_, target_):
             assert trgt.shape[0] == 1, f"Expect target with single channel, got {trgt.shape}"
             seg = self._segment(prd, trgt[0])
-            scores.append(matching(seg, trgt[0], threshold=self.overlap_threshold)["f1"])
+            scores.append(1.0 - matching(seg, trgt[0], threshold=self.overlap_threshold)["precision"])
         return torch.tensor(scores).float().mean()
