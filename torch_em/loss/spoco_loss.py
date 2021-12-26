@@ -583,6 +583,64 @@ class SPOCOLoss(ExtendedContrastiveLoss):
         return contrastive_loss
 
 
+class SPOCOConsistencyLoss(nn.Module):
+    def __init__(self, delta_var, pmaps_threshold, max_anchors=30, norm="fro"):
+        super().__init__()
+        self.max_anchors = max_anchors
+        self.consistency_loss = DiceLoss()
+        self.norm = norm
+        self.dist_to_mask = GaussianKernel(delta_var=delta_var, pmaps_threshold=pmaps_threshold)
+        # TODO init_kwargs
+
+    def _inst_pmap(self, emb, anchor):
+        # compute distance map
+        distance_map = torch.norm(emb - anchor, self.norm, dim=-1)
+        # convert distance map to instance pmaps and return
+        return self.dist_to_mask(distance_map)
+
+    def emb_consistency(self, emb_q, emb_k):
+        inst_q = []
+        inst_k = []
+        mask = torch.ones(emb_q.shape[1:])
+        for i in range(self.max_anchors):
+            # get random anchor
+            indices = torch.nonzero(mask, as_tuple=True)
+            ind = np.random.randint(len(indices[0]))
+
+            q_pmap = self._extract_pmap(emb_q, mask, indices, ind)
+            inst_q.append(q_pmap)
+
+            k_pmap = self._extract_pmap(emb_k, mask, indices, ind)
+            inst_k.append(k_pmap)
+
+        # stack along channel dim
+        inst_q = torch.stack(inst_q)
+        inst_k = torch.stack(inst_k)
+
+        loss = self.consistency_loss(inst_q, inst_k)
+        return loss
+
+    def _extract_pmap(self, emb, mask, indices, ind):
+        if mask.dim() == 2:
+            y, x = indices
+            anchor = emb[:, y[ind], x[ind]]
+            emb = emb.permute(1, 2, 0)
+        else:
+            z, y, x = indices
+            anchor = emb[:, z[ind], y[ind], x[ind]]
+            emb = emb.permute(1, 2, 3, 0)
+
+        return self._inst_pmap(emb, anchor)
+
+    def forward(self, emb_q, emb_k):
+        contrastive_loss = 0.0
+        # compute consistency term
+        for e_q, e_k in zip(emb_q, emb_k):
+            emb_consistency_loss = self.emb_consistency(e_q, e_k)
+            contrastive_loss += self.consistency_term_weight + emb_consistency_loss
+        return contrastive_loss
+
+
 class SPOCOMetric(nn.Module):
     def __init__(self, delta_var, pmaps_threshold, overlap_threshold=0.5):
         super().__init__()
