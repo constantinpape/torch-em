@@ -92,10 +92,10 @@ class CombinedAuxLoss(nn.Module):
         result = 0.
         for loss, weight in zip(self.losses, self.weights):
             if isinstance(loss, AffinitySideLoss):
-                result += weight * loss(embeddings, target)
-            else:
-                if instance_masks is not None:
-                    result += weight * loss(instance_pmaps, instance_masks).mean()
+                # add batch axis / batch and channel axis for embeddings, target
+                result += weight * loss(embeddings[None], target[None, None])
+            elif instance_masks is not None:
+                result += weight * loss(instance_pmaps, instance_masks).mean()
         return result
 
 
@@ -400,7 +400,7 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
         elif aux_loss == "affinity":
             self.aux_loss = AffinitySideLoss(
                 delta=delta_dist,
-                offset_ranges=kwargs.get("offset_ranges", [(-18, 0), (-18, 0)]),
+                offset_ranges=kwargs.get("offset_ranges", [(-18, 18), (-18, 18)]),
                 n_samples=kwargs.get("n_samples", 9)
             )
         elif aux_loss == "dice_aff":
@@ -411,7 +411,7 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
             dice_loss = DiceLoss()
             aff_loss = AffinitySideLoss(
                 delta=delta_dist,
-                offset_ranges=kwargs.get("offset_ranges", [(-18, 0), (-18, 0)]),
+                offset_ranges=kwargs.get("offset_ranges", [(-18, 18), (-18, 18)]),
                 n_samples=kwargs.get("n_samples", 9)
             )
 
@@ -466,12 +466,18 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
             for i in instances:
                 if i == 0:
                     # just take the mean anchor
-                    anchor_embeddings.append(cluster_means[0])
+                    anchor_embeddings.append(cluster_means[i])
                 else:
-                    anchor_emb = select_stable_anchor(embeddings, cluster_means[i], target == i, self.delta_var)
+                    # FIXME this makes training extremely slow, check with Adrian if this is the latest version
+                    # anchor_emb = select_stable_anchor(embeddings, cluster_means[i], target == i, self.delta_var)
+                    anchor_emb = cluster_means[i]
                     anchor_embeddings.append(anchor_emb)
 
-            anchor_embeddings = torch.stack(anchor_embeddings, dim=0).to(embeddings.device)
+            # FIXME rare bug
+            try:
+                anchor_embeddings = torch.stack(anchor_embeddings, dim=0).to(embeddings.device)
+            except RuntimeError:
+                breakpoint()
 
             instance_pmaps, instance_masks = self._create_instance_pmaps_and_masks(
                 embeddings, anchor_embeddings, target
@@ -493,7 +499,7 @@ class SPOCOLoss(ExtendedContrastiveLoss):
     "Sparse Object-level Supervision for Instance Segmentation with Pixel Embeddings": https://arxiv.org/abs/2103.14572
     """
 
-    def __init__(self, delta_var, delta_dist, norm="fro", alpha=1., beta=1., gamma=0.001,
+    def __init__(self, delta_var, delta_dist, norm="fro", alpha=1.0, beta=1.0, gamma=0.001,
                  unlabeled_push_weight=1.0, instance_term_weight=1.0, consistency_term_weight=1.0,
                  aux_loss="dice", pmaps_threshold=0.9, max_anchors=20, volume_threshold=0.05, **kwargs):
 
@@ -582,7 +588,9 @@ class SPOCOMetric(nn.Module):
 
     def _get_mask(self, pred, anchor):
         anchor_emb = pred[(slice(None),) + anchor]
-        dist_map = np.linalg.norm(pred, - anchor_emb)
+        expand_spatial = (np.s_[:],) + (np.s_[None],) * (pred.ndim - 1)
+        anchor_emb = anchor_emb[expand_spatial]
+        dist_map = np.linalg.norm(pred - anchor_emb, axis=0)
         mask = np.exp(- dist_map * dist_map / self.two_sigma)
         return mask > 0.5
 
@@ -598,10 +606,10 @@ class SPOCOMetric(nn.Module):
         return seg
 
     def forward(self, pred, target):
-        pred_, target_ = pred.numpy(), target.numpy()
+        pred_, target_ = pred.detach().cpu().numpy(), target.detach().cpu().numpy()
         scores = []
         for prd, trgt in zip(pred_, target_):
             assert trgt.shape[0] == 1, f"Expect target with single channel, got {trgt.shape}"
             seg = self._segment(prd, trgt[0])
-            scores.append(matching(seg, trgt[0], threshold=self.overlap_threshold))
-        return torch.tensor(scores)
+            scores.append(matching(seg, trgt[0], threshold=self.overlap_threshold)["f1"])
+        return torch.tensor(scores).float().mean()
