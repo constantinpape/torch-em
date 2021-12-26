@@ -578,7 +578,7 @@ class SPOCOLoss(ExtendedContrastiveLoss):
             if unlabeled_mask.sum() < self.volume_threshold * unlabeled_mask.numel():
                 continue
             emb_consistency_loss = self.emb_consistency(e_q, e_k, unlabeled_mask)
-            contrastive_loss += self.consistency_term_weight + emb_consistency_loss
+            contrastive_loss += self.consistency_term_weight * emb_consistency_loss
 
         return contrastive_loss
 
@@ -636,8 +636,7 @@ class SPOCOConsistencyLoss(nn.Module):
         contrastive_loss = 0.0
         # compute consistency term
         for e_q, e_k in zip(emb_q, emb_k):
-            emb_consistency_loss = self.emb_consistency(e_q, e_k)
-            contrastive_loss += self.consistency_term_weight + emb_consistency_loss
+            contrastive_loss += self.emb_consistency(e_q, e_k)
         return contrastive_loss
 
 
