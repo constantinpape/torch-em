@@ -288,6 +288,8 @@ def default_segmentation_dataset(
             transform=transform,
             n_samples=n_samples,
             sampler=sampler,
+            dtype=dtype,
+            label_dtype=label_dtype,
         )
 
     return ds

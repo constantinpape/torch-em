@@ -4,6 +4,7 @@ from warnings import warn
 import numpy as np
 import torch
 import torch.nn as nn
+from elf.evaluation import matching
 from torch_scatter import scatter_mean
 
 # TODO refactor this function and use the functionality from contrastive impl
@@ -315,10 +316,8 @@ class ContrastiveLossBase(nn.Module):
         Args:
              input_ (torch.tensor): embeddings predicted by the network (NxExDxHxW) (E - embedding dims)
                 expects float32 tensor
-             target (torch.tensor): ground truth instance segmentation (NxDxHxW)
-                expects int64 tensor if self.ignore_zero_label is True then expects target of shape Nx2xDxHxW where
-                relabeled version is in target[:,0,...] and the original labeling is in target[:,1,...]
-
+             target (torch.tensor): ground truth instance segmentation (Nx1DxHxW)
+                expects int64 tensor
         Returns:
             Combined loss defined as: alpha * variance_term + beta * distance_term + gamma * regularization_term
                 + instance_term_weight * instance_term + unlabeled_push_weight * unlabeled_push_term
@@ -329,6 +328,11 @@ class ContrastiveLossBase(nn.Module):
         # and sum it up in the per_instance variable
         loss = 0.0
         for single_input, single_target in zip(input_, target):
+            # compare spatial dimensions
+            assert single_input.shape[1:] == single_target.shape[1:], f"{single_input.shape}, {single_target.shape}"
+            assert single_target.shape[0] == 1
+            single_target = single_target[0]
+
             contains_bg = 0 in single_target
             if self.unlabeled_push and contains_bg:
                 ignore_zero_label = True
@@ -339,15 +343,13 @@ class ContrastiveLossBase(nn.Module):
             # get the number of instances
             C = instance_ids.size(0)
 
-            # compare spatial dimensions
-            assert single_input.size()[1:] == single_target.size()
-
             # compute mean embeddings (output is of shape CxE)
             cluster_means = compute_cluster_means(single_input, single_target, C)
 
             # compute variance term, i.e. pull force
-            variance_term = self._compute_variance_term(cluster_means, single_input, single_target, instance_counts,
-                                                        ignore_zero_label)
+            variance_term = self._compute_variance_term(
+                cluster_means, single_input, single_target, instance_counts, ignore_zero_label
+            )
 
             # compute unlabeled push force, i.e. push force between
             # the mean cluster embeddings and embeddings of background pixels
@@ -562,10 +564,44 @@ class SPOCOLoss(ExtendedContrastiveLoss):
 
         # compute consistency term
         for e_q, e_k, t in zip(emb_q, emb_k, target):
-            unlabeled_mask = (t == 0).int()
+            unlabeled_mask = (t[0] == 0).int()
             if unlabeled_mask.sum() < self.volume_threshold * unlabeled_mask.numel():
                 continue
             emb_consistency_loss = self.emb_consistency(e_q, e_k, unlabeled_mask)
             contrastive_loss += self.consistency_term_weight + emb_consistency_loss
 
         return contrastive_loss
+
+
+class SPOCOMetric(nn.Module):
+    def __init__(self, delta_var, pmaps_threshold, overlap_threshold=0.5):
+        super().__init__()
+        self.pmaps_threshold = pmaps_threshold
+        self.overlap_threshold = overlap_threshold
+        self.two_sigma = delta_var * delta_var / (-math.log(pmaps_threshold))
+
+    def _get_mask(self, pred, anchor):
+        anchor_emb = pred[(slice(None),) + anchor]
+        dist_map = np.linalg.norm(pred, - anchor_emb)
+        mask = np.exp(- dist_map * dist_map / self.two_sigma)
+        return mask > 0.5
+
+    def _segment(self, pred, target):
+        gt_ids = np.unique(target)[1:]
+        seg = np.zeros(target.shape, dtype="uint32")
+        for gt_id in gt_ids:
+            anchors = np.where(target == gt_id)
+            anchor_id = np.random.randint(0, len(anchors[0]))
+            anchor = tuple(anch[anchor_id] for anch in anchors)
+            mask = self._get_mask(pred, anchor)
+            seg[mask] = gt_id
+        return seg
+
+    def forward(self, pred, target):
+        pred_, target_ = pred.numpy(), target.numpy()
+        scores = []
+        for prd, trgt in zip(pred_, target_):
+            assert trgt.shape[0] == 1, f"Expect target with single channel, got {trgt.shape}"
+            seg = self._segment(prd, trgt[0])
+            scores.append(matching(seg, trgt[0], threshold=self.overlap_threshold))
+        return torch.tensor(scores)
