@@ -21,8 +21,13 @@ class SPOCOTrainer(DefaultTrainer):
             param2.data = param1.data * self.momentum + param2.data * (1. - self.momentum)
 
     def save_checkpoint(self, name, best_metric):
-        model2_state = {"model2_state": self.model2.state()}
-        super().save_checkpoint(name, best_metric, model2_state)
+        model2_state = {"model2_state": self.model2.state_dict()}
+        super().save_checkpoint(name, best_metric, **model2_state)
+
+    def _initialize(self, iterations, load_from_checkpoint):
+        best_metric = super()._initialize(iterations, load_from_checkpoint)
+        self.model2.to(self.device)
+        return best_metric
 
     def _train_epoch(self, progress):
         self.model.train()

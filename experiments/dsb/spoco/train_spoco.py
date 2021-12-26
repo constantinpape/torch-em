@@ -11,10 +11,12 @@ def train_boundaries(args):
 
     patch_shape = (1, 256, 256)
     train_loader = get_dsb_loader(
-        args.input, patch_shape, split="train", download=True, batch_size=args.batch_size, label_dtype=torch.int64
+        args.input, patch_shape, split="train", download=True, batch_size=args.batch_size, label_dtype=torch.int64,
+        label_transform=torch_em.transform.label_consecutive, num_workers=4,
     )
     val_loader = get_dsb_loader(
-        args.input, patch_shape, split="test", batch_size=args.batch_size, label_dtype=torch.int64
+        args.input, patch_shape, split="test", batch_size=args.batch_size, label_dtype=torch.int64,
+        label_transform=torch_em.transform.label_consecutive, num_workers=4,
     )
 
     delta_var = 0.75

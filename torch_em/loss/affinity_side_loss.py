@@ -68,7 +68,7 @@ def segmentation_to_affinities(segmentation, offsets):
             The channel axis (= dimension 1) needs to be a singleton.
         offsets [list[tuple]] - list of offsets for which to compute the affinities.
     """
-    assert segmentation.shape[1] == 1
+    assert segmentation.shape[1] == 1, f"{segmentation.shape}"
     # shift the segmentation and substract the shifted tensor from the segmentation
     # we need to shift in the opposite direction of the offsets, so we invert them
     # before applying the shift
@@ -113,7 +113,7 @@ class AffinitySideLoss(nn.Module):
         ignore_in_variance_term=None,
         ignore_in_distance_term=None,
     ):
-        assert input_.dim() == target.dim()
+        assert input_.dim() == target.dim(), f"{input_.dim()}, {target.dim()}"
         assert input_.shape[2:] == target.shape[2:]
 
         # sample offsets
