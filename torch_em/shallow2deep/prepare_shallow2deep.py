@@ -196,7 +196,7 @@ def _get_filters(ndim, filters_and_sigmas):
     assert isinstance(filters_and_sigmas, (list, tuple))
     for filt_and_sig in filters_and_sigmas:
         filt, sig = filt_and_sig
-        assert callable(filt)
+        assert callable(filt) or (isinstance(filt, str) and hasattr(filter_impl, filt))
         assert isinstance(sig, (float, tuple))
         if isinstance(sig, tuple):
             assert ndim is not None and len(sig) == ndim
@@ -207,7 +207,8 @@ def _get_filters(ndim, filters_and_sigmas):
 def _apply_filters(raw, filters_and_sigmas):
     features = []
     for filter_, sigma in filters_and_sigmas:
-        response = filter_(raw, sigma)
+        func = getattr(filter_impl, filter_) if isinstance(filter_, str) else filter_
+        response = func(raw, sigma)
         if response.ndim > raw.ndim:
             for c in range(response.shape[-1]):
                 features.append(response[..., c].flatten())
@@ -220,7 +221,8 @@ def _apply_filters(raw, filters_and_sigmas):
 def _apply_filters_with_mask(raw, filters_and_sigmas, mask):
     features = []
     for filter_, sigma in filters_and_sigmas:
-        response = filter_(raw, sigma)
+        func = getattr(filter_impl, filter_) if isinstance(filter_, str) else filter_
+        response = func(raw, sigma)
         if response.ndim > raw.ndim:
             for c in range(response.shape[-1]):
                 features.append(response[..., c][mask])
