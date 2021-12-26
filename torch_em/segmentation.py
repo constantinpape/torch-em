@@ -274,7 +274,6 @@ def default_segmentation_dataset(
             with_channels=with_channels,
         )
     else:
-        # TODO implement with channels for image collection
         ds = _load_image_collection_dataset(
             raw_paths,
             raw_key,
