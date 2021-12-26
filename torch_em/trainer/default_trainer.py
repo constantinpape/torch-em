@@ -394,8 +394,8 @@ class DefaultTrainer:
     def _validate_mixed(self):
         self.model.eval()
 
-        metric_val = 0.
-        loss_val = 0.
+        metric_val = 0.0
+        loss_val = 0.0
 
         with torch.no_grad():
             for x, y in self.val_loader:
