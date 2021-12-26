@@ -158,7 +158,7 @@ class SPOCOTrainer(DefaultTrainer):
 
     def _validate(self):
         self.model.eval()
-        self.model2.evail()
+        self.model2.eval()
 
         metric = 0.0
         loss = 0.0
@@ -180,7 +180,7 @@ class SPOCOTrainer(DefaultTrainer):
 
     def _validate_mixed(self):
         self.model.eval()
-        self.model2.evail()
+        self.model2.eval()
 
         metric_val = 0.0
         loss_val = 0.0
