@@ -286,7 +286,6 @@ def default_segmentation_dataset(
             label_transform2=label_transform2,
             transform=transform,
             n_samples=n_samples,
-            sampler=sampler,
             dtype=dtype,
             label_dtype=label_dtype,
         )
