@@ -142,7 +142,6 @@ class ContrastiveLossBase(nn.Module):
             if impl == "scatter" and not has_torch_scatter:
                 raise ValueError()
             self.impl = impl
-        # TODO init_kwargs
 
     def __str__(self):
         return super().__str__() + f"\ndelta_var: {self.delta_var}\ndelta_dist: {self.delta_dist}" \
@@ -426,7 +425,12 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
 
         # init dist_to_mask kernel which maps distance to the cluster center to instance probability map
         self.dist_to_mask = GaussianKernel(delta_var=self.delta_var, pmaps_threshold=pmaps_threshold)
-        # TODO init_kwargs
+        self.init_kwargs = {
+            "delta_var": delta_var, "delta_dist": delta_dist, "norm": norm, "alpha": alpha, "beta": beta,
+            "gamma": gamma, "unlabeled_push_weight": unlabeled_push_weight,
+            "instance_term_weight": instance_term_weight, "aux_loss": aux_loss, "pmaps_threshold": pmaps_threshold
+        }
+        self.init_kwargs.update(kwargs)
 
     def _create_instance_pmaps_and_masks(self, embeddings, anchors, target):
         inst_pmaps = []
@@ -518,7 +522,13 @@ class SPOCOLoss(ExtendedContrastiveLoss):
         self.max_anchors = max_anchors
         self.volume_threshold = volume_threshold
         self.consistency_loss = DiceLoss()
-        # TODO init_kwargs
+        self.init_kwargs = {
+            "delta_var": delta_var, "delta_dist": delta_dist, "norm": norm, "alpha": alpha, "beta": beta,
+            "gamma": gamma, "unlabeled_push_weight": unlabeled_push_weight,
+            "instance_term_weight": instance_term_weight, "aux_loss": aux_loss, "pmaps_threshold": pmaps_threshold,
+            "max_anchors": max_anchors, "volume_threshold": volume_threshold
+        }
+        self.init_kwargs.update(kwargs)
 
     def __str__(self):
         return super().__str__() + f"\nconsistency_term_weight: {self.consistency_term_weight}"
@@ -590,7 +600,8 @@ class SPOCOConsistencyLoss(nn.Module):
         self.consistency_loss = DiceLoss()
         self.norm = norm
         self.dist_to_mask = GaussianKernel(delta_var=delta_var, pmaps_threshold=pmaps_threshold)
-        # TODO init_kwargs
+        self.init_kwargs = {"delta_var": delta_var, "pmaps_threshold": pmaps_threshold,
+                            "max_anchors": max_anchors, "norm": norm}
 
     def _inst_pmap(self, emb, anchor):
         # compute distance map
@@ -646,6 +657,9 @@ class SPOCOMetric(nn.Module):
         self.pmaps_threshold = pmaps_threshold
         self.overlap_threshold = overlap_threshold
         self.two_sigma = delta_var * delta_var / (-math.log(pmaps_threshold))
+        self.init_kwargs = {
+            "delta_var": delta_var, "pmaps_threshold": pmaps_threshold, "overlap_threshold": overlap_threshold
+        }
 
     def _get_mask(self, pred, anchor):
         anchor_emb = pred[(slice(None),) + anchor]
