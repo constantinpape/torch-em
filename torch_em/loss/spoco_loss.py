@@ -4,7 +4,6 @@ from warnings import warn
 import numpy as np
 import torch
 import torch.nn as nn
-from elf.evaluation import matching
 try:
     from torch_scatter import scatter_mean
 except ImportError:
@@ -649,42 +648,3 @@ class SPOCOConsistencyLoss(nn.Module):
         for e_q, e_k in zip(emb_q, emb_k):
             contrastive_loss += self.emb_consistency(e_q, e_k)
         return contrastive_loss
-
-
-class SPOCOMetric(nn.Module):
-    def __init__(self, delta_var, pmaps_threshold, overlap_threshold=0.5):
-        super().__init__()
-        self.pmaps_threshold = pmaps_threshold
-        self.overlap_threshold = overlap_threshold
-        self.two_sigma = delta_var * delta_var / (-math.log(pmaps_threshold))
-        self.init_kwargs = {
-            "delta_var": delta_var, "pmaps_threshold": pmaps_threshold, "overlap_threshold": overlap_threshold
-        }
-
-    def _get_mask(self, pred, anchor):
-        anchor_emb = pred[(slice(None),) + anchor]
-        expand_spatial = (np.s_[:],) + (np.s_[None],) * (pred.ndim - 1)
-        anchor_emb = anchor_emb[expand_spatial]
-        dist_map = np.linalg.norm(pred - anchor_emb, axis=0)
-        mask = np.exp(- dist_map * dist_map / self.two_sigma)
-        return mask > 0.5
-
-    def _segment(self, pred, target):
-        gt_ids = np.unique(target)[1:]
-        seg = np.zeros(target.shape, dtype="uint32")
-        for gt_id in gt_ids:
-            anchors = np.where(target == gt_id)
-            anchor_id = np.random.randint(0, len(anchors[0]))
-            anchor = tuple(anch[anchor_id] for anch in anchors)
-            mask = self._get_mask(pred, anchor)
-            seg[mask] = gt_id
-        return seg
-
-    def forward(self, pred, target):
-        pred_, target_ = pred.detach().cpu().numpy(), target.detach().cpu().numpy()
-        scores = []
-        for prd, trgt in zip(pred_, target_):
-            assert trgt.shape[0] == 1, f"Expect target with single channel, got {trgt.shape}"
-            seg = self._segment(prd, trgt[0])
-            scores.append(1.0 - matching(seg, trgt[0], threshold=self.overlap_threshold)["precision"])
-        return torch.tensor(scores).float().mean()
