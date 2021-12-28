@@ -1,0 +1,1 @@
+from .instance_segmentation_metric import EmbeddingMWSIOUMetric
