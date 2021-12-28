@@ -110,7 +110,7 @@ def _compute_variance_term_scatter(
         assert isinstance(ignore_labels, list)
         # mask out the ignore labels
         mask = torch.ones_like(variance)
-        mask[torch.isin(mask, torch.tensor(ignore_labels))]
+        mask[torch.isin(mask, torch.tensor(ignore_labels).to(mask.device))]
         variance *= mask
         # decrease number of instances
         n_instances -= len(ignore_labels)

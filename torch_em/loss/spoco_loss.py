@@ -295,30 +295,27 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
         # init auxiliary loss
         assert aux_loss in ["dice", "affinity", "dice_aff"]
         if aux_loss == "dice":
-            self.aux_loss = DiceLoss()
+            self.aff_loss = None
+            self.dice_loss = DiceLoss()
         # additional auxiliary losses
         elif aux_loss == "affinity":
-            self.aux_loss = AffinitySideLoss(
+            self.aff_loss = AffinitySideLoss(
                 delta=delta_dist,
                 offset_ranges=kwargs.get("offset_ranges", [(-18, 18), (-18, 18)]),
                 n_samples=kwargs.get("n_samples", 9)
             )
+            self.dice_loss = None
         elif aux_loss == "dice_aff":
             # combine dice and affinity side loss
-            dice_weight = kwargs.get("dice_weight", 1.0)
-            aff_weight = kwargs.get("aff_weight", 1.0)
+            self.dice_weight = kwargs.get("dice_weight", 1.0)
+            self.aff_weight = kwargs.get("aff_weight", 1.0)
 
-            dice_loss = DiceLoss()
-            aff_loss = AffinitySideLoss(
+            self.aff_loss = AffinitySideLoss(
                 delta=delta_dist,
                 offset_ranges=kwargs.get("offset_ranges", [(-18, 18), (-18, 18)]),
                 n_samples=kwargs.get("n_samples", 9)
             )
-
-            self.aux_loss = CombinedAuxLoss(
-                losses=[dice_loss, aff_loss],
-                weights=[dice_weight, aff_weight]
-            )
+            self.dice_loss = DiceLoss()
 
         # init dist_to_mask kernel which maps distance to the cluster center to instance probability map
         self.dist_to_mask = GaussianKernel(delta_var=self.delta_var, pmaps_threshold=pmaps_threshold)
@@ -329,27 +326,10 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
         }
         self.init_kwargs.update(kwargs)
 
+    # FIXME stacking per instance here makes this very memory hungry,
     def _create_instance_pmaps_and_masks(self, embeddings, anchors, target):
         inst_pmaps = []
         inst_masks = []
-
-        # permute embedding dimension at the end
-        if target.dim() == 2:
-            embeddings = embeddings.permute(1, 2, 0)
-        else:
-            embeddings = embeddings.permute(1, 2, 3, 0)
-
-        for i, anchor_emb in enumerate(anchors):
-            if i == 0:
-                # ignore 0-label
-                continue
-            # compute distance map; embeddings is ExSPATIAL, cluster_mean is ExSINGLETON_SPATIAL, can just broadcast
-            distance_map = torch.norm(embeddings - anchor_emb, self.norm, dim=-1)
-            # convert distance map to instance pmaps and save
-            inst_pmaps.append(self.dist_to_mask(distance_map).unsqueeze(0))
-            # create real mask and save
-            assert i in target
-            inst_masks.append((target == i).float().unsqueeze(0))
 
         if not inst_masks:
             return None, None
@@ -362,38 +342,47 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
 
     def compute_instance_term(self, embeddings, cluster_means, target):
         assert embeddings.size()[1:] == target.size()
-        if isinstance(self.aux_loss, AffinitySideLoss):
-            return self.aux_loss(embeddings[None], target[None, None])
+
+        if self.aff_loss is None:
+            aff_loss = None
         else:
+            aff_loss = self.aff_loss(embeddings[None], target[None, None])
+
+        if self.dice_loss is None:
+            dice_loss = None
+        else:
+            dice_loss = []
+
+            # permute embedding dimension at the end
+            if target.dim() == 2:
+                embeddings = embeddings.permute(1, 2, 0)
+            else:
+                embeddings = embeddings.permute(1, 2, 3, 0)
+
             # compute random anchors per instance
             instances = torch.unique(target)
-            anchor_embeddings = []
             for i in instances:
                 if i == 0:
-                    # just take the mean anchor
-                    anchor_embeddings.append(cluster_means[i])
-                else:
-                    # FIXME this makes training extremely slow, check with Adrian if this is the latest version
-                    # anchor_emb = select_stable_anchor(embeddings, cluster_means[i], target == i, self.delta_var)
-                    anchor_emb = cluster_means[i]
-                    anchor_embeddings.append(anchor_emb)
+                    continue
+                anchor_emb = cluster_means[i]
+                # FIXME this makes training extremely slow, check with Adrian if this is the latest version
+                # anchor_emb = select_stable_anchor(embeddings, cluster_means[i], target == i, self.delta_var)
 
-            # FIXME rare bug
-            try:
-                anchor_embeddings = torch.stack(anchor_embeddings, dim=0).to(embeddings.device)
-            except RuntimeError:
-                breakpoint()
+                distance_map = torch.norm(embeddings - anchor_emb, self.norm, dim=-1)
+                instance_pmap = self.dist_to_mask(distance_map).unsqueeze(0)
+                instance_mask = (target == i).float().unsqueeze(0)
 
-            instance_pmaps, instance_masks = self._create_instance_pmaps_and_masks(
-                embeddings, anchor_embeddings, target
-            )
+                dice_loss.append(self.dice_loss(instance_pmap, instance_mask))
 
-            if isinstance(self.aux_loss, CombinedAuxLoss):
-                return self.aux_loss(embeddings, target, instance_pmaps, instance_masks)
-            else:
-                if instance_masks is None:
-                    return 0.0
-                return self.aux_loss(instance_pmaps, instance_masks).mean()
+            dice_loss = torch.tensor(dice_loss).to(embeddings.device).mean() if dice_loss else 0.0
+
+        assert not (dice_loss is None and aff_loss is None)
+        if dice_loss is None and aff_loss is not None:
+            return aff_loss
+        if dice_loss is not None and aff_loss is None:
+            return dice_loss
+        else:
+            return self.dice_weight * dice_loss + self.aff_weight * aff_loss
 
 
 class SPOCOLoss(ExtendedContrastiveLoss):
