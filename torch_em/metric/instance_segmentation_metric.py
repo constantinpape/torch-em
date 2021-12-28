@@ -18,7 +18,7 @@ class BaseInstanceSegmentationMetric(nn.Module):
 
     def forward(self, input_, target):
         if self.to_numpy:
-            input_ = input_.detach().cpu().numpy()
+            input_ = input_.detach().cpu().numpy().astype("float32")
             target = target.detach().cpu().numpy()
         assert input_.ndim == target.ndim
         assert len(input_) == len(target)
@@ -27,24 +27,24 @@ class BaseInstanceSegmentationMetric(nn.Module):
         for pred, trgt in zip(input_, target):
             seg = self.segmenter(pred)
             # by convention we assume that the segmentation channel is always in the last channel of trgt
-            scores.append(self.metric(seg, trgt[-1]))
+            scores.append(self.metric(seg, trgt[-1].astype("uint32")))
         return torch.tensor(scores).mean()
-
-    @staticmethod
-    def filter_sizes(seg, min_seg_size, hmap=None):
-        seg_ids, counts = np.unique(seg, return_counts=True)
-        if hmap is None:
-            bg_ids = seg_ids[counts < min_seg_size]
-            seg[np.isin(seg, bg_ids)] = 0
-        else:
-            raise NotImplementedError  # TODO
-        return seg
 
 
 # TODO normal mws for affinites, multicut for boundaries, hdbscan for embeddings
 #
 # Segmenters
 #
+
+def filter_sizes(seg, min_seg_size, hmap=None):
+    seg_ids, counts = np.unique(seg, return_counts=True)
+    if hmap is None:
+        bg_ids = seg_ids[counts < min_seg_size]
+        seg[np.isin(seg, bg_ids)] = 0
+    else:
+        raise NotImplementedError  # TODO
+    return seg
+
 
 class EmbeddingMWS:
     def __init__(self, delta, offsets, with_background, min_seg_size, strides=None):
@@ -57,14 +57,14 @@ class EmbeddingMWS:
         assert len(strides) == len(offsets[0])
         self.strides = strides
 
-    def merge_embeddings(self, seg, embeddings):
+    def merge_background(self, seg, embeddings):
         seg += 1
         seg_ids, counts = np.unique(seg, return_counts=True)
         bg_seg = seg_ids[np.argmax(counts)]
-        mean_embeddings = np.concatenate([
-            vigra.analysis.extractRegionFeatures(emb, seg.astype("uint32"), features=["mean"])["mean"][None]
-            for emb in embeddings
-        ], axis=0)
+        mean_embeddings = []
+        for emb in embeddings:
+            mean_embeddings.append(vigra.analysis.extractRegionFeatures(emb, seg, features=["mean"])["mean"][None])
+        mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         bg_embed = mean_embeddings[:, bg_seg][:, None]
         bg_probs = elfemb._embeddings_to_probabilities(mean_embeddings, bg_embed, self.delta, 0)
         bg_ids = np.where(bg_probs > 0.5)
@@ -80,7 +80,7 @@ class EmbeddingMWS:
         if self.with_background:
             seg = self.merge_background(seg, embeddings)
         if self.min_seg_size > 0:
-            seg = self.filter_sizes(seg, self.min_seg_size)
+            seg = filter_sizes(seg, self.min_seg_size)
         return seg
 
 
@@ -108,12 +108,12 @@ class AdaptedRandError:
 
 
 #
-# Ready made metrics
+# Prefab metrics
 #
 
 
 class EmbeddingMWSIOUMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, delta, offsets, min_seg_size, iou_threshold, strides=None):
+    def __init__(self, delta, offsets, min_seg_size, iou_threshold=0.5, strides=None):
         segmenter = EmbeddingMWS(delta, offsets, with_background=True, min_seg_size=min_seg_size)
         metric = IOUError(iou_threshold)
         super().__init__(segmenter, metric)
