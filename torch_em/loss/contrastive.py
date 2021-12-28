@@ -132,7 +132,7 @@ class ContrastiveLoss(nn.Module):
         assert ndim in (2, 3)
 
         # iterate over the batches
-        loss = 0.
+        loss = 0.0
         for input_batch, target_batch in zip(input_, target):
             loss_batch = self._contrastive_impl(input_batch, target_batch, ndim)
             loss += loss_batch
