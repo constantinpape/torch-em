@@ -645,7 +645,7 @@ def _load_normalizer(model_spec):
         )
 
     elif name == "scale_range":
-        assert spec_kwargs.mode == "per_sample"  # can"t parse the other modes right now
+        assert spec_kwargs["mode"] == "per_sample"  # can"t parse the other modes right now
         axis = _get_axis(spec_kwargs["axes"])
         lower, upper = spec_kwargs["min_percentile"], spec_kwargs["max_percentile"]
         if np.isclose(lower, 0.0) and np.isclose(upper, 100.0):
