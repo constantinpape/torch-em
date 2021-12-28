@@ -23,7 +23,7 @@ def _compute_cluster_means_scatter(input_, target, ndim, n_lbl=None):
     return mean_embeddings.transpose(1, 0)
 
 
-def _compute_distance_term_scatter(cluster_means, norm, delta_dist):
+def _compute_distance_term_scatter(cluster_means, norm, delta_dist, ignore_labels=None):
     C = cluster_means.shape[0]
     if C == 1:
         # just one cluster in the batch, so distance term does not contribute to the loss
@@ -41,6 +41,31 @@ def _compute_distance_term_scatter(cluster_means, norm, delta_dist):
     # compute pair-wise distances (CxC)
     dist_matrix = torch.norm(cm_matrix1 - cm_matrix2, p=norm, dim=2)
 
+    C_norm = C
+    if ignore_labels is not None:
+        # TODO implement arbitrary ignore labels
+        assert ignore_labels == [0], "Only zero ignore label supported so far"
+        if C == 2:
+            # just two cluster instances, including one which is ignored,
+            # i.e. distance term does not contribute to the loss
+            return 0.0
+        # set the distance to ignore-labels to be greater than 2*delta_dist,
+        # so that it does not contribute to the loss because of the hinge at 2*delta_dist
+
+        # find minimum dist
+        d_min = torch.min(dist_matrix[dist_matrix > 0]).item()
+        # dist_multiplier = 2 * delta_dist / d_min + epsilon
+        dist_multiplier = 2 * delta_dist / d_min + 1e-3
+        # create distance mask
+        dist_mask = torch.ones_like(dist_matrix)
+        dist_mask[0, 1:] = dist_multiplier
+        dist_mask[1:, 0] = dist_multiplier
+
+        # mask the dist_matrix
+        dist_matrix = dist_matrix * dist_mask
+        # decrease number of instances
+        C_norm -= 1
+
     # create matrix for the repulsion distance (i.e. cluster centers further apart than 2 * delta_dist
     # are not longer repulsed)
     # CxC
@@ -50,19 +75,21 @@ def _compute_distance_term_scatter(cluster_means, norm, delta_dist):
     # sum all of the hinged pair-wise distances
     hinged_dist = torch.sum(hinged_dist, dim=(0, 1))
     # normalized by the number of paris and return
-    return hinged_dist / (C * (C - 1))
+    return hinged_dist / (C_norm * (C_norm - 1))
 
 
 # NOTE: it would be better to not expand the instance sizes spatially, but instead expand the
 # instance dimension once we have the variance summed up and then divide by the instance sizes
 # (both for performance and numerical stability)
-def _compute_variance_term_scatter(cluster_means, embeddings, target, norm, delta_var, instance_sizes):
+def _compute_variance_term_scatter(
+    cluster_means, embeddings, target, norm, delta_var, instance_sizes, ignore_labels=None
+):
+    assert cluster_means.shape[1] == embeddings.shape[1]
     ndim = embeddings.ndim - 2
-    assert ndim in (2, 3)
+    assert ndim in (2, 3), f"{ndim}"
     n_instances = cluster_means.shape[0]
 
-    # compute the spatial mean and instance fields by scattering with the
-    # target tensor
+    # compute the spatial mean and instance fields by scattering with the target tensor
     cluster_means_spatial = cluster_means[target]
     instance_sizes_spatial = instance_sizes[target]
 
@@ -77,6 +104,19 @@ def _compute_variance_term_scatter(cluster_means, embeddings, target, norm, delt
 
     # compute the variance
     variance = torch.norm(embeddings - cluster_means_spatial, norm, dim=1)
+
+    # apply the ignore labels (if given)
+    if ignore_labels is not None:
+        assert isinstance(ignore_labels, list)
+        # mask out the ignore labels
+        mask = torch.ones_like(variance)
+        mask[torch.isin(mask, torch.tensor(ignore_labels))]
+        variance *= mask
+        # decrease number of instances
+        n_instances -= len(ignore_labels)
+        # if there are only ignore labels in the target return 0
+        if n_instances == 0:
+            return 0.0
 
     # hinge the variance
     variance = torch.clamp(variance - delta_var, min=0) ** 2

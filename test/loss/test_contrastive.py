@@ -25,11 +25,11 @@ class TestContrastiveLoss(unittest.TestCase):
         self.assertFalse(np.allclose(grads.numpy(), 0))
 
     def test_expand_random(self):
-        self._test_random('expand')
+        self._test_random("expand")
 
     @unittest.skipUnless(ContrastiveLoss.has_torch_scatter(), "Need pytorch_scatter")
     def test_scatter_random(self):
-        self._test_random('scatter')
+        self._test_random("scatter")
 
     def _test_deterministic(self, impl):
         loss = ContrastiveLoss(delta_var=1., delta_dist=2., impl=impl)
@@ -52,11 +52,11 @@ class TestContrastiveLoss(unittest.TestCase):
         self.assertGreater(lval.item(), 1.)
 
     def test_expand_deterministic(self):
-        self._test_deterministic('expand')
+        self._test_deterministic("expand")
 
     @unittest.skipUnless(ContrastiveLoss.has_torch_scatter(), "Need pytorch_scatter")
     def test_scatter_deterministic(self):
-        self._test_deterministic('scatter')
+        self._test_deterministic("scatter")
 
     # TODO
     # def _test_ignore(self, impl):
@@ -82,11 +82,11 @@ class TestContrastiveLoss(unittest.TestCase):
     #     self.assertTrue(np.allclose(grads[:, ignore_mask]), 0)
 
     # def test_expand_ignore(self):
-    #     self._test_ignore('expand')
+    #     self._test_ignore("expand")
 
     # @unittest.skipUnless(ContrastiveLoss.has_torch_scatter(), "Need pytorch_scatter")
     # def test_scatter_ignore(self):
-    #     self._test_ignore('scatter')
+    #     self._test_ignore("scatter")
 
     def _test_impls(self, device):
         target_shape = (1, 1, 32, 32)
@@ -97,7 +97,7 @@ class TestContrastiveLoss(unittest.TestCase):
         y = torch.randint(low=0, high=5, size=target_shape).to(device)
 
         # compute the loss for expand implementation
-        loss = ContrastiveLoss(delta_var=1., delta_dist=2., impl='expand')
+        loss = ContrastiveLoss(delta_var=1., delta_dist=2., impl="expand")
         lval1 = loss(x, y)
         lval1.backward()
         grad1 = x.grad.detach().cpu()
@@ -106,7 +106,7 @@ class TestContrastiveLoss(unittest.TestCase):
 
         # compute the loss for the scatter implementation
         x.grad = None  # clear the gradients
-        loss = ContrastiveLoss(delta_var=1., delta_dist=2., impl='scatter')
+        loss = ContrastiveLoss(delta_var=1., delta_dist=2., impl="scatter")
         lval2 = loss(x, y)
         lval2.backward()
 
@@ -117,10 +117,10 @@ class TestContrastiveLoss(unittest.TestCase):
 
     @unittest.skipUnless(ContrastiveLoss.has_torch_scatter(), "Need pytorch_scatter")
     def test_impls(self):
-        self._test_impls(torch.device('cpu'))
+        self._test_impls(torch.device("cpu"))
         if torch.cuda.is_available():
-            self._test_impls(torch.device('cuda'))
+            self._test_impls(torch.device("cuda"))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

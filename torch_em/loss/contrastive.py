@@ -36,7 +36,7 @@ class ContrastiveLoss(nn.Module):
     implementations = (None, "scatter", "expand")
 
     def __init__(self, delta_var, delta_dist, norm="fro",
-                 alpha=1., beta=1., gamma=0.001,
+                 alpha=1.0, beta=1.0, gamma=0.001,
                  ignore_label=None, impl=None):
         assert ignore_label is None, "Not implemented"  # TODO
         super().__init__()
@@ -107,8 +107,7 @@ class ContrastiveLoss(nn.Module):
 
         instance_ids, instance_sizes = torch.unique(target_batch, return_counts=True)
         n_instances = len(instance_ids)
-        cluster_means = impl._compute_cluster_means_scatter(input_batch, target_batch, ndim,
-                                                            n_lbl=n_instances)
+        cluster_means = impl._compute_cluster_means_scatter(input_batch, target_batch, ndim, n_lbl=n_instances)
 
         variance_term = impl._compute_variance_term_scatter(cluster_means, input_batch, target_batch, self.norm,
                                                             self.delta_var, instance_sizes)
