@@ -1,12 +1,13 @@
 from functools import partial
 
 import numpy as np
+import elf.evaluation as elfval
+import elf.segmentation as elfseg
 import elf.segmentation.embeddings as elfemb
 import torch
 import torch.nn as nn
 import vigra
-
-from elf.evaluation import matching
+from elf.segmentation.watershed import apply_size_filter
 
 
 class BaseInstanceSegmentationMetric(nn.Module):
@@ -31,7 +32,6 @@ class BaseInstanceSegmentationMetric(nn.Module):
         return torch.tensor(scores).mean()
 
 
-# TODO normal mws for affinites, multicut for boundaries, hdbscan for embeddings
 #
 # Segmenters
 #
@@ -42,8 +42,35 @@ def filter_sizes(seg, min_seg_size, hmap=None):
         bg_ids = seg_ids[counts < min_seg_size]
         seg[np.isin(seg, bg_ids)] = 0
     else:
-        raise NotImplementedError  # TODO
+        ndim = seg.ndim
+        hmap_ = hmap if hmap.ndim == ndim else np.max(hmap, axis=0)
+        seg, _ = apply_size_filter(seg, hmap_, min_seg_size)
     return seg
+
+
+class MWS:
+    def __init__(self, offsets, with_background, min_seg_size, strides=None):
+        self.offsets = offsets
+        self.with_background = with_background
+        self.min_seg_size = min_seg_size
+        if strides is None:
+            strides = [4] * len(offsets[0])
+        assert len(strides) == len(offsets[0])
+        self.strides = strides
+
+    def __call__(self, affinities):
+        if self.with_background:
+            assert len(affinities) == len(self.offsets) + 1
+            mask, affinities = affinities[0], affinities[1:]
+        else:
+            assert len(affinities) == len(self.offsets)
+            mask = None
+        seg = elfseg.mutex_watershed.mutex_watershed(affinities, self.offsets, self.strides,
+                                                     randomize_strides=True, mask=mask).astype("uint32")
+        if self.min_seg_size > 0:
+            seg = filter_sizes(seg, self.min_seg_size,
+                               hmap=None if self.with_background else affinities)
+        return seg
 
 
 class EmbeddingMWS:
@@ -84,6 +111,48 @@ class EmbeddingMWS:
         return seg
 
 
+class Multicut:
+    def __init__(self, min_seg_size, anisotropic=False, dt_threshold=0.25, sigma_seeds=2.0, solver="decomposition"):
+        self.min_seg_size = min_seg_size
+        self.anisotropic = anisotropic
+        self.dt_threshold = dt_threshold
+        self.sigma_seeds = sigma_seeds
+        self.solver = solver
+
+    def __call__(self, boundaries):
+        if boundaries.shape[0] == 1:
+            boundaries = boundaries[0]
+        assert boundaries.ndim in (2, 3), f"{boundaries.ndim}"
+        if self.anisotropic and boundaries.ndim == 3:
+            ws, max_id = elfseg.stacked_watershed(boundaries, threshold=self.dt_threshold,
+                                                  sigma_seed=self.sigma_seeds,
+                                                  sigma_weights=self.sigma_seeds,
+                                                  n_threads=1)
+        else:
+            ws, max_id = elfseg.distance_transform_watershed(boundaries, threshold=self.dt_threshold,
+                                                             sigma_seeds=self.sigma_seeds,
+                                                             sigma_weights=self.sigma_seeds)
+        rag = elfseg.compute_rag(ws, max_id + 1, n_threads=1)
+        feats = elfseg.compute_boundary_mean_and_length(rag, boundaries, n_threads=1)[:, 0]
+        costs = elfseg.compute_edge_costs(feats)
+        solver = elfseg.get_multicut_solver(self.solver)
+        node_labels = solver(rag, costs, n_threads=1)
+        seg = elfseg.project_node_labels_to_pixels(rag, node_labels, n_threads=1).astype("uint32")
+        if self.min_seg_size > 0:
+            seg = filter_sizes(seg, self.min_seg_size, hmap=boundaries)
+        return seg
+
+
+class HDBScan:
+    def __init__(self, min_size, eps, remove_largest):
+        self.min_size = min_size
+        self.eps = eps
+        self.remove_largest = remove_largest
+
+    def __call__(self, embeddings):
+        return elfemb.segment_hdbscan(embeddings, self.min_size, self.eps, self.remove_largest)
+
+
 #
 # Metrics
 #
@@ -94,21 +163,24 @@ class IOUError:
         self.metric = metric
 
     def __call__(self, seg, target):
-        return 1.0 - matching(seg, target, threshold=self.threshold)[self.metric]
+        score = 1.0 - elfval.matching(seg, target, threshold=self.threshold)[self.metric]
+        return score
 
 
-# TODO
 class VariationOfInformation:
-    pass
+    def __call__(self, seg, target):
+        vis, vim = elfval.variation_of_information(seg, target)
+        return vis + vim
 
 
-# TODO
 class AdaptedRandError:
-    pass
+    def __call__(self, seg, target):
+        are, _ = elfval.rand_index(seg, target)
+        return are
 
 
 #
-# Prefab metrics
+# Prefab Full Metrics
 #
 
 
@@ -119,3 +191,86 @@ class EmbeddingMWSIOUMetric(BaseInstanceSegmentationMetric):
         super().__init__(segmenter, metric)
         self.init_kwargs = {"delta": delta, "offsets": offsets, "min_seg_size": min_seg_size,
                             "iou_threshold": iou_threshold, "strides": strides}
+
+
+class EmbeddingMWSVOIMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, delta, offsets, min_seg_size, strides=None):
+        segmenter = EmbeddingMWS(delta, offsets, with_background=False, min_seg_size=min_seg_size)
+        metric = VariationOfInformation()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"delta": delta, "offsets": offsets, "min_seg_size": min_seg_size, "strides": strides}
+
+
+class EmbeddingMWSRandMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, delta, offsets, min_seg_size, strides=None):
+        segmenter = EmbeddingMWS(delta, offsets, with_background=False, min_seg_size=min_seg_size)
+        metric = AdaptedRandError()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"delta": delta, "offsets": offsets, "min_seg_size": min_seg_size, "strides": strides}
+
+
+class HDBScanIOUMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, min_size, eps, iou_threshold=0.5):
+        segmenter = HDBScan(min_size=min_size, eps=eps, remove_largest=True)
+        metric = IOUError(iou_threshold)
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"min_size": min_size, "eps": eps, "iou_threshold": iou_threshold}
+
+
+class HDBScanRandMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, min_size, eps):
+        segmenter = HDBScan(min_size=min_size, eps=eps, remove_largest=True)
+        metric = AdaptedRandError()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"min_size": min_size, "eps": eps}
+
+
+class HDBScanVOIMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, min_size, eps):
+        segmenter = HDBScan(min_size=min_size, eps=eps, remove_largest=True)
+        metric = VariationOfInformation()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"min_size": min_size, "eps": eps}
+
+
+class MulticutVOIMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, min_seg_size, anisotropic=False, dt_threshold=0.25, sigma_seeds=2.0):
+        segmenter = Multicut(dt_threshold, anisotropic, sigma_seeds)
+        metric = VariationOfInformation()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"anisotropic": anisotropic, "min_seg_size": min_seg_size,
+                            "dt_threshold": dt_threshold, "sigma_seeds": sigma_seeds}
+
+
+class MulticutRandMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, min_seg_size, anisotropic=False, dt_threshold=0.25, sigma_seeds=2.0):
+        segmenter = Multicut(dt_threshold, anisotropic, sigma_seeds)
+        metric = AdaptedRandError()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"anisotropic": anisotropic, "min_seg_size": min_seg_size,
+                            "dt_threshold": dt_threshold, "sigma_seeds": sigma_seeds}
+
+
+class MWSIOUMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, offsets, min_seg_size, iou_threshold=0.5, strides=None):
+        segmenter = MWS(offsets, with_background=True, min_seg_size=min_seg_size, strides=strides)
+        metric = IOUError(iou_threshold)
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"offsets": offsets, "min_seg_size": min_seg_size,
+                            "iou_threshold": iou_threshold, "strides": strides}
+
+
+class MWSVOIMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, offsets, min_seg_size, strides=None):
+        segmenter = MWS(offsets, with_background=False, min_seg_size=min_seg_size, strides=strides)
+        metric = VariationOfInformation()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"offsets": offsets, "min_seg_size": min_seg_size, "strides": strides}
+
+
+class MWSRandMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, offsets, min_seg_size, strides=None):
+        segmenter = MWS(offsets, with_background=False, min_seg_size=min_seg_size, strides=strides)
+        metric = AdaptedRandError()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"offsets": offsets, "min_seg_size": min_seg_size, "strides": strides}
