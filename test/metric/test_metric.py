@@ -6,6 +6,11 @@ from scipy.ndimage import distance_transform_edt
 from skimage.measure import label
 from skimage.segmentation import watershed
 
+try:
+    import hdbscan
+except Exception:
+    hdbscan = None
+
 
 class TestMetric(unittest.TestCase):
     batch_size = 2
@@ -91,6 +96,7 @@ class TestMetric(unittest.TestCase):
         metric = EmbeddingMWSVOIMetric(delta=2.0, offsets=self.offsets, min_seg_size=self.min_size)
         self._test_metric(embed, gt, metric)
 
+    @unittest.skipIf(hdbscan is None, "Needs hdbscan")
     def test_hdbscan_iou(self):
         from torch_em.metric import HDBScanIOUMetric
         embed = torch.from_numpy(np.random.rand(self.batch_size, 6, 128, 128))
@@ -98,6 +104,7 @@ class TestMetric(unittest.TestCase):
         metric = HDBScanIOUMetric(min_size=50, eps=1.0e-4)
         self._test_metric(embed, gt, metric, upper_bound=1.0)
 
+    @unittest.skipIf(hdbscan is None, "Needs hdbscan")
     def test_hdbscan_rand(self):
         from torch_em.metric import HDBScanRandMetric
         embed = torch.from_numpy(np.random.rand(self.batch_size, 6, 128, 128))
@@ -105,6 +112,7 @@ class TestMetric(unittest.TestCase):
         metric = HDBScanRandMetric(min_size=50, eps=1.0e-4)
         self._test_metric(embed, gt, metric, upper_bound=1.0)
 
+    @unittest.skipIf(hdbscan is None, "Needs hdbscan")
     def test_hdbscan_voi(self):
         from torch_em.metric import HDBScanVOIMetric
         embed = torch.from_numpy(np.random.rand(self.batch_size, 6, 128, 128))
