@@ -2,6 +2,40 @@ import os
 import imageio
 import h5py
 import numpy as np
+import torch
+
+from scipy.ndimage import distance_transform_edt
+from skimage.measure import label
+from skimage.segmentation import watershed
+
+
+def make_gt(spatial_shape, n_batches=None, with_channels=False, with_background=False, dtype=None):
+    def _make_gt():
+        seeds = np.random.rand(*spatial_shape)
+        seeds = label(seeds > 0.99)
+        hmap = distance_transform_edt(seeds == 0)
+        if with_background:
+            mask = np.random.rand(*spatial_shape) > 0.5
+            assert mask.shape == hmap.shape
+        else:
+            mask = None
+        return watershed(hmap, markers=seeds, mask=mask)
+
+    if n_batches is None and not with_channels:
+        seg = _make_gt()
+    elif n_batches is None and with_channels:
+        seg = _make_gt[None]
+    else:
+        seg = []
+        for _ in range(n_batches):
+            batch_seg = _make_gt()
+            if with_channels:
+                batch_seg = batch_seg[None]
+            seg.append(batch_seg[None])
+        seg = np.concatenate(seg, axis=0)
+    if dtype is not None:
+        seg = seg.astype(dtype)
+    return torch.from_numpy(seg)
 
 
 def create_segmentation_test_data(data_path, raw_key, label_key, shape, chunks):

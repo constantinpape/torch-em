@@ -1,5 +1,4 @@
 import math
-from warnings import warn
 
 import numpy as np
 import torch
@@ -9,8 +8,7 @@ try:
 except ImportError:
     scatter_mean = None
 
-# TODO refactor this function and use the functionality from contrastive impl
-# from . import contrastive_impl as cimpl
+from . import contrastive_impl as cimpl
 from .affinity_side_loss import AffinitySideLoss
 from .dice import DiceLoss
 
@@ -105,19 +103,11 @@ class CombinedAuxLoss(nn.Module):
 class ContrastiveLossBase(nn.Module):
     """Base class for the spoco losses.
     """
-    implementations = (None, "scatter", "expand")
-
-    @staticmethod
-    def has_torch_scatter():
-        try:
-            import torch_scatter
-        except ImportError:
-            torch_scatter = None
-        return torch_scatter is not None
 
     def __init__(self, delta_var, delta_dist,
                  norm="fro", alpha=1., beta=1., gamma=0.001, unlabeled_push_weight=0.0,
                  instance_term_weight=1.0, impl=None):
+        assert scatter_mean is not None, "Spoco loss requires pytorch_scatter"
         super().__init__()
         self.delta_var = delta_var
         self.delta_dist = delta_dist
@@ -128,19 +118,6 @@ class ContrastiveLossBase(nn.Module):
         self.unlabeled_push_weight = unlabeled_push_weight
         self.unlabeled_push = unlabeled_push_weight > 0
         self.instance_term_weight = instance_term_weight
-
-        if impl not in self.implementations:
-            raise ValueError(f"Expected one of {self.implementations} for impl, got {impl}")
-        has_torch_scatter = self.has_torch_scatter()
-        if impl is None:
-            if not has_torch_scatter:
-                pt_scatter = "https://github.com/rusty1s/pytorch_scatter"
-                warn(f"ContrastiveLoss: using pure pytorch implementation. Install {pt_scatter} for memory efficiency.")
-            self.impl = "scatter" if has_torch_scatter else "expand"
-        else:
-            if impl == "scatter" and not has_torch_scatter:
-                raise ValueError()
-            self.impl = impl
 
     def __str__(self):
         return super().__str__() + f"\ndelta_var: {self.delta_var}\ndelta_dist: {self.delta_dist}" \
@@ -162,41 +139,12 @@ class ContrastiveLossBase(nn.Module):
             instance_counts: number of voxels per instance
             ignore_zero_label: if True ignores the cluster corresponding to the 0-label
         """
-
         assert target.dim() in (2, 3)
-        n_instances = cluster_means.shape[0]
-
-        # compute the spatial mean and instance fields by scattering with the
-        # target tensor
-        cluster_means_spatial = cluster_means[target]
-        instance_sizes_spatial = instance_counts[target]
-
-        # permute the embedding dimension to axis 0
-        if target.dim() == 2:
-            cluster_means_spatial = cluster_means_spatial.permute(2, 0, 1)
-        else:
-            cluster_means_spatial = cluster_means_spatial.permute(3, 0, 1, 2)
-
-        # compute the distance to cluster means
-        dist_to_mean = torch.norm(embeddings - cluster_means_spatial, self.norm, dim=0)
-
-        if ignore_zero_label:
-            # zero out distances corresponding to 0-label cluster, so that it does not contribute to the loss
-            dist_mask = torch.ones_like(dist_to_mean)
-            dist_mask[target == 0] = 0
-            dist_to_mean = dist_to_mean * dist_mask
-            # decrease number of instances
-            n_instances -= 1
-            # if there is only 0-label in the target return 0
-            if n_instances == 0:
-                return 0.0
-
-        # zero out distances less than delta_var (hinge)
-        hinge_dist = torch.clamp(dist_to_mean - self.delta_var, min=0) ** 2
-
-        # normalize the variance by instance sizes and number of instances and sum it up
-        variance_term = torch.sum(hinge_dist / instance_sizes_spatial) / n_instances
-        return variance_term
+        ignore_labels = [0] if ignore_zero_label else None
+        return cimpl._compute_variance_term_scatter(
+            cluster_means, embeddings.unsqueeze(0), target.unsqueeze(0),
+            self.norm, self.delta_var, instance_counts, ignore_labels
+        )
 
     def _compute_unlabeled_push(self, cluster_means, embeddings, target):
         assert target.dim() in (2, 3)
@@ -228,6 +176,7 @@ class ContrastiveLossBase(nn.Module):
         # normalize by the number of instances
         return background_push / n_instances
 
+    # def _compute_distance_term_scatter(cluster_means, norm, delta_dist):
     def _compute_distance_term(self, cluster_means, ignore_zero_label):
         """
         Compute the distance term, i.e an inter-cluster push-force that pushes clusters away from each other, increasing
@@ -237,58 +186,8 @@ class ContrastiveLossBase(nn.Module):
             cluster_means: mean embedding of each instance, tensor (CxE)
             ignore_zero_label: if True ignores the cluster corresponding to the 0-label
         """
-        C = cluster_means.size(0)
-        if C == 1:
-            # just one cluster in the batch, so distance term does not contribute to the loss
-            return 0.
-
-        # expand cluster_means tensor in order to compute the pair-wise distance between cluster means
-        # CxE -> CxCxE
-        cluster_means = cluster_means.unsqueeze(0)
-        shape = list(cluster_means.size())
-        shape[0] = C
-
-        # cm_matrix1 is CxCxE
-        cm_matrix1 = cluster_means.expand(shape)
-        # transpose the cluster_means matrix in order to compute pair-wise distances
-        cm_matrix2 = cm_matrix1.permute(1, 0, 2)
-        # compute pair-wise distances between cluster means, result is a CxC tensor
-        dist_matrix = torch.norm(cm_matrix1 - cm_matrix2, p=self.norm, dim=2)
-
-        # create matrix for the repulsion distance (i.e. cluster centers further apart than 2 * delta_dist
-        # are not longer repulsed)
-        repulsion_dist = 2 * self.delta_dist * (1 - torch.eye(C))
-        repulsion_dist = repulsion_dist.to(cluster_means.device)
-
-        if ignore_zero_label:
-            if C == 2:
-                # just two cluster instances, including one which is ignored,
-                # i.e. distance term does not contribute to the loss
-                return 0.
-            # set the distance to 0-label to be greater than 2*delta_dist,
-            # so that it does not contribute to the loss because of the hinge at 2*delta_dist
-
-            # find minimum dist
-            d_min = torch.min(dist_matrix[dist_matrix > 0]).item()
-            # dist_multiplier = 2 * delta_dist / d_min + epsilon
-            dist_multiplier = 2 * self.delta_dist / d_min + 1e-3
-            # create distance mask
-            dist_mask = torch.ones_like(dist_matrix)
-            dist_mask[0, 1:] = dist_multiplier
-            dist_mask[1:, 0] = dist_multiplier
-
-            # mask the dist_matrix
-            dist_matrix = dist_matrix * dist_mask
-            # decrease number of instances
-            C -= 1
-
-        # zero out distances grater than 2*delta_dist (hinge)
-        hinged_dist = torch.clamp(repulsion_dist - dist_matrix, min=0) ** 2
-        # sum all of the hinged pair-wise distances
-        dist_sum = torch.sum(hinged_dist)
-        # normalized by the number of paris and return
-        distance_term = dist_sum / (C * (C - 1))
-        return distance_term
+        ignore_labels = [0] if ignore_zero_label else None
+        return cimpl._compute_distance_term_scatter(cluster_means, self.norm, self.delta_dist, ignore_labels)
 
     def _compute_regularizer_term(self, cluster_means):
         """
@@ -336,8 +235,7 @@ class ContrastiveLossBase(nn.Module):
             single_target = single_target[0]
 
             contains_bg = 0 in single_target
-            if self.unlabeled_push and contains_bg:
-                ignore_zero_label = True
+            ignore_zero_label = self.unlabeled_push and contains_bg
 
             # get number of instances in the batch instance
             instance_ids, instance_counts = torch.unique(single_target, return_counts=True)
@@ -465,7 +363,7 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
     def compute_instance_term(self, embeddings, cluster_means, target):
         assert embeddings.size()[1:] == target.size()
         if isinstance(self.aux_loss, AffinitySideLoss):
-            return self.aux_loss(embeddings, target)
+            return self.aux_loss(embeddings[None], target[None, None])
         else:
             # compute random anchors per instance
             instances = torch.unique(target)

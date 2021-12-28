@@ -15,7 +15,7 @@ class TestDiceLoss(unittest.TestCase):
         y = torch.rand(*shape)
 
         lval = loss(x, y)
-        self.assertNotEqual(lval.item(), 0.)
+        self.assertNotEqual(lval.item(), 0.0)
 
         lval.backward()
         grads = x.grad
@@ -30,12 +30,12 @@ class TestDiceLoss(unittest.TestCase):
         x = torch.ones(*shape)
         y = torch.ones(*shape)
         lval = loss(x, y)
-        self.assertAlmostEqual(lval.item(), 0.)
+        self.assertAlmostEqual(lval.item(), 0.0)
 
         x = torch.ones(*shape)
         y = torch.zeros(*shape)
         lval = loss(x, y)
-        self.assertAlmostEqual(lval.item(), 1.)
+        self.assertAlmostEqual(lval.item(), 1.0)
 
 
 if __name__ == '__main__':
