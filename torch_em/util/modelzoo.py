@@ -472,14 +472,14 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
                             input_optional_parameters=True,
                             model_postprocessing=None,
                             for_deepimagej=False, links=[],
-                            maintainers=None,
+                            maintainers=None, checkpoint_name="best",
                             config={}):
     """
     """
     assert input_data is not None
 
     # load trainer and model
-    trainer = get_trainer(checkpoint, device="cpu")
+    trainer = get_trainer(checkpoint, name=checkpoint_name, device="cpu")
     model, model_kwargs = _get_model(trainer, model_postprocessing)
 
     # create the weights
