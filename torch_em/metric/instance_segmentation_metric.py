@@ -179,6 +179,12 @@ class AdaptedRandError:
         return are
 
 
+class SymmetricBestDice:
+    def __call__(self, seg, target):
+        score = 1.0 - elfval.symmetric_best_dice_score(seg, target)
+        return score
+
+
 #
 # Prefab Full Metrics
 #
@@ -191,6 +197,14 @@ class EmbeddingMWSIOUMetric(BaseInstanceSegmentationMetric):
         super().__init__(segmenter, metric)
         self.init_kwargs = {"delta": delta, "offsets": offsets, "min_seg_size": min_seg_size,
                             "iou_threshold": iou_threshold, "strides": strides}
+
+
+class EmbeddingMWSSBDMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, delta, offsets, min_seg_size, strides=None):
+        segmenter = EmbeddingMWS(delta, offsets, with_background=True, min_seg_size=min_seg_size)
+        metric = SymmetricBestDice()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"delta": delta, "offsets": offsets, "min_seg_size": min_seg_size, "strides": strides}
 
 
 class EmbeddingMWSVOIMetric(BaseInstanceSegmentationMetric):
@@ -215,6 +229,14 @@ class HDBScanIOUMetric(BaseInstanceSegmentationMetric):
         metric = IOUError(iou_threshold)
         super().__init__(segmenter, metric)
         self.init_kwargs = {"min_size": min_size, "eps": eps, "iou_threshold": iou_threshold}
+
+
+class HDBScanSBDMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, min_size, eps):
+        segmenter = HDBScan(min_size=min_size, eps=eps, remove_largest=True)
+        metric = SymmetricBestDice()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"min_size": min_size, "eps": eps}
 
 
 class HDBScanRandMetric(BaseInstanceSegmentationMetric):
@@ -258,6 +280,14 @@ class MWSIOUMetric(BaseInstanceSegmentationMetric):
         super().__init__(segmenter, metric)
         self.init_kwargs = {"offsets": offsets, "min_seg_size": min_seg_size,
                             "iou_threshold": iou_threshold, "strides": strides}
+
+
+class MWSSBDMetric(BaseInstanceSegmentationMetric):
+    def __init__(self, offsets, min_seg_size, strides=None):
+        segmenter = MWS(offsets, with_background=True, min_seg_size=min_seg_size, strides=strides)
+        metric = SymmetricBestDice()
+        super().__init__(segmenter, metric)
+        self.init_kwargs = {"offsets": offsets, "min_seg_size": min_seg_size, "strides": strides}
 
 
 class MWSVOIMetric(BaseInstanceSegmentationMetric):

@@ -41,6 +41,13 @@ class TestMetric(unittest.TestCase):
         metric = MWSIOUMetric(self.offsets, self.min_size)
         self._test_metric(affs, gt, metric, upper_bound=1.0)
 
+    def test_mws_sbd(self):
+        from torch_em.metric import MWSSBDMetric
+        affs = torch.from_numpy(np.random.rand(self.batch_size, 5, 128, 128))
+        gt = make_gt((128, 128), n_batches=self.batch_size, with_channels=True, with_background=True)
+        metric = MWSSBDMetric(self.offsets, self.min_size)
+        self._test_metric(affs, gt, metric, upper_bound=1.0)
+
     def test_multicut_rand(self):
         from torch_em.metric import MulticutRandMetric
         bd = torch.from_numpy(np.random.rand(self.batch_size, 1, 128, 128))
@@ -60,6 +67,13 @@ class TestMetric(unittest.TestCase):
         emebd = torch.from_numpy(np.random.rand(self.batch_size, 6, 128, 128))
         gt = make_gt((128, 128), n_batches=self.batch_size, with_channels=True, with_background=True)
         metric = EmbeddingMWSIOUMetric(delta=2.0, offsets=self.offsets, min_seg_size=self.min_size)
+        self._test_metric(emebd, gt, metric, upper_bound=1.0)
+
+    def test_embed_mws_sbd(self):
+        from torch_em.metric import EmbeddingMWSSBDMetric
+        emebd = torch.from_numpy(np.random.rand(self.batch_size, 6, 128, 128))
+        gt = make_gt((128, 128), n_batches=self.batch_size, with_channels=True, with_background=True)
+        metric = EmbeddingMWSSBDMetric(delta=2.0, offsets=self.offsets, min_seg_size=self.min_size)
         self._test_metric(emebd, gt, metric, upper_bound=1.0)
 
     def test_embed_mws_rand(self):
@@ -82,6 +96,14 @@ class TestMetric(unittest.TestCase):
         embed = torch.from_numpy(np.random.rand(self.batch_size, 6, 128, 128))
         gt = make_gt((128, 128), n_batches=self.batch_size, with_channels=True, with_background=True)
         metric = HDBScanIOUMetric(min_size=50, eps=1.0e-4)
+        self._test_metric(embed, gt, metric, upper_bound=1.0)
+
+    @unittest.skipIf(hdbscan is None, "Needs hdbscan")
+    def test_hdbscan_sbd(self):
+        from torch_em.metric import HDBScanSBDMetric
+        embed = torch.from_numpy(np.random.rand(self.batch_size, 6, 128, 128))
+        gt = make_gt((128, 128), n_batches=self.batch_size, with_channels=True, with_background=True)
+        metric = HDBScanSBDMetric(min_size=50, eps=1.0e-4)
         self._test_metric(embed, gt, metric, upper_bound=1.0)
 
     @unittest.skipIf(hdbscan is None, "Needs hdbscan")

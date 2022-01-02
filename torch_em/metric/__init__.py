@@ -1,4 +1,4 @@
-from .instance_segmentation_metric import (EmbeddingMWSIOUMetric, EmbeddingMWSRandMetric, EmbeddingMWSVOIMetric,
-                                           HDBScanIOUMetric, HDBScanRandMetric, HDBScanVOIMetric,
+from .instance_segmentation_metric import (EmbeddingMWSIOUMetric, EmbeddingMWSRandMetric, EmbeddingMWSSBDMetric, EmbeddingMWSVOIMetric,
+                                           HDBScanIOUMetric, HDBScanRandMetric, HDBScanSBDMetric, HDBScanVOIMetric,
                                            MulticutRandMetric, MulticutVOIMetric,
-                                           MWSIOUMetric, MWSRandMetric, MWSVOIMetric)
+                                           MWSIOUMetric, MWSSBDMetric, MWSRandMetric, MWSVOIMetric)

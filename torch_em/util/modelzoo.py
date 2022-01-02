@@ -583,10 +583,10 @@ def main():
 # model import functionality
 #
 
-def _load_model(model_spec):
+def _load_model(model_spec, device):
     model = PytorchModelAdapter.get_nn_instance(model_spec)
     weights = model_spec.weights["pytorch_state_dict"]
-    state = torch.load(weights.source, map_location="cpu")
+    state = torch.load(weights.source, map_location=device)
     model.load_state_dict(state)
     model.eval()
     return model
@@ -667,10 +667,10 @@ def _load_normalizer(model_spec):
     return normalizer
 
 
-def import_bioimageio_model(spec_path, return_spec=False):
+def import_bioimageio_model(spec_path, return_spec=False, device="cpu"):
     model_spec = core.load_resource_description(spec_path)
 
-    model = _load_model(model_spec)
+    model = _load_model(model_spec, device=device)
     normalizer = _load_normalizer(model_spec)
 
     if return_spec:
