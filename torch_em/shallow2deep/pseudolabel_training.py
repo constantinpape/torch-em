@@ -3,6 +3,7 @@ from torch_em.data import ConcatDataset, PseudoLabelDataset
 from torch_em.segmentation import (get_data_loader, get_raw_transform,
                                    is_segmentation_dataset,
                                    samples_to_datasets, _get_default_transform)
+from torch_em.util import get_trainer, import_bioimageio_model
 
 
 def check_paths(raw_paths):
@@ -10,7 +11,7 @@ def check_paths(raw_paths):
         if not os.path.exists(path):
             raise ValueError(f"Could not find path {path}")
 
-    if isinstance(raw_paths) and not os.path.exists(raw_paths):
+    if isinstance(raw_paths, str):
         _check_path(raw_paths)
     else:
         for rp in raw_paths:
@@ -44,12 +45,19 @@ def _load_pseudolabel_dataset(raw_paths, raw_key, **kwargs):
     return ds
 
 
-# TODO support loading model from torch em checkpoint or bioimageio model
-def _get_pseudo_labler(checkpoint):
-    pass
+def _get_pseudo_labeler(checkpoint, device):
+    try:
+        model = get_trainer(checkpoint, device=device).model
+        return model
+    except Exception as e:
+        print("Could not load torch_em checkpoint from", checkpoint, "due to exception:", e)
+        print("Trying to load as bioimageio model instead")
+    model = import_bioimageio_model(checkpoint, device=device)[0]
+    model.eval()
+    return model
 
 
-def get_shallow2deep_dataset(
+def get_pseudolabel_dataset(
     raw_paths,
     raw_key,
     checkpoint,
@@ -60,6 +68,7 @@ def get_shallow2deep_dataset(
     n_samples=None,
     ndim=None,
     is_raw_dataset=None,
+    pseudo_labeler_device="cpu",
 ):
     check_paths(raw_paths)
     if is_raw_dataset is None:
@@ -75,12 +84,12 @@ def get_shallow2deep_dataset(
             raw_paths if isinstance(raw_paths, str) else raw_paths[0], raw_key, is_raw_dataset, ndim
         )
 
-    pseudo_labler = _get_pseudo_labler(checkpoint)
+    pseudo_labeler = _get_pseudo_labeler(checkpoint, pseudo_labeler_device)
     if is_raw_dataset:
         ds = _load_pseudolabel_dataset(
             raw_paths, raw_key,
-            pseudo_labler=pseudo_labler,
             patch_shape=patch_shape,
+            pseudo_labeler=pseudo_labeler,
             raw_transform=raw_transform,
             transform=transform,
             rois=rois, n_samples=n_samples, ndim=ndim,
@@ -103,12 +112,14 @@ def get_pseudolabel_loader(
     n_samples=None,
     ndim=None,
     is_raw_dataset=None,
+    pseudo_labeler_device="cpu",
     **loader_kwargs,
 ):
-    ds = get_shallow2deep_dataset(
+    ds = get_pseudolabel_dataset(
         raw_paths=raw_paths, raw_key=raw_key,
         checkpoint=checkpoint, patch_shape=patch_shape,
         raw_transform=raw_transform, transform=transform, rois=rois,
-        n_samples=n_samples, ndim=ndim, is_raw_dataset=is_raw_dataset
+        n_samples=n_samples, ndim=ndim, is_raw_dataset=is_raw_dataset,
+        pseudo_labeler_device=pseudo_labeler_device,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)

@@ -89,13 +89,13 @@ def get_pseudolabel_loader(args, split, ckpt_name):
         roi = np.s_[nz-2:, :, :]
     else:
         raise ValueError(f"Wrong split: {split}")
-    ckpt = os.path.join("./checkpoints/isbi2d", ckpt_name)
+    ckpt = os.path.join("./checkpoints", ckpt_name)
     raw_transform = torch_em.transform.raw.normalize
     loader = shallow2deep.get_pseudolabel_loader(
         raw_paths=args.input, raw_key="volumes/raw", checkpoint=ckpt,
         batch_size=args.batch_size, patch_shape=patch_shape, rois=roi,
         raw_transform=raw_transform, n_samples=n_samples,
-        ndim=2, is_seg_dataset=True, shuffle=True, num_workers=8
+        ndim=2, is_raw_dataset=True, shuffle=True, num_workers=8
     )
     return loader
 
