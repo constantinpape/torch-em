@@ -223,6 +223,10 @@ class ContrastiveLossBase(nn.Module):
             Combined loss defined as: alpha * variance_term + beta * distance_term + gamma * regularization_term
                 + instance_term_weight * instance_term + unlabeled_push_weight * unlabeled_push_term
         """
+        # enable calling this loss from the spoco trainer, which passes a tuple
+        if isinstance(input_, tuple):
+            assert len(input_) == 2
+            input_ = input_[0]
 
         n_batches = input_.shape[0]
         # compute the loss per each instance in the batch separately
