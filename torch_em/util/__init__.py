@@ -10,4 +10,4 @@ from .reporting import get_training_summary
 from .training import parser_helper
 from .util import (ensure_array, ensure_spatial_array,
                    ensure_tensor, ensure_tensor_with_channels,
-                   get_constructor_arguments)
+                   get_constructor_arguments, get_trainer)
