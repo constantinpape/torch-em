@@ -19,13 +19,14 @@ class PseudoLabelDataset(RawDataset):
         sampler=None,
         ndim=None,
         with_channels=False,
+        labeler_device=None,
     ):
         super().__init__(raw_path, raw_key, patch_shape, raw_transform=raw_transform, transform=transform,
                          roi=roi, dtype=dtype, n_samples=n_samples, sampler=sampler,
                          ndim=ndim, with_channels=with_channels)
         self.pseudo_labeler = pseudo_labeler
         self.label_transform = label_transform
-        self.labeler_device = next(self.pseudo_labeler.parameters()).device
+        self.labeler_device = next(pseudo_labeler.parameters()).device if labeler_device is None else labeler_device
 
     def __getitem__(self, index):
         raw = self._get_sample(index)

@@ -54,7 +54,6 @@ def get_isbi_loader(args, split, rf_folder):
 
 
 def train_shallow2deep(args):
-    # TODO find a version scheme for names depending on args and existing versions
     name = "isbi2d"
 
     # check if we need to train the rfs for preparation
@@ -91,17 +90,24 @@ def get_pseudolabel_loader(args, split, ckpt_name):
         raise ValueError(f"Wrong split: {split}")
     ckpt = os.path.join("./checkpoints", ckpt_name)
     raw_transform = torch_em.transform.raw.normalize
+
+    # tf trained on isbi
+    rf_path = "./test_data/rf_0.pkl"
+    ndim = 2
+    filter_config = None
+
     loader = shallow2deep.get_pseudolabel_loader(
         raw_paths=args.input, raw_key="volumes/raw", checkpoint=ckpt,
+        rf_config=(rf_path, ndim, filter_config),
         batch_size=args.batch_size, patch_shape=patch_shape, rois=roi,
         raw_transform=raw_transform, n_samples=n_samples,
-        ndim=2, is_raw_dataset=True, shuffle=True, num_workers=8
+        ndim=2, is_raw_dataset=True, shuffle=True, num_workers=0
     )
     return loader
 
 
 def train_pseudo_label(args):
-    name = "isbi2d-pseudo-label"
+    name = "cremi2d-pseudo-label-isbi"
 
     model = UNet2d(in_channels=1, out_channels=1, final_activation="Sigmoid")
 
