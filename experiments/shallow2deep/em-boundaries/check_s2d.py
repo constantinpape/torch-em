@@ -31,7 +31,7 @@ def _predict_rf(path, rf_path):
         if "rf_pred" in f:
             return out_path
     print("Run prediction with rf...")
-    filters_and_sigmas = _get_filters(ndim=2, filter_config=None)
+    filters_and_sigmas = _get_filters(ndim=2, filters_and_sigmas=None)
     with h5py.File(path, "r") as f:
         raw = f["volumes/raw"][:]
     with open(rf_path, "rb") as f:
@@ -89,7 +89,8 @@ def check_prediction(path, test_path):
 
 def main():
     os.makedirs(TEST_OUT, exist_ok=True)
-    path = "/scratch/pape/cremi/sampleA.h5"
+    # path = "/scratch/pape/cremi/sampleA.h5"
+    path = "/home/pape/Work/data/cremi/sample_A_20160501.hdf"
     rf_path = require_rf(path)
     test_path = predict_s2d(path, rf_path)
     check_prediction(path, test_path)
