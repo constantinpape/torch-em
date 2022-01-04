@@ -35,7 +35,7 @@ def _load_pseudolabel_dataset(raw_paths, raw_key, **kwargs):
             [None] * len(raw_paths) if n_samples is None else samples_to_datasets(n_samples, raw_paths, raw_key)
         )
         ds = []
-        for i, (raw_path, label_path) in enumerate(raw_paths):
+        for i, raw_path in enumerate(raw_paths):
             roi = None if rois is None else rois[i]
             dset = PseudoLabelDataset(
                 raw_path, raw_key, roi=roi, labeler_device="cpu", n_samples=samples_per_ds[i], **kwargs
