@@ -4,6 +4,16 @@ import torch
 from torch_em.util import get_trainer, import_bioimageio_model
 from .prepare_shallow2deep import _get_filters, _apply_filters
 
+# optional imports only needed for using ilastik api for the predictio
+try:
+    from ilastik.experimental.api import from_project_file
+except ImportError:
+    from_project_file = None
+try:
+    from xarray import DataArray
+except ImportError:
+    DataArray = None
+
 
 class RFWithFilters:
     def __init__(self, rf_path, ndim, filter_config):
@@ -18,7 +28,24 @@ class RFWithFilters:
         return out
 
 
-# TODO make sure this is picklable
+# TODO need installation that does not downgrade numpy; talk to Dominik about this
+# currently ilastik-api deps are installed via:
+# conda install --strict-channel-priority -c ilastik-forge/label/freepy -c conda-forge ilastik-core
+# print hint on how to install it once this is more stable
+class IlastikPredicter:
+    def __init__(self, ilp_path, ndim):
+        assert from_project_file is not None
+        assert DataArray is not None
+        assert ndim in (2, 3)
+        self.ilp = from_project_file(ilp_path)
+        self.dims = ("y", "x") if ndim == 2 else ("z", "y", "x")
+
+    def __call__(self, x):
+        assert x.ndim == len(self.dims), f"{x.ndim}, {self.dims}"
+        out = self.ilp.predict(DataArray(x, dims=self.dims))
+        return out
+
+
 class Shallow2DeepModel:
 
     @staticmethod
@@ -39,9 +66,9 @@ class Shallow2DeepModel:
             rf_path, ndim, filter_config = rf_config
             assert os.path.exists(rf_path)
             return RFWithFilters(rf_path, ndim, filter_config)
-        elif os.path.exists(rf_config) and os.path.splitext(rf_config)[1] == ".ilp":
-            # from ilastik project TODO
-            pass
+        elif len(rf_config) == 2:  # ilastik project and dimensionality
+            ilp_path, ndim = rf_config
+            return IlastikPredicter(ilp_path, ndim)
         else:
             raise ValueError(f"Invalid rf config: {rf_config}")
 
@@ -50,8 +77,22 @@ class Shallow2DeepModel:
         self.rf_predicter = self.load_rf(rf_config)
         self.device = device
 
+        self.checkpoint = checkpoint
+        self.rf_config = rf_config
+        self.device = device
+
     def __call__(self, x):
         out = self.rf_predicter(x[0, 0].numpy())
         out = torch.from_numpy(out[None, None]).to(self.device)
         out = self.model(out)
         return out
+
+    # need to overwrite pickle to support the rf / ilastik predicter
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state["rf_predicter"]
+        return state
+
+    def __setstate__(self, state):
+        state["rf_predicter"] = self.load_rf(state["rf_config"])
+        self.__dict__.update(state)
