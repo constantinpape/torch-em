@@ -81,6 +81,16 @@ Check out [expirements/platynereis/mitochondria/train_affinities.py](https://git
 
 ## Installation
 
+### From conda
+
+You can install `torch_em` from conda-forge:
+```
+conda install -c conda-forge torch_em
+```
+Please check out [pytorch.org](https://pytorch.org/) for more information on how to install a pytorch version compatible with your system.
+
+### From source
+
 It's recommmended to set up a conda environment for using `torch_em`.
 Two conda environment files are provided: `environment_cpu.yaml` for a pure cpu set-up and `environment_gpu.yaml` for a gpu set-up.
 If you want to use the gpu version, make sure to set the correct cuda version for your system in the environment file, by modifiying [this-line](https://github.com/constantinpape/torch-em/blob/main/environment_gpu.yaml#L9).
@@ -99,6 +109,7 @@ where <ENV>.yaml is either `environment_cpu.yaml` or `environment_gpu.yaml`.
 - Training of [2d U-Nets](https://doi.org/10.1007/978-3-319-24574-4_28) and [3d U-Nets](https://doi.org/10.1007/978-3-319-46723-8_49) for various segmentation tasks.
 - Random forest based transfer learning from [Shallow2Deep](https://doi.org/10.1101/2021.11.09.467925 )
 - Training models for embedding prediction with sparse instance labels from [SPOCO](https://arxiv.org/abs/2103.14572)
+
 
 ## Command Line Scripts
 
