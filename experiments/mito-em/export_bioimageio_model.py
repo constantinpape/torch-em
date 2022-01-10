@@ -108,6 +108,9 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
 
     doc = _get_doc(is_aff_model, checkpoint, name)
 
+    if additional_formats is None:
+        additional_formats = []
+
     export_bioimageio_model(
         checkpoint, output,
         input_data=input_data,
