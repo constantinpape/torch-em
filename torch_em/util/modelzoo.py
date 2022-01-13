@@ -409,7 +409,7 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
             min_shape = [1, inc] + [2 * sp for sp in scale_prod]
         else:
             raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
-        halo = step
+        halo = [st // 2 for st in step]
 
         ref = "input0"
         if inc == outc:
