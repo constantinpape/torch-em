@@ -8,8 +8,8 @@ from torch_em.util import (add_weight_formats, export_biomageio_model,
 
 
 def _load_data(input_, ndim):
-    with open_file(input_, 'r') as f:
-        ds = f['volumes/raw'] if 'volumes/raw' in f else f['raw']
+    with open_file(input_, "r") as f:
+        ds = f["volumes/raw"] if "volumes/raw" in f else f["raw"]
         shape = ds.shape
         if ndim == 2:
             s0, s1 = shape[0] - 1, shape[0]
@@ -55,12 +55,12 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
 
     ckpt_name = os.path.split(checkpoint)[1]
 
-    ndim = 3 if '3d' in ckpt_name else 2
+    ndim = 3 if "3d" in ckpt_name else 2
     input_data = _load_data(input_, ndim)
 
-    is_aff_model = 'affinity' in ckpt_name
+    is_aff_model = "affinity" in ckpt_name
     if is_aff_model and affs_to_bd:
-        postprocessing = f'affinities_to_boundaries{ndim}d'
+        postprocessing = f"affinities_to_boundaries{ndim}d"
     else:
         postprocessing = None
     if is_aff_model and affs_to_bd:
@@ -88,14 +88,17 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
     cite["data"] = "https://doi.org/10.3389/fnana.2015.00142"
     doc = _get_doc(is_aff_model, ndim)
 
+    if additional_formats is None:
+        additional_formats = []
+
     export_biomageio_model(
         checkpoint, output, input_data,
         name=name,
         authors=[{"name": "Constantin Pape; @constantinpape"}],
         tags=tags,
-        license='CC-BY-4.0',
+        license="CC-BY-4.0",
         documentation=doc,
-        git_repo='https://github.com/constantinpape/torch-em.git',
+        git_repo="https://github.com/constantinpape/torch-em.git",
         cite=cite,
         model_postprocessing=postprocessing,
         input_optional_parameters=False,
@@ -106,7 +109,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
     add_weight_formats(output, additional_formats)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = export_parser_helper()
     args = parser.parse_args()
     export_to_bioimageio(args.checkpoint, args.input, args.output,
