@@ -15,7 +15,8 @@ def get_loader(input_path, samples, splits, patch_shape,
     print("Getting mito-em loader for splits", splits)
     return get_mitoem_loader(input_path, patch_shape, splits, samples,
                              batch_size=batch_size, download=True,
-                             offsets=OFFSETS, sampler=sampler)
+                             offsets=OFFSETS, sampler=sampler,
+                             num_workers=8*batch_size)
 
 
 def get_model(large_model):

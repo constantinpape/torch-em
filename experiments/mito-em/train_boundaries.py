@@ -8,7 +8,8 @@ def get_loader(input_path, samples, splits, patch_shape,
     sampler = torch_em.data.MinForegroundSampler(min_fraction=0.05, p_reject=.75)
     return get_mitoem_loader(input_path, patch_shape, splits, samples,
                              batch_size=batch_size, download=True,
-                             boundaries=True, sampler=sampler)
+                             boundaries=True, sampler=sampler,
+                             num_workers=8*batch_size)
 
 
 def get_model(large_model):
@@ -68,7 +69,7 @@ def train_boundaries(args, samples):
     tag = "large" if large_model else "default"
     if args.train_on_val:
         tag += "_train_on_val"
-    name = f"affinity_model_{tag}_{'_'.join(samples)}"
+    name = f"boundary_model_{tag}_{'_'.join(samples)}"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,

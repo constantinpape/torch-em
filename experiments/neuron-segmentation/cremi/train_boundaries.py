@@ -38,7 +38,7 @@ def get_loader(input_path, all_samples, is_train, patch_shape, batch_size=1, n_s
 
 
 def get_model(large_model):
-    n_out = 2
+    n_out = 1
     if large_model:
         print("Using large model")
         model = AnisotropicUNet(
