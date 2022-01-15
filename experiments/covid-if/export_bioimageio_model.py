@@ -3,7 +3,7 @@ import os
 import h5py
 from torch_em.data.datasets import get_bioimageio_dataset_id
 from torch_em.util import (add_weight_formats,
-                           export_biomageio_model,
+                           export_bioimageio_model,
                            export_parser_helper,
                            get_default_citations,
                            get_training_summary)
@@ -74,7 +74,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         input_data = None
     else:
         with h5py.File(input_, "r") as f:
-            input_data = f["raw/serum_IgG/s0"][:]
+            input_data = f["raw/serum_IgG/s0"][:512, :512]
 
     is_aff_model = "affinity" in ckpt_name
     if is_aff_model and affs_to_bd:
@@ -85,8 +85,8 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         is_aff_model = False
 
     name, description = _get_name_and_description(is_aff_model)
-    tags = ["UNet", "cells", "high-content-microscopy", "instance-segmentation",
-            "covid19", "immunofluorescence-microscopy", "2D"]
+    tags = ["unet", "cells", "high-content-microscopy", "instance-segmentation",
+            "covid19", "immunofluorescence-microscopy", "2d"]
 
     # eventually we should refactor the citation logic
     covid_if_pub = "https://doi.org/10.1002/bies.202000257"
@@ -112,7 +112,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     if additional_formats is None:
         additional_formats = []
 
-    export_biomageio_model(
+    export_bioimageio_model(
         checkpoint, output,
         input_data=input_data,
         name=name,

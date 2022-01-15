@@ -78,7 +78,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
         config = {}
 
     name = _get_name(is_aff_model, ndim)
-    tags = ["u-net", "neuron-segmentation", "segmentation", "volume-em", "isbi2012-challenge"]
+    tags = ["unet", "neurons", "instance-segmentation", "electron-microscopy", "isbi2012-challenge"]
     tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
 
     cite = get_default_citations(

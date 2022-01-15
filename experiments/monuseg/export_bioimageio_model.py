@@ -50,16 +50,16 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         input_data = input_data.transpose((2, 0, 1))
         assert input_data.shape[0] == 3, f"{input_data.shape}"
 
-    is_aff_model = 'affinity' in ckpt_name
+    is_aff_model = "affinity" in ckpt_name
     if is_aff_model and affs_to_bd:
-        postprocessing = 'affinities_with_foreground_to_boundaries2d'
+        postprocessing = "affinities_with_foreground_to_boundaries2d"
     else:
         postprocessing = None
 
     if is_aff_model and affs_to_bd:
         is_aff_model = False
     name = _get_name(is_aff_model)
-    tags = ["u-net", "nucleus-segmentation", "segmentation", "volume-em", "platynereis", "nuclei"]
+    tags = ["unet", "instance-segmentation", "nuclei", "whole-slide-imaging"]
     tags += ["boundary-prediction"] if is_aff_model else ["affinity-prediction"]
 
     # eventually we should refactor the citation logic
@@ -69,6 +69,8 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     cite["data"] = "https://ieeexplore.ieee.org/document/8880654"
 
     doc = _get_doc(is_aff_model)
+    if additional_formats is None:
+        additional_formats = []
 
     export_biomageio_model(
         checkpoint, output,
@@ -76,21 +78,20 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
         name=name,
         authors=[{"name": "Constantin Pape; @constantinpape"}],
         tags=tags,
-        license='CC-BY-4.0',
+        license="CC-BY-4.0",
         documentation=doc,
-        git_repo='https://github.com/constantinpape/torch-em.git',
+        git_repo="https://github.com/constantinpape/torch-em.git",
         cite=cite,
         model_postprocessing=postprocessing,
         input_optional_parameters=False,
         # need custom deepimagej fields if we have torchscript export
         for_deepimagej="torchscript" in additional_formats,
-        # TODO
-        # links=[get_bioimageio_dataset_id("monuseg")]
+        links=[get_bioimageio_dataset_id("monuseg")]
     )
     add_weight_formats(output, additional_formats)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = export_parser_helper()
     args = parser.parse_args()
     export_to_bioimageio(args.checkpoint, args.output, args.input,

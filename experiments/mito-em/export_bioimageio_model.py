@@ -104,7 +104,7 @@ def export_to_bioimageio(checkpoint, input_, output, affs_to_bd, additional_form
         model_output="affinities" if is_aff_model else "boundaries"
     )
     cite["data"] = "https://doi.org/10.1007/978-3-030-59722-1_7"
-    tags = ["3D", "electron-microscopy", "mitochondria", "instance-segmentation", "UNet"]
+    tags = ["3d", "electron-microscopy", "mitochondria", "instance-segmentation", "unet"]
 
     doc = _get_doc(is_aff_model, checkpoint, name)
 

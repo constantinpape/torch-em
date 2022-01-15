@@ -81,7 +81,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     if is_aff_model and affs_to_bd:
         is_aff_model = False
     name, description = _get_name_and_description(is_aff_model)
-    tags = ["2D", "transmission-light-microscopy", "label-free", "cells", "instance-segmentation", "UNet"]
+    tags = ["2d", "transmission-light-microscopy", "label-free", "cells", "instance-segmentation", "unet"]
 
     # eventually we should refactor the citation logic
     cite = get_default_citations(
