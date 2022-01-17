@@ -48,7 +48,7 @@ train_loader = get_dsb_loader(
 val_loader = get_dsb_loader(
     data_path, 
     patch_shape=(1, 256, 256),
-    batch_size=8
+    batch_size=8,
     split="test",
     label_transform=label_transform
 )
