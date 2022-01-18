@@ -10,6 +10,7 @@ from sklearn.ensemble import RandomForestClassifier
 from torch_em.segmentation import check_paths, is_segmentation_dataset, samples_to_datasets
 from tqdm import tqdm
 
+import vigra
 try:
     import fastfilters as filter_impl
 except ImportError:
@@ -207,7 +208,11 @@ def _get_filters(ndim, filters_and_sigmas):
 def _apply_filters(raw, filters_and_sigmas):
     features = []
     for filter_, sigma in filters_and_sigmas:
-        func = getattr(filter_impl, filter_) if isinstance(filter_, str) else filter_
+        # fastfilters does not support passing sigma as tuple
+        if isinstance(sigma, tuple):
+            func = getattr(vigra.filters, filter_) if isinstance(filter_, str) else filter_
+        else:
+            func = getattr(filter_impl, filter_) if isinstance(filter_, str) else filter_
         response = func(raw, sigma)
         if response.ndim > raw.ndim:
             for c in range(response.shape[-1]):
@@ -221,7 +226,11 @@ def _apply_filters(raw, filters_and_sigmas):
 def _apply_filters_with_mask(raw, filters_and_sigmas, mask):
     features = []
     for filter_, sigma in filters_and_sigmas:
-        func = getattr(filter_impl, filter_) if isinstance(filter_, str) else filter_
+        # fastfilters does not support passing sigma as tuple
+        if isinstance(sigma, tuple):
+            func = getattr(vigra.filters, filter_) if isinstance(filter_, str) else filter_
+        else:
+            func = getattr(filter_impl, filter_) if isinstance(filter_, str) else filter_
         response = func(raw, sigma)
         if response.ndim > raw.ndim:
             for c in range(response.shape[-1]):
