@@ -69,7 +69,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.shape = self.labels.shape
         self.roi = roi
 
-        assert len(patch_shape) == self.labels.ndim
+        assert len(patch_shape) == self.labels.ndim, f"{patch_shape}, {self.labels.ndim}"
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform

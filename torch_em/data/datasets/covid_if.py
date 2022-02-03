@@ -49,7 +49,7 @@ def get_covid_if_loader(path, patch_shape, sample_range=None,
             start = 0
         if stop is None:
             stop = len(file_paths)
-        file_paths = [os.path.join(path, f'gt_image_{idx:03}.h5') for idx in range(start, stop)]
+        file_paths = [os.path.join(path, f"gt_image_{idx:03}.h5") for idx in range(start, stop)]
         assert all(os.path.exists(fp) for fp in file_paths), f"Invalid sample range {sample_range}"
 
     assert sum((offsets is not None, boundaries, binary)) <= 1
@@ -59,18 +59,18 @@ def get_covid_if_loader(path, patch_shape, sample_range=None,
                                                                      add_binary_target=True,
                                                                      add_mask=True)
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
     elif boundaries:
         label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
         msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
     elif binary:
         label_transform = torch_em.transform.label.labels_to_binary
         msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
-    kwargs = update_kwargs(kwargs, 'patch_shape', patch_shape)
-    kwargs = update_kwargs(kwargs, 'ndim', 2)
+    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
+    kwargs = update_kwargs(kwargs, "ndim", 2)
 
     return torch_em.default_segmentation_loader(
         file_paths, raw_key,
