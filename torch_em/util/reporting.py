@@ -38,11 +38,16 @@ def _get_training_summary(trainer, lr):
     n_val = _get_n_images(trainer.val_loader)
     print(n_train, "images were used for training and", n_val, "for validation")
 
-    return dict(
+    report = dict(
         n_epochs=n_epochs, batches_per_epoch=batches_per_epoch, batch_size=batch_size,
         loss_function=loss, optimizer=opt, learning_rate=lr,
         n_train_images=n_train, n_validation_images=n_val
     )
+    if n_train is not None:
+        report["n_train_images"] = n_train
+    if n_val is not None:
+        report["n_val_images"] = n_val
+    return report
 
 
 def get_training_summary(
@@ -52,5 +57,5 @@ def get_training_summary(
     print("Model summary for", ckpt, "using the", model_name, "model")
     training_summary = _get_training_summary(trainer, lr)
     if to_md:
-        training_summary = "\n".join(f"{k}: {v}" for k, v in training_summary.items())
+        training_summary = "\n".join(f"- {k}: {v}" for k, v in training_summary.items())
     return training_summary

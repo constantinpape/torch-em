@@ -35,7 +35,7 @@ def ensure_tensor_with_channels(tensor, ndim, dtype=None):
         if tensor.ndim == 2:
             tensor = tensor[None]
         elif tensor.ndim == 4:
-            assert tensor.shape[0] == 1
+            assert tensor.shape[0] == 1, f"{tensor.shape}"
             tensor = tensor[0]
         elif tensor.ndim == 5:
             assert tensor.shape[:2] == (1, 1)
