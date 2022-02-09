@@ -110,13 +110,17 @@ def _write_depedencies(export_folder, dependencies):
         ver = torch.__version__
         major, minor = list(map(int, ver.split(".")[:2]))
         assert major == 1
-        # the torch zip layout was changed in version 1.6, so files will no longer load
-        # in older versions
+        # the torch zip layout changed for a few versions:
+        torch_min_version = "1.0"
+        if minor > 6 and minor < 10:
+            torch_min_version = "1.6"
+        else:
+            torch_min_version = "1.10"
         torch_min_version = "1.6" if minor >= 6 else "1.0"
         dependencies = {
             "channels": ["pytorch", "conda-forge"],
             "name": "torch-em-deploy",
-            "dependencies": f"pytorch>={torch_min_version},<2.0"
+            "dependencies": ["pytorch>={torch_min_version},<2.0"]
         }
         with open(dep_path, "w") as f:
             yaml.dump(dependencies, f)
