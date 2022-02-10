@@ -49,7 +49,21 @@ class IlastikPredicter:
 
     def __call__(self, x):
         assert x.ndim == len(self.dims), f"{x.ndim}, {self.dims}"
-        out = self.ilp.predict(DataArray(x, dims=self.dims)).values
+        try:
+            out = self.ilp.predict(DataArray(x, dims=self.dims)).values
+        except ValueError as e:
+            # this is a bit of a dirty hack for projects that are trained to classify in 2d, but with 3d data
+            # and thus need a singleton z axis. It would be better to ask this of the ilastik classifier, see
+            # https://github.com/ilastik/ilastik/issues/2530
+            if x.ndim == 2:
+                x = x[None]
+                dims = ("z",) + self.dims
+                out = self.ilp.predict(DataArray(x, dims=dims)).values
+                assert out.shape[0] == 1
+                # get rid of the singleton z-axis
+                out = out[0]
+            else:
+                raise e
         if self.output_channel is not None:
             out = out[..., self.output_channel]
         return out
