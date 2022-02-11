@@ -75,6 +75,7 @@ class Shallow2DeepModel:
     def load_model(checkpoint, device):
         try:
             model = get_trainer(checkpoint, device=device).model
+            model.eval()
             return model
         except Exception as e:
             print("Could not load torch_em checkpoint from", checkpoint, "due to exception:", e)
