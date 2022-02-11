@@ -105,7 +105,7 @@ class Shallow2DeepModel:
         self.device = device
 
     def __call__(self, x):
-        out = self.rf_predicter(x[0, 0].numpy())
+        out = self.rf_predicter(x[0, 0].cpu().detach().numpy())
         out = torch.from_numpy(out[None, None]).to(self.device)
         out = self.model(out)
         return out
