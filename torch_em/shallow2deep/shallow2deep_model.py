@@ -11,7 +11,8 @@ try:
     # set the number of threads used by ilastik to 0.
     # otherwise it does not work inside of the torch loader (and we want to limit number of threads anyways)
     # see https://github.com/ilastik/ilastik/issues/2517
-    lazyflow.request.Request.reset_thread_pool(0)
+    # lazyflow.request.Request.reset_thread_pool(0)
+    # added this to the constructors via boolean flag
 except ImportError:
     from_project_file = None
 try:
@@ -39,10 +40,12 @@ class RFWithFilters:
 # conda install --strict-channel-priority -c ilastik-forge/label/freepy -c conda-forge ilastik-core
 # print hint on how to install it once this is more stable
 class IlastikPredicter:
-    def __init__(self, ilp_path, ndim, output_channel=None):
+    def __init__(self, ilp_path, ndim, ilastik_multi_thread, output_channel=None):
         assert from_project_file is not None
         assert DataArray is not None
         assert ndim in (2, 3)
+        if not ilastik_multi_thread:
+            lazyflow.request.Request.reset_thread_pool(0)
         self.ilp = from_project_file(ilp_path)
         self.dims = ("y", "x") if ndim == 2 else ("z", "y", "x")
         self.output_channel = output_channel
@@ -85,20 +88,20 @@ class Shallow2DeepModel:
         return model
 
     @staticmethod
-    def load_rf(rf_config, rf_channel):
+    def load_rf(rf_config, rf_channel, ilastik_multi_thread):
         if len(rf_config) == 3:  # random forest path and feature config
             rf_path, ndim, filter_config = rf_config
             assert os.path.exists(rf_path)
             return RFWithFilters(rf_path, ndim, filter_config, rf_channel)
         elif len(rf_config) == 2:  # ilastik project and dimensionality
             ilp_path, ndim = rf_config
-            return IlastikPredicter(ilp_path, ndim, rf_channel)
+            return IlastikPredicter(ilp_path, ndim, ilastik_multi_thread, rf_channel)
         else:
             raise ValueError(f"Invalid rf config: {rf_config}")
 
-    def __init__(self, checkpoint, rf_config, device, rf_channel=1):
+    def __init__(self, checkpoint, rf_config, device, rf_channel=1, ilastik_multi_thread=False):
         self.model = self.load_model(checkpoint, device)
-        self.rf_predicter = self.load_rf(rf_config, rf_channel)
+        self.rf_predicter = self.load_rf(rf_config, rf_channel, ilastik_multi_thread)
         self.device = device
 
         self.checkpoint = checkpoint
