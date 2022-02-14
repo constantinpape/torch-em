@@ -73,7 +73,7 @@ def get_pseudolabel_dataset(
             raw_paths if isinstance(raw_paths, str) else raw_paths[0], raw_key, is_raw_dataset, ndim
         )
 
-    pseudo_labeler = Shallow2DeepModel(checkpoint, rf_config, pseudo_labeler_device, ilastik_multi_thread=True) # TODO: does this work with multi thread?
+    pseudo_labeler = Shallow2DeepModel(checkpoint, rf_config, pseudo_labeler_device)
     if is_raw_dataset:
         ds = _load_pseudolabel_dataset(
             raw_paths, raw_key,
