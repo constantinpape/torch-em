@@ -1,4 +1,3 @@
-from configparser import Interpolation
 from .util import ensure_array
 
 
