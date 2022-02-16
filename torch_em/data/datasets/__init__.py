@@ -8,4 +8,5 @@ from .mitoem import get_mitoem_loader
 from .monuseg import get_monuseg_loader
 from .platynereis import (get_platynereis_cell_loader,
                           get_platynereis_nuclei_loader)
+from .snemi import get_snemi_loader
 from .util import get_bioimageio_dataset_id
