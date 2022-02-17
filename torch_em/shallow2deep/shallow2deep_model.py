@@ -88,7 +88,7 @@ class Shallow2DeepModel:
         return model
 
     @staticmethod
-    def load_rf(rf_config, rf_channel, ilastik_multi_thread):
+    def load_rf(rf_config, rf_channel=1, ilastik_multi_thread=False):
         if len(rf_config) == 3:  # random forest path and feature config
             rf_path, ndim, filter_config = rf_config
             assert os.path.exists(rf_path)
