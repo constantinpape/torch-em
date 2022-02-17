@@ -31,9 +31,8 @@ class PseudoLabelDataset(RawDataset):
     def __getitem__(self, index):
         raw = self._get_sample(index)
 
-        if self.raw_transform is not None:
-            raw = self.raw_transform(raw)
-
+        # transform for augmentations
+        # only applied to raw since labels are generated on the fly anyway by the pseudo_labeler
         if self.transform is not None:
             raw = self.transform(raw)[0]
             if self.trafo_halo is not None:
@@ -41,7 +40,13 @@ class PseudoLabelDataset(RawDataset):
 
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
         with torch.no_grad():
-            labels = self.pseudo_labeler(raw[None].to(self.labeler_device))[0]
+            labels = self.pseudo_labeler(raw[None].to(self.labeler_device))[0] # ilastik needs uint input, so normalize afterwards
+
+        # normalize after ilastik
+        if self.raw_transform is not None:
+            raw = self.raw_transform(raw.cpu().detach().numpy()) # normalization functions need numpy array, self.transform already creates torch.tensor
+        raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
+
         if self.label_transform is not None:
             labels = self.label_transform(labels)
         labels = ensure_tensor_with_channels(labels, ndim=self._ndim)
