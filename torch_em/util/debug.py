@@ -4,7 +4,6 @@ from .util import ensure_array
 def check_loader(loader, n_samples, instance_labels=False, plt=False):
     if plt:
         import matplotlib.pyplot as plt
-        from matplotlib import colors
 
         nrows = 2
         img_size = 5
@@ -14,8 +13,8 @@ def check_loader(loader, n_samples, instance_labels=False, plt=False):
             if ii >= n_samples:
                 break
 
-            x = ensure_array(x).squeeze(0)
-            y = ensure_array(y).squeeze(0)
+            x = ensure_array(x).squeeze()
+            y = ensure_array(y).squeeze()
 
             ax = fig.add_subplot(nrows, n_samples, ii+1)
             ax.imshow(x, interpolation='nearest', cmap='Greys', aspect='auto')
@@ -26,6 +25,8 @@ def check_loader(loader, n_samples, instance_labels=False, plt=False):
                 ax.imshow(y, interpolation='nearest', aspect='auto')
             else:
                 ax.imshow(y, interpolation='nearest', cmap='Greys', aspect='auto')
+        
+        plt.show()
 
     else:
         import napari
