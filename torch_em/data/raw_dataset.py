@@ -63,7 +63,7 @@ class RawDataset(torch.utils.data.Dataset):
         self.sampler = sampler
         self.dtype = dtype
 
-        if n_samples is None:
+        if n_samples:
             self._len = n_samples
         else:
             self._len = self.compute_len(raw_path, raw_key, self.patch_shape, with_channels)
