@@ -44,9 +44,9 @@ def normalize_with_batch(data, normalizer):
 
 
 def get_default_citations(model=None, model_output=None):
-    citations = {
-        "training library": "https://doi.org/10.5281/zenodo.5108853"
-    }
+    citations = [
+        {"text": "training library", "doi": "https://doi.org/10.5281/zenodo.5108853"}
+    ]
 
     # try to derive the correct network citation from the model class
     if model is not None:
@@ -56,9 +56,13 @@ def get_default_citations(model=None, model_output=None):
             model_name = str(model.__class__.__name__)
 
         if model_name.lower() in ("unet2d", "unet_2d", "unet"):
-            citations["architecture"] = "https://doi.org/10.1007/978-3-319-24574-4_28"
+            citations.append(
+                {"text": "architecture", "doi": "https://doi.org/10.1007/978-3-319-24574-4_28"}
+            )
         elif model_name.lower() in ("unet3d", "unet_3d", "anisotropicunet"):
-            citations["architecture"] = "https://doi.org/10.1007/978-3-319-46723-8_49"
+            citations.append(
+                {"text": "architecture", "doi": "https://doi.org/10.1007/978-3-319-46723-8_49"}
+            )
         else:
             warn("No citation for architecture {model_name} found.")
 
@@ -66,9 +70,13 @@ def get_default_citations(model=None, model_output=None):
     if model_output is not None:
         msg = f"No segmentation algorithm for output {model_output} known. 'affinities' and 'boundaries' are supported."
         if model_output == "affinities":
-            citations["segmentation algorithm"] = "https://doi.org/10.1109/TPAMI.2020.2980827"
+            citations.append(
+                {"text": "segmentation algorithm", "doi": "https://doi.org/10.1109/TPAMI.2020.2980827"}
+            )
         elif model_output == "boundaries":
-            citations["segmentation algorithm"] = "https://doi.org/10.1038/nmeth.4151"
+            citations.append(
+                {"text": "segmentation algorithm", "doi": "https://doi.org/10.1038/nmeth.4151"}
+            )
         else:
             warn(msg)
 
@@ -315,51 +323,40 @@ def _get_preprocessing(trainer):
         assert (min_ is None) == (max_ is None)
 
         if min_ is None:
-            preprocessing = {
-                "scale_range": {
-                    "mode": "per_sample",
-                    "axes": axes,
-                    "min_percentile": 0.0,
-                    "max_percentile": 100.0
-                }
-            }
+            preprocessing = [{
+                "name": "scale_range",
+                "kwargs": {"mode": "per_sample", "axes": axes,
+                           "min_percentile": 0.0, "max_percentile": 100.0}
+            }]
         else:
-            preprocessing = {
-                "scale_linear": {
-                    "gain": 1. / max_,
-                    "offset": -min_,
-                    "axes": axes
-                }
-            }
+            preprocessing = [{
+                "name": "scale_linear",
+                "kwargs": {"gain": 1. / max_, "offset": -min_, "axes": axes}
+            }]
 
     elif name == "torch_em.transform.raw.standardize":
 
         mean, std = kwargs.get("mean", None), kwargs.get("std", None)
         mode = "per_sample" if mean is None else "fixed"
         axes = _get_axes(kwargs.get("axis", None))
-        preprocessing = {
-            "zero_mean_unit_variance": {
-                "mode": mode,
-                "axes": axes
-            }
-        }
+        preprocessing = [{
+            "name": "zero_mean_unit_variance",
+            "kwargs": {"mode": mode, "axes": axes}
+        }]
         if mean is not None:
-            preprocessing["zero_mean_unit_variance"]["mean"] = mean
+            preprocessing[0]["kwargs"]["mean"] = mean
         if std is not None:
-            preprocessing["zero_mean_unit_variance"]["std"] = std
+            preprocessing[0]["kwargs"]["std"] = std
 
     elif name == "torch_em.transform.normalize_percentile":
 
         lower, upper = kwargs.get("lower", 1.0), kwargs.get("upper", 99.0)
         axes = _get_axes(kwargs.get("axis", None))
-        preprocessing = {
-            "scale_range": {
-                "mode": "per_sample",
-                "axes": axes,
-                "min_percentile": lower,
-                "max_percentile": upper
-            }
-        }
+        preprocessing = [{
+            "name": "scale_range",
+            "kwargs": {"mode": "per_sample", "axes": axes,
+                       "min_percentile": lower, "max_percentile": upper}
+        }]
 
     else:
         warn("Could not parse the normalization function, 'preprocessing' field will be empty.")
