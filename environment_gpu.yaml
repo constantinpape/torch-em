@@ -5,7 +5,7 @@ name:
     torch-em
 dependencies:
     - affogato
-    - bioimageio.core >=0.4.6
+    - bioimageio.core >=0.5.0
     - cudatoolkit>=11,<12  # set correct cuda version for your system
     - python-elf
     - pytorch
