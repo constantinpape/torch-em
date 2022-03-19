@@ -42,11 +42,13 @@ def _resize(path, native_resolution, target_resolution):
     assert len(native_resolution) == len(target_resolution)
     scale_factor = tuple(nres / tres for nres, tres in zip(native_resolution, target_resolution))
     paths = glob(os.path.join(path, "*.h5"))
+
+    # check if anything needs to be resized
+    need_resize = []
     for pp in paths:
-        with open_file(pp, "a") as f:
+        with open_file(pp, "r") as f:
             for name, obj in f.items():
                 rescaled_name = f"rescaled/{name}"
-
                 if is_group(obj):
                     continue
                 if rescaled_name in f:
@@ -56,8 +58,15 @@ def _resize(path, native_resolution, target_resolution):
                     )
                     if correct_res:
                         continue
-                    del f[rescaled_name]
+                need_resize.append(path)
 
+    # resize if necessary
+    need_resize = list(set(need_resize))
+    for pp in need_resize:
+        with open_file(pp, mode="a") as f:
+            if "rescaled" in f:
+                del f["rescaled"]
+            for name, obj in f.items():
                 print("Resizing", pp, name)
                 print("from resolution (microns)", native_resolution, "to", target_resolution)
                 print("with scale factor", scale_factor)

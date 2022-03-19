@@ -88,11 +88,12 @@ def _load_rf_segmentation_dataset(
     raw_paths, raw_key, label_paths, label_key, patch_shape_min, patch_shape_max, **kwargs
 ):
     rois = kwargs.pop("rois", None)
+    sampler = torch_em.data.MinForegroundSampler(min_fraction=0.01)
     if isinstance(raw_paths, str):
         if rois is not None:
             assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
         ds = RFSegmentationDataset(
-            raw_paths, raw_key, label_paths, label_key, roi=rois, patch_shape=patch_shape_min, **kwargs
+            raw_paths, raw_key, label_paths, label_key, roi=rois, patch_shape=patch_shape_min, sampler=sampler, **kwargs
         )
         ds.patch_shape_min = patch_shape_min
         ds.patch_shape_max = patch_shape_max
@@ -111,7 +112,7 @@ def _load_rf_segmentation_dataset(
             roi = None if rois is None else rois[i]
             dset = RFSegmentationDataset(
                 raw_path, raw_key, label_path, label_key, roi=roi, n_samples=samples_per_ds[i],
-                patch_shape=patch_shape_min, **kwargs
+                patch_shape=patch_shape_min, sampler=sampler, **kwargs
             )
             dset.patch_shape_min = patch_shape_min
             dset.patch_shape_max = patch_shape_max
