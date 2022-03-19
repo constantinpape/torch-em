@@ -40,7 +40,11 @@ class Shallow2DeepDataset(SegmentationDataset):
         assert rf.n_features_in_ == features.shape[1], f"{rf.n_features_in_}, {features.shape[1]}"
         # NOTE: we always select the predictions for the foreground class here.
         # for multi-class training where we need multiple predictions this would need to be changed
-        prediction = rf.predict_proba(features)[:, 1]
+        try:
+            prediction = rf.predict_proba(features)[:, 1]
+        except IndexError:
+            print("Prediction failed:", features.shape)
+            prediction = np.zeros(len(features), dtype="float32")
         prediction = prediction.reshape(raw.shape)
         return prediction
 
