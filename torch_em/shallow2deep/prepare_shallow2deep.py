@@ -242,27 +242,38 @@ def _apply_filters_with_mask(raw, filters_and_sigmas, mask):
     return features
 
 
+def _balance_labels(labels, mask):
+    class_ids, label_counts = np.unique(labels[mask], return_counts=True)
+    n_classes = len(class_ids)
+    assert class_ids.tolist() == list(range(n_classes))
+
+    min_class = class_ids[np.argmin(label_counts)]
+    n_labels = label_counts[min_class]
+
+    for class_id in class_ids:
+        if class_id == min_class:
+            continue
+        n_discard = label_counts[class_id] - n_labels
+        # sample from the current class
+        # shuffle the positions and only keep up to n_labels in the mask
+        label_pos = np.where(labels == class_id)
+        discard_ids = np.arange(len(label_pos[0]))
+        np.random.shuffle(discard_ids)
+        discard_ids = discard_ids[:n_discard]
+        discard_mask = tuple(pos[discard_ids] for pos in label_pos)
+        mask[discard_mask] = False
+
+    assert mask.sum() == n_classes * n_labels
+    return mask
+
+
 def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels):
     # find the mask for where we compute filters and labels
     # by default we exclude everything that has label -1
     assert labels.shape == raw.shape
     mask = labels != -1
     if balance_labels:
-        label_ids, label_counts = np.unique(labels[mask], return_counts=True)
-        if not np.array_equal(label_ids, np.array([0, 1])):
-            raise NotImplementedError(f"Label balancing is only implemented for binary lables, got {label_ids}")
-        n_labels = label_counts[np.argmin(label_counts)]
-        n_discard = label_counts[np.argmax(label_counts)] - n_labels
-        max_label = label_ids[np.argmax(label_counts)]
-        # sample from the maximum label
-        # shuffle the positions and only keep up to n_labels in the mask
-        max_label_pos = np.where(labels == max_label)
-        discard_ids = np.arange(len(max_label_pos[0]))
-        np.random.shuffle(discard_ids)
-        discard_ids = discard_ids[:n_discard]
-        discard_mask = tuple(pos[discard_ids] for pos in max_label_pos)
-        mask[discard_mask] = False
-        assert mask.sum() == 2 * n_labels
+        mask = _balance_labels(labels, mask)
     labels = labels[mask]
     assert labels.ndim == 1
     features = _apply_filters_with_mask(raw, filters_and_sigmas, mask)
