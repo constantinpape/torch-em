@@ -30,6 +30,14 @@ class Shallow2DeepDataset(SegmentationDataset):
     def filter_config(self, value):
         self._filter_config = value
 
+    @property
+    def rf_channels(self):
+        return self._rf_channels
+
+    @rf_channels.setter
+    def rf_channels(self, value):
+        self._rf_channels = value
+
     def _predict_rf(self, raw):
         n_rfs = len(self._rf_paths)
         rf_path = self._rf_paths[np.random.randint(0, n_rfs)]
@@ -38,14 +46,22 @@ class Shallow2DeepDataset(SegmentationDataset):
         filters_and_sigmas = _get_filters(self.ndim, self._filter_config)
         features = _apply_filters(raw, filters_and_sigmas)
         assert rf.n_features_in_ == features.shape[1], f"{rf.n_features_in_}, {features.shape[1]}"
-        # NOTE: we always select the predictions for the foreground class here.
-        # for multi-class training where we need multiple predictions this would need to be changed
+
         try:
-            prediction = rf.predict_proba(features)[:, 1]
+            pred_ = rf.predict_proba(features)
+            assert pred_.shape[1] > max(self.rf_channels), f"{pred_.shape}, {self.rf_channels}"
+            pred_ = pred_[:, self.rf_channels]
         except IndexError:
             print("Prediction failed:", features.shape)
-            prediction = np.zeros(len(features), dtype="float32")
-        prediction = prediction.reshape(raw.shape)
+            pred_shape = (len(features), len(self.rf_channels))
+            pred_ = np.zeros(pred_shape, dtype="float32")
+
+        spatial_shape = raw.shape
+        out_shape = (len(self.rf_channels),) + spatial_shape
+        prediction = np.zeros(out_shape, dtype="float32")
+        for chan in range(pred_.shape[1]):
+            prediction[chan] = pred_[:, chan].reshape(spatial_shape)
+
         return prediction
 
     def __getitem__(self, index):
@@ -76,13 +92,14 @@ class Shallow2DeepDataset(SegmentationDataset):
                 f"Shallow2Deep training not implemented for multi-channel input yet; got {raw.shape[0]} channels"
             )
 
+        # NOTE we assume single channel raw data here; this needs to be changed for multi-channel
         prediction = self._predict_rf(raw[0].numpy())
         prediction = ensure_tensor_with_channels(prediction, ndim=self._ndim, dtype=self.dtype)
         labels = ensure_tensor_with_channels(labels, ndim=self._ndim, dtype=self.label_dtype)
         return prediction, labels
 
 
-def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_paths, **kwargs):
+def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_paths, rf_channels, **kwargs):
     rois = kwargs.pop("rois", None)
     filter_config = kwargs.pop("filter_config", None)
     if isinstance(raw_paths, str):
@@ -109,6 +126,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
             )
             dset.rf_paths = rf_paths
             dset.filter_config = filter_config
+            dset.rf_channels = rf_channels
             ds.append(dset)
         ds = ConcatDataset(*ds)
     return ds
@@ -132,6 +150,7 @@ def get_shallow2deep_dataset(
     is_seg_dataset=None,
     with_channels=False,
     filter_config=None,
+    rf_channels=(1,),
 ):
     check_paths(raw_paths, label_paths)
     if is_seg_dataset is None:
@@ -166,6 +185,7 @@ def get_shallow2deep_dataset(
             dtype=dtype,
             with_channels=with_channels,
             filter_config=filter_config,
+            rf_channels=rf_channels,
         )
     else:
         raise NotImplementedError("Image collection dataset for shallow2deep not implemented yet.")
@@ -186,9 +206,11 @@ def get_shallow2deep_loader(
     transform=None,
     rois=None,
     n_samples=None,
+    sampler=None,
     ndim=None,
     is_seg_dataset=None,
     with_channels=False,
+    rf_channels=(1,),
     **loader_kwargs,
 ):
     ds = get_shallow2deep_dataset(
@@ -203,9 +225,11 @@ def get_shallow2deep_loader(
         transform=transform,
         rois=rois,
         n_samples=n_samples,
+        sampler=sampler,
         ndim=ndim,
         is_seg_dataset=is_seg_dataset,
         with_channels=with_channels,
         filter_config=filter_config,
+        rf_channels=rf_channels,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
