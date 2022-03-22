@@ -5,7 +5,7 @@
 # Torch'em
 
 Deep-learning based semantic and instance segmentation for 3D Electron Microscopy and other bioimage analysis problems based on pytorch.
-This library is in anearly state, so don't expect a stable API, no bugs and there be dragons ;). Early feedback is highly appreciated, just open an issue!
+Any feedback is highly appreciated, just open an issue!
 
 Highlights:
 - Functional API with sensible defaults to train a state-of-the-art segmentation model with a few lines of code.
