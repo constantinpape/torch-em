@@ -90,7 +90,9 @@ def _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key, **kwa
     rois = kwargs.pop("rois", None)
     if isinstance(raw_paths, str):
         if rois is not None:
-            assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
+            assert isinstance(rois, (tuple, slice))
+            if isinstance(rois, tuple):
+                assert all(isinstance(roi, slice) for roi in rois)
         ds = SegmentationDataset(raw_paths, raw_key, label_paths, label_key, roi=rois, **kwargs)
     else:
         assert len(raw_paths) > 0
@@ -197,6 +199,7 @@ def default_segmentation_loader(
     ndim=None,
     is_seg_dataset=None,
     with_channels=False,
+    with_label_channels=False,
     **loader_kwargs,
 ):
     ds = default_segmentation_dataset(
@@ -217,6 +220,7 @@ def default_segmentation_loader(
         ndim=ndim,
         is_seg_dataset=is_seg_dataset,
         with_channels=with_channels,
+        with_label_channels=with_label_channels,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -239,6 +243,7 @@ def default_segmentation_dataset(
     ndim=None,
     is_seg_dataset=None,
     with_channels=False,
+    with_label_channels=False,
 ):
     check_paths(raw_paths, label_paths)
     if is_seg_dataset is None:
@@ -272,6 +277,7 @@ def default_segmentation_dataset(
             dtype=dtype,
             label_dtype=label_dtype,
             with_channels=with_channels,
+            with_label_channels=with_label_channels,
         )
     else:
         ds = _load_image_collection_dataset(
