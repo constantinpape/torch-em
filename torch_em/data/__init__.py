@@ -5,4 +5,4 @@ from .raw_dataset import RawDataset
 from .pseudo_label_dataset import PseudoLabelDataset
 from .raw_image_collection_dataset import RawImageCollectionDataset
 from .segmentation_dataset import SegmentationDataset
-from .sampler import MinForegroundSampler
+from .sampler import MinForegroundSampler, MinIntensitySampler
