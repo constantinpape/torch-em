@@ -1,4 +1,4 @@
-from collections import Sized
+from collections.abc import Sized
 from typing import Callable
 
 from torch.utils.data import Dataset
