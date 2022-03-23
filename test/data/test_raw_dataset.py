@@ -42,7 +42,7 @@ class TestRawDataset(unittest.TestCase):
         for i in range(10):
             self.assertEqual(ds[i].shape, expected_shape)
 
-    def _test_dataset_4d(self):
+    def test_dataset_4d(self):
         from torch_em.data import RawDataset
         raw_key = "raw"
         shape = (12, 64, 64, 64)
@@ -51,7 +51,7 @@ class TestRawDataset(unittest.TestCase):
         ds = RawDataset(self.path, raw_key, patch_shape=patch_shape)
         self.assertEqual(ds.raw.shape, shape)
         self.assertEqual(ds._ndim, 4)
-        expected_shape = (1,) + patch_shape
+        expected_shape = patch_shape
         for i in range(10):
             self.assertEqual(ds[i].shape, expected_shape)
 

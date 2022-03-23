@@ -28,23 +28,28 @@ def ensure_tensor(tensor, dtype=None):
 
 
 def ensure_tensor_with_channels(tensor, ndim, dtype=None):
-    assert ndim in (2, 3)
+    assert ndim in (2, 3, 4), f"{ndim}"
     tensor = ensure_tensor(tensor, dtype)
     if ndim == 2:
-        assert tensor.ndim in (2, 3, 4, 5), str(tensor.ndim)
+        assert tensor.ndim in (2, 3, 4, 5), f"{tensor.ndim}"
         if tensor.ndim == 2:
             tensor = tensor[None]
         elif tensor.ndim == 4:
             assert tensor.shape[0] == 1, f"{tensor.shape}"
             tensor = tensor[0]
         elif tensor.ndim == 5:
-            assert tensor.shape[:2] == (1, 1)
+            assert tensor.shape[:2] == (1, 1), f"{tensor.shape}"
             tensor = tensor[0, 0]
-    else:
-        assert tensor.ndim in (3, 4, 5)
+    elif ndim == 3:
+        assert tensor.ndim in (3, 4, 5), f"{tensor.ndim}"
         if tensor.ndim == 3:
             tensor = tensor[None]
         elif tensor.ndim == 5:
+            assert tensor.shape[0] == 1, f"{tensor.shape}"
+            tensor = tensor[0]
+    else:
+        assert tensor.ndim in (4, 5), f"{tensor.ndim}"
+        if tensor.ndim == 5:
             assert tensor.shape[0] == 1, f"{tensor.shape}"
             tensor = tensor[0]
     return tensor

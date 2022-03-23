@@ -55,6 +55,25 @@ class TestSegmentationDataset(unittest.TestCase):
     def test_dataset_4d(self):
         from torch_em.data import SegmentationDataset
         raw_key, label_key = "raw", "labels"
+        shape = (4, 64, 64, 64)
+        chunks = (1, 32, 32, 32)
+        create_segmentation_test_data(self.path, raw_key, label_key, shape=shape, chunks=chunks)
+
+        patch_shape = (2, 32, 32, 32)
+        ds = SegmentationDataset(self.path, raw_key, self.path, label_key, patch_shape=patch_shape)
+        self.assertEqual(ds.raw.shape, shape)
+        self.assertEqual(ds.labels.shape, shape)
+        self.assertEqual(ds._ndim, 4)
+
+        expected_shape = patch_shape
+        for i in range(10):
+            x, y = ds[i]
+            self.assertEqual(x.shape, expected_shape)
+            self.assertEqual(y.shape, expected_shape)
+
+    def test_dataset_3d4d(self):
+        from torch_em.data import SegmentationDataset
+        raw_key, label_key = "raw", "labels"
         shape = (4, 128, 128, 128)
         chunks = (1, 32, 32, 32)
         create_segmentation_test_data(self.path, raw_key, label_key, shape=shape, chunks=chunks)
