@@ -120,7 +120,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
                 bb = self._sample_bounding_box()
                 bb_raw = (slice(None),) + bb if self._with_channels else bb
                 bb_labels = (slice(None),) + bb if self._with_label_channels else bb
-                raw, labels = self.raw[bb], self.labels[bb]
+                raw, labels = self.raw[bb_raw], self.labels[bb_labels]
                 sample_id += 1
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
