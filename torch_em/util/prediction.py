@@ -9,9 +9,10 @@ from tqdm import tqdm
 from ..transform.raw import standardize
 
 
-def _load_block(input_, offset, block_shape, halo,
-                padding_mode='reflect'):
+def _load_block(input_, offset, block_shape, halo, padding_mode="reflect", with_channels=False):
     shape = input_.shape
+    if with_channels:
+        shape = shape[1:]
 
     starts = [off - ha for off, ha in zip(offset, halo)]
     stops = [off + bs + ha for off, bs, ha in zip(offset, block_shape, halo)]
@@ -31,7 +32,10 @@ def _load_block(input_, offset, block_shape, halo,
         stops = [min(shape[i], stop) for i, stop in enumerate(stops)]
 
     bb = tuple(slice(start, stop) for start, stop in zip(starts, stops))
-    data = input_[bb]
+    if with_channels:
+        data = input_[(slice(None),) + bb]
+    else:
+        data = input_[bb]
 
     ndim = len(shape)
     # pad if necessary
@@ -39,6 +43,8 @@ def _load_block(input_, offset, block_shape, halo,
         pad_left = (0,) * ndim if pad_left is None else pad_left
         pad_right = (0,) * ndim if pad_right is None else pad_right
         pad_width = tuple((pl, pr) for pl, pr in zip(pad_left, pad_right))
+        if with_channels:
+            pad_width = ((0, 0),) + pad_width
         data = np.pad(data, pad_width, mode=padding_mode)
 
         # extend the bounding box for downstream
@@ -50,7 +56,6 @@ def _load_block(input_, offset, block_shape, halo,
     return data, bb
 
 
-# TODO support input channels
 # TODO half precision prediction
 def predict_with_halo(
     input_,
@@ -60,7 +65,8 @@ def predict_with_halo(
     halo,
     output=None,
     preprocess=standardize,
-    postprocess=None
+    postprocess=None,
+    with_channels=False,
 ):
     """ Run block-wise network prediction with halo.
 
@@ -76,6 +82,7 @@ def predict_with_halo(
         preprocess [callable] - function to preprocess input data before passing it to the network.
             (default: standardize)
         postprocess [callable] - function to postprocess the network predictions (default: None)
+        with_channels [bool] - whether the input has a channel axis (default: False)
     """
     devices = [torch.device(gpu) for gpu in gpu_ids]
     models = [
@@ -85,12 +92,15 @@ def predict_with_halo(
 
     n_workers = len(gpu_ids)
     shape = input_.shape
+    if with_channels:
+        shape = shape[1:]
     ndim = len(shape)
-    blocking = nt.blocking([0] * len(shape), shape, block_shape)
+    assert len(block_shape) == len(halo) == ndim
+    blocking = nt.blocking([0] * ndim, shape, block_shape)
 
     if output is None:
         n_out = models[0][0].out_channels
-        output = np.zeros((n_out,) + shape, dtype='float32')
+        output = np.zeros((n_out,) + shape, dtype="float32")
 
     def predict_block(block_id):
         worker_id = block_id % n_workers
@@ -99,11 +109,13 @@ def predict_with_halo(
         with torch.no_grad():
             block = blocking.getBlock(block_id)
             offset = [beg for beg in block.begin]
-            inp, _ = _load_block(input_, offset, block_shape, halo)
+            inp, _ = _load_block(input_, offset, block_shape, halo, with_channels=with_channels)
             if preprocess is not None:
                 inp = preprocess(inp)
 
-            inp = torch.from_numpy(inp[None, None]).to(device)
+            # add (channel) and batch axis
+            expand_dims = np.s_[None] if with_channels else np.s_[None, None]
+            inp = torch.from_numpy(inp[expand_dims]).to(device)
 
             prediction = net(inp)
             # allow for list of tensors
