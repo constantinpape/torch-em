@@ -1,3 +1,5 @@
+import warnings
+
 import torch
 import numpy as np
 from elf.io import open_file
@@ -96,6 +98,8 @@ class RawDataset(torch.utils.data.Dataset):
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.sample_shape))
 
     def _get_sample(self, index):
+        if self.raw is None:
+            raise RuntimeError("RawDataset has not been properly deserialized.")
         bb = self._sample_bounding_box()
         if self._with_channels:
             raw = self.raw[(slice(None),) + bb]
@@ -140,5 +144,13 @@ class RawDataset(torch.utils.data.Dataset):
         return state
 
     def __setstate__(self, state):
-        state["raw"] = open_file(state["raw_path"], mode="r")[state["raw_key"]]
+        raw_path, raw_key = state["raw_path"], state["raw_key"]
+        try:
+            state["raw"] = open_file(state["raw_path"], mode="r")[state["raw_key"]]
+        except Exception:
+            msg = f"RawDataset could not be deserialized because of missing {raw_path}, {raw_key}.\n"
+            msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
+            msg += "But it cannot be used for further training and wil throw an error."
+            warnings.warn(msg)
+            state["raw"] = None
         self.__dict__.update(state)
