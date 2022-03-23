@@ -14,12 +14,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
     max_sampling_attempts = 500
 
     @staticmethod
-    def compute_len(path, key, patch_shape):
-        with open_file(path, mode="r") as f:
-            shape = f[key].shape
-        n_samples = int(np.prod(
-            [float(sh / csh) for sh, csh in zip(shape, patch_shape)]
-        ))
+    def compute_len(shape, patch_shape):
+        n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
         return n_samples
 
     def __init__(
@@ -40,6 +36,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         sampler=None,
         ndim=None,
         with_channels=False,
+        with_label_channels=False,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -50,28 +47,25 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.labels = open_file(label_path, mode="r")[label_key]
 
         self._with_channels = with_channels
-        if ndim is None:
-            self._ndim = self.labels.ndim
-        else:
-            self._ndim = ndim
-        assert self._ndim in (2, 3), "Invalid data dimensionality: {self._ndim}. Only 2d or 3d data is supported"
-
-        if self._with_channels:
-            assert self.raw.shape[1:] == self.labels.shape, f"{self.raw.shape[1:]}, {self.labels.shape}"
-            if self._ndim < self.labels.ndim:
-                raise NotImplementedError("Using channels and smapling 2d slcies from 3d data is not supported yet")
-        else:
-            assert self.raw.shape == self.labels.shape, f"{self.raw.shape}, {self.labels.shape}"
+        self._with_label_channels = with_label_channels
 
         if roi is not None:
-            assert len(roi) == self.labels.ndim, f"{roi}, {self.labels.ndim}"
+            if isinstance(roi, slice):
+                roi = (roi,)
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
-            self.labels = RoiWrapper(self.labels, roi)
+            self.labels = RoiWrapper(self.labels, (slice(None),) + roi) if self._with_label_channels else\
+                RoiWrapper(self.labels, roi)
 
-        self.shape = self.labels.shape
+        shape_raw = self.raw.shape[1:] if self._with_channels else self.raw.shape
+        shape_label = self.labels.shape[1:] if self._with_label_channels else self.labels.shape
+        assert shape_raw == shape_label, f"{shape_raw}, {shape_label}"
+
+        self.shape = shape_raw
         self.roi = roi
 
-        assert len(patch_shape) == self.labels.ndim, f"{patch_shape}, {self.labels.ndim}"
+        self._ndim = len(shape_raw) if ndim is None else ndim
+        assert self._ndim in (2, 3, 4), f"Invalid data dimensions: {self._ndim}. Only 2d, 3d or 4d data is supported"
+        assert len(patch_shape) in (self._ndim, self._ndim + 1), f"{patch_shape}, {self._ndim}"
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform
@@ -83,20 +77,20 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.dtype = dtype
         self.label_dtype = label_dtype
 
-        self._len = self.compute_len(label_path, label_key, self.patch_shape) if n_samples is None else n_samples
+        self._len = self.compute_len(self.shape, self.patch_shape) if n_samples is None else n_samples
 
-        # TODO
+        self.sample_shape = patch_shape
         self.trafo_halo = None
-        # self.trafo_halo = None if self.transform is None\
-        #     else self.transform.halo(self.patch_shape)
-        if self.trafo_halo is None:
-            self.sample_shape = self.patch_shape
-        else:
-            if len(self.trafo_halo) == 2 and self._ndim == 3:
-                self.trafo_halo = (0,) + self.trafo_halo
-            assert len(self.trafo_halo) == self._ndim
-            self.sample_shape = tuple(sh + ha for sh, ha in zip(self.patch_shape, self.trafo_halo))
-            self.inner_bb = tuple(slice(ha, sh - ha) for sh, ha in zip(self.patch_shape, self.trafo_halo))
+        # TODO add support for trafo halo: asking for a bigger bounding box before applying the trafo,
+        # which is then cut. See code below; but this ne needs to be properly tested
+
+        # self.trafo_halo = None if self.transform is None else self.transform.halo(self.patch_shape)
+        # if self.trafo_halo is not None:
+        #     if len(self.trafo_halo) == 2 and self._ndim == 3:
+        #         self.trafo_halo = (0,) + self.trafo_halo
+        #     assert len(self.trafo_halo) == self._ndim
+        #     self.sample_shape = tuple(sh + ha for sh, ha in zip(self.patch_shape, self.trafo_halo))
+        #     self.inner_bb = tuple(slice(ha, sh - ha) for sh, ha in zip(self.patch_shape, self.trafo_halo))
 
     def __len__(self):
         return self._len
@@ -116,22 +110,25 @@ class SegmentationDataset(torch.utils.data.Dataset):
         if self.raw is None or self.labels is None:
             raise RuntimeError("SegmentationDataset has not been properly deserialized.")
         bb = self._sample_bounding_box()
-        if self._with_channels:
-            raw, labels = self.raw[(slice(None),) + bb], self.labels[bb]
-        else:
-            raw, labels = self.raw[bb], self.labels[bb]
+        bb_raw = (slice(None),) + bb if self._with_channels else bb
+        bb_labels = (slice(None),) + bb if self._with_label_channels else bb
+        raw, labels = self.raw[bb_raw], self.labels[bb_labels]
 
         if self.sampler is not None:
             sample_id = 0
             while not self.sampler(raw, labels):
                 bb = self._sample_bounding_box()
-                if self._with_channels:
-                    raw, labels = self.raw[(slice(None),) + bb], self.labels[bb]
-                else:
-                    raw, labels = self.raw[bb], self.labels[bb]
+                bb_raw = (slice(None),) + bb if self._with_channels else bb
+                bb_labels = (slice(None),) + bb if self._with_label_channels else bb
+                raw, labels = self.raw[bb], self.labels[bb]
                 sample_id += 1
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+
+        # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
+        if len(self.patch_shape) == self._ndim + 1:
+            raw = raw.squeeze(1 if self._with_channels else 0)
+            labels = labels.squeeze(1 if self._with_label_channels else 0)
 
         return raw, labels
 
