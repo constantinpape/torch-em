@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -21,7 +22,7 @@ class AccumulateChannels(nn.Module):
         super().__init__()
         self.invariant_channels = invariant_channels
         self.accumulate_channels = accumulate_channels
-        assert accumulator in ('mean', 'min', 'max')
+        assert accumulator in ("mean", "min", "max")
         self.accumulator = getattr(torch, accumulator)
 
     def _accumulate(self, x, c0, c1):
@@ -41,11 +42,11 @@ class AccumulateChannels(nn.Module):
             return torch.cat([x[:, i0:i1], self._accumulate(x, c0, c1)], dim=1)
 
 
-def affinities_to_boundaries(aff_channels, accumulator='max'):
+def affinities_to_boundaries(aff_channels, accumulator="max"):
     return AccumulateChannels(None, aff_channels, accumulator)
 
 
-def affinities_with_foreground_to_boundaries(aff_channels, fg_channel=(0, 1), accumulator='max'):
+def affinities_with_foreground_to_boundaries(aff_channels, fg_channel=(0, 1), accumulator="max"):
     return AccumulateChannels(fg_channel, aff_channels, accumulator)
 
 
@@ -92,7 +93,8 @@ class UNetBase(nn.Module):
         decoder,
         out_conv=None,
         final_activation=None,
-        postprocessing=None
+        postprocessing=None,
+        check_shape=True,
     ):
         super().__init__()
         if len(encoder) != len(decoder):
@@ -114,7 +116,7 @@ class UNetBase(nn.Module):
             self.return_decoder_outputs = False
             self._out_channels = out_conv.out_channels
         self.out_conv = out_conv
-
+        self.check_shape = check_shape
         self.final_activation = self._get_activation(final_activation)
         self.postprocessing = self._get_postprocessing(postprocessing)
 
@@ -197,9 +199,19 @@ class UNetBase(nn.Module):
         # we reverse the list to have the full shape output as first element
         return x[::-1]
 
+    def _check_shape(self, x):
+        spatial_shape = tuple(x.shape)[2:]
+        depth = len(self.encoder)
+        factor = [2**depth] * len(spatial_shape)
+        if any(sh % fac != 0 for sh, fac in zip(spatial_shape, factor)):
+            msg = f"Invalid shape for U-Net: {spatial_shape} is not divisible by {factor}"
+            raise ValueError(msg)
+
     def forward(self, x):
         # cast input data to float, hotfix for modelzoo deployment issues, leaving it here for reference
         # x = x.float()
+        if getattr(self, "check_shape", True):
+            self._check_shape(x)
         if self.return_decoder_outputs:
             return self._apply_with_side_outputs(x)
         else:
@@ -207,21 +219,21 @@ class UNetBase(nn.Module):
 
 
 def _update_conv_kwargs(kwargs, scale_factor):
-    # if the scale factor is a scalar or all entries are the same we don't need to update the kwargs
+    # if the scale factor is a scalar or all entries are the same we don"t need to update the kwargs
     if isinstance(scale_factor, int) or scale_factor.count(scale_factor[0]) == len(scale_factor):
         return kwargs
     else:  # otherwise set anisotropic kernel
-        kernel_size = kwargs.get('kernel_size', 3)
-        padding = kwargs.get('padding', 1)
+        kernel_size = kwargs.get("kernel_size", 3)
+        padding = kwargs.get("padding", 1)
 
-        # bail out if kernel size or padding aren't scalars, because it's
+        # bail out if kernel size or padding aren"t scalars, because it"s
         # unclear what to do in this case
         if not (isinstance(kernel_size, int) and isinstance(padding, int)):
             return kwargs
 
         kernel_size = tuple(1 if factor == 1 else kernel_size for factor in scale_factor)
         padding = tuple(0 if factor == 1 else padding for factor in scale_factor)
-        kwargs.update({'kernel_size': kernel_size, 'padding': padding})
+        kwargs.update({"kernel_size": kernel_size, "padding": padding})
         return kwargs
 
 
@@ -340,11 +352,11 @@ class Decoder(nn.Module):
 def get_norm_layer(norm, dim, channels, n_groups=32):
     if norm is None:
         return None
-    if norm == 'InstanceNorm':
+    if norm == "InstanceNorm":
         return nn.InstanceNorm2d(channels) if dim == 2 else nn.InstanceNorm3d(channels)
-    elif norm == 'GroupNorm':
+    elif norm == "GroupNorm":
         return nn.GroupNorm(min(n_groups, channels), channels)
-    elif norm == 'BatchNorm':
+    elif norm == "BatchNorm":
         return nn.BatchNorm2d(channels) if dim == 2 else nn.BatchNorm3d(channels)
     else:
         raise ValueError(f"Invalid norm: expect one of 'InstanceNorm', 'BatchNorm' or 'GroupNorm', got {norm}")
@@ -352,7 +364,7 @@ def get_norm_layer(norm, dim, channels, n_groups=32):
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dim,
-                 kernel_size=3, padding=1, norm='InstanceNorm'):
+                 kernel_size=3, padding=1, norm="InstanceNorm"):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -414,7 +426,7 @@ class ConvBlock2d(ConvBlock):
 class Upsampler2d(Upsampler):
     def __init__(self, scale_factor,
                  in_channels, out_channels,
-                 mode='bilinear'):
+                 mode="bilinear"):
         super().__init__(scale_factor, in_channels, out_channels,
                          dim=2, mode=mode)
 
@@ -433,7 +445,8 @@ class UNet2d(UNetBase):
         pooler_impl=nn.MaxPool2d,
         sampler_impl=Upsampler2d,
         postprocessing=None,
-        **conv_block_kwargs
+        check_shape=True,
+        **conv_block_kwargs,
     ):
         features_encoder = [in_channels] + [initial_features * gain ** i for i in range(depth)]
         features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
@@ -471,13 +484,14 @@ class UNet2d(UNetBase):
             ),
             out_conv=out_conv,
             final_activation=final_activation,
-            postprocessing=postprocessing
+            postprocessing=postprocessing,
+            check_shape=check_shape,
         )
-        self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'depth': depth,
-                            'initial_features': initial_features, 'gain': gain,
-                            'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
-                            'conv_block_impl': conv_block_impl, 'pooler_impl': pooler_impl,
-                            'sampler_impl': sampler_impl, 'postprocessing': postprocessing, **conv_block_kwargs}
+        self.init_kwargs = {"in_channels": in_channels, "out_channels": out_channels, "depth": depth,
+                            "initial_features": initial_features, "gain": gain,
+                            "final_activation": final_activation, "return_side_outputs": return_side_outputs,
+                            "conv_block_impl": conv_block_impl, "pooler_impl": pooler_impl,
+                            "sampler_impl": sampler_impl, "postprocessing": postprocessing, **conv_block_kwargs}
 
 
 #
@@ -492,7 +506,7 @@ class ConvBlock3d(ConvBlock):
 class Upsampler3d(Upsampler):
     def __init__(self, scale_factor,
                  in_channels, out_channels,
-                 mode='trilinear'):
+                 mode="trilinear"):
         super().__init__(scale_factor, in_channels, out_channels,
                          dim=3, mode=mode)
 
@@ -510,7 +524,8 @@ class AnisotropicUNet(UNetBase):
         conv_block_impl=ConvBlock3d,
         anisotropic_kernel=False,  # TODO benchmark which option is better and set as default
         postprocessing=None,
-        **conv_block_kwargs
+        check_shape=True,
+        **conv_block_kwargs,
     ):
         depth = len(scale_factors)
         features_encoder = [in_channels] + [initial_features * gain ** i for i in range(depth)]
@@ -550,13 +565,25 @@ class AnisotropicUNet(UNetBase):
             ),
             out_conv=out_conv,
             final_activation=final_activation,
-            postprocessing=postprocessing
+            postprocessing=postprocessing,
+            check_shape=check_shape,
         )
-        self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'scale_factors': scale_factors,
-                            'initial_features': initial_features, 'gain': gain,
-                            'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
-                            'conv_block_impl': conv_block_impl, 'anisotropic_kernel': anisotropic_kernel,
-                            'postprocessing': postprocessing, **conv_block_kwargs}
+        self.init_kwargs = {"in_channels": in_channels, "out_channels": out_channels, "scale_factors": scale_factors,
+                            "initial_features": initial_features, "gain": gain,
+                            "final_activation": final_activation, "return_side_outputs": return_side_outputs,
+                            "conv_block_impl": conv_block_impl, "anisotropic_kernel": anisotropic_kernel,
+                            "postprocessing": postprocessing, **conv_block_kwargs}
+
+    def _check_shape(self, x):
+        spatial_shape = tuple(x.shape)[2:]
+        scale_factors = self.init_kwargs.get("scale_factors", [[2, 2, 2]]*len(self.encoder))
+        factor = [int(np.prod([sf[i] for sf in scale_factors])) for i in range(3)]
+        if len(spatial_shape) != len(factor):
+            msg = f"Invalid shape for U-Net: dimensions don't agree {len(spatial_shape)} != {len(factor)}"
+            raise ValueError(msg)
+        if any(sh % fac != 0 for sh, fac in zip(spatial_shape, factor)):
+            msg = f"Invalid shape for U-Net: {spatial_shape} is not divisible by {factor}"
+            raise ValueError(msg)
 
 
 class UNet3d(AnisotropicUNet):
@@ -571,7 +598,8 @@ class UNet3d(AnisotropicUNet):
         return_side_outputs=False,
         conv_block_impl=ConvBlock3d,
         postprocessing=None,
-        **conv_block_kwargs
+        check_shape=True,
+        **conv_block_kwargs,
     ):
         scale_factors = depth * [2]
         super().__init__(in_channels, out_channels, scale_factors,
@@ -580,8 +608,10 @@ class UNet3d(AnisotropicUNet):
                          return_side_outputs=return_side_outputs,
                          anisotropic_kernel=False,
                          postprocessing=postprocessing,
-                         conv_block_impl=conv_block_impl, **conv_block_kwargs)
-        self.init_kwargs = {'in_channels': in_channels, 'out_channels': out_channels, 'depth': depth,
-                            'initial_features': initial_features, 'gain': gain,
-                            'final_activation': final_activation, 'return_side_outputs': return_side_outputs,
-                            'conv_block_impl': conv_block_impl, 'postprocessing': postprocessing, **conv_block_kwargs}
+                         conv_block_impl=conv_block_impl,
+                         check_shape=check_shape,
+                         **conv_block_kwargs)
+        self.init_kwargs = {"in_channels": in_channels, "out_channels": out_channels, "depth": depth,
+                            "initial_features": initial_features, "gain": gain,
+                            "final_activation": final_activation, "return_side_outputs": return_side_outputs,
+                            "conv_block_impl": conv_block_impl, "postprocessing": postprocessing, **conv_block_kwargs}
