@@ -1,3 +1,5 @@
+from math import ceil, floor
+
 import torch
 import torch.nn as nn
 
@@ -310,8 +312,9 @@ class Decoder(nn.Module):
     # FIXME this prevents traces from being valid for other input sizes, need to find
     # a solution to traceable cropping
     def _crop(self, x, shape):
-        shape_diff = [(xsh - sh) // 2 for xsh, sh in zip(x.shape, shape)]
-        crop = tuple([slice(sd, xsh - sd) for sd, xsh in zip(shape_diff, x.shape)])
+        lower = [ceil((xsh - sh) / 2) for xsh, sh in zip(x.shape, shape)]
+        upper = [floor((xsh - sh) / 2) for xsh, sh in zip(x.shape, shape)]
+        crop = tuple([slice(l, xsh - u) for l, u, xsh in zip(lower, upper, x.shape)])
         return x[crop]
         # # Implementation with torch.narrow, does not fix the tracing warnings!
         # for dim, (sh, sd) in enumerate(zip(shape, shape_diff)):
