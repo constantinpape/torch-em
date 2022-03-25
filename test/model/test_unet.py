@@ -16,6 +16,11 @@ class TestUnet(unittest.TestCase):
         net = UNet2d(1, 1, depth=3, initial_features=8)
         self._test_net(net, (1, 1, 64, 64))
 
+    def test_unet_large_shape(self):
+        from torch_em.model import UNet2d
+        net = UNet2d(1, 1, depth=3, initial_features=8)
+        self._test_net(net, (1, 1, 1250, 1250))
+
     def test_norms(self):
         from torch_em.model import UNet2d
         for norm in ('InstanceNorm', 'GroupNorm', 'BatchNorm', None):
