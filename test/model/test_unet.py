@@ -16,9 +16,15 @@ class TestUnet(unittest.TestCase):
         net = UNet2d(1, 1, depth=3, initial_features=8)
         self._test_net(net, (1, 1, 64, 64))
 
+    def test_unet_invalid_shape(self):
+        from torch_em.model import UNet2d
+        net = UNet2d(1, 1, depth=3, initial_features=8)
+        with self.assertRaises(ValueError):
+            self._test_net(net, (1, 1, 67, 67))
+
     def test_norms(self):
         from torch_em.model import UNet2d
-        for norm in ('InstanceNorm', 'GroupNorm', 'BatchNorm', None):
+        for norm in ("InstanceNorm", "GroupNorm", "BatchNorm", None):
             net = UNet2d(1, 1, depth=3, initial_features=8,
                          norm=norm)
             self._test_net(net, (1, 1, 64, 64))
@@ -53,7 +59,7 @@ class TestUnet(unittest.TestCase):
     def test_to_device(self):
         from torch_em.model import UNet2d
         net = UNet2d(1, 1, depth=3, initial_features=4)
-        net.to(torch.device('cpu'))
+        net.to(torch.device("cpu"))
 
     def test_postprocessing(self):
         from torch_em.model import UNet2d
@@ -62,15 +68,15 @@ class TestUnet(unittest.TestCase):
         x = torch.rand(*shape)
 
         net = UNet2d(1, 6, depth=3, initial_features=4,
-                     postprocessing='affinities_to_boundaries2d')
+                     postprocessing="affinities_to_boundaries2d")
         out = net(x)
         self.assertEqual(tuple(out.shape), shape)
 
         net = UNet2d(1, 6, depth=3, initial_features=4,
-                     postprocessing='affinities_with_foreground_to_boundaries2d')
+                     postprocessing="affinities_with_foreground_to_boundaries2d")
         out = net(x)
         self.assertEqual(tuple(out.shape), (1, 2, 64, 64))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
