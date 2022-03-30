@@ -1,5 +1,6 @@
 import os
 import multiprocessing
+from concurrent import futures
 from shutil import rmtree
 
 import imageio
@@ -10,12 +11,24 @@ from tqdm import tqdm
 from .util import download_source, update_kwargs, unzip
 
 URLS = {
-    "human": "https://www.dropbox.com/sh/p5xn9e4gderjtm6/AADfUMzAA38XBvcXDTG1kAGGa/MitoEM-H.zip?dl=1",
-    "rat": "https://www.dropbox.com/sh/p5xn9e4gderjtm6/AAAjVuVydTvccP1D4SvakrLda/MitoEM-R.zip?dl=1"
+    "raw": {
+        "human": "https://www.dropbox.com/s/z41qtu4y735j95e/EM30-H-im.zip?dl=1",
+        "rat": "https://www.dropbox.com/s/kobmxbrabdfkx7y/EM30-R-im.zip?dl=1"
+    },
+    "labels": {
+        "human": "https://www.dropbox.com/s/dhf89bc14kemw4e/EM30-H-mito-train-val-v2.zip?dl=1",
+        "rat": "https://www.dropbox.com/s/stncdytayhr8ggz/EM30-R-mito-train-val-v2.zip?dl=1"
+    }
 }
 CHECKSUMS = {
-    "human": "f4ad14e098697be78d3ea13f263f76d5ba81a27e354c9edc906adfe728c765bd",
-    "rat": "6da3ad29ae867eb13819a28fe04e8d771489b07e4ff5a854f8a369b72abc346f"
+    "raw": {
+        "human": "98fe259f36a7d8d43f99981b7a0ef8cdeba2ce2615ff91595f428ae57207a041",
+        "rat": "6a2cac68adde5d01984542d3ee1d7753d1fa3e6eb2a042ce15ce297c95885bbe"
+    },
+    "labels": {
+        "human": "0e8ed292cfcd0c58701d9f4299244a1b66d6aeb506c85754c34f98a4eda0ef1b",
+        "rat": "c56380ac575428a818bd293ca3509d1249999846c3702ccbf11d308acdd2ae86"
+    }
 }
 
 
@@ -33,7 +46,7 @@ def get_slices(folder):
     return slice_ids
 
 
-def _load_vol(pattern, slice_ids, desc, dtype=None):
+def _load_vol(pattern, slice_ids, desc, n_threads, dtype=None):
     im0 = pattern % slice_ids[0]
     im0 = imageio.imread(im0)
 
@@ -43,8 +56,13 @@ def _load_vol(pattern, slice_ids, desc, dtype=None):
     out = np.zeros(shape, dtype=dtype)
     out[0] = im0
 
-    for z, slice_id in tqdm(enumerate(slice_ids[1:], 1), total=len(slice_ids) - 1, desc=desc):
+    def load_slice(z, slice_id):
         out[z] = imageio.imread(pattern % slice_id)
+
+    zs = list(range(1, len(slice_ids)))
+    assert len(zs) == len(slice_ids) - 1
+    with futures.ThreadPoolExecutor(n_threads) as tp:
+        list(tqdm(tp.map(load_slice, zs, slice_ids[1:]), total=len(slice_ids) - 1, desc=desc))
 
     return out
 
@@ -58,13 +76,13 @@ def _create_volume(out_path, im_folder, label_folder=None, z_start=None):
         assert z_start is None
         slices = get_slices(label_folder)
 
-    raw = _load_vol(os.path.join(im_folder, "im%04i.png"), slices, "load raw")
+    n_threads = min(16, multiprocessing.cpu_count())
+    raw = _load_vol(os.path.join(im_folder, "im%04i.png"), slices, "load raw", n_threads)
     if label_folder is not None:
-        labels = _load_vol(os.path.join(label_folder, "seg%04i.tif"), slices, "load labels", "uint64")
+        labels = _load_vol(os.path.join(label_folder, "seg%04i.tif"), slices, "load labels", n_threads, dtype="uint64")
 
     print("Write volume to", out_path)
     chunks = (32, 256, 256)
-    n_threads = min(16, multiprocessing.cpu_count())
     with z5py.File(out_path, "a") as f:
         f.create_dataset("raw", data=raw, chunks=chunks, compression="gzip", n_threads=n_threads)
         if label_folder is not None:
@@ -75,16 +93,18 @@ def _create_volume(out_path, im_folder, label_folder=None, z_start=None):
 
 
 def _require_mitoem_sample(path, sample, download):
-    url = URLS[sample]
-    checksum = CHECKSUMS[sample]
-    zip_path = os.path.join(path, f"{sample}.zip")
-    download_source(zip_path, url, download, checksum)
-    unzip(zip_path, path, remove=True)
+    os.makedirs(path, exist_ok=True)
 
-    prefix = "MitoEM-H" if sample == "human" else "MitoEM-R"
-    im_folder = os.path.join(path, prefix, "im")
-    train_folder = os.path.join(path, prefix, "mito_train")
-    val_folder = os.path.join(path, prefix, "mito_val")
+    for name in ("raw", "labels"):
+        url = URLS[name][sample]
+        checksum = CHECKSUMS[name][sample]
+        zip_path = os.path.join(path, f"{sample}.zip")
+        download_source(zip_path, url, download, checksum)
+        unzip(zip_path, path, remove=True)
+
+    im_folder = os.path.join(path, "im")
+    train_folder = os.path.join(path, "mito-train-v2")
+    val_folder = os.path.join(path, "mito-val-v2")
 
     print("Create train volume")
     train_path = os.path.join(path, f"{sample}_train.n5")
@@ -98,7 +118,9 @@ def _require_mitoem_sample(path, sample, download):
     test_path = os.path.join(path, f"{sample}_test.n5")
     _create_volume(test_path, im_folder, z_start=z)
 
-    rmtree(os.path.join(path, prefix))
+    rmtree(im_folder)
+    rmtree(train_folder)
+    rmtree(val_folder)
 
 
 def get_mitoem_loader(
