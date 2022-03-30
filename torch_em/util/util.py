@@ -81,7 +81,7 @@ def ensure_spatial_array(array, ndim, dtype=None):
     else:
         assert array.ndim in (3, 4, 5), str(array.ndim)
         if array.ndim == 4:
-            assert array.shape[0] == 1
+            assert array.shape[0] == 1, f"{array.shape}"
             array = array[0]
         elif array.ndim == 5:
             assert array.shape[:2] == (1, 1)
