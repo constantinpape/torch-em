@@ -67,6 +67,7 @@ def predict_with_halo(
     preprocess=standardize,
     postprocess=None,
     with_channels=False,
+    skip_block=None,
 ):
     """ Run block-wise network prediction with halo.
 
@@ -83,6 +84,7 @@ def predict_with_halo(
             (default: standardize)
         postprocess [callable] - function to postprocess the network predictions (default: None)
         with_channels [bool] - whether the input has a channel axis (default: False)
+        skip_block [callable] - function to evaluate wheter a given input block should be skipped (default: None)
     """
     devices = [torch.device(gpu) for gpu in gpu_ids]
     models = [
@@ -110,6 +112,10 @@ def predict_with_halo(
             block = blocking.getBlock(block_id)
             offset = [beg for beg in block.begin]
             inp, _ = _load_block(input_, offset, block_shape, halo, with_channels=with_channels)
+
+            if skip_block is not None and skip_block(inp):
+                return
+
             if preprocess is not None:
                 inp = preprocess(inp)
 
