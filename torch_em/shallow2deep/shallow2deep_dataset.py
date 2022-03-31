@@ -108,6 +108,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
         ds = Shallow2DeepDataset(raw_paths, raw_key, label_paths, label_key, roi=rois, **kwargs)
         ds.rf_paths = rf_paths
         ds.filter_config = filter_config
+        ds.rf_channels = rf_channels
     else:
         assert len(raw_paths) > 0
         if rois is not None:
