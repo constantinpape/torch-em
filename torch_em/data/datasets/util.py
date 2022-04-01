@@ -16,7 +16,8 @@ BIOIMAGEIO_IDS = {
     "mitoem": "ilastik/mitoem_segmentation_challenge",
     "monuseg": "deepimagej/monuseg_digital_pathology_miccai2018",
     "ovules": "",  # not on bioimageio yet
-    "platynereis": "ilastik/platynereis_em_training_data"
+    "platynereis": "ilastik/platynereis_em_training_data",
+    "vnc": "ilastik/vnc"
 }
 
 

@@ -128,7 +128,7 @@ def _write_depedencies(export_folder, dependencies):
         dependencies = {
             "channels": ["pytorch", "conda-forge"],
             "name": "torch-em-deploy",
-            "dependencies": ["pytorch>={torch_min_version},<2.0"]
+            "dependencies": [f"pytorch>={torch_min_version},<2.0"]
         }
         with open(dep_path, "w") as f:
             yaml.dump(dependencies, f)
@@ -474,7 +474,7 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
                             model_postprocessing=None,
                             for_deepimagej=False, links=[],
                             maintainers=None, checkpoint_name="best",
-                            config={}):
+                            training_data=None, config={}):
     """
     """
     assert input_data is not None
@@ -528,6 +528,7 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
             architecture=source,
             model_kwargs=model_kwargs,
             add_deepimagej_config=for_deepimagej,
+            training_data=training_data,
             **kwargs
         )
     except Exception as e:
