@@ -22,7 +22,7 @@ except ImportError:
 
 
 class RFWithFilters:
-    def __init__(self, rf_path, ndim, filter_config, output_channel):
+    def __init__(self, rf_path, ndim, filter_config, output_channel=None):
         with open(rf_path, "rb") as f:
             self.rf = pickle.load(f)
         self.filters_and_sigmas = _get_filters(ndim, filter_config)
@@ -31,7 +31,13 @@ class RFWithFilters:
     def __call__(self, x):
         features = _apply_filters(x, self.filters_and_sigmas)
         assert features.shape[1] == self.rf.n_features_in_, f"{features.shape[1]}, {self.rf.n_features_in_}"
-        out = self.rf.predict_proba(features)[:, self.output_channel].reshape(x.shape).astype("float32")
+        out = self.rf.predict_proba(features)
+        if self.output_channel is None:
+            out_shape = (out.shape[1],) + x.shape
+        else:
+            out = out[:, self.output_channel]
+            out_shape = x.shape if isinstance(self.output_channel, int) else (len(self.output_channel),) + x.shape
+        out = out.reshape(out_shape).astype("float32")
         return out
 
 
