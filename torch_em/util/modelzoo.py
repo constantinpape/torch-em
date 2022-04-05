@@ -461,8 +461,12 @@ def _extract_from_zip(zip_path, out_path, name):
 # model export functionality
 #
 
+def _get_input_data(trainer):
+    loader = trainer.val_loader
+    x = next(iter(loader))[0].numpy()
+    return x
 
-# TODO support loading data from the val_loader of the trainer when input_data is None (SampleGenerator)
+
 # TODO config: training details derived from loss and optimizer, custom params, e.g. offsets for mws
 def export_bioimageio_model(checkpoint, export_folder, input_data=None,
                             dependencies=None, name=None,
@@ -477,11 +481,12 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
                             training_data=None, config={}):
     """
     """
-    assert input_data is not None
-
     # load trainer and model
     trainer = get_trainer(checkpoint, name=checkpoint_name, device="cpu")
     model, model_kwargs = _get_model(trainer, model_postprocessing)
+
+    if input_data is None:
+        input_data = _get_input_data(trainer)
 
     # create the weights
     os.makedirs(export_folder, exist_ok=True)
