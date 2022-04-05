@@ -49,18 +49,18 @@ def get_dsb_loader(path, patch_shape, split, download=False,
                                                                      add_binary_target=True,
                                                                      add_mask=True)
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
     elif boundaries:
         label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
         msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
     elif binary:
         label_transform = torch_em.transform.label.labels_to_binary
         msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
-    kwargs = update_kwargs(kwargs, 'patch_shape', patch_shape)
-    kwargs = update_kwargs(kwargs, 'ndim', 2)
+    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
+    kwargs = update_kwargs(kwargs, "ndim", 2)
 
     return torch_em.default_segmentation_loader(
         image_path, "*.tif",
