@@ -29,6 +29,7 @@ class WandbLogger(TorchEmLogger):
         log_model_graph: bool = True,
         mode: Literal["online", "offline", "disabled"] = "online",
         config: Optional[dict] = None,
+        resume: Optional[str] = None,
         **unused_kwargs,
     ):
         if wandb is None:
@@ -42,14 +43,16 @@ class WandbLogger(TorchEmLogger):
         config = dict(config or {})
         config.update(trainer.init_data)
         self.wand_run = wandb.init(
-            project=project_name, name=trainer.name, dir=self.log_dir, mode=mode, config=config
+            id=resume, project=project_name, name=trainer.name, dir=self.log_dir, mode=mode, config=config, resume="allow"
         )
+        trainer.id = self.wand_run.id
 
         if trainer.name is None:
             if mode == "online":
                 trainer.name = self.wand_run.name
             elif mode in ("offline", "disabled"):
                 trainer.name = f"{mode}_{datetime.now():%Y-%m-%d_%H-%M-%S}"
+                trainer.id = trainer.name  # if we don't upload the log, name with time stamp is a better run id
             else:
                 raise ValueError(mode)
 
