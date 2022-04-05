@@ -18,6 +18,7 @@ BIOIMAGEIO_IDS = {
     "monuseg": "deepimagej/monuseg_digital_pathology_miccai2018",
     "ovules": "",  # not on bioimageio yet
     "platynereis": "ilastik/platynereis_em_training_data",
+    "snemi": "",  # not on bioimagegio yet
     "vnc": "ilastik/vnc"
 }
 

@@ -89,8 +89,7 @@ def _get_model(trainer, postprocessing):
     model_kwargs = model.init_kwargs
     # clear the kwargs of non builtins
     # TODO warn if we strip any non-standard arguments
-    model_kwargs = {k: v for k, v in model_kwargs.items()
-                    if not isinstance(v, type)}
+    model_kwargs = {k: v for k, v in model_kwargs.items() if not isinstance(v, type)}
 
     # set the in-model postprocessing if given
     if postprocessing is not None:
@@ -376,8 +375,10 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
         "input_axes": [get_ax(tensor) for tensor in input_tensors],
         "output_axes": [get_ax(tensor) for tensor in output_tensors]
     }
+    notebook_link = None
     module = str(model.__class__.__module__)
     name = str(model.__class__.__name__)
+
     # can derive tensor kwargs only for known torch_em models (only unet for now)
     if module == "torch_em.model.unet":
         assert len(input_tensors) == len(output_tensors) == 1
@@ -395,10 +396,12 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
             depth = model_kwargs["depth"]
             step = [0, 0] + [2 ** depth] * 2
             min_shape = [1, inc] + [2 ** (depth + 1)] * 2
+            notebook_link = "ilastik/torch-em-2d-unet-notebook"
         elif name == "UNet3d":
             depth = model_kwargs["depth"]
             step = [0, 0] + [2 ** depth] * 3
             min_shape = [1, inc] + [2 ** (depth + 1)] * 3
+            notebook_link = "ilastik/torch-em-3d-unet-notebook"
         elif name == "AnisotropicUNet":
             scale_factors = model_kwargs["scale_factors"]
             scale_prod = [
@@ -408,6 +411,7 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
             assert len(scale_prod) == 3
             step = [0, 0] + scale_prod
             min_shape = [1, inc] + [2 * sp for sp in scale_prod]
+            notebook_link = "ilastik/torch-em-3d-unet-notebook"
         else:
             raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
         halo = [st // 2 for st in step]
@@ -427,7 +431,7 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
             "output_offset": [offset],
             "halo": [halo]
         })
-    return tensor_kwargs
+    return tensor_kwargs, notebook_link
 
 
 def _validate_model(spec_path):
@@ -476,7 +480,7 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
                             git_repo=None, cite=None,
                             input_optional_parameters=True,
                             model_postprocessing=None,
-                            for_deepimagej=False, links=[],
+                            for_deepimagej=False, links=None,
                             maintainers=None, checkpoint_name="best",
                             training_data=None, config={}):
     """
@@ -494,7 +498,7 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
 
     # create the test input/output file and derive the tensor kwargs from the model and its kwargs
     test_in_paths, test_out_paths = _write_data(input_data, model, trainer, export_folder)
-    tensor_kwargs = _get_tensor_kwargs(model, model_kwargs, test_in_paths, test_out_paths)
+    tensor_kwargs, notebook_link = _get_tensor_kwargs(model, model_kwargs, test_in_paths, test_out_paths)
 
     # create the model source file
     source = _write_source(model, export_folder)
@@ -513,7 +517,12 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
     preprocessing = _get_preprocessing(trainer)
 
     # the apps to link with this model, by default ilastik
+    if links is None:
+        links = []
     links.append("ilastik/ilastik")
+    # add the notebook link, if available
+    if notebook_link is not None:
+        links.append(notebook_link)
     kwargs.update({"links": links, "config": config})
 
     zip_path = os.path.join(export_folder, f"{name}.zip")
