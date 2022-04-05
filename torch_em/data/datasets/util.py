@@ -11,12 +11,14 @@ BIOIMAGEIO_IDS = {
     "covid_if": "ilastik/covid_if_training_data",
     "cremi": "ilastik/cremi_training_data",
     "dsb": "ilastik/stardist_dsb_training_data",
+    "hpa": "",  # not on bioimageio yet
     "isbi2012": "ilastik/isbi2012_neuron_segmentation_challenge",
     "livecell": "ilastik/livecell_dataset",
     "mitoem": "ilastik/mitoem_segmentation_challenge",
     "monuseg": "deepimagej/monuseg_digital_pathology_miccai2018",
     "ovules": "",  # not on bioimageio yet
     "platynereis": "ilastik/platynereis_em_training_data",
+    "snemi": "",  # not on bioimagegio yet
     "vnc": "ilastik/vnc"
 }
 
