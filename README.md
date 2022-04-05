@@ -77,7 +77,9 @@ test_im = imageio.imread(glob(f"{data_path}/test/images/*.tif")[0])
 export_bioimageio_model("./checkpoints/dsb-boundary-model", "./bioimageio-model", test_im)
 ```
 
-Check out [expirements/platynereis/mitochondria/train_affinities.py](https://github.com/constantinpape/torch-em/blob/main/experiments/platynereis/mitochondria/train_affinities.py) for a more advanced example.
+For a more in-depth example, check out one of the example notebooks:
+- [2D-UNet](https://github.com/constantinpape/torch-em/blob/main/experiments/2D-UNet-Training.ipynb): train a 2d UNet for a segmentation task. [Available on google colab](https://colab.research.google.com/github/constantinpape/torch-em/blob/main/experiments/2D-UNet-Training.ipynb).
+- [3D-UNet](https://github.com/constantinpape/torch-em/blob/main/experiments/3D-UNet-Training.ipynb): train a 3d UNet for a segmentation task. [Available on google colab](https://colab.research.google.com/github/constantinpape/torch-em/blob/main/experiments/3D-UNet-Training.ipynb).
 
 
 ## Installation
