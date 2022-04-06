@@ -1,8 +1,9 @@
+import contextlib
 import os
 import time
 import warnings
 from importlib import import_module
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import numpy as np
 import torch
@@ -308,40 +309,30 @@ class DefaultTrainer:
         if isinstance(self.logger, WandbLogger):
             self.logger.get_wandb().finish()
 
+    def _backprop(self, loss):
+        loss.backward()
+        self.optimizer.step()
+
+    def _backprop_mixed(self, loss):
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
+
     def _train_epoch(self, progress):
-        self.model.train()
-
-        n_iter = 0
-        t_per_iter = time.time()
-        for x, y in self.train_loader:
-            x, y = x.to(self.device), y.to(self.device)
-
-            self.optimizer.zero_grad()
-
-            prediction = self.model(x)
-            if self._iteration % self.log_image_interval == 0:
-                prediction.retain_grad()
-            loss = self.loss(prediction, y)
-
-            loss.backward()
-            self.optimizer.step()
-
-            lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
-            if self.logger is not None:
-                self.logger.log_train(self._iteration, loss, lr,
-                                      x, y, prediction,
-                                      log_gradients=True)
-
-            self._iteration += 1
-            n_iter += 1
-            if self._iteration >= self.max_iteration:
-                break
-            progress.update(1)
-
-        t_per_iter = (time.time() - t_per_iter) / n_iter
-        return t_per_iter
+        return self._train_epoch_impl(progress, contextlib.nullcontext, self._backprop)
 
     def _train_epoch_mixed(self, progress):
+        return self._train_epoch_impl(progress, amp.autocast, self._backprop_mixed)
+
+    def _forward_and_loss(self, x, y):
+        pred = self.model(x)
+        if self._iteration % self.log_image_interval == 0:
+            pred.retain_grad()
+
+        loss = self.loss(pred, y)
+        return pred, loss
+
+    def _train_epoch_impl(self, progress, forward_context, backprop: Callable[[torch.Tensor], None]):
         self.model.train()
 
         n_iter = 0
@@ -351,18 +342,14 @@ class DefaultTrainer:
 
             self.optimizer.zero_grad()
 
-            with amp.autocast():
-                prediction = self.model(x)
-                loss = self.loss(prediction, y)
+            with forward_context():
+                pred, loss = self._forward_and_loss(x, y)
 
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            backprop(loss)
 
             lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
             if self.logger is not None:
-                self.logger.log_train(self._iteration, loss, lr,
-                                      x, y, prediction)
+                self.logger.log_train(self._iteration, loss, lr, x, y, pred, log_gradients=True)
 
             self._iteration += 1
             n_iter += 1
@@ -374,26 +361,12 @@ class DefaultTrainer:
         return t_per_iter
 
     def _validate(self):
-        self.model.eval()
-
-        metric = 0.0
-        loss = 0.0
-
-        with torch.no_grad():
-            for x, y in self.val_loader:
-                x, y = x.to(self.device), y.to(self.device)
-                prediction = self.model(x)
-                loss += self.loss(prediction, y).item()
-                metric += self.metric(prediction, y).item()
-
-        metric /= len(self.val_loader)
-        loss /= len(self.val_loader)
-        if self.logger is not None:
-            self.logger.log_validation(self._iteration, metric, loss,
-                                       x, y, prediction)
-        return metric
+        return self._validate_impl(contextlib.nullcontext)
 
     def _validate_mixed(self):
+        return self._validate_impl(amp.autocast)
+
+    def _validate_impl(self, forward_context):
         self.model.eval()
 
         metric_val = 0.0
@@ -402,16 +375,15 @@ class DefaultTrainer:
         with torch.no_grad():
             for x, y in self.val_loader:
                 x, y = x.to(self.device), y.to(self.device)
-                with amp.autocast():
-                    prediction = self.model(x)
-                    loss = self.loss(prediction, y)
-                    metric = self.metric(prediction, y)
-                loss_val += loss
-                metric_val += metric
+                with forward_context():
+                    pred, loss = self._forward_and_loss(x, y)
+                    metric = self.metric(pred, y)
+
+                loss_val += loss.item()
+                metric_val += metric.item()
 
         metric_val /= len(self.val_loader)
         loss_val /= len(self.val_loader)
         if self.logger is not None:
-            self.logger.log_validation(self._iteration, metric, loss,
-                                       x, y, prediction)
+            self.logger.log_validation(self._iteration, metric, loss, x, y, pred)
         return metric_val
