@@ -89,7 +89,7 @@ class WandbLogger(TorchEmLogger):
         if loss < self.wand_run.summary.get("validation/loss", np.inf):
             self.wand_run.summary["validation/loss"] = loss
 
-        if metric > self.wand_run.summary.get("validation/metric", np.inf):
+        if metric < self.wand_run.summary.get("validation/metric", np.inf):
             self.wand_run.summary["validation/metric"] = metric
 
         self._log_images(step, x, y, prediction, "validation")
