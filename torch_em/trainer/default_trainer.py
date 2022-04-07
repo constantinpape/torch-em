@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import os
 import time
@@ -208,43 +210,90 @@ class DefaultTrainer:
         trainer._initialize(0, save_dict)
         return trainer
 
+    class Serializer:
+        """Implements helpers to serialize 'init_data' from a trainer instance"""
+
+        def __init__(self, trainer: DefaultTrainer):
+            self.init_data = {}
+            self.trainer = trainer
+
+        def __call__(self, *names: str, optional=False) -> None:
+            for name in names:
+                self.dump(name, optional)
+
+        def dump(self, name: str, optional=False):
+            if name == "device":
+                self.dump_device()
+            elif name.endswith("_loader"):
+                self.dump_loader(name, optional)
+            elif not hasattr(self.trainer, name):
+                if hasattr(self.trainer, f"{name}_class"):
+                    self.dump_explicit_class_and_kwargs(name, optional)
+                else:
+                    raise AttributeError(f"{self.trainer.__class__} has no attribute '{name}' or '{name}_class'")
+            else:
+                obj = getattr(self.trainer, name)
+                if obj is None or isinstance(
+                    obj,
+                    (
+                        bool,
+                        bytearray,
+                        bytes,
+                        dict,
+                        float,
+                        frozenset,
+                        int,
+                        list,
+                        set,
+                        str,
+                        tuple,
+                    ),
+                ):
+                    self.dump_as_is(name, optional)
+                else:
+                    self.dump_class_instance(name, optional)
+
+        def dump_device(self):
+            self.init_data["device"] = str(self.trainer.device)
+
+        def dump_loader(self, name: str, optional=False):
+            loader = getattr(self, name)
+            if loader is None and optional:
+                return
+            self.init_data[f"{name.replace('_loader', '')}_dataset"] = loader.dataset
+            self.init_data[f"{name}_kwargs"] = get_constructor_arguments(loader)
+
+        def dump_explicit_class_and_kwargs(self, name: str, optional=False) -> None:
+            obj = getattr(self.trainer, f"{name}_class")
+            if obj is None and optional:
+                return
+            self.init_data[f"{name}_class"] = None if obj is None else f"{obj.__module__}.{obj.__name__}"
+            if hasattr(self.trainer, f"{name}_kwargs"):
+                self.init_data[f"{name}_kwargs"] = getattr(self.trainer, f"{name}_kwargs")
+
+        def dump_as_is(self, name: str, optional=False) -> None:
+            obj = getattr(self.trainer, name)
+            if obj is None and optional:
+                return
+            self.init_data[name] = obj
+
+        def dump_class_instance(self, name: str, optional=False) -> None:
+            obj = getattr(self.trainer, name)
+            if obj is None and optional:
+                return
+            self.init_data[f"{name}_class"] = f"{obj.__class__.__module__}.{obj.__class__.__name__}"
+            self.init_data[f"{name}_kwargs"] = get_constructor_arguments(obj)
+
+    def _serialize(self) -> Serializer:
+        serializer = self.Serializer(self)
+        serializer("model", "loss", "optimizer", "metric", "device", "log_image_interval", "mixed_precision", "logger")
+        serializer("early_stopping", "lr_scheduler", optional=True)
+
+        return serializer
+
     def _build_init(self):
-
-        def _full_class_path(obj):
-            return f"{obj.__class__.__module__}.{obj.__class__.__name__}"
-
-        def _full_class_path_of_class(obj):
-            return f"{obj.__module__}.{obj.__name__}"
-
-        def _update_loader(init_data, loader, name):
-            init_data.update({
-                f"{name}_dataset": loader.dataset,
-                f"{name}_loader_kwargs": get_constructor_arguments(loader)
-            })
-            return init_data
-
-        init_data = {
-            "model_class": _full_class_path(self.model),
-            "model_kwargs": get_constructor_arguments(self.model),
-            "loss_class": _full_class_path(self.loss),
-            "loss_kwargs": get_constructor_arguments(self.loss),
-            "optimizer_class": _full_class_path(self.optimizer),
-            "optimizer_kwargs": get_constructor_arguments(self.optimizer),
-            "metric_class": _full_class_path(self.metric),
-            "metric_kwargs": get_constructor_arguments(self.metric),
-            "device": self.device.type,
-            "log_image_interval": self.log_image_interval,
-            "mixed_precision": self.mixed_precision,
-            "early_stopping": self.early_stopping,
-            "logger_class": None if self.logger_class is None else _full_class_path_of_class(self.logger_class),
-            "logger_kwargs": self.logger_kwargs,
-        }
-        init_data = _update_loader(init_data, self.train_loader, "train")
-        init_data = _update_loader(init_data, self.val_loader, "val")
-        if self.lr_scheduler is not None:
-            init_data["lr_scheduler_class"] = _full_class_path(self.lr_scheduler)
-            init_data["lr_scheduler_kwargs"] = get_constructor_arguments(self.lr_scheduler)
-        return init_data
+        serializer = self._serialize()
+        return serializer.init_data
 
     def _initialize(self, iterations, load_from_checkpoint):
         assert self.train_loader is not None
