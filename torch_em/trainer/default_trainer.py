@@ -149,8 +149,8 @@ class DefaultTrainer:
                 return this_cls(*dynamic_args, **self.init_data.get(f"{name}_kwargs", {}), **(dynamic_kwargs or {}))
 
         def load_loader(self, name):
-            ds = self.init_data[f"{name}_dataset"]
-            loader_kwargs = self.init_data[f"{name}_loader_kwargs"]
+            ds = self.init_data[f"{name.replace('_loader', '')}_dataset"]
+            loader_kwargs = self.init_data[f"{name}_kwargs"]
             loader = torch.utils.data.DataLoader(ds, **loader_kwargs)
             # monkey patch shuffle attribute to the loader
             loader.shuffle = loader_kwargs.get("shuffle", False)
