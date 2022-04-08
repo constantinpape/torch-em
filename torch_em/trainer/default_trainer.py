@@ -177,7 +177,10 @@ class DefaultTrainer:
 
         # todo: remove and rename kwarg 'logger' to 'logger_class'
         def load_logger(self, kwarg_name: str, optional: bool):
-            self.load_generic(f"{kwarg_name}_class", optional=optional)
+            assert kwarg_name == "logger"
+            self.load_generic("logger_class", optional=optional)
+            if "logger_class" in self.trainer_kwargs:
+                self.trainer_kwargs["logger"] = self.trainer_kwargs.pop("logger_class")
 
     @staticmethod
     def _get_save_dict(save_path, device):
