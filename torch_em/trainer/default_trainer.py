@@ -188,7 +188,7 @@ class DefaultTrainer:
         save_path = os.path.join(checkpoint_folder, f"{name}.pt")
         save_dict = cls._get_save_dict(save_path, device)
         deserializer = cls.Deserializer(save_dict["init"], save_path, device)
-        for name, parameter in inspect.signature(cls).parameters:
+        for name, parameter in inspect.signature(cls).parameters.items():
             deserializer.load(name, optional=parameter.default is not inspect.Parameter.empty)
 
         trainer = cls(**deserializer.trainer_kwargs)
