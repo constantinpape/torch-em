@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import os
 import time
 import warnings
@@ -18,18 +19,18 @@ from ..util import get_constructor_arguments
 
 
 class DefaultTrainer:
-    """ Trainer class for 2d/3d training on a single GPU.
-    """
+    """Trainer class for 2d/3d training on a single GPU."""
+
     def __init__(
         self,
         name: Optional[str],
-        train_loader=None,
-        val_loader=None,
-        model=None,
-        loss=None,
-        optimizer=None,
-        metric=None,
-        device=None,
+        train_loader,
+        val_loader,
+        model,
+        loss,
+        optimizer,
+        metric,
+        device,
         lr_scheduler=None,
         log_image_interval=100,
         mixed_precision=True,
@@ -97,61 +98,57 @@ class DefaultTrainer:
             >>>
             >>>     class Deserializer(DefaultTrainer.Deserializer):
             >>>         def load_the_answer(self):
-            >>>             generic_answer = self.init_data["the_answer"]  # default Deserializer would return this
+            >>>             generic_answer = self.init_data["the_answer"]
             >>>             # (device dependent) special deserialization
             >>>             if self.device.type == "cpu":
-            >>>                 return generic_answer + 1
+            >>>                 self.trainer_kwargs["the_answer"] = generic_answer + 1
             >>>             else:
-            >>>                 return generic_answer * 2
+            >>>                 self.trainer_kwargs["the_answer"] = generic_answer * 2
         """
 
         def __init__(self, init_data: dict, save_path: str, device: Union[str, torch.device]):
             self.init_data = init_data
             self.save_path = save_path
             self.device = torch.device(self.init_data["device"]) if device is None else torch.device(device)
+            self.trainer_kwargs = {}  # populate with deserialized trainer kwargs during deserialization
 
-        def __call__(
-            self,
-            kwarg_name: str,
-            *dynamic_args,
-            optional=False,
-            only_class=False,
-            dynamic_kwargs: Optional[Dict[str, Any]] = None,
-        ):
+        def load(self, kwarg_name: str, optional):
+            """`optional` is True if self.trainer.__class__.__init__ specifies a default value for 'kwarg_name'"""
+
             if kwarg_name == "device":
-                return self.device
+                pass  # deserialized in __init__
             elif kwarg_name.endswith("_loader"):
-                return self.load_data_loader(kwarg_name)
+                self.load_data_loader(kwarg_name, optional)
             else:
                 load = getattr(self, f"load_{kwarg_name}", self.load_generic)
+                load(kwarg_name, optional=optional)
 
-                return load(
-                    kwarg_name, *dynamic_args, optional=optional, only_class=only_class, dynamic_kwargs=dynamic_kwargs
-                )
+        def load_data_loader(self, loader_name, optional) -> None:
+            ds = self.init_data.get(loader_name.replace("_loader", "_dataset"))
+            if ds is None and optional:
+                return
 
-        def load_data_loader(self, loader_name):
-            ds = self.init_data[loader_name.replace("_loader", "_dataset")]
             loader_kwargs = self.init_data[f"{loader_name}_kwargs"]
             loader = torch.utils.data.DataLoader(ds, **loader_kwargs)
             # monkey patch shuffle loader_name to the loader
             loader.shuffle = loader_kwargs.get("shuffle", False)
-            return loader
+            self.trainer_kwargs[loader_name] = loader
 
         def load_generic(
             self,
             kwarg_name: str,
             *dynamic_args,
             optional: bool,
-            only_class: bool,
-            dynamic_kwargs: Optional[Dict[str, Any]],
-        ):
+            only_class: bool = False,
+            dynamic_kwargs: Optional[Dict[str, Any]] = None,
+        ) -> None:
             if kwarg_name in self.init_data:
                 return self.init_data[kwarg_name]
 
             this_cls = self.init_data.get(f"{kwarg_name}_class", None)
             if this_cls is None:
                 if optional:
-                    return None
+                    return
                 else:
                     raise RuntimeError(f"Could not find init data for {kwarg_name} in {self.save_path}")
 
@@ -160,11 +157,24 @@ class DefaultTrainer:
             cls_p, cls_m = this_cls.rsplit(".", 1)
             this_cls = getattr(import_module(cls_p), cls_m)
             if only_class:
-                return this_cls
+                self.trainer_kwargs[kwarg_name] = this_cls
             else:
-                return this_cls(
+                self.trainer_kwargs[kwarg_name] = this_cls(
                     *dynamic_args, **self.init_data.get(f"{kwarg_name}_kwargs", {}), **(dynamic_kwargs or {})
                 )
+
+        def load_name(self, kwarg_name: str, optional: bool):
+            self.trainer_kwargs[kwarg_name] = os.path.split(os.path.dirname(self.save_path))[1]
+
+        def load_optimizer(self, kwarg_name: str, optional: bool):
+            self.load_generic(kwarg_name, self.trainer_kwargs["model"].parameters(), optional=optional)
+
+        def load_lr_scheduler(self, kwarg_name: str, optional: bool):
+            self.load_generic(kwarg_name, self.trainer_kwargs["optimizer"], optional=optional)
+
+        # todo: remove and rename kwarg 'logger' to 'logger_class'
+        def load_logger(self, kwarg_name: str, optional: bool):
+            self.load_generic(f"{kwarg_name}_class", optional=optional)
 
     @staticmethod
     def _get_save_dict(save_path, device):
@@ -173,126 +183,145 @@ class DefaultTrainer:
 
         return torch.load(save_path, map_location=device)
 
-    @staticmethod
-    def _get_trainer_kwargs(load: Deserializer):
-        model = load("model")
-        optimizer = load("optimizer", model.parameters())
-
-        kwargs = dict(
-            name=os.path.split(os.path.dirname(load.save_path))[1],
-            model=model,
-            optimizer=optimizer,
-            lr_scheduler=load("lr_scheduler", optimizer, optional=True),
-            logger=load("logger", only_class=True, optional=True),
-            logger_kwargs=load("logger_kwargs", optional=True),
-        )
-        for kw_name in [
-            "train_loader",
-            "val_loader",
-            "loss",
-            "metric",
-            "device",
-            "log_image_interval",
-            "mixed_precision",
-            "early_stopping",
-        ]:
-            kwargs[kw_name] = load(kw_name)
-
-        return kwargs
-
     @classmethod
     def from_checkpoint(cls, checkpoint_folder, name="best", device=None):
         save_path = os.path.join(checkpoint_folder, f"{name}.pt")
         save_dict = cls._get_save_dict(save_path, device)
         deserializer = cls.Deserializer(save_dict["init"], save_path, device)
-        trainer_kwargs = cls._get_trainer_kwargs(deserializer)
-        trainer = cls(**trainer_kwargs)
+        for name, parameter in inspect.signature(cls).parameters:
+            deserializer.load(name, optional=parameter.default is not inspect.Parameter.empty)
+
+        trainer = cls(**deserializer.trainer_kwargs)
         trainer._initialize(0, save_dict)
         return trainer
 
     class Serializer:
-        """Implements helpers to serialize 'init_data' from a trainer instance"""
+        """Implements how to serialize trainer kwargs from a trainer instance
+
+        Examples:
+            To extend the serialization process you can inherite from this Serializer in a derived Trainer class.
+            Note that `DefaultTrainer.Serializer.dump_generic()` covers most cases already.
+
+            This example adds `the_answer` kwarg, which requires extra steps on dumping only because we don't keep a
+            'the_answer' attribute:
+            >>> class MyTrainer(DefaultTrainer):
+            >>>     def __init__(self, *args, the_answer: int, **kwargs):
+            >>>         super().__init__(*args, **kwargs)
+            >>>         # self.the_answer = the_answer  # this would allow the default Serializer to save the new kwarg,
+            >>>         # but let's make things more interesting...
+            >>>         self.the = the_answer // 10
+            >>>         self.answer = the_answer % 10
+            >>>
+            >>>     class Serializer(DefaultTrainer.Serializer):
+            >>>         trainer: MyTrainer
+            >>>         def dump_the_answer(self, kwarg_name: str) -> None:  # custom dump method for 'the_answer' kwarg
+            >>>             assert kwarg_name == "the_answer"
+            >>>             # populate self.init_data with the serialized data required by Deserializer
+            >>>             # to restore the trainer kwargs
+            >>>             self.init_data["the_answer"] = self.trainer.the * 10 + self.trainer.answer
+
+            This example with both Serializer and Deserializer adds `the_answer` kwarg,
+            while saving it in two separate entries 'the' and 'answer'
+            >>> class MyTrainer(DefaultTrainer):
+            >>>     def __init__(self, *args, the_answer: int, **kwargs):
+            >>>         super().__init__(*args, **kwargs)
+            >>>         self.the_answer = the_answer
+            >>>
+            >>>     class Serializer(DefaultTrainer.Serializer):
+            >>>         trainer: MyTrainer
+            >>>         def dump_the_answer(self, kwarg_name: str):
+            >>>             assert kwarg_name == "the_answer"
+            >>>             self.init_data.update({
+            >>>                 "the": self.trainer.the_answer // 10,
+            >>>                 "answer": self.trainer.the_answer % 10
+            >>>             })
+            >>>
+            >>>     class Deserializer(DefaultTrainer.Deserializer):
+            >>>         def load_the_answer(self, kwarg_name: str, optional: bool):
+            >>>             assert kwarg_name == "the_answer"
+            >>>             # 'optional' is True if MyTrainer.__init__ specifies a default value for 'kwarg_name'
+            >>>             self.trainer_kwargs[kwarg_name] = self.init_data["the"] * 10 + self.init_data["answer"]
+        """
 
         def __init__(self, trainer: DefaultTrainer):
-            self.init_data = {}
             self.trainer = trainer
+            self.init_data = {}  # to be populated during serialization process
 
-        def __call__(self, *names: str, optional=False) -> None:
-            for name in names:
-                self.dump(name, optional)
-
-        def dump(self, name: str, optional=False):
-            if name == "device":
-                self.dump_device()
-            elif name.endswith("_loader"):
-                self.dump_loader(name, optional)
-            elif not hasattr(self.trainer, name):
-                if hasattr(self.trainer, f"{name}_class"):
-                    self.dump_explicit_class_and_kwargs(name, optional)
-                else:
-                    raise AttributeError(f"{self.trainer.__class__} has no attribute '{name}' or '{name}_class'")
+        def dump(self, kwarg_name: str) -> None:
+            dumper = getattr(self, f"dump_{kwarg_name}", None)
+            if dumper is not None:
+                dumper(kwarg_name)
+            elif kwarg_name.endswith("_loader"):
+                self.dump_data_loader(kwarg_name)
+            elif kwarg_name.endswith("_class"):
+                self.dump_generic_class(kwarg_name)
+            elif not hasattr(self.trainer, kwarg_name):
+                raise AttributeError(
+                    f"{self.trainer.__class__} missing attribute '{kwarg_name}' "
+                    f"or special dump method {self.trainer.__class__}.Serializer.dump_{kwarg_name}()"
+                )
             else:
-                obj = getattr(self.trainer, name)
-                if obj is None or isinstance(
-                    obj,
-                    (
-                        bool,
-                        bytearray,
-                        bytes,
-                        dict,
-                        float,
-                        frozenset,
-                        int,
-                        list,
-                        set,
-                        str,
-                        tuple,
-                    ),
+                assert hasattr(self.trainer, kwarg_name)
+                obj = getattr(self.trainer, kwarg_name)
+                if obj is None or type(obj) in (
+                    bool,
+                    bytearray,
+                    bytes,
+                    dict,
+                    float,
+                    frozenset,
+                    int,
+                    list,
+                    set,
+                    str,
+                    tuple,
                 ):
-                    self.dump_as_is(name, optional)
+                    self.dump_generic_builtin(kwarg_name)
                 else:
-                    self.dump_class_instance(name, optional)
+                    self.dump_generic_instance(kwarg_name)
 
-        def dump_device(self):
-            self.init_data["device"] = str(self.trainer.device)
+        def dump_generic_builtin(self, kwarg_name: str) -> None:
+            assert hasattr(self.trainer, kwarg_name)
+            self.init_data[kwarg_name] = getattr(self.trainer, kwarg_name)
 
-        def dump_loader(self, name: str, optional=False):
-            loader = getattr(self, name)
-            if loader is None and optional:
-                return
-            self.init_data[f"{name.replace('_loader', '')}_dataset"] = loader.dataset
-            self.init_data[f"{name}_kwargs"] = get_constructor_arguments(loader)
+        def dump_generic_class(self, kwarg_name: str) -> None:
+            assert hasattr(self.trainer, kwarg_name)
+            assert kwarg_name.endswith("_class")
+            obj = getattr(self.trainer, kwarg_name)
+            self.init_data[kwarg_name] = None if obj is None else f"{obj.__module__}.{obj.__name__}"
 
-        def dump_explicit_class_and_kwargs(self, name: str, optional=False) -> None:
-            obj = getattr(self.trainer, f"{name}_class")
-            if obj is None and optional:
-                return
-            self.init_data[f"{name}_class"] = None if obj is None else f"{obj.__module__}.{obj.__name__}"
-            if hasattr(self.trainer, f"{name}_kwargs"):
-                self.init_data[f"{name}_kwargs"] = getattr(self.trainer, f"{name}_kwargs")
+        def dump_generic_instance(self, kwarg_name: str) -> None:
+            assert hasattr(self.trainer, kwarg_name)
+            instance = getattr(self.trainer, kwarg_name)
+            self.init_data.update(
+                {
+                    f"{kwarg_name}_class": f"{instance.__class__.__module__}.{instance.__class__.__name__}",
+                    f"{kwarg_name}_kwargs": get_constructor_arguments(instance),
+                }
+            )
 
-        def dump_as_is(self, name: str, optional=False) -> None:
-            obj = getattr(self.trainer, name)
-            if obj is None and optional:
-                return
-            self.init_data[name] = obj
+        def dump_device(self, kwarg_name: str):
+            assert hasattr(self.trainer, kwarg_name)
+            self.init_data[kwarg_name] = str(getattr(self.trainer, kwarg_name))
 
-        def dump_class_instance(self, name: str, optional=False) -> None:
-            obj = getattr(self.trainer, name)
-            if obj is None and optional:
-                return
-            self.init_data[f"{name}_class"] = f"{obj.__class__.__module__}.{obj.__class__.__name__}"
-            self.init_data[f"{name}_kwargs"] = get_constructor_arguments(obj)
+        def dump_data_loader(self, kwarg_name: str) -> None:
+            assert hasattr(self.trainer, kwarg_name)
+            loader = getattr(self, kwarg_name)
+            self.init_data.update(
+                {
+                    f"{kwarg_name.replace('_loader', '_dataset')}": loader.dataset,
+                    f"{kwarg_name}_kwargs": get_constructor_arguments(loader),
+                }
+            )
 
-    def _serialize(self) -> Serializer:
+        def dump_logger(self, kwarg_name: str):  # todo: remove and rename kwarg 'logger' to 'logger_class'
+            self.dump_generic_class(f"{kwarg_name}_class")
+
+    def _build_init(self) -> Dict[str, Any]:
         serializer = self.Serializer(self)
-        serializer("model", "loss", "optimizer", "metric", "device", "log_image_interval", "mixed_precision", "logger")
-        serializer("early_stopping", "lr_scheduler", optional=True)
+        for name in inspect.signature(self.__class__).parameters:
+            serializer.dump(name)
 
-        return serializer
-
-    def _build_init(self):
-        serializer = self._serialize()
         return serializer.init_data
 
     def _initialize(self, iterations, load_from_checkpoint):
@@ -338,7 +367,7 @@ class DefaultTrainer:
             "best_metric": best_metric,
             "model_state": self.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
-            "init": self.init_data
+            "init": self.init_data,
         }
         save_dict.update(**extra_save_dict)
         if self.scaler is not None:
@@ -376,8 +405,13 @@ class DefaultTrainer:
 
     def fit(self, iterations, load_from_checkpoint=None):
         best_metric = self._initialize(iterations, load_from_checkpoint)
-        print("Start fitting for", self.max_iteration - self._iteration,
-              "iterations / ", self.max_epoch - self._epoch, "epochs")
+        print(
+            "Start fitting for",
+            self.max_iteration - self._iteration,
+            "iterations / ",
+            self.max_epoch - self._epoch,
+            "epochs",
+        )
 
         if self.mixed_precision:
             train_epoch = self._train_epoch_mixed
@@ -414,8 +448,7 @@ class DefaultTrainer:
                     break
 
             self._epoch += 1
-            progress.set_description(msg % (self._epoch, t_per_iter, current_metric, best_metric),
-                                     refresh=True)
+            progress.set_description(msg % (self._epoch, t_per_iter, current_metric, best_metric), refresh=True)
 
         print(f"Finished training after {self._epoch} epochs / {self._iteration} iterations.")
         print(f"The best epoch is number {self._best_epoch}.")
