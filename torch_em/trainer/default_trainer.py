@@ -100,7 +100,7 @@ class DefaultTrainer:
             >>>         def load_the_answer(self):
             >>>             generic_answer = self.init_data["the_answer"]
             >>>             # (device dependent) special deserialization
-            >>>             if self.device.type == "cpu":
+            >>>             if self.trainer_kwargs["device"].type == "cpu":  # accessing previously deserialized kwarg
             >>>                 self.trainer_kwargs["the_answer"] = generic_answer + 1
             >>>             else:
             >>>                 self.trainer_kwargs["the_answer"] = generic_answer * 2
@@ -109,8 +109,10 @@ class DefaultTrainer:
         def __init__(self, init_data: dict, save_path: str, device: Union[str, torch.device]):
             self.init_data = init_data
             self.save_path = save_path
-            self.device = torch.device(self.init_data["device"]) if device is None else torch.device(device)
-            self.trainer_kwargs = {}  # populate with deserialized trainer kwargs during deserialization
+            # populate with deserialized trainer kwargs during deserialization; possibly overwrite 'device'
+            self.trainer_kwargs: Dict[str, Any] = dict(
+                device=torch.device(self.init_data["device"]) if device is None else torch.device(device)
+            )
 
         def load(self, kwarg_name: str, optional):
             """`optional` is True if self.trainer.__class__.__init__ specifies a default value for 'kwarg_name'"""
