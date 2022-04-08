@@ -306,7 +306,7 @@ class DefaultTrainer:
 
         def dump_data_loader(self, kwarg_name: str) -> None:
             assert hasattr(self.trainer, kwarg_name)
-            loader = getattr(self, kwarg_name)
+            loader = getattr(self.trainer, kwarg_name)
             self.init_data.update(
                 {
                     f"{kwarg_name.replace('_loader', '_dataset')}": loader.dataset,
