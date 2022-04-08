@@ -63,7 +63,7 @@ class DefaultTrainer:
         self.mixed_precision = mixed_precision
         self.early_stopping = early_stopping
 
-        self.scaler = amp.GradScaler() if self.mixed_precision else None
+        self.scaler = amp.GradScaler() if mixed_precision else None
 
         self.logger_class = logger
         self.logger_kwargs = logger_kwargs
@@ -145,7 +145,8 @@ class DefaultTrainer:
             dynamic_kwargs: Optional[Dict[str, Any]] = None,
         ) -> None:
             if kwarg_name in self.init_data:
-                return self.init_data[kwarg_name]
+                self.trainer_kwargs[kwarg_name] = self.init_data[kwarg_name]
+                return
 
             this_cls = self.init_data.get(f"{kwarg_name}_class", None)
             if this_cls is None:
