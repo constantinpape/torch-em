@@ -36,7 +36,11 @@ class Shallow2DeepDataset(SegmentationDataset):
 
     @rf_channels.setter
     def rf_channels(self, value):
-        self._rf_channels = value
+        if isinstance(value, int):
+            self.rf_channels = (value,)
+        else:
+            assert isinstance(value, tuple)
+            self._rf_channels = value
 
     def _predict_rf(self, raw):
         n_rfs = len(self._rf_paths)
