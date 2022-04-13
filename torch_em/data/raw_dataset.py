@@ -138,6 +138,7 @@ class RawDataset(torch.utils.data.Dataset):
 
     def __setstate__(self, state):
         raw_path, raw_key = state["raw_path"], state["raw_key"]
+        # TODO need to properly deserialize the raw, including potential ROIWrapper!
         try:
             state["raw"] = open_file(state["raw_path"], mode="r")[state["raw_key"]]
         except Exception:
