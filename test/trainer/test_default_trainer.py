@@ -73,7 +73,6 @@ class TestDefaultTrainer(unittest.TestCase):
         trainer.fit(8, load_from_checkpoint="latest")
         self.assertEqual(trainer.iteration, 20)
 
-    # TODO expand this test
     def test_from_checkpoint(self):
         from torch_em.trainer import DefaultTrainer
         trainer = DefaultTrainer(**self._get_kwargs())
@@ -84,6 +83,7 @@ class TestDefaultTrainer(unittest.TestCase):
             name="latest"
         )
         self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertEqual(trainer.model.depth, trainer2.model.depth)
 
         # make sure that the optimizer was loaded properly
         lr1 = [pm["lr"] for pm in trainer.optimizer.param_groups][0]
