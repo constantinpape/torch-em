@@ -173,6 +173,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
     def __setstate__(self, state):
         raw_path, raw_key = state["raw_path"], state["raw_key"]
         label_path, label_key = state["label_path"], state["label_key"]
+        # TODO need to properly deserialize the raw and labels here, including potential ROIWrapper!
         try:
             state["raw"] = open_file(raw_path, mode="r")[raw_key]
         except Exception:
