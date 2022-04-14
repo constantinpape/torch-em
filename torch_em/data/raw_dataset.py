@@ -138,9 +138,12 @@ class RawDataset(torch.utils.data.Dataset):
 
     def __setstate__(self, state):
         raw_path, raw_key = state["raw_path"], state["raw_key"]
-        # TODO need to properly deserialize the raw, including potential ROIWrapper!
+        roi = state["roi"]
         try:
-            state["raw"] = open_file(state["raw_path"], mode="r")[state["raw_key"]]
+            raw = open_file(state["raw_path"], mode="r")[state["raw_key"]]
+            if roi is not None:
+                raw = RoiWrapper(raw, (slice(None),) + roi) if state["_with_channels"] else RoiWrapper(raw, roi)
+            state["raw"] = raw
         except Exception:
             msg = f"RawDataset could not be deserialized because of missing {raw_path}, {raw_key}.\n"
             msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
