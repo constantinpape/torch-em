@@ -18,6 +18,14 @@ class RawDataset(torch.utils.data.Dataset):
         n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
         return n_samples
 
+    @staticmethod
+    def apply_roi(data, roi, with_channels):
+        if roi is not None:
+            if isinstance(roi, slice):
+                roi = (roi,)
+            return RoiWrapper(data, (slice(None),) + roi) if with_channels else RoiWrapper(data, roi)
+        return data
+
     def __init__(
         self,
         raw_path,
@@ -38,10 +46,7 @@ class RawDataset(torch.utils.data.Dataset):
 
         self._with_channels = with_channels
 
-        if roi is not None:
-            if isinstance(roi, slice):
-                roi = (roi,)
-            self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
+        self.raw = self.apply_roi(self.raw, roi, self._with_channels)
 
         self.shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
         self.roi = roi
@@ -138,8 +143,11 @@ class RawDataset(torch.utils.data.Dataset):
 
     def __setstate__(self, state):
         raw_path, raw_key = state["raw_path"], state["raw_key"]
-        try:
-            state["raw"] = open_file(state["raw_path"], mode="r")[state["raw_key"]]
+        try: # can still use model even if data is not available anymore
+            raw = open_file(state["raw_path"], mode="r")[state["raw_key"]]
+            roi = state["roi"]
+            with_channels = state["_with_channels"]
+            state["raw"] = self.apply_roi(raw, roi, with_channels)
         except Exception:
             msg = f"RawDataset could not be deserialized because of missing {raw_path}, {raw_key}.\n"
             msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
