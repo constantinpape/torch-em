@@ -18,14 +18,6 @@ class SegmentationDataset(torch.utils.data.Dataset):
         n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
         return n_samples
 
-    @staticmethod
-    def apply_roi(data, roi, with_channels):
-        if roi is not None:
-            if isinstance(roi, slice):
-                roi = (roi,)
-            return RoiWrapper(data, (slice(None),) + roi) if with_channels else RoiWrapper(data, roi)
-        return data
-
     def __init__(
         self,
         raw_path,
@@ -57,8 +49,12 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self._with_channels = with_channels
         self._with_label_channels = with_label_channels
 
-        self.raw = self.apply_roi(self.raw, roi, self._with_channels)
-        self.labels = self.apply_roi(self.labels, roi, self._with_label_channels)
+        if roi is not None:
+            if isinstance(roi, slice):
+                roi = (roi,)
+            self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
+            self.labels = RoiWrapper(self.labels, (slice(None),) + roi) if self._with_label_channels else\
+                RoiWrapper(self.labels, roi)
 
         shape_raw = self.raw.shape[1:] if self._with_channels else self.raw.shape
         shape_label = self.labels.shape[1:] if self._with_label_channels else self.labels.shape
@@ -177,26 +173,30 @@ class SegmentationDataset(torch.utils.data.Dataset):
     def __setstate__(self, state):
         raw_path, raw_key = state["raw_path"], state["raw_key"]
         label_path, label_key = state["label_path"], state["label_key"]
-        try: # can still use model even if data is not available anymore
-            raw = open_file(state["raw_path"], mode="r")[state["raw_key"]]
-            roi = state["roi"]
-            with_channels = state["_with_channels"]
-            state["raw"] = self.apply_roi(raw, roi, with_channels)
+        roi = state["roi"]
+        try:
+            raw = open_file(raw_path, mode="r")[raw_key]
+            if roi is not None:
+                raw = RoiWrapper(raw, (slice(None),) + roi) if state["_with_channels"] else RoiWrapper(raw, roi)
+            state["raw"] = raw
         except Exception:
             msg = f"SegmentationDataset could not be deserialized because of missing {raw_path}, {raw_key}.\n"
             msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
             msg += "But it cannot be used for further training and wil throw an error."
             warnings.warn(msg)
             state["raw"] = None
+
         try:
-            labels = open_file(state["label_path"], mode="r")[state["label_key"]]
-            roi = state["roi"]
-            with_channels = state["_with_channels"]
-            state["labels"] = self.apply_roi(labels, roi, with_channels)
+            labels = open_file(label_path, mode="r")[label_key]
+            if roi is not None:
+                labels = RoiWrapper(labels, (slice(None),) + roi) if state["_with_label_channels"] else\
+                    RoiWrapper(labels, roi)
+            state["labels"] = labels
         except Exception:
             msg = f"SegmentationDataset could not be deserialized because of missing {label_path}, {label_key}.\n"
             msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
             msg += "But it cannot be used for further training and wil throw an error."
             warnings.warn(msg)
             state["labels"] = None
+
         self.__dict__.update(state)
