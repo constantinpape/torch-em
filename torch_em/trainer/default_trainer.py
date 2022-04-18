@@ -398,7 +398,8 @@ class DefaultTrainer:
     def _forward_and_loss(self, x, y):
         pred = self.model(x)
         if self._iteration % self.log_image_interval == 0:
-            pred.retain_grad()
+            if pred.requires_grad:
+                pred.retain_grad()
 
         loss = self.loss(pred, y)
         return pred, loss
