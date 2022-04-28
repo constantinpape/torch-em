@@ -204,7 +204,8 @@ class DefaultTrainer:
 
         Examples:
             To extend the serialization process you can inherite from this Serializer in a derived Trainer class.
-            Note that `DefaultTrainer.Serializer.dump_generic()` covers most cases already.
+            Note that the methods `dump_generic_builtin()`, `dump_generic_class()` and `dump_generic_instance()`
+            called by the `dump()` method when appropriate cover most cases already.
 
             This example adds `the_answer` kwarg, which requires extra steps on dumping only because we don't keep a
             'the_answer' attribute:
