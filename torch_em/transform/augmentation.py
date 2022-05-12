@@ -64,7 +64,7 @@ class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
 # TODO implement 'require_halo', and estimate the halo from the transformations
 # so that we can load a bigger block and cut it away
 class KorniaAugmentationPipeline(torch.nn.Module):
-    interpolatable_torch_tpyes = [torch.float16, torch.float32, torch.float64]
+    interpolatable_torch_types = [torch.float16, torch.float32, torch.float64]
     interpolatable_numpy_types = [np.dtype('float32'), np.dtype('float64')]
 
     def __init__(self, *kornia_augmentations, dtype=torch.float32):
