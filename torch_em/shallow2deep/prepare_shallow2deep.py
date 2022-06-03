@@ -88,7 +88,8 @@ def _load_rf_segmentation_dataset(
     raw_paths, raw_key, label_paths, label_key, patch_shape_min, patch_shape_max, **kwargs
 ):
     rois = kwargs.pop("rois", None)
-    sampler = torch_em.data.MinForegroundSampler(min_fraction=0.01)
+    sampler = kwargs.pop("sampler", None)
+    sampler = sampler if sampler else torch_em.data.MinForegroundSampler(min_fraction=0.01)
     if isinstance(raw_paths, str):
         if rois is not None:
             assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
@@ -299,6 +300,7 @@ def prepare_shallow2deep(
     is_seg_dataset=None,
     balance_labels=True,
     filter_config=None,
+    sampler=None,
     **rf_kwargs,
 ):
     assert len(patch_shape_min) == len(patch_shape_max)
@@ -312,7 +314,7 @@ def prepare_shallow2deep(
         ds = _load_rf_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
                                            patch_shape_min, patch_shape_max,
                                            raw_transform=raw_transform, label_transform=label_transform,
-                                           rois=rois, n_samples=n_forests)
+                                           rois=rois, n_samples=n_forests, sampler=sampler)
     else:
         ds = _load_rf_image_collection_dataset(raw_paths, raw_key, label_paths, label_key,
                                                patch_shape_min, patch_shape_max, roi=rois,
