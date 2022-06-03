@@ -29,3 +29,30 @@ class MinIntensitySampler:
             return True
         else:
             return np.random.rand() > self.p_reject
+
+
+class MinInstanceSampler:
+    def __init__(self, min_num_instances=2, p_reject=1.0):
+        self.min_num_instances = min_num_instances
+        self.p_reject = p_reject
+
+    def __call__(self, x, y):
+        uniques = np.unique(y)
+        if len(uniques) >= self.min_num_instances:
+            return True
+        else:
+            return np.random.rand() > self.p_reject
+
+
+class MinTwoInstanceSampler:
+    # for the case of min_num_instances=2 this is roughly 10x faster
+    # than using MinInstanceSampler since np.unique is slow
+    def __init__(self, p_reject=1.0):
+        self.p_reject = p_reject
+
+    def __call__(self, x, y):
+        sample_value = y.flat[0]
+        if (y != sample_value).any():
+            return True
+        else:
+            return np.random.rand() > self.p_reject
