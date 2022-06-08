@@ -207,15 +207,27 @@ def _get_filters(ndim, filters_and_sigmas):
     return filters_and_sigmas
 
 
+def _calculate_response(raw, filter_, sigma):
+    if callable(filter_):
+        return filter_(raw, sigma)
+
+    # filter_ is still string, convert it to function
+    # fastfilters does not support passing sigma as tuple
+    func = getattr(vigra.filters, filter_) if isinstance(sigma, tuple) else getattr(filter_impl, filter_)
+    
+    # special case since additional argument outerScale
+    # is needed for structureTensorEigenvalues functions
+    if filter_ == "structureTensorEigenvalues":
+        outerScale = tuple([s*2 for s in sigma]) if isinstance(sigma, tuple) else 2*sigma
+        return func(raw, sigma, outerScale=outerScale)
+
+    return func(raw, sigma)
+
+
 def _apply_filters(raw, filters_and_sigmas):
     features = []
     for filter_, sigma in filters_and_sigmas:
-        # fastfilters does not support passing sigma as tuple
-        if isinstance(sigma, tuple):
-            func = getattr(vigra.filters, filter_) if isinstance(filter_, str) else filter_
-        else:
-            func = getattr(filter_impl, filter_) if isinstance(filter_, str) else filter_
-        response = func(raw, sigma)
+        response = _calculate_response(raw, filter_, sigma)
         if response.ndim > raw.ndim:
             for c in range(response.shape[-1]):
                 features.append(response[..., c].flatten())
@@ -228,12 +240,7 @@ def _apply_filters(raw, filters_and_sigmas):
 def _apply_filters_with_mask(raw, filters_and_sigmas, mask):
     features = []
     for filter_, sigma in filters_and_sigmas:
-        # fastfilters does not support passing sigma as tuple
-        if isinstance(sigma, tuple):
-            func = getattr(vigra.filters, filter_) if isinstance(filter_, str) else filter_
-        else:
-            func = getattr(filter_impl, filter_) if isinstance(filter_, str) else filter_
-        response = func(raw, sigma)
+        response = _calculate_response(raw, filter_, sigma)
         if response.ndim > raw.ndim:
             for c in range(response.shape[-1]):
                 features.append(response[..., c][mask])
