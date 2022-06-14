@@ -56,3 +56,28 @@ class MinTwoInstanceSampler:
             return True
         else:
             return np.random.rand() > self.p_reject
+
+
+class MinNoToBackgroundBoundarySampler:
+    # Sometimes it is necessary to ignore boundaries to the background
+    # in RF training. Then, it can happen that even with 2 instances in the
+    # image while sampling there will be no boundary in the image after the
+    # label_transform and the RF only learns one class (Error further downstream).
+    # Therefore, this sampler is needed. Unfortunatley, the NoToBackgroundBoundaryTransform
+    # is then calculated multiple times.
+    def __init__(self, trafo, min_fraction=0.01, p_reject=1.0):
+        self.trafo = trafo
+        self.bg_label = trafo.bg_label
+        self.mask_label = trafo.mask_label
+        self.min_fraction = min_fraction
+        self.p_reject = p_reject
+
+    def __call__(self, x, y):
+        y_boundaries = self.trafo(y)
+        y_boundaries[y_boundaries == self.mask_label] = self.bg_label
+        size = float(y_boundaries.size)
+        foreground_fraction = np.sum(y_boundaries != self.bg_label) / size
+        if foreground_fraction > self.min_fraction:
+            return True
+        else:
+            return np.random.rand() > self.p_reject

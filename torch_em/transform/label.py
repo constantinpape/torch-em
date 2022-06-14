@@ -52,6 +52,28 @@ class BoundaryTransform:
         return target
 
 
+class NoToBackgroundBoundaryTransform:
+    def __init__(self, bg_label=0, mask_label=-1, mode="thick", ndim=None):
+        self.bg_label = bg_label
+        self.mask_label = mask_label
+        self.mode = mode
+        self.ndim = ndim
+
+    def __call__(self, labels):
+        labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
+        # calc normal boundaries
+        boundaries = skimage.segmentation.find_boundaries(labels, mode=self.mode)[None]
+
+        # make label image binary and calculate to-background-boundaries
+        labels_binary = (labels != self.bg_label)
+        to_bg_boundaries = skimage.segmentation.find_boundaries(labels_binary, mode=self.mode)[None]
+
+        # mask the to-background-boundaries
+        boundaries = boundaries.astype(np.int8)
+        boundaries[to_bg_boundaries] = self.mask_label
+        return boundaries
+
+
 # TODO affinity smoothing
 class AffinityTransform:
     def __init__(self, offsets,

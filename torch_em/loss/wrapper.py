@@ -15,24 +15,24 @@ class LossWrapper(nn.Module):
         self.transform = transform
         self.init_kwargs = {'loss': loss, 'transform': transform}
 
-    def apply_transform(self, prediction, target):
+    def apply_transform(self, prediction, target, **kwargs):
         # check if the tensors (prediction and target are lists)
         # if they are, apply the transform to each element inidvidually
         if isinstance(prediction, (list, tuple)):
             assert isinstance(target, (list, tuple))
             transformed_prediction, transformed_target = [], []
             for pred, targ in zip(prediction, target):
-                tr_pred, tr_targ = self.transform(pred, targ)
+                tr_pred, tr_targ = self.transform(pred, targ, **kwargs)
                 transformed_prediction.append(tr_pred)
                 transformed_target.append(tr_targ)
             return transformed_prediction, transformed_target
         # tensor input
         else:
-            prediction, target = self.transform(prediction, target)
+            prediction, target = self.transform(prediction, target, **kwargs)
             return prediction, target
 
-    def forward(self, prediction, target):
-        prediction, target = self.apply_transform(prediction, target)
+    def forward(self, prediction, target, **kwargs):
+        prediction, target = self.apply_transform(prediction, target, **kwargs)
         loss = self.loss(prediction, target)
         return loss
 
@@ -54,4 +54,24 @@ class ApplyAndRemoveMask:
 
         # mask the prediction
         prediction = prediction * mask
+        return prediction, target
+
+
+class ApplyMask:
+    def __call__(self, prediction, target, mask):
+        mask.requires_grad = False
+        prediction = prediction * mask
+        target = target * mask
+        return prediction, target
+
+
+class MaskIgnoreLabel:
+    def __init__(self, ignore_label=-1):
+        self.ignore_label = ignore_label
+
+    def __call__(self, prediction, target):
+        mask = (target != self.ignore_label)
+        mask.requires_grad = False
+        prediction = prediction * mask
+        target = target * mask
         return prediction, target
