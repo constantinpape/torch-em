@@ -64,7 +64,7 @@ def get_loader(args, split, rf_folder):
 
 
 def train_shallow2deep(args):
-    name = "shallow2deep-em-mitochondria" if args.train_advanced else "shallow2deep-em-mitochondria-advanced"
+    name = "shallow2deep-em-mitochondria-advanced" if args.train_advanced else "shallow2deep-em-mitochondria"
     _get_vnc_data(args.input, download=True)
 
     # check if we need to train the rfs for preparation
@@ -89,6 +89,7 @@ def train_shallow2deep(args):
 
 if __name__ == "__main__":
     parser = torch_em.util.parser_helper()
+    parser.add_argument("--train_advanced", "-a", type=int, default=0)
     parser.add_argument("--n_rfs", type=int, default=500)
     parser.add_argument("--n_threads", type=int, default=32)
     args = parser.parse_args()
