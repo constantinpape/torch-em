@@ -421,6 +421,18 @@ def prepare_shallow2deep_advanced(
     sampler=None,
     **rf_kwargs,
 ):
+    """Advanced training of random forests for shallow2deep enhancer training.
+
+    This function accepts the 'sampling_strategy' parameter, which allows to implement custom
+    sampling strategies for the samples used for training the random forests.
+    Training operates in stages, the parameter 'forests_per_stage' determines how many forests
+    are trained in each stage, and 'sample_fraction_per_stage' which fraction of the samples is
+    taken per stage. The random forests in stage 0 are always trained from balanced dense labels.
+    For the other stages 'sampling_strategy' enables specifying the strategy; it has to be a function
+    with signature '(features, labels, forests, forests_per_stage, sample_fraction_per_stage)',
+    and return the sampled features and labels. See thw 'worst_points' function
+    in this file for an example implementation.
+    """
     os.makedirs(output_folder, exist_ok=True)
     ds, filters_and_sigmas = _prepare_shallow2deep(
         raw_paths, raw_key, label_paths, label_key,
