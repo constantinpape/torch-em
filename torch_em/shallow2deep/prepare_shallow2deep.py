@@ -380,7 +380,10 @@ def worst_points(
     forests, forests_per_stage,
     sample_fraction_per_stage,
 ):
+    # only consider the random forests from the last stage
     last_forests = forests[-forests_per_stage:]
+
+    # get the mean prediction of the rfs
     pred = None
     for forest in last_forests:
         this_pred = forest.predict_proba(features)
@@ -389,13 +392,24 @@ def worst_points(
         else:
             pred += this_pred
     pred /= forests_per_stage
+
+    # labels to one-hot encoding
     unique, inverse = np.unique(labels, return_inverse=True)
-    # labels to one-hout encoding
     onehot = np.eye(unique.shape[0])[inverse]
+    # compute the difference between labels and prediction
     diff = np.abs(onehot - pred).sum(axis=1)
     assert len(diff) == len(features)
+
+    # get training samples based on the label-prediction diff
+    samples = []
+    nc = len(np.unique(labels))
+    # sample in a class balanced way
     n_samples = int(sample_fraction_per_stage * len(features))
-    samples = np.argsort(diff)[::-1][:n_samples]
+    n_samples_class = n_samples // nc
+    for class_id in range(nc):
+        this_samples = np.argsort(diff[labels == class_id])[::-1][:n_samples_class]
+        samples.append(this_samples)
+    samples = np.concatenate(samples)
     return features[samples], labels[samples]
 
 
@@ -443,7 +457,6 @@ def prepare_shallow2deep_advanced(
     forests = []
     n_stages = n_forests // forests_per_stage if n_forests % forests_per_stage == 0 else\
         n_forests // forests_per_stage + 1
-    print("N-stages:", n_stages)
 
     if isinstance(sampling_strategy, str):
         assert sampling_strategy == "worst_points", "Currently only have one prebuild sampling strategy: 'worst_points'"
@@ -455,20 +468,29 @@ def prepare_shallow2deep_advanced(
         def _train_rf(rf_id):
             # sample random patch with dataset
             raw, labels = ds[rf_id]
+
             # cast to numpy and remove channel axis
             # need to update this to support multi-channel input data and/or multi class prediction
             raw, labels = raw.numpy().squeeze(), labels.numpy().astype("int8").squeeze()
             assert raw.ndim == labels.ndim == ndim, f"{raw.ndim}, {labels.ndim}, {ndim}"
-            features, labels = _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels=True)
+
+            # only balance samples for the first (densely trained) rfs
+            features, labels = _get_features_and_labels(
+                raw, labels, filters_and_sigmas, balance_labels=len(forests) == 0
+            )
             if forests:  # we have forests: apply the sampling strategy
                 features, labels = worst_points(
                     features, labels,
                     forests, forests_per_stage,
                     sample_fraction_per_stage,
                 )
+
+            # fit the random forest
             assert len(features) == len(labels)
             rf = RandomForestClassifier(**rf_kwargs)
             rf.fit(features, labels)
+
+            # save the random forest, update pbar, return it
             out_path = os.path.join(output_folder, f"rf_{rf_id}.pkl")
             with open(out_path, "wb") as f:
                 pickle.dump(rf, f)
