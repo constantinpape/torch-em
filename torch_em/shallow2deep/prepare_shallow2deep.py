@@ -504,3 +504,32 @@ def prepare_shallow2deep_advanced(
                     _train_rf, range(forests_per_stage * stage, forests_per_stage * (stage + 1))
                 ))
                 forests.extend(this_forests)
+
+
+def visualize_pretrained_rfs(checkpoint, raw, n_forests, sample_random=False, filter_config=None, n_threads=1):
+    import napari
+
+    rf_folder = os.path.join(checkpoint, "rfs")
+    assert os.path.exists(rf_folder), rf_folder
+    rf_paths = glob(os.path.join(rf_folder, "*.pkl"))
+    rf_paths = np.random.sample(rf_paths) if sample_random else rf_paths[::(len(rf_paths) // n_forests)]
+
+    features = _apply_filters(raw, filter_config)
+
+    def predict_rf(rf_path):
+        with open(rf_path, "rb") as f:
+            rf = pickle.load(f)
+        pred = rf.predict_proba(features)
+        pred = pred.reshape(raw.shape + (pred.shape[1],))
+        pred = np.moveaxis(pred, -1, 0)
+        return pred
+
+    with futures.ThreadPoolExecutor(n_threads) as tp:
+        preds = list(tqdm(tp.map(predict_rf, rf_paths), desc="Predict RFs", total=n_forests))
+
+    v = napari.Viewer()
+    v.add_image(raw)
+    for path, pred in zip(rf_paths, preds):
+        name = os.path.basename(path)
+        v.add_image(pred, name=name)
+    napari.run()
