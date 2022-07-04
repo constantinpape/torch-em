@@ -367,7 +367,7 @@ def prepare_shallow2deep(
         features, labels = _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels)
         rf = RandomForestClassifier(**rf_kwargs)
         rf.fit(features, labels)
-        out_path = os.path.join(output_folder, f"rf_{rf_id}.pkl")
+        out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")
         with open(out_path, "wb") as f:
             pickle.dump(rf, f)
 
@@ -376,22 +376,15 @@ def prepare_shallow2deep(
 
 
 def worst_points(
-    features, labels,
+    features, labels, rf_id,
     forests, forests_per_stage,
     sample_fraction_per_stage,
+    accumulate_samples=True,
 ):
-    # only consider the random forests from the last stage
-    last_forests = forests[-forests_per_stage:]
-
-    # get the mean prediction of the rfs
-    pred = None
-    for forest in last_forests:
-        this_pred = forest.predict_proba(features)
-        if pred is None:
-            pred = this_pred
-        else:
-            pred += this_pred
-    pred /= forests_per_stage
+    # get the corresponding random forest from the last stage
+    # and predict with it
+    last_forest = forests[rf_id - forests_per_stage]
+    pred = last_forest.predict_proba(features)
 
     # labels to one-hot encoding
     unique, inverse = np.unique(labels, return_inverse=True)
@@ -410,9 +403,43 @@ def worst_points(
         this_samples = np.argsort(diff[labels == class_id])[::-1][:n_samples_class]
         samples.append(this_samples)
     samples = np.concatenate(samples)
+
+    # get the features and labels, add from previous rf if specified
+    features, labels = features[samples], labels[samples]
+    if accumulate_samples:
+        features = np.concatenate([last_forest.train_features, features], axis=0)
+        labels = np.concatenate([last_forest.train_labels, labels], axis=0)
+
+    return features, labels
+
+
+def random_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+):
+    samples = []
+    nc = len(np.unique(labels))
+    # sample in a class balanced way
+    n_samples = int(sample_fraction_per_stage * len(features))
+    n_samples_class = n_samples // nc
+    for class_id in range(nc):
+        class_indices = np.where(labels == class_id)[0]
+        this_samples = np.random.choice(
+            class_indices, size=n_samples_class, replace=len(class_indices) < n_samples_class
+        )
+        samples.append(this_samples)
+    samples = np.concatenate(samples)
     return features[samples], labels[samples]
 
 
+SAMPLING_STRATEGIES = {
+    "worst_points": worst_points,
+    "random_points": random_points,
+}
+
+
+# TODO need to incorporate the -1 ignore label
 def prepare_shallow2deep_advanced(
     raw_paths,
     raw_key,
@@ -441,9 +468,9 @@ def prepare_shallow2deep_advanced(
     sampling strategies for the samples used for training the random forests.
     Training operates in stages, the parameter 'forests_per_stage' determines how many forests
     are trained in each stage, and 'sample_fraction_per_stage' which fraction of the samples is
-    taken per stage. The random forests in stage 0 are always trained from balanced dense labels.
+    taken per stage. The random forests in stage 0 are trained from random balanced labels.
     For the other stages 'sampling_strategy' enables specifying the strategy; it has to be a function
-    with signature '(features, labels, forests, forests_per_stage, sample_fraction_per_stage)',
+    with signature '(features, labels, forests, rf_id, forests_per_stage, sample_fraction_per_stage)',
     and return the sampled features and labels. See thw 'worst_points' function
     in this file for an example implementation.
     """
@@ -459,7 +486,8 @@ def prepare_shallow2deep_advanced(
         n_forests // forests_per_stage + 1
 
     if isinstance(sampling_strategy, str):
-        assert sampling_strategy == "worst_points", "Currently only have one prebuild sampling strategy: 'worst_points'"
+        assert sampling_strategy in SAMPLING_STRATEGIES,\
+            f"Invalid sampling strategy {sampling_strategy}, only support {list(SAMPLING_STRATEGIES.keys())}"
         sampling_strategy = worst_points
     assert callable(sampling_strategy)
 
@@ -476,11 +504,17 @@ def prepare_shallow2deep_advanced(
 
             # only balance samples for the first (densely trained) rfs
             features, labels = _get_features_and_labels(
-                raw, labels, filters_and_sigmas, balance_labels=len(forests) == 0
+                raw, labels, filters_and_sigmas, balance_labels=False
             )
             if forests:  # we have forests: apply the sampling strategy
                 features, labels = worst_points(
-                    features, labels,
+                    features, labels, rf_id,
+                    forests, forests_per_stage,
+                    sample_fraction_per_stage,
+                )
+            else:  # sample randomly
+                features, labels = random_points(
+                    features, labels, rf_id,
                     forests, forests_per_stage,
                     sample_fraction_per_stage,
                 )
@@ -491,9 +525,14 @@ def prepare_shallow2deep_advanced(
             rf.fit(features, labels)
 
             # save the random forest, update pbar, return it
-            out_path = os.path.join(output_folder, f"rf_{rf_id}.pkl")
+            out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")
             with open(out_path, "wb") as f:
                 pickle.dump(rf, f)
+
+            # monkey patch the training data and labels so we can re-use it in later stages
+            rf.train_features = features
+            rf.train_labels = labels
+
             pbar.update(1)
             return rf
 
@@ -504,32 +543,3 @@ def prepare_shallow2deep_advanced(
                     _train_rf, range(forests_per_stage * stage, forests_per_stage * (stage + 1))
                 ))
                 forests.extend(this_forests)
-
-
-def visualize_pretrained_rfs(checkpoint, raw, n_forests, sample_random=False, filter_config=None, n_threads=1):
-    import napari
-
-    rf_folder = os.path.join(checkpoint, "rfs")
-    assert os.path.exists(rf_folder), rf_folder
-    rf_paths = glob(os.path.join(rf_folder, "*.pkl"))
-    rf_paths = np.random.sample(rf_paths) if sample_random else rf_paths[::(len(rf_paths) // n_forests)]
-
-    features = _apply_filters(raw, filter_config)
-
-    def predict_rf(rf_path):
-        with open(rf_path, "rb") as f:
-            rf = pickle.load(f)
-        pred = rf.predict_proba(features)
-        pred = pred.reshape(raw.shape + (pred.shape[1],))
-        pred = np.moveaxis(pred, -1, 0)
-        return pred
-
-    with futures.ThreadPoolExecutor(n_threads) as tp:
-        preds = list(tqdm(tp.map(predict_rf, rf_paths), desc="Predict RFs", total=n_forests))
-
-    v = napari.Viewer()
-    v.add_image(raw)
-    for path, pred in zip(rf_paths, preds):
-        name = os.path.basename(path)
-        v.add_image(pred, name=name)
-    napari.run()

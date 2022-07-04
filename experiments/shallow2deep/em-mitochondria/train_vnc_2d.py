@@ -9,11 +9,11 @@ from torch_em.data.datasets.vnc import _get_vnc_data
 
 
 def prepare_shallow2deep(args, out_folder):
-    patch_shape_min = [1, 512, 512]
-    patch_shape_max = [1, 768, 768]
+    patch_shape_min = [1, 256, 256]
+    patch_shape_max = [1, 512, 512]
 
     raw_transform = torch_em.transform.raw.normalize
-    label_transform = shallow2deep.BoundaryTransform(ndim=2, add_binary_target=False)
+    label_transform = shallow2deep.ForegroundTransform(ndim=2)
 
     path = os.path.join(args.input, "vnc_train.h5")
     raw_key = "raw"
@@ -24,7 +24,7 @@ def prepare_shallow2deep(args, out_folder):
             raw_paths=path, raw_key=raw_key, label_paths=path, label_key=label_key,
             patch_shape_min=patch_shape_min, patch_shape_max=patch_shape_max,
             n_forests=args.n_rfs, n_threads=args.n_threads,
-            forests_per_stage=25, sample_fraction_per_stage=0.1,
+            forests_per_stage=25, sample_fraction_per_stage=0.05,
             output_folder=out_folder, ndim=2,
             raw_transform=raw_transform, label_transform=label_transform,
             is_seg_dataset=True,
@@ -64,7 +64,9 @@ def get_loader(args, split, rf_folder):
 
 
 def train_shallow2deep(args):
-    name = "shallow2deep-em-mitochondria-advanced" if args.train_advanced else "shallow2deep-em-mitochondria"
+    name = "shallow2deep-em-mitochondria"
+    if args.train_advanced:
+        name += "-advanced"
     _get_vnc_data(args.input, download=True)
 
     # check if we need to train the rfs for preparation
