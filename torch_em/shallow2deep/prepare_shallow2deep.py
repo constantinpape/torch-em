@@ -192,7 +192,7 @@ def _get_filters(ndim, filters_and_sigmas):
                    filter_impl.structureTensorEigenvalues]
         sigmas = [0.7, 1.6, 3.5, 5.0]
         filters_and_sigmas = [
-            (filt, sigma) if i != len(filters) - 1 else (partial(filt, outerScale=2*sigma), sigma)
+            (filt, sigma) if i != len(filters) - 1 else (partial(filt, outerScale=0.5*sigma), sigma)
             for i, filt in enumerate(filters) for sigma in sigmas
         ]
     # validate the filter config
