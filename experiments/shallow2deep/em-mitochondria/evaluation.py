@@ -92,7 +92,8 @@ def evaluation_v1():
         "many-labels": os.path.join(data_root, "rfs", "rf3.ilp"),
     }
     enhancers = {
-        "direct-net": "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip",
+        "vanilla-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D/mitchondriaemsegmentation2d_pytorch_state_dict.zip",
+        "advanced-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D-advanced-traing/mitchondriaemsegmentation2d_pytorch_state_dict.zip",
     }
     scores = _evaluation(data_path, rfs, enhancers, rf_channel=1)
     enhancers = {
