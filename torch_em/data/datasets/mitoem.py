@@ -132,6 +132,7 @@ def get_mitoem_loader(
     offsets=None,
     boundaries=False,
     binary=False,
+    ndim=3,
     **kwargs,
 ):
     """
@@ -176,6 +177,6 @@ def get_mitoem_loader(
 
     raw_key = "raw"
     label_key = "labels"
-    kwargs["ndim"] = 3
+    kwargs["ndim"] = ndim
     return torch_em.default_segmentation_loader(data_paths, raw_key, data_paths, label_key,
                                                 patch_shape=patch_shape, **kwargs)
