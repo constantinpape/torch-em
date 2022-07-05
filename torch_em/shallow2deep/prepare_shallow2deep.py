@@ -214,7 +214,7 @@ def _calculate_response(raw, filter_, sigma):
     # filter_ is still string, convert it to function
     # fastfilters does not support passing sigma as tuple
     func = getattr(vigra.filters, filter_) if isinstance(sigma, tuple) else getattr(filter_impl, filter_)
-    
+
     # special case since additional argument outerScale
     # is needed for structureTensorEigenvalues functions
     if filter_ == "structureTensorEigenvalues":
@@ -290,6 +290,45 @@ def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels):
     return features, labels
 
 
+def _prepare_shallow2deep(
+    raw_paths,
+    raw_key,
+    label_paths,
+    label_key,
+    patch_shape_min,
+    patch_shape_max,
+    n_forests,
+    ndim,
+    raw_transform,
+    label_transform,
+    rois,
+    is_seg_dataset,
+    filter_config,
+    sampler,
+):
+    assert len(patch_shape_min) == len(patch_shape_max)
+    assert all(maxs >= mins for maxs, mins in zip(patch_shape_max, patch_shape_min))
+    check_paths(raw_paths, label_paths)
+
+    # get the correct dataset
+    if is_seg_dataset is None:
+        is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
+    if is_seg_dataset:
+        ds = _load_rf_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
+                                           patch_shape_min, patch_shape_max,
+                                           raw_transform=raw_transform, label_transform=label_transform,
+                                           rois=rois, n_samples=n_forests, sampler=sampler)
+    else:
+        ds = _load_rf_image_collection_dataset(raw_paths, raw_key, label_paths, label_key,
+                                               patch_shape_min, patch_shape_max, roi=rois,
+                                               raw_transform=raw_transform, label_transform=label_transform,
+                                               n_samples=n_forests)
+
+    assert len(ds) == n_forests, f"{len(ds), {n_forests}}"
+    filters_and_sigmas = _get_filters(ndim, filter_config)
+    return ds, filters_and_sigmas
+
+
 def prepare_shallow2deep(
     raw_paths,
     raw_key,
@@ -310,27 +349,13 @@ def prepare_shallow2deep(
     sampler=None,
     **rf_kwargs,
 ):
-    assert len(patch_shape_min) == len(patch_shape_max)
-    assert all(maxs >= mins for maxs, mins in zip(patch_shape_max, patch_shape_min))
-    check_paths(raw_paths, label_paths)
-
-    # get the correct dataset
-    if is_seg_dataset is None:
-        is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
-    if is_seg_dataset:
-        ds = _load_rf_segmentation_dataset(raw_paths, raw_key, label_paths, label_key,
-                                           patch_shape_min, patch_shape_max,
-                                           raw_transform=raw_transform, label_transform=label_transform,
-                                           rois=rois, n_samples=n_forests, sampler=sampler)
-    else:
-        ds = _load_rf_image_collection_dataset(raw_paths, raw_key, label_paths, label_key,
-                                               patch_shape_min, patch_shape_max, roi=rois,
-                                               raw_transform=raw_transform, label_transform=label_transform,
-                                               n_samples=n_forests)
-    assert len(ds) == n_forests, f"{len(ds), {n_forests}}"
-
-    filters_and_sigmas = _get_filters(ndim, filter_config)
     os.makedirs(output_folder, exist_ok=True)
+    ds, filters_and_sigmas = _prepare_shallow2deep(
+        raw_paths, raw_key, label_paths, label_key,
+        patch_shape_min, patch_shape_max, n_forests, ndim,
+        raw_transform, label_transform, rois, is_seg_dataset,
+        filter_config, sampler,
+    )
 
     def _train_rf(rf_id):
         # sample random patch with dataset
@@ -342,9 +367,178 @@ def prepare_shallow2deep(
         features, labels = _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels)
         rf = RandomForestClassifier(**rf_kwargs)
         rf.fit(features, labels)
-        out_path = os.path.join(output_folder, f"rf_{rf_id}.pkl")
+        out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")
         with open(out_path, "wb") as f:
             pickle.dump(rf, f)
 
     with futures.ThreadPoolExecutor(n_threads) as tp:
         list(tqdm(tp.map(_train_rf, range(n_forests)), desc="Train RFs", total=n_forests))
+
+
+def worst_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+    accumulate_samples=True,
+):
+    # get the corresponding random forest from the last stage
+    # and predict with it
+    last_forest = forests[rf_id - forests_per_stage]
+    pred = last_forest.predict_proba(features)
+
+    # labels to one-hot encoding
+    unique, inverse = np.unique(labels, return_inverse=True)
+    onehot = np.eye(unique.shape[0])[inverse]
+    # compute the difference between labels and prediction
+    diff = np.abs(onehot - pred).sum(axis=1)
+    assert len(diff) == len(features)
+
+    # get training samples based on the label-prediction diff
+    samples = []
+    nc = len(np.unique(labels))
+    # sample in a class balanced way
+    n_samples = int(sample_fraction_per_stage * len(features))
+    n_samples_class = n_samples // nc
+    for class_id in range(nc):
+        this_samples = np.argsort(diff[labels == class_id])[::-1][:n_samples_class]
+        samples.append(this_samples)
+    samples = np.concatenate(samples)
+
+    # get the features and labels, add from previous rf if specified
+    features, labels = features[samples], labels[samples]
+    if accumulate_samples:
+        features = np.concatenate([last_forest.train_features, features], axis=0)
+        labels = np.concatenate([last_forest.train_labels, labels], axis=0)
+
+    return features, labels
+
+
+def random_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+):
+    samples = []
+    nc = len(np.unique(labels))
+    # sample in a class balanced way
+    n_samples = int(sample_fraction_per_stage * len(features))
+    n_samples_class = n_samples // nc
+    for class_id in range(nc):
+        class_indices = np.where(labels == class_id)[0]
+        this_samples = np.random.choice(
+            class_indices, size=n_samples_class, replace=len(class_indices) < n_samples_class
+        )
+        samples.append(this_samples)
+    samples = np.concatenate(samples)
+    return features[samples], labels[samples]
+
+
+SAMPLING_STRATEGIES = {
+    "worst_points": worst_points,
+    "random_points": random_points,
+}
+
+
+def prepare_shallow2deep_advanced(
+    raw_paths,
+    raw_key,
+    label_paths,
+    label_key,
+    patch_shape_min,
+    patch_shape_max,
+    n_forests,
+    n_threads,
+    output_folder,
+    ndim,
+    forests_per_stage,
+    sample_fraction_per_stage,
+    sampling_strategy="worst_points",
+    raw_transform=None,
+    label_transform=None,
+    rois=None,
+    is_seg_dataset=None,
+    filter_config=None,
+    sampler=None,
+    **rf_kwargs,
+):
+    """Advanced training of random forests for shallow2deep enhancer training.
+
+    This function accepts the 'sampling_strategy' parameter, which allows to implement custom
+    sampling strategies for the samples used for training the random forests.
+    Training operates in stages, the parameter 'forests_per_stage' determines how many forests
+    are trained in each stage, and 'sample_fraction_per_stage' which fraction of the samples is
+    taken per stage. The random forests in stage 0 are trained from random balanced labels.
+    For the other stages 'sampling_strategy' enables specifying the strategy; it has to be a function
+    with signature '(features, labels, forests, rf_id, forests_per_stage, sample_fraction_per_stage)',
+    and return the sampled features and labels. See thw 'worst_points' function
+    in this file for an example implementation.
+    """
+    os.makedirs(output_folder, exist_ok=True)
+    ds, filters_and_sigmas = _prepare_shallow2deep(
+        raw_paths, raw_key, label_paths, label_key,
+        patch_shape_min, patch_shape_max, n_forests, ndim,
+        raw_transform, label_transform, rois, is_seg_dataset,
+        filter_config, sampler,
+    )
+    forests = []
+    n_stages = n_forests // forests_per_stage if n_forests % forests_per_stage == 0 else\
+        n_forests // forests_per_stage + 1
+
+    if isinstance(sampling_strategy, str):
+        assert sampling_strategy in SAMPLING_STRATEGIES,\
+            f"Invalid sampling strategy {sampling_strategy}, only support {list(SAMPLING_STRATEGIES.keys())}"
+        sampling_strategy = worst_points
+    assert callable(sampling_strategy)
+
+    with tqdm(total=n_forests) as pbar:
+
+        def _train_rf(rf_id):
+            # sample random patch with dataset
+            raw, labels = ds[rf_id]
+
+            # cast to numpy and remove channel axis
+            # need to update this to support multi-channel input data and/or multi class prediction
+            raw, labels = raw.numpy().squeeze(), labels.numpy().astype("int8").squeeze()
+            assert raw.ndim == labels.ndim == ndim, f"{raw.ndim}, {labels.ndim}, {ndim}"
+
+            # only balance samples for the first (densely trained) rfs
+            features, labels = _get_features_and_labels(
+                raw, labels, filters_and_sigmas, balance_labels=False
+            )
+            if forests:  # we have forests: apply the sampling strategy
+                features, labels = worst_points(
+                    features, labels, rf_id,
+                    forests, forests_per_stage,
+                    sample_fraction_per_stage,
+                )
+            else:  # sample randomly
+                features, labels = random_points(
+                    features, labels, rf_id,
+                    forests, forests_per_stage,
+                    sample_fraction_per_stage,
+                )
+
+            # fit the random forest
+            assert len(features) == len(labels)
+            rf = RandomForestClassifier(**rf_kwargs)
+            rf.fit(features, labels)
+
+            # save the random forest, update pbar, return it
+            out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")
+            with open(out_path, "wb") as f:
+                pickle.dump(rf, f)
+
+            # monkey patch the training data and labels so we can re-use it in later stages
+            rf.train_features = features
+            rf.train_labels = labels
+
+            pbar.update(1)
+            return rf
+
+        for stage in range(n_stages):
+            pbar.set_description(f"Train RFs for stage {stage}")
+            with futures.ThreadPoolExecutor(n_threads) as tp:
+                this_forests = list(tp.map(
+                    _train_rf, range(forests_per_stage * stage, forests_per_stage * (stage + 1))
+                ))
+                forests.extend(this_forests)
