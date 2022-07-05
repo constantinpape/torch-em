@@ -439,7 +439,6 @@ SAMPLING_STRATEGIES = {
 }
 
 
-# TODO need to incorporate the -1 ignore label
 def prepare_shallow2deep_advanced(
     raw_paths,
     raw_key,
