@@ -1,5 +1,6 @@
 import argparse
 import os
+from glob import glob
 
 import h5py
 from torch_em.data.datasets import get_bioimageio_dataset_id
@@ -18,7 +19,6 @@ def _get_name_and_description():
 
 def _get_doc(ckpt, name):
     training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
-    model_tag = name.lower()
     doc = f"""#Prediction Enhancer for Mitochondrion Segmentation in EM
 
 This model was trained with the [Shallow2Deep](https://doi.org/10.3389/fcomp.2022.805166)
@@ -51,7 +51,7 @@ This model can be used in ilastik, deepimageJ or other software that supports th
 ## Contact
 
 For questions or issues with this models, please reach out by:
-- opening a topic with tags bioimageio and {model_tag} on [image.sc](https://forum.image.sc/)
+- opening a topic with tags bioimageio and the name of this model on [image.sc](https://forum.image.sc/)
 - or creating an issue in https://github.com/constantinpape/torch-em"""
     return doc
 
@@ -61,7 +61,7 @@ def create_input(input_, checkpoint):
     assert os.path.exists(input_path), input_path
     with h5py.File(input_path, "r") as f:
         data = f["raw"][-1, :512, :512]
-    rf_path = os.path.join(checkpoint, "rfs/rf_0.pkl")
+    rf_path = glob(os.path.join(checkpoint, "rfs/*.pkl"))[-1]
     assert os.path.exists(rf_path), rf_path
     filter_config = _get_filters(2, None)
     rf = RFWithFilters(rf_path, ndim=2, filter_config=filter_config, output_channel=1)
@@ -71,14 +71,13 @@ def create_input(input_, checkpoint):
 
 def export_enhancer(input_, train_advanced):
 
+    checkpoint = "./checkpoints/shallow2deep-em-mitochondria"
     if train_advanced:
-        checkpoint = "./checkpoints/shallow2deep-em-mitochondria-advanced"
-    else:
-        checkpoint = "./checkpoints/shallow2deep-em-mitochondria"
+        checkpoint += "-advanced"
     input_data = create_input(input_, checkpoint)
 
     name, description = _get_name_and_description()
-    tags = ["unet", "mitochondria", "electron-microscopy", "instance-segmentation", "2d"]
+    tags = ["unet", "mitochondria", "electron-microscopy", "instance-segmentation", "2d", "shallow2deep"]
 
     # eventually we should refactor the citation logic
     vnc_doi = "http://dx.doi.org/10.6084/m9.figshare.856713"
@@ -91,7 +90,7 @@ def export_enhancer(input_, train_advanced):
 
     out_folder = "./bio-models"
     os.makedirs(out_folder, exist_ok=True)
-    output = os.path.join(out_folder, name)
+    output = os.path.join(out_folder, f"{name}-advanced-traing" if train_advanced else name)
 
     export_bioimageio_model(
         checkpoint, output,
@@ -118,7 +117,7 @@ def main():
     parser.add_argument("-i", "--input")
     parser.add_argument("-a", "--train_advanced", default=0)
     args = parser.parse_args()
-    export_enhancer(args.input)
+    export_enhancer(args.input, args.train_advanced)
 
 
 if __name__ == "__main__":

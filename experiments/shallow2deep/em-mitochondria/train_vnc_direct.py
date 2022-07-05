@@ -34,7 +34,5 @@ def train_direct(args):
 
 if __name__ == "__main__":
     parser = torch_em.util.parser_helper()
-    parser.add_argument("--n_rfs", type=int, default=500)
-    parser.add_argument("--n_threads", type=int, default=32)
     args = parser.parse_args()
     train_direct(args)
