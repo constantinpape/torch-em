@@ -4,18 +4,8 @@ from functools import partial
 import numpy as np
 
 from elf.io import open_file
-from elf.evaluation import matching, dice_score
-from skimage.measure import label
-from skimage.segmentation import watershed
+from elf.evaluation import dice_score
 from torch_em.shallow2deep import evaluate_enhancers
-
-
-def cc_ws(pred):
-    fg, bd = pred[0], pred[1]
-    seeds = label(fg - bd > 0.5)
-    mask = fg + bd > 0.5
-    seg = watershed(bd, markers=seeds, mask=mask)
-    return seg
 
 
 # make cut-outs from mito-em for ilastik training and evaluation
@@ -45,22 +35,15 @@ def prepare_eval_v1():
         f.create_dataset("labels", data=labels_test, compression="gzip")
 
 
-def _evaluation(data_path, rfs, enhancers, rf_channel, use_iou=False, raw_key="raw", label_key="labels"):
+def _evaluation(data_path, rfs, enhancers, rf_channel, raw_key="raw", label_key="labels"):
     with open_file(data_path, "r") as f:
         raw = f[raw_key][:]
         labels = f[label_key][:]
-    if use_iou:
-        metric = lambda x: matching(x)["precision"]
-        postprocess_rf = lambda x: label(x[0, 0] > 0.5)
-        postprocess_enhancer = cc_ws
-    else:
-        metric = partial(dice_score, threshold_seg=None)
-        postprocess_rf = lambda x: x[0, 0]
-        postprocess_enhancer = lambda x: x[0]
 
+    metric = partial(dice_score, threshold_seg=None)
     scores = evaluate_enhancers(raw, labels, enhancers, rfs, metric=metric,
-                                postprocess_rf=postprocess_rf,
-                                postprocess_enhancer=postprocess_enhancer,
+                                postprocess_rf=lambda x: x[0, 0],
+                                postprocess_enhancer=lambda x: x[0],
                                 is2d=True, rf_channel=rf_channel)
     return scores
 
@@ -92,8 +75,8 @@ def evaluation_v1():
         "many-labels": os.path.join(data_root, "rfs", "rf3.ilp"),
     }
     enhancers = {
-        "vanilla-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D/mitchondriaemsegmentation2d_pytorch_state_dict.zip",
-        "advanced-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D-advanced-traing/mitchondriaemsegmentation2d_pytorch_state_dict.zip",
+        "vanilla-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D/EnhancerMitochondriaEM2D.zip",
+        "advanced-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D-advanced-traing/EnhancerMitochondriaEM2D.zip",
     }
     scores = _evaluation(data_path, rfs, enhancers, rf_channel=1)
     enhancers = {
