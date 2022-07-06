@@ -1,6 +1,5 @@
 import argparse
 import os
-from glob import glob
 
 import h5py
 from torch_em.data.datasets import get_bioimageio_dataset_id
@@ -8,21 +7,20 @@ from torch_em.util import (add_weight_formats,
                            export_bioimageio_model,
                            get_default_citations,
                            get_training_summary)
-from torch_em.shallow2deep.shallow2deep_model import RFWithFilters, _get_filters
 
 
 def _get_name_and_description():
-    name = "EnhancerMitochondriaEM2D"
-    description = "Prediction enhancer for segmenting mitochondria in EM images."
+    name = "MitchondriaEMSegmentation2D"
+    description = "Segmentation of mitochondria in EM images."
     return name, description
 
 
 def _get_doc(ckpt, name):
     training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
+    model_tag = name.lower()
     doc = f"""#Prediction Enhancer for Mitochondrion Segmentation in EM
 
-This model was trained with the [Shallow2Deep](https://doi.org/10.3389/fcomp.2022.805166)
-method to improve ilastik predictions for mitochondria segmentation in EM.
+This model was trained to segment mitochondria in EM.
 It predicts foreground and boundary probabilities.
 
 ## Training
@@ -39,9 +37,6 @@ and trained using [torch_em](https://github.com/constantinpape/torch-em).
 ### Recommended Validation
 
 It is recommended to validate the instance segmentation obtained from this model using intersection-over-union.
-Note that this model expects foreground probabilities from a shallow classifer,
-such as a Random Forest, as input. It can thus be applied to new data of mitochondria, where only a
-new Random Forest for mitochondria foreground prediction needs to be trained, e.g. using ilastik.
 This model can be used in ilastik, deepimageJ or other software that supports the bioimage.io model format.
 
 ### Training Schedule
@@ -51,7 +46,7 @@ This model can be used in ilastik, deepimageJ or other software that supports th
 ## Contact
 
 For questions or issues with this models, please reach out by:
-- opening a topic with tags bioimageio and the name of this model on [image.sc](https://forum.image.sc/)
+- opening a topic with tags bioimageio and {model_tag} on [image.sc](https://forum.image.sc/)
 - or creating an issue in https://github.com/constantinpape/torch-em"""
     return doc
 
@@ -61,36 +56,24 @@ def create_input(input_, checkpoint):
     assert os.path.exists(input_path), input_path
     with h5py.File(input_path, "r") as f:
         data = f["raw"][-1, :512, :512]
-    rf_path = glob(os.path.join(checkpoint, "rfs/*.pkl"))[-1]
-    assert os.path.exists(rf_path), rf_path
-    filter_config = _get_filters(2, None)
-    rf = RFWithFilters(rf_path, ndim=2, filter_config=filter_config, output_channel=1)
-    pred = rf(data)
-    return pred[None]
+    return data[None, None]
 
 
-def export_enhancer(input_, train_advanced):
-
-    checkpoint = "./checkpoints/shallow2deep-em-mitochondria"
-    if train_advanced:
-        checkpoint += "-advanced"
+def export_enhancer(checkpoint, input_):
     input_data = create_input(input_, checkpoint)
-
     name, description = _get_name_and_description()
-    tags = ["unet", "mitochondria", "electron-microscopy", "instance-segmentation", "2d", "shallow2deep"]
+    tags = ["unet", "mitochondria", "electron-microscopy", "instance-segmentation", "2d"]
 
     # eventually we should refactor the citation logic
     vnc_doi = "http://dx.doi.org/10.6084/m9.figshare.856713"
-    s2d_doi = "https://doi.org/10.3389/fcomp.2022.805166"
     cite = get_default_citations(model="UNet2d", model_output="boundaries")
     cite.append({"text": "data", "doi": vnc_doi})
-    cite.append({"text": "shallow2deep", "doi": s2d_doi})
     doc = _get_doc(checkpoint, name)
     additional_formats = ["torchscript"]
 
     out_folder = "./bio-models"
     os.makedirs(out_folder, exist_ok=True)
-    output = os.path.join(out_folder, f"{name}-advanced-traing" if train_advanced else name)
+    output = os.path.join(out_folder, name)
 
     export_bioimageio_model(
         checkpoint, output,
@@ -108,16 +91,18 @@ def export_enhancer(input_, train_advanced):
         for_deepimagej="torchscript" in additional_formats,
         training_data={"id": get_bioimageio_dataset_id("vnc")},
         maintainers=[{"github_user": "constantinpape"}],
+        min_shape=[256, 256],
     )
     add_weight_formats(output, additional_formats)
 
 
 def main():
     parser = argparse.ArgumentParser()
+    # checkpoint = "./checkpoints/em-mitochondria"
+    parser.add_argument("-c", "--checkpoint")
     parser.add_argument("-i", "--input")
-    parser.add_argument("-a", "--train_advanced", default=0)
     args = parser.parse_args()
-    export_enhancer(args.input, args.train_advanced)
+    export_enhancer(args.checkpoint, args.input)
 
 
 if __name__ == "__main__":
