@@ -487,7 +487,7 @@ def prepare_shallow2deep_advanced(
     if isinstance(sampling_strategy, str):
         assert sampling_strategy in SAMPLING_STRATEGIES,\
             f"Invalid sampling strategy {sampling_strategy}, only support {list(SAMPLING_STRATEGIES.keys())}"
-        sampling_strategy = worst_points
+        sampling_strategy = SAMPLING_STRATEGIES[sampling_strategy]
     assert callable(sampling_strategy)
 
     with tqdm(total=n_forests) as pbar:
