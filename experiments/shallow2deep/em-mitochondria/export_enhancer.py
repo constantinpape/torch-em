@@ -2,7 +2,7 @@ import argparse
 import os
 from glob import glob
 
-import h5py
+from elf.io import open_file
 from torch_em.data.datasets import get_bioimageio_dataset_id
 from torch_em.util import (add_weight_formats,
                            export_bioimageio_model,
@@ -56,10 +56,8 @@ For questions or issues with this models, please reach out by:
     return doc
 
 
-def create_input(input_, checkpoint):
-    input_path = os.path.join(input_, "vnc_train.h5")
-    assert os.path.exists(input_path), input_path
-    with h5py.File(input_path, "r") as f:
+def create_input(input_path, checkpoint):
+    with open_file(input_path, "r") as f:
         data = f["raw"][-1, :512, :512]
     rf_path = glob(os.path.join(checkpoint, "rfs/*.pkl"))[-1]
     assert os.path.exists(rf_path), rf_path

@@ -45,10 +45,10 @@ def prepare_eval_v1():
         f.create_dataset("labels", data=labels_test, compression="gzip")
 
 
-def _evaluation(data_path, rfs, enhancers, rf_channel, use_iou=False):
+def _evaluation(data_path, rfs, enhancers, rf_channel, use_iou=False, raw_key="raw", label_key="labels"):
     with open_file(data_path, "r") as f:
-        raw = f["raw"][:]
-        labels = f["labels"][:]
+        raw = f[raw_key][:]
+        labels = f[label_key][:]
     if use_iou:
         metric = lambda x: matching(x)["precision"]
         postprocess_rf = lambda x: label(x[0, 0] > 0.5)
@@ -65,14 +65,14 @@ def _evaluation(data_path, rfs, enhancers, rf_channel, use_iou=False):
     return scores
 
 
-def _direct_evaluation(data_path, model_path):
+def _direct_evaluation(data_path, model_path, raw_key="raw", label_key="labels"):
     import bioimageio.core
     import xarray
     from tqdm import trange
 
     model = bioimageio.core.load_resource_description(model_path)
     with open_file(data_path, "r") as f:
-        raw, labels = f["raw"][:], f["labels"][:]
+        raw, labels = f[raw_key][:], f[label_key][:]
     scores = []
 
     with bioimageio.core.create_prediction_pipeline(model) as pp:
@@ -102,8 +102,35 @@ def evaluation_v1():
     scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0)
     scores = scores.append(scores_direct.iloc[0])
 
-    model_path = "./bio-models/v1/EnhancerMitochondriaEM2D/EnhancerMitochondriaEM2D.zip"
+    model_path = "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip"
     score_raw = _direct_evaluation(data_path, model_path)
+
+    print("Evaluation results:")
+    print(scores.to_markdown())
+    print("Raw net evaluation:", score_raw)
+
+
+def evaluation_v2():
+    data_path = "/g/kreshuk/data/VNC/data_labeled_mito.h5"
+    rf_folder = "/g/kreshuk/pape/Work/data/vnc/ilps"
+    rfs = {
+        "few-labels": os.path.join(rf_folder, "vnc-mito1.ilp"),
+        "medium-labels": os.path.join(rf_folder, "vnc-mito3.ilp"),
+        "many-labels": os.path.join(rf_folder, "vnc-mito6.ilp"),
+    }
+    enhancers = {
+        "vanilla-enhancer": "./bio-models/v2/EnhancerMitochondriaEM2D/EnhancerMitochondriaEM2D.zip",
+        "advanced-enhancer": "./bio-models/v2/EnhancerMitochondriaEM2D-advanced-traing/EnhancerMitochondriaEM2D.zip",
+    }
+    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, label_key="label")
+    enhancers = {
+        "direct-net": "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip",
+    }
+    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, label_key="label")
+    scores = scores.append(scores_direct.iloc[0])
+
+    model_path = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
+    score_raw = _direct_evaluation(data_path, model_path, label_key="label")
 
     print("Evaluation results:")
     print(scores.to_markdown())
@@ -112,4 +139,5 @@ def evaluation_v1():
 
 if __name__ == "__main__":
     # prepare_eval_v1()
-    evaluation_v1()
+    # evaluation_v1()
+    evaluation_v2()
