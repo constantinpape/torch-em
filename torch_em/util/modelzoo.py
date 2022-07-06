@@ -364,7 +364,7 @@ def _get_preprocessing(trainer):
     return [preprocessing]
 
 
-def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
+def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors, min_shape):
 
     def get_ax(tensor):
         ndim = np.load(tensor).ndim
@@ -395,12 +395,20 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
         if name == "UNet2d":
             depth = model_kwargs["depth"]
             step = [0, 0] + [2 ** depth] * 2
-            min_shape = [1, inc] + [2 ** (depth + 1)] * 2
+            if min_shape is None:
+                min_shape = [1, inc] + [2 ** (depth + 1)] * 2
+            else:
+                assert len(min_shape) == 2
+                min_shape = [1, inc] + list(min_shape)
             notebook_link = "ilastik/torch-em-2d-unet-notebook"
         elif name == "UNet3d":
             depth = model_kwargs["depth"]
             step = [0, 0] + [2 ** depth] * 3
-            min_shape = [1, inc] + [2 ** (depth + 1)] * 3
+            if min_shape is None:
+                min_shape = [1, inc] + [2 ** (depth + 1)] * 3
+            else:
+                assert len(min_shape) == 3
+                min_shape = [1, inc] + list(min_shape)
             notebook_link = "ilastik/torch-em-3d-unet-notebook"
         elif name == "AnisotropicUNet":
             scale_factors = model_kwargs["scale_factors"]
@@ -410,7 +418,11 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors):
             ]
             assert len(scale_prod) == 3
             step = [0, 0] + scale_prod
-            min_shape = [1, inc] + [2 * sp for sp in scale_prod]
+            if min_shape is None:
+                min_shape = [1, inc] + [2 * sp for sp in scale_prod]
+            else:
+                assert len(min_shape) == 3
+                min_shape = [1, inc] + list(min_shape)
             notebook_link = "ilastik/torch-em-3d-unet-notebook"
         else:
             raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
@@ -481,7 +493,8 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
                             input_optional_parameters=True,
                             model_postprocessing=None,
                             for_deepimagej=False, links=None,
-                            maintainers=None, checkpoint_name="best",
+                            maintainers=None, min_shape=None,
+                            checkpoint_name="best",
                             training_data=None, config={}):
     """
     """
@@ -498,7 +511,7 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
 
     # create the test input/output file and derive the tensor kwargs from the model and its kwargs
     test_in_paths, test_out_paths = _write_data(input_data, model, trainer, export_folder)
-    tensor_kwargs, notebook_link = _get_tensor_kwargs(model, model_kwargs, test_in_paths, test_out_paths)
+    tensor_kwargs, notebook_link = _get_tensor_kwargs(model, model_kwargs, test_in_paths, test_out_paths, min_shape)
 
     # create the model source file
     source = _write_source(model, export_folder)
