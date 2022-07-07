@@ -470,7 +470,7 @@ def prepare_shallow2deep_advanced(
     taken per stage. The random forests in stage 0 are trained from random balanced labels.
     For the other stages 'sampling_strategy' enables specifying the strategy; it has to be a function
     with signature '(features, labels, forests, rf_id, forests_per_stage, sample_fraction_per_stage)',
-    and return the sampled features and labels. See thw 'worst_points' function
+    and return the sampled features and labels. See for the 'worst_points' function
     in this file for an example implementation.
     """
     os.makedirs(output_folder, exist_ok=True)
@@ -506,7 +506,7 @@ def prepare_shallow2deep_advanced(
                 raw, labels, filters_and_sigmas, balance_labels=False
             )
             if forests:  # we have forests: apply the sampling strategy
-                features, labels = worst_points(
+                features, labels = sampling_strategy(
                     features, labels, rf_id,
                     forests, forests_per_stage,
                     sample_fraction_per_stage,
