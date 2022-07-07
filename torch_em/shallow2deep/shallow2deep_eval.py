@@ -6,6 +6,7 @@ from multiprocessing import cpu_count
 
 import numpy as np
 import pandas as pd
+import elf.io as io
 from tqdm import tqdm, trange
 
 from .prepare_shallow2deep import _apply_filters, _get_filters
@@ -63,9 +64,7 @@ def visualize_pretrained_rfs(checkpoint, raw, n_forests,
 
 
 def evaluate_enhancers(data, labels, enhancers, ilastik_projects, metric,
-                       postprocess_rf=None, postprocess_enhancer=None,
-                       prediction_function=None,
-                       rf_channel=1, is2d=False, view=False):
+                       prediction_function=None, rf_channel=1, is2d=False, save_path=None):
     """Evaluate enhancers on ilastik random forests from multiple projects.
 
     Arguments:
@@ -75,19 +74,15 @@ def evaluate_enhancers(data, labels, enhancers, ilastik_projects, metric,
             models saved in the biomage.io model format
         ilastik_projects [dict[str, str]] - map of names to ilastik project paths
         metric [callable] - the metric used for evaluation
-        postprocess_rf [callable] - function to postprocess the random forest predictions
-            before evaluation (default: None)
-        postprocess_enhancer [callable] - function to postprocess the enhancer predictions
-            before evaluation (default: None)
         prediction_function [callable] - function to run prediction with the enhancer.
             By default the bioimageio.prediction pipeline is called directly.
             If given, needs to take the prediction pipeline and data (as xarray)
             as input (default: None)
-        rf_channel [[int, list[int]]] - the channel(s) of the random forest to be passed
+        rf_channel [int, list[int]] - the channel(s) of the random forest to be passed
             as input to the enhancer (default: 1)
         is2d [bool] - whether to process 3d data as individual slices and average the scores.
             Is ignored if the data is 2d (default: False)
-        view [bool] - whether to view the data and predictions (default: False)
+        save_path [str] -
     Returns:
         [pd.DataFrame] - a table with the scores of the enhancers for the different forests
             and scores of the raw forest predictions
@@ -112,55 +107,87 @@ def evaluate_enhancers(data, labels, enhancers, ilastik_projects, metric,
         for name, path in ilastik_projects.items()
     }
 
-    def process_chunk(x, y, axes):
-        predictions = {}
+    def require_rf_prediction(rf, input_, name, axes):
+        if save_path is None:
+            return rf(input_)
+        with io.open_file(save_path, "a") as f:
+            if name in f:
+                pred = f[name][:]
+            else:
+                pred = rf(input_)
+                # require len(axes) + 2 dimensions (additional batch and channel axis)
+                pred = pred[(None,) * (len(axes) + 2 - pred.ndim)]
+                assert pred.ndim == len(axes) + 2, f"{pred.ndim}, {len(axes) + 2}"
+                f.create_dataset(name, data=pred, compression="gzip")
+            return pred
+
+    def require_enh_prediction(enh, rf_pred, name, prediction_function, axes):
+        if save_path is None:
+            pred = enh(rf_pred) if prediction_function is None else prediction_function(enh, rf_pred)
+            pred = pred[0]
+            return pred
+        with io.open_file(save_path, "a") as f:
+            if name in f:
+                pred = f[name][:]
+            else:
+                rf_pred = xarray.DataArray(rf_pred, dims=("b", "c",) + tuple(axes))
+                pred = enh(rf_pred) if prediction_function is None else prediction_function(enh, rf_pred)
+                pred = pred[0]
+                f.create_dataset(name, data=pred, compression="gzip")
+            return pred
+
+    def process_chunk(x, y, axes, z=None):
         scores = np.zeros((len(models) + 1, len(ilps)))
         for i, (rf_name, ilp) in enumerate(ilps.items()):
-            rf_pred = ilp(x)
-            predictions[rf_name] = rf_pred
-            if rf_pred.ndim == model_ndim:
-                rf_pred = xarray.DataArray(rf_pred[None, None], dims=("b", "c",) + tuple(axes))
-            else:
-                rf_pred = xarray.DataArray(rf_pred[None], dims=("b",) + tuple(axes))
-
+            rf_pred = require_rf_prediction(
+                ilp, x,
+                rf_name if z is None else f"{rf_name}/{z:04}",
+                axes
+            )
             for j, (enh_name, enh) in enumerate(models.items()):
-                pred = enh(rf_pred) if prediction_function is None else prediction_function(enh, rf_pred)
-                pred = pred[0][0]
-                predictions[f"{rf_name}-{enh_name}"] = pred
-                if postprocess_enhancer:
-                    pred = postprocess_enhancer(pred)
+                pred = require_enh_prediction(
+                    enh, rf_pred,
+                    f"{enh_name}/{rf_name}" if z is None else f"{enh_name}/{rf_name}/{z:04}",
+                    prediction_function,
+                    axes
+                )
                 score = metric(pred, y)
                 scores[j, i] = score
-
-            if postprocess_rf:
-                rf_pred = postprocess_rf(rf_pred)
             score = metric(rf_pred, y)
             scores[-1, i] = score
 
         scores = pd.DataFrame(scores, columns=list(ilps.keys()))
         scores.insert(loc=0, column="enhancer", value=list(models.keys()) + ["rf-score"])
-        return scores, predictions
+        return scores
 
     # if we have 2d data, or 3d data that is processed en block,
     # we only have to process a single 'chunk'
     if ndim == 2 or (ndim == 3 and not is2d):
-        scores, predictions = process_chunk(data, labels, "yx" if ndim == 2 else "zyx")
+        scores = process_chunk(data, labels, "yx" if ndim == 2 else "zyx")
     elif ndim == 3 and is2d:
         scores = []
         for z in trange(data.shape[0]):
-            scores_z, predictions = process_chunk(data[z], labels[z], "yx")
+            scores_z = process_chunk(data[z], labels[z], "yx", z)
             scores.append(scores_z)
         scores = pd.concat(scores).groupby("enhancer").mean()
     else:
         raise ValueError("Invalid data dimensions: {ndim}")
 
-    if view:
-        import napari
-        v = napari.Viewer()
-        v.add_image(data[-1] if (ndim == 3 and is2d) else data, name="data")
-        for name, pred in predictions.items():
-            v.add_image(pred, name=name)
-        v.add_labels(labels[-1] if (ndim == 3 and is2d) else labels, name="labels")
-        napari.run()
-
     return scores
+
+
+def load_predictions(save_path, is2d=False):
+    """Helper functions to load predictions from a save_path created by evaluate_enhancers
+    """
+    predictions = {}
+
+    def visit(name, node):
+        pass
+
+    def visit_2d(name, node):
+        pass
+
+    with io.open_file(save_path, "r") as f:
+        f.visititems(visit_2d if is2d else visit)
+
+    return predictions
