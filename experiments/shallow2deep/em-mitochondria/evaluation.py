@@ -34,6 +34,18 @@ def prepare_eval_v1():
         f.create_dataset("labels", data=labels_test, compression="gzip")
 
 
+def prepare_eval_v2():
+    in_path = "/g/kreshuk/data/VNC/data_labeled_mito.h5"
+    out_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
+    with open_file(in_path, "r") as f:
+        raw = f["raw"][:]
+        labels = f["label"][:]
+    raw = raw.astype("float32") / 255.0
+    with open_file(out_path, "a") as f:
+        f.create_dataset("raw", data=raw, compression="gzip")
+        f.create_dataset("labels", data=labels, compression="gzip")
+
+
 def dice_metric(pred, label):
     assert pred.ndim == 4
     assert label.ndim == 2
@@ -102,14 +114,15 @@ def evaluation_v1():
     save_path = "./bio-models/v1/prediction.h5"
     scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path)
 
+    model_path = "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip"
+    score_raw = _direct_evaluation(data_path, model_path, save_path)
+
     enhancers = {
         "direct-net": "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip",
     }
+    save_path = "./bio-models/v2/prediction-direct.h5"
     scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, save_path=save_path)
     scores = scores.append(scores_direct.iloc[0])
-
-    model_path = "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip"
-    score_raw = _direct_evaluation(data_path, model_path, save_path)
 
     print("Evaluation results:")
     print(scores.to_markdown())
@@ -117,7 +130,7 @@ def evaluation_v1():
 
 
 def evaluation_v2():
-    data_path = "/g/kreshuk/data/VNC/data_labeled_mito.h5"
+    data_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
     rf_folder = "/g/kreshuk/pape/Work/data/vnc/ilps"
     rfs = {
         "few-labels": os.path.join(rf_folder, "vnc-mito1.ilp"),
@@ -129,15 +142,17 @@ def evaluation_v2():
         "advanced-enhancer": "./bio-models/v2/EnhancerMitochondriaEM2D-advanced-traing/EnhancerMitochondriaEM2D.zip",
     }
     save_path = "./bio-models/v2/prediction.h5"
-    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, label_key="label", save_path=save_path)
+    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path)
+
+    model_path = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
+    score_raw = _direct_evaluation(data_path, model_path, save_path)
+
     enhancers = {
         "direct-net": "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip",
     }
-    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, label_key="label", save_path=save_path)
+    save_path = "./bio-models/v2/prediction-direct.h5"
+    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, save_path=save_path)
     scores = scores.append(scores_direct.iloc[0])
-
-    model_path = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
-    score_raw = _direct_evaluation(data_path, model_path, save_path, label_key="label")
 
     print("Evaluation results:")
     print(scores.to_markdown())
@@ -146,5 +161,7 @@ def evaluation_v2():
 
 if __name__ == "__main__":
     # prepare_eval_v1()
+    # prepare_eval_v2()
+
     # evaluation_v1()
     evaluation_v2()

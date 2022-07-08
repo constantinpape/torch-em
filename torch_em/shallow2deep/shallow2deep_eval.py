@@ -176,18 +176,36 @@ def evaluate_enhancers(data, labels, enhancers, ilastik_projects, metric,
     return scores
 
 
-def load_predictions(save_path, is2d=False):
+def load_predictions(save_path, n_threads=1):
     """Helper functions to load predictions from a save_path created by evaluate_enhancers
     """
     predictions = {}
 
     def visit(name, node):
-        pass
-
-    def visit_2d(name, node):
-        pass
+        if io.is_group(node):
+            return
+        node.n_threads = n_threads
+        # if we store with 'is2d' individual slices are datasets
+        try:
+            data_name = "/".join(name.split("/")[:-1])
+            z = int(name.split("/")[-1])
+            data = node[:]
+            pred = predictions.get(data_name, {})
+            pred[z] = data
+            predictions[data_name] = pred
+        # otherwise the above will throw a val error and we just load the array
+        except ValueError:
+            predictions[name] = node[:]
 
     with io.open_file(save_path, "r") as f:
-        f.visititems(visit_2d if is2d else visit)
+        f.visititems(visit)
+
+    def to_vol(pred):
+        if isinstance(pred, np.ndarray):
+            return pred
+        pred = dict(sorted(pred.items()))
+        return np.concatenate([pz[None] for pz in pred.values()], axis=0)
+
+    predictions = {name: to_vol(pred) for name, pred in predictions.items()}
 
     return predictions
