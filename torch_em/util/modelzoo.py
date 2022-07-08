@@ -364,7 +364,7 @@ def _get_preprocessing(trainer):
     return [preprocessing]
 
 
-def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors, min_shape):
+def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors, min_shape, halo):
 
     def get_ax(tensor):
         ndim = np.load(tensor).ndim
@@ -421,12 +421,17 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors, min_s
             if min_shape is None:
                 min_shape = [1, inc] + [2 * sp for sp in scale_prod]
             else:
-                assert len(min_shape) == 3
                 min_shape = [1, inc] + list(min_shape)
+            assert len(min_shape) == len(step), f"{len(min_shape), len(step)}"
             notebook_link = "ilastik/torch-em-3d-unet-notebook"
         else:
             raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
-        halo = [st // 2 for st in step]
+
+        if halo is None:   # default halo = step // 2
+            halo = [st // 2 for st in step]
+        else:  # make sure the passed halo has the same length as step, by padding with zeros
+            halo = [0] * (len(step) - len(halo)) + halo
+        assert len(halo) == len(step), f"{len(halo)}, {len(step)}"
 
         ref = "input0"
         if inc == outc:
@@ -493,7 +498,7 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
                             input_optional_parameters=True,
                             model_postprocessing=None,
                             for_deepimagej=False, links=None,
-                            maintainers=None, min_shape=None,
+                            maintainers=None, min_shape=None, halo=None,
                             checkpoint_name="best",
                             training_data=None, config={}):
     """
@@ -511,7 +516,9 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
 
     # create the test input/output file and derive the tensor kwargs from the model and its kwargs
     test_in_paths, test_out_paths = _write_data(input_data, model, trainer, export_folder)
-    tensor_kwargs, notebook_link = _get_tensor_kwargs(model, model_kwargs, test_in_paths, test_out_paths, min_shape)
+    tensor_kwargs, notebook_link = _get_tensor_kwargs(
+        model, model_kwargs, test_in_paths, test_out_paths, min_shape, halo
+    )
 
     # create the model source file
     source = _write_source(model, export_folder)

@@ -1,10 +1,10 @@
 import os
-from functools import partial
 
+import bioimageio.core
 import numpy as np
-
 from elf.io import open_file
 from elf.evaluation import dice_score
+from sklearn.metrics import f1_score
 from torch_em.shallow2deep import evaluate_enhancers
 
 
@@ -35,20 +35,47 @@ def prepare_eval_v1():
         f.create_dataset("labels", data=labels_test, compression="gzip")
 
 
-def _evaluation(data_path, rfs, enhancers, rf_channel, raw_key="raw", label_key="labels"):
+def prepare_eval_v2():
+    in_path = "/g/kreshuk/data/VNC/data_labeled_mito.h5"
+    out_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
+    with open_file(in_path, "r") as f:
+        raw = f["raw"][:]
+        labels = f["label"][:]
+    raw = raw.astype("float32") / 255.0
+    with open_file(out_path, "a") as f:
+        f.create_dataset("raw", data=raw, compression="gzip")
+        f.create_dataset("labels", data=labels, compression="gzip")
+
+
+def dice_metric(pred, label):
+    assert pred.shape[2:] == label.shape
+    return dice_score(pred[0, 0], label, threshold_seg=None)
+
+
+def f1_metric(pred, label):
+    assert pred.shape[2:] == label.shape
+    return f1_score(label.ravel() > 0, pred[0, 0].ravel() > 0.5)
+
+
+def _evaluation(
+    data_path, rfs, enhancers, rf_channel, save_path, metric=dice_metric, raw_key="raw", label_key="labels", is2d=True
+):
     with open_file(data_path, "r") as f:
         raw = f[raw_key][:]
         labels = f[label_key][:]
-
-    metric = partial(dice_score, threshold_seg=None)
-    scores = evaluate_enhancers(raw, labels, enhancers, rfs, metric=metric,
-                                postprocess_rf=lambda x: x[0, 0],
-                                postprocess_enhancer=lambda x: x[0],
-                                is2d=True, rf_channel=rf_channel)
+    if is2d:
+        prediction_function = None
+    else:
+        prediction_function = bioimageio.core.predict_with_tiling
+    scores = evaluate_enhancers(
+        raw, labels, enhancers, rfs,
+        metric=metric, is2d=is2d, rf_channel=rf_channel, save_path=save_path,
+        prediction_function=prediction_function
+    )
     return scores
 
 
-def _direct_evaluation(data_path, model_path, raw_key="raw", label_key="labels"):
+def _direct_evaluation(data_path, model_path, save_path, raw_key="raw", label_key="labels", metric=dice_metric):
     import bioimageio.core
     import xarray
     from tqdm import trange
@@ -58,13 +85,46 @@ def _direct_evaluation(data_path, model_path, raw_key="raw", label_key="labels")
         raw, labels = f[raw_key][:], f[label_key][:]
     scores = []
 
-    with bioimageio.core.create_prediction_pipeline(model) as pp:
-        for z in trange(raw.shape[0]):
-            inp = xarray.DataArray(raw[z][None, None], dims=tuple("bcyx"))
-            pred = pp(inp)[0].values[0, 0]
-            scores.append(dice_score(pred, labels[z], threshold_seg=None))
+    save_key = "direct_predictions"
+    with open_file(save_path, "a") as f:
+        if save_key in f:
+            pred = f[save_key][:]
+        else:
+            with bioimageio.core.create_prediction_pipeline(model) as pp:
+                pred = []
+                for z in trange(raw.shape[0]):
+                    inp = xarray.DataArray(raw[z][None, None], dims=tuple("bcyx"))
+                    predz = pp(inp)[0].values
+                    pred.append(predz[None])
+                pred = np.concatenate(pred)
+                f.create_dataset(save_key, data=pred, compression="gzip")
+
+    for z in range(raw.shape[0]):
+        scores.append(metric(pred[z], labels[z]))
 
     return np.mean(scores)
+
+
+def _direct_evaluation3d(data_path, model_path, save_path, raw_key="raw", label_key="labels", metric=dice_metric):
+    import xarray
+
+    model = bioimageio.core.load_resource_description(model_path)
+    with open_file(data_path, "r") as f:
+        raw, labels = f[raw_key][:], f[label_key][:]
+
+    save_key = "direct_predictions"
+    with open_file(save_path, "a") as f:
+        if save_key in f:
+            pred = f[save_key][:]
+        else:
+            with bioimageio.core.create_prediction_pipeline(model) as pp:
+                inp = xarray.DataArray(raw[None, None], dims=tuple("bczyx"))
+                pred = bioimageio.core.predict_with_tiling(pp, inp, verbose=True)
+                pred = pred[0].values
+            f.create_dataset(save_key, data=pred, compression="gzip")
+
+    score = metric(pred, labels)
+    return score
 
 
 def evaluation_v1():
@@ -78,15 +138,18 @@ def evaluation_v1():
         "vanilla-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D/EnhancerMitochondriaEM2D.zip",
         "advanced-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D-advanced-traing/EnhancerMitochondriaEM2D.zip",
     }
-    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1)
+    save_path = "./bio-models/v1/prediction.h5"
+    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path)
+
+    model_path = "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip"
+    score_raw = _direct_evaluation(data_path, model_path, save_path)
+
     enhancers = {
         "direct-net": "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip",
     }
-    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0)
+    save_path = "./bio-models/v2/prediction-direct.h5"
+    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, save_path=save_path)
     scores = scores.append(scores_direct.iloc[0])
-
-    model_path = "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip"
-    score_raw = _direct_evaluation(data_path, model_path)
 
     print("Evaluation results:")
     print(scores.to_markdown())
@@ -94,7 +157,7 @@ def evaluation_v1():
 
 
 def evaluation_v2():
-    data_path = "/g/kreshuk/data/VNC/data_labeled_mito.h5"
+    data_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
     rf_folder = "/g/kreshuk/pape/Work/data/vnc/ilps"
     rfs = {
         "few-labels": os.path.join(rf_folder, "vnc-mito1.ilp"),
@@ -105,15 +168,42 @@ def evaluation_v2():
         "vanilla-enhancer": "./bio-models/v2/EnhancerMitochondriaEM2D/EnhancerMitochondriaEM2D.zip",
         "advanced-enhancer": "./bio-models/v2/EnhancerMitochondriaEM2D-advanced-traing/EnhancerMitochondriaEM2D.zip",
     }
-    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, label_key="label")
+    save_path = "./bio-models/v2/prediction.h5"
+    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path)
+
+    model_path = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
+    score_raw = _direct_evaluation(data_path, model_path, save_path)
+
     enhancers = {
         "direct-net": "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip",
     }
-    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, label_key="label")
+    save_path = "./bio-models/v2/prediction-direct.h5"
+    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, save_path=save_path)
     scores = scores.append(scores_direct.iloc[0])
 
-    model_path = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
-    score_raw = _direct_evaluation(data_path, model_path, label_key="label")
+    print("Evaluation results:")
+    print(scores.to_markdown())
+    print("Raw net evaluation:", score_raw)
+
+
+def evaluation_v3():
+    data_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
+    rf_folder = "/g/kreshuk/pape/Work/data/vnc/ilps3d"
+
+    rfs = {
+        "few-labels": os.path.join(rf_folder, "vnc-mito1.ilp"),
+        "medium-labels": os.path.join(rf_folder, "vnc-mito2.ilp"),
+        "many-labels": os.path.join(rf_folder, "vnc-mito3.ilp"),
+    }
+    enhancers = {
+        "vanilla-enhancer": "./bio-models/v3/EnhancerMitochondriaEM3D/EnhancerMitochondriaEM3D.zip",
+        "advanced-enhancer": "./bio-models/v3/EnhancerMitochondriaEM3D-advanced-traing/EnhancerMitochondriaEM3D.zip",
+    }
+    save_path = "./bio-models/v3/prediction.h5"
+    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path, is2d=False)
+
+    model_path = "./bio-models/v3/DirectModel/mitochondriaemsegmentationboundarymodel_pytorch_state_dict.zip"
+    score_raw = _direct_evaluation3d(data_path, model_path, save_path)
 
     print("Evaluation results:")
     print(scores.to_markdown())
@@ -122,5 +212,8 @@ def evaluation_v2():
 
 if __name__ == "__main__":
     # prepare_eval_v1()
+    # prepare_eval_v2()
+
     # evaluation_v1()
-    evaluation_v2()
+    # evaluation_v2()
+    evaluation_v3()
