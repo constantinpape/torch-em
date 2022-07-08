@@ -32,4 +32,12 @@ Raw net evaluation: 0.5664974146646325
 
 ### V3
 
-TODO: train on mito-em in 3d (should work now, since fixing several bugs in training), find another 3d dataset for validation
+Enhancer and direct model trained on Mito-EM and applied to VNC; everything fully in 3d
+
+Evaluation results:
+| enhancer          |   few-labels |   medium-labels |   many-labels |
+|:------------------|-------------:|----------------:|--------------:|
+| vanilla-enhancer  |     0.439439 |        0.464081 |      0.45908  |
+| advanced-enhancer |     0.461565 |        0.495362 |      0.574192 |
+| rf-score          |     0.259479 |        0.223419 |      0.223723 |
+Raw net evaluation: 0.20031713226486814
