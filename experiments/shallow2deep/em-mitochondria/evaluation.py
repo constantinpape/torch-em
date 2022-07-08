@@ -1,5 +1,6 @@
 import os
 
+import bioimageio.core
 import numpy as np
 from elf.io import open_file
 from elf.evaluation import dice_score
@@ -47,25 +48,29 @@ def prepare_eval_v2():
 
 
 def dice_metric(pred, label):
-    assert pred.ndim == 4
-    assert label.ndim == 2
     assert pred.shape[2:] == label.shape
     return dice_score(pred[0, 0], label, threshold_seg=None)
 
 
 def f1_metric(pred, label):
-    assert pred.ndim == 4
-    assert label.ndim == 2
     assert pred.shape[2:] == label.shape
     return f1_score(label.ravel() > 0, pred[0, 0].ravel() > 0.5)
 
 
-def _evaluation(data_path, rfs, enhancers, rf_channel, save_path, metric=dice_metric, raw_key="raw", label_key="labels"):
+def _evaluation(
+    data_path, rfs, enhancers, rf_channel, save_path, metric=dice_metric, raw_key="raw", label_key="labels", is2d=True
+):
     with open_file(data_path, "r") as f:
         raw = f[raw_key][:]
         labels = f[label_key][:]
+    if is2d:
+        prediction_function = None
+    else:
+        prediction_function = bioimageio.core.predict_with_tiling
     scores = evaluate_enhancers(
-        raw, labels, enhancers, rfs, metric=metric, is2d=True, rf_channel=rf_channel, save_path=save_path
+        raw, labels, enhancers, rfs,
+        metric=metric, is2d=is2d, rf_channel=rf_channel, save_path=save_path,
+        prediction_function=prediction_function
     )
     return scores
 
@@ -98,6 +103,28 @@ def _direct_evaluation(data_path, model_path, save_path, raw_key="raw", label_ke
         scores.append(metric(pred[z], labels[z]))
 
     return np.mean(scores)
+
+
+def _direct_evaluation3d(data_path, model_path, save_path, raw_key="raw", label_key="labels", metric=dice_metric):
+    import xarray
+
+    model = bioimageio.core.load_resource_description(model_path)
+    with open_file(data_path, "r") as f:
+        raw, labels = f[raw_key][:], f[label_key][:]
+
+    save_key = "direct_predictions"
+    with open_file(save_path, "a") as f:
+        if save_key in f:
+            pred = f[save_key][:]
+        else:
+            with bioimageio.core.create_prediction_pipeline(model) as pp:
+                inp = xarray.DataArray(raw[None, None], dims=tuple("bczyx"))
+                pred = bioimageio.core.predict_with_tiling(pp, inp, verbose=True)
+                pred = pred[0].values
+            f.create_dataset(save_key, data=pred, compression="gzip")
+
+    score = metric(pred, labels)
+    return score
 
 
 def evaluation_v1():
@@ -159,9 +186,34 @@ def evaluation_v2():
     print("Raw net evaluation:", score_raw)
 
 
+def evaluation_v3():
+    data_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
+    rf_folder = "/g/kreshuk/pape/Work/data/vnc/ilps3d"
+
+    rfs = {
+        "few-labels": os.path.join(rf_folder, "vnc-mito1.ilp"),
+        "medium-labels": os.path.join(rf_folder, "vnc-mito2.ilp"),
+        "many-labels": os.path.join(rf_folder, "vnc-mito3.ilp"),
+    }
+    enhancers = {
+        "vanilla-enhancer": "./bio-models/v3/EnhancerMitochondriaEM3D/EnhancerMitochondriaEM3D.zip",
+        "advanced-enhancer": "./bio-models/v3/EnhancerMitochondriaEM3D-advanced-traing/EnhancerMitochondriaEM3D.zip",
+    }
+    save_path = "./bio-models/v3/prediction.h5"
+    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path, is2d=False)
+
+    model_path = "./bio-models/v3/DirectModel/mitochondriaemsegmentationboundarymodel_pytorch_state_dict.zip"
+    score_raw = _direct_evaluation3d(data_path, model_path, save_path)
+
+    print("Evaluation results:")
+    print(scores.to_markdown())
+    print("Raw net evaluation:", score_raw)
+
+
 if __name__ == "__main__":
     # prepare_eval_v1()
     # prepare_eval_v2()
 
     # evaluation_v1()
-    evaluation_v2()
+    # evaluation_v2()
+    evaluation_v3()

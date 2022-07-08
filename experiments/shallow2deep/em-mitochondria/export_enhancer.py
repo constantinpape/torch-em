@@ -105,7 +105,7 @@ def export_enhancer(input_, train_advanced, is3d):
     output = os.path.join(out_folder, f"{name}-advanced-traing" if train_advanced else name)
 
     if is3d:
-        min_shape = [32, 128, 128]
+        min_shape = [16, 128, 128]
         halo = [4, 32, 32]
     else:
         min_shape = [256, 256]
