@@ -9,7 +9,7 @@ from torch_em.data.datasets.mouse_embryo import _require_embryo_data
 from torch_em.data.datasets.plantseg import _require_plantseg_data
 
 
-# TODO more publicly available ones? check initial experiments on this
+# any more publicly available datasets?
 DATA_ROOT = "/scratch/pape/s2d-lm-nuclei"
 DATASETS = ["mouse-embryo", "root"]
 
@@ -37,7 +37,7 @@ def require_ds(dataset):
 
 
 def require_rfs_ds(dataset, n_rfs):
-    out_folder = os.path.join(DATA_ROOT, "rfs", dataset)
+    out_folder = os.path.join(DATA_ROOT, "rfs3d", dataset)
     os.makedirs(out_folder, exist_ok=True)
     if len(glob(os.path.join(out_folder, "*.pkl"))) == n_rfs:
         return
@@ -79,7 +79,7 @@ def get_ds(file_pattern, rf_pattern, n_samples):
     return shallow2deep.shallow2deep_dataset.get_shallow2deep_dataset(
         paths, raw_key, paths, label_key, rf_paths,
         patch_shape=patch_shape, label_transform=label_transform,
-        n_samples=n_samples
+        n_samples=n_samples, ndim=3
     )
 
 
@@ -89,22 +89,24 @@ def get_loader(args, split, dataset_names):
     if "mouse-embryo" in dataset_names:
         ds_name = "mouse-embryo"
         file_pattern = os.path.join(DATA_ROOT, ds_name, "Nuclei", "test" if split == "val" else split, "*.h5")
-        rf_pattern = os.path.join(DATA_ROOT, "rfs", ds_name, "*.pkl")
+        rf_pattern = os.path.join(DATA_ROOT, "rfs3d", ds_name, "*.pkl")
         datasets.append(get_ds(file_pattern, rf_pattern, n_samples))
     if "root" in dataset_names and split == "train":
-        ds_name = "DATA_ROOT"
+        ds_name = "root"
         file_pattern = os.path.join(DATA_ROOT, ds_name, "nuclei_train", "*.h5")
-        rf_pattern = os.path.join(DATA_ROOT, "rfs", ds_name, "*.pkl")
+        rf_pattern = os.path.join(DATA_ROOT, "rfs3d", ds_name, "*.pkl")
         datasets.append(get_ds(file_pattern, rf_pattern, n_samples))
     ds = torch_em.data.concat_dataset.ConcatDataset(*datasets)
-    return torch.utils.data.DataLoader(
+    loader = torch.utils.data.DataLoader(
         ds, shuffle=True, batch_size=args.batch_size, num_workers=12
     )
+    loader.shuffle = True
+    return loader
 
 
 def train_shallow2deep(args):
     datasets = normalize_datasets(args.datasets)
-    name = f"s2d-lm-nuclei-{'_'.join(datasets)}"
+    name = f"s2d-lm-nuclei-{'_'.join(datasets)}-3d"
     require_rfs(datasets, args.n_rfs)
 
     train_loader = get_loader(args, "train", datasets)
