@@ -43,9 +43,9 @@ def get_mouse_embryo_loader(
     assert not (offsets is not None and boundaries)
     if offsets is not None:
         # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     add_binary_target=binary,
-                                                                     add_mask=True)
+        label_transform = torch_em.transform.label.AffinityTransform(
+            offsets=offsets, add_binary_target=binary, add_mask=True
+        )
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
         kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
     elif boundaries:
