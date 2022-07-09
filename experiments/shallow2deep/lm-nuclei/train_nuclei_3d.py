@@ -1,14 +1,17 @@
 import os
 from glob import glob
 
+import torch
 import torch_em
 import torch_em.shallow2deep as shallow2deep
 from torch_em.model import AnisotropicUNet
+from torch_em.data.datasets.mouse_embryo import _require_embryo_data
+from torch_em.data.datasets.plantseg import _require_plantseg_data
 
 
 # TODO more publicly available ones? check initial experiments on this
-DATA_ROOT = "/scratch/pape/s2d-lm"
-DATASETS = ["root", "mouse-embryo"]
+DATA_ROOT = "/scratch/pape/s2d-lm-nuclei"
+DATASETS = ["mouse-embryo", "root"]
 
 
 def normalize_datasets(datasets):
@@ -19,13 +22,22 @@ def normalize_datasets(datasets):
     return datasets
 
 
-# TODO require the data for this dataset
 def require_ds(dataset):
-    pass
+    os.makedirs(DATA_ROOT, exist_ok=True)
+    data_path = os.path.join(DATA_ROOT, dataset)
+    if dataset == "root":
+        _require_plantseg_data(data_path, True, "nuclei", "train")
+        paths = glob(os.path.join(data_path, "nuclei_train", "*.h5"))
+        raw_key, label_key = "raw", "label"
+    elif dataset == "mouse-embryo":
+        _require_embryo_data(data_path, True)
+        paths = glob(os.path.join(data_path, "Nuclei", "train", "*.h5"))
+        raw_key, label_key = "raw", "label"
+    return paths, raw_key, label_key
 
 
 def require_rfs_ds(dataset, n_rfs):
-    out_folder = os.path.join("checkpoints/rfs", dataset)
+    out_folder = os.path.join(DATA_ROOT, "rfs", dataset)
     os.makedirs(out_folder, exist_ok=True)
     if len(glob(os.path.join(out_folder, "*.pkl"))) == n_rfs:
         return
@@ -54,9 +66,40 @@ def require_rfs(datasets, n_rfs):
         require_rfs_ds(ds, n_rfs)
 
 
-# TODO
-def get_loader(args, split, datasets):
-    pass
+def get_ds(file_pattern, rf_pattern, n_samples):
+    label_transform = shallow2deep.transform.BoundaryTransform(ndim=3, add_binary_target=True)
+    patch_shape = [32, 256, 256]
+    raw_key, label_key = "raw", "label"
+    paths = glob(file_pattern)
+    paths.sort()
+    assert len(paths) > 0
+    rf_paths = glob(rf_pattern)
+    rf_paths.sort()
+    assert len(rf_paths) > 0
+    return shallow2deep.shallow2deep_dataset.get_shallow2deep_dataset(
+        paths, raw_key, paths, label_key, rf_paths,
+        patch_shape=patch_shape, label_transform=label_transform,
+        n_samples=n_samples
+    )
+
+
+def get_loader(args, split, dataset_names):
+    datasets = []
+    n_samples = 500 if split == "train" else 25
+    if "mouse-embryo" in dataset_names:
+        ds_name = "mouse-embryo"
+        file_pattern = os.path.join(DATA_ROOT, ds_name, "Nuclei", "test" if split == "val" else split, "*.h5")
+        rf_pattern = os.path.join(DATA_ROOT, "rfs", ds_name, "*.pkl")
+        datasets.append(get_ds(file_pattern, rf_pattern, n_samples))
+    if "root" in dataset_names and split == "train":
+        ds_name = "DATA_ROOT"
+        file_pattern = os.path.join(DATA_ROOT, ds_name, "nuclei_train", "*.h5")
+        rf_pattern = os.path.join(DATA_ROOT, "rfs", ds_name, "*.pkl")
+        datasets.append(get_ds(file_pattern, rf_pattern, n_samples))
+    ds = torch_em.data.concat_dataset.ConcatDataset(*datasets)
+    return torch.utils.data.DataLoader(
+        ds, shuffle=True, batch_size=args.batch_size, num_workers=12
+    )
 
 
 def train_shallow2deep(args):
@@ -80,8 +123,8 @@ def train_shallow2deep(args):
 
 if __name__ == "__main__":
     parser = torch_em.util.parser_helper(require_input=False)
-    parser.add_argument("--datasets", "-d", nargs="+", required=True)
-    parser.add_argument("--n_rfs", type=int, default=200, help="Number of foersts per dataset")
+    parser.add_argument("--datasets", "-d", nargs="+", default=DATASETS)
+    parser.add_argument("--n_rfs", type=int, default=250, help="Number of foersts per dataset")
     parser.add_argument("--n_threads", type=int, default=32)
     args = parser.parse_args()
     train_shallow2deep(args)
