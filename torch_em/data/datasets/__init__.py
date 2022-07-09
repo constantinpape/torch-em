@@ -6,6 +6,7 @@ from .isbi2012 import get_isbi_loader
 from .livecell import get_livecell_loader
 from .mitoem import get_mitoem_loader
 from .monuseg import get_monuseg_loader
+from .mouse_embryo import get_mouse_embryo_loader
 from .plantseg import get_plantseg_loader
 from .platynereis import (get_platynereis_cell_loader,
                           get_platynereis_nuclei_loader)
