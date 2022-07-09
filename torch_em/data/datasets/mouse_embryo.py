@@ -14,7 +14,9 @@ def _require_embryo_data(path, download):
     os.makedirs(path, exist_ok=True)
     tmp_path = os.path.join(path, "mouse_embryo.zip")
     download_source(tmp_path, URL, download, CHECKSUM)
-    unzip(tmp_path, path, remove=False)
+    unzip(tmp_path, path, remove=True)
+    # remove empty volume
+    os.remove(os.path.join(path, "Membrane", "fused_paral_stack0_chan2_tp00073_raw_crop_bg_noise.h5"))
 
 
 def get_mouse_embryo_loader(
