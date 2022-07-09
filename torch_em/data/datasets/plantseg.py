@@ -1,135 +1,94 @@
 import os
 from glob import glob
 
-import numpy as np
 import torch_em
-from elf.io import open_file, is_group
-from skimage.transform import rescale
-from .util import download_source, update_kwargs
+from .util import download_source, update_kwargs, unzip
 
-# TODO just download the full zip from https://osf.io/uzq3w/ instead
-# but this is currently broken
 URLS = {
     "root": {
-        "cells": [],
-        "nuclei": [
-            "https://osf.io/n9y34/download",
-            "https://osf.io/su27h/download",
-            "https://osf.io/q5rxz/download",
-        ]
+        "train": "https://files.de-1.osf.io/v1/resources/9x3g2/providers/osfstorage/?zip=",
+        "val": "https://files.de-1.osf.io/v1/resources/vs6gb/providers/osfstorage/?zip=",
+        "test": "https://files.de-1.osf.io/v1/resources/tn4xj/providers/osfstorage/?zip=",
+    },
+    "nuclei": {
+        "train": "https://files.de-1.osf.io/v1/resources/thxzn/providers/osfstorage/?zip=",
     },
     "ovules": {
-        "cells": []
+        "train": "https://files.de-1.osf.io/v1/resources/x9yns/providers/osfstorage/?zip=",
+        "val": "https://files.de-1.osf.io/v1/resources/xp5uf/providers/osfstorage/?zip=",
+        "test": "https://files.de-1.osf.io/v1/resources/8jz7e/providers/osfstorage/?zip=",
     }
 }
+
+# FIXME somehow the checksums are not reliably, this is quite worrying...
 CHECKSUMS = {
     "root": {
-        "cells": [],
-        "nuclei": [
-            "ff9e86cb05d56ae2463e7482ad248a985a2378b1c7f3d92022d1191a6504adfa",
-            "b21fd70556591ca04e83b1461324d0a14e31b1dad24fe4b1efe9712dded2281c",
-            "c8976fefdc06d92290ba6c2b7686fd2c1a285a800a3b6d8a002e1ec67caca072",
-        ]
+        "train": None, "val": None, "test": None
+        # "train": "f72e9525ff716ef14b70ab1318efd4bf303bbf9e0772bf2981a2db6e22a75794",
+        # "val": "987280d9a56828c840e508422786431dcc3603e0ba4814aa06e7bf4424efcd9e",
+        # "test": "ad71b8b9d20effba85fb5e1b42594ae35939d1a0cf905f3403789fc9e6afbc58",
+    },
+    "nuclei": {
+        "train": None
+        # "train": "9d19ddb61373e2a97effb6cf8bd8baae5f8a50f87024273070903ea8b1160396",
     },
     "ovules": {
-        "cells": []
+        "train": None, "val": None, "test": None
+        # "train": "70379673f1ab1866df6eb09d5ce11db7d3166d6d15b53a9c8b47376f04bae413",
+        # "val": "872f516cb76879c30782d9a76d52df95236770a866f75365902c60c37b14fa36",
+        # "test": "a7272f6ad1d765af6d121e20f436ac4f3609f1a90b1cb2346aa938d8c52800b9",
     }
 }
-NATIVE_RESOLUTION = (0.235, 0.075, 0.075)
+# The resolution previous used for the resizing
+# I have removed this feature since it was not reliable,
+# but leaving this here for reference
+# (also implementing resizing would be a good idea,
+#  but more general and not for each dataset individually)
+# NATIVE_RESOLUTION = (0.235, 0.075, 0.075)
 
 
-def _resize(path, native_resolution, target_resolution):
-    assert len(native_resolution) == len(target_resolution)
-    scale_factor = tuple(nres / tres for nres, tres in zip(native_resolution, target_resolution))
-    paths = glob(os.path.join(path, "*.h5"))
-
-    # check if anything needs to be resized
-    need_resize = []
-    for pp in paths:
-        with open_file(pp, "r") as f:
-            for name, obj in f.items():
-                rescaled_name = f"rescaled/{name}"
-                if is_group(obj):
-                    continue
-                if rescaled_name in f:
-                    this_resolution = f[rescaled_name].attrs["resolution"]
-                    correct_res = all(
-                        np.isclose(this_re, target_re) for this_re, target_re in zip(this_resolution, target_resolution)
-                    )
-                    if correct_res:
-                        continue
-                need_resize.append(path)
-
-    # resize if necessary
-    need_resize = list(set(need_resize))
-    for pp in need_resize:
-        with open_file(pp, mode="a") as f:
-            if "rescaled" in f:
-                del f["rescaled"]
-            for name, obj in f.items():
-                print("Resizing", pp, name)
-                print("from resolution (microns)", native_resolution, "to", target_resolution)
-                print("with scale factor", scale_factor)
-
-                vol = obj[:]
-                if name == "raw":
-                    vol = rescale(vol, scale_factor, preserve_range=True).astype(vol.dtype)
-                else:
-                    vol = rescale(
-                        vol, scale_factor, preserve_range=True, order=0, anti_aliasing=False
-                    ).astype(vol.dtype)
-                ds = f.create_dataset(rescaled_name, data=vol, compression="gzip")
-                ds.attrs["resolution"] = target_resolution
-
-
-def _download_plantseg(path, download, name, type_):
-    urls = URLS[name][type_]
-    checksums = CHECKSUMS[name][type_]
-
-    assert len(urls) == len(checksums)
+def _require_plantseg_data(path, download, name, split):
+    url = URLS[name][split]
+    checksum = CHECKSUMS[name][split]
     os.makedirs(path, exist_ok=True)
+    out_path = os.path.join(path, f"{name}_{split}")
+    if os.path.exists(out_path):
+        return out_path
+    tmp_path = os.path.join(path, f"{name}_{split}.zip")
+    download_source(tmp_path, url, download, checksum)
+    unzip(tmp_path, out_path, remove=True)
+    return out_path
 
-    for ii, (url, checksum) in enumerate(zip(urls, checksums)):
-        out_path = os.path.join(path, f"{name}_{type_}_{ii}.h5")
-        if os.path.exists(out_path):
-            continue
-        download_source(out_path, url, download, checksum)
 
-
-def get_root_nucleus_loader(
+# TODO add support for ignore label, key: "/label_with_ignore"
+def get_plantseg_loader(
     path,
+    name,
+    split,
     patch_shape,
-    samples=None,
-    target_resolution=None,
     download=False,
     offsets=None,
     boundaries=False,
     binary=False,
+    ndim=3,
     **kwargs,
 ):
     assert len(patch_shape) == 3
-    _download_plantseg(path, download, "root", "nuclei")
-    if target_resolution is not None:
-        _resize(path, NATIVE_RESOLUTION, target_resolution)
+    data_path = _require_plantseg_data(path, download, name, split)
 
-    file_paths = glob(os.path.join(path, "*.h5"))
+    file_paths = glob(os.path.join(data_path, "*.h5"))
     file_paths.sort()
 
-    if samples is not None:
-        assert all(isinstance(sample, int) for sample in samples)
-        assert all(sample < len(file_paths) for sample in samples)
-        file_paths = [file_paths[sample] for sample in samples]
-
-    assert sum((offsets is not None, boundaries, binary)) <= 1
+    assert not (offsets is not None and boundaries)
     if offsets is not None:
         # we add a binary target channel for foreground background segmentation
         label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     add_binary_target=True,
+                                                                     add_binary_target=binary,
                                                                      add_mask=True)
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
         kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
     elif boundaries:
-        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
+        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=binary)
         msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
         kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
     elif binary:
@@ -138,24 +97,11 @@ def get_root_nucleus_loader(
         kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
     kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
-    kwargs = update_kwargs(kwargs, "ndim", 3)
+    kwargs = update_kwargs(kwargs, "ndim", ndim)
 
-    if target_resolution is None:
-        raw_key, label_key = "raw", "label_uint16_smooth"
-    else:
-        raw_key, label_key = "rescaled/raw", "rescaled/label_uint16_smooth"
+    raw_key, label_key = "raw", "label"
     return torch_em.default_segmentation_loader(
         file_paths, raw_key,
         file_paths, label_key,
         **kwargs
     )
-
-
-# TODO
-def get_root_cell_loader():
-    pass
-
-
-# TODO
-def get_ovules_loader():
-    pass
