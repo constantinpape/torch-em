@@ -67,7 +67,7 @@ def require_rfs(datasets, n_rfs):
 
 
 def get_ds(file_pattern, rf_pattern, n_samples):
-    label_transform = shallow2deep.transform.BoundaryTransform(ndim=3, add_binary_target=True)
+    label_transform = torch_em.transform.BoundaryTransform(ndim=3, add_binary_target=True)
     patch_shape = [32, 256, 256]
     raw_key, label_key = "raw", "label"
     paths = glob(file_pattern)
@@ -93,7 +93,8 @@ def get_loader(args, split, dataset_names):
         datasets.append(get_ds(file_pattern, rf_pattern, n_samples))
     if "root" in dataset_names and split == "train":
         ds_name = "root"
-        file_pattern = os.path.join(DATA_ROOT, ds_name, "nuclei_train", "*.h5")
+        _require_plantseg_data(os.path.join(DATA_ROOT, ds_name), True, "nuclei", split)
+        file_pattern = os.path.join(DATA_ROOT, ds_name, f"nuclei_{split}", "*.h5")
         rf_pattern = os.path.join(DATA_ROOT, "rfs3d", ds_name, "*.pkl")
         datasets.append(get_ds(file_pattern, rf_pattern, n_samples))
     ds = torch_em.data.concat_dataset.ConcatDataset(*datasets)
