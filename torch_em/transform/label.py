@@ -134,3 +134,16 @@ class AffinityTransform:
             affs = np.concatenate([affs, mask.astype(affs.dtype)], axis=0)
 
         return affs
+
+
+class OneHotTransform:
+    def __init__(self, class_ids=None):
+        self.class_ids = list(range(class_ids)) if isinstance(class_ids, int) else class_ids
+
+    def __call__(self, labels):
+        class_ids = np.unique(labels).tolist() if self.class_ids is None else self.class_ids
+        n_classes = len(class_ids)
+        one_hot = np.zeros((n_classes,) + labels.shape, dtype="float32")
+        for i, class_id in enumerate(class_ids):
+            one_hot[i][labels == class_id] = 1.0
+        return one_hot

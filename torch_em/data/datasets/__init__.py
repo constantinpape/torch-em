@@ -1,3 +1,4 @@
+from .axondeepseg import get_axondeepseg_loader
 from .covid_if import get_covid_if_loader
 from .cremi import get_cremi_loader
 from .dsb import get_dsb_loader
