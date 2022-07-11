@@ -142,7 +142,7 @@ def _livecell_segmentation_loader(
     return loader
 
 
-# TODO at support for the different benchmark tasks
+# TODO add support for the different benchmark tasks
 def get_livecell_loader(path, patch_shape, split, download=False,
                         offsets=None, boundaries=False, binary=False,
                         **kwargs):
