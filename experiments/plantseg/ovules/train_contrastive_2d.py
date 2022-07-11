@@ -1,78 +1,37 @@
-import argparse
-import os
-from glob import glob
-from functools import partial
-
 import torch
 import torch_em
-from elf.io import open_file
 from torch_em.model import UNet2d
-
-ROOT_TRAIN = '/g/kreshuk/wolny/Datasets/Ovules/GT2x/train'
-ROOT_VAL = '/g/kreshuk/wolny/Datasets/Ovules/GT2x/val'
+from torch_em.data.datasets import get_plantseg_loader
 
 
-# exclude the volumes that don't fit
-def get_paths(split, patch_shape, raw_key):
-    root = ROOT_TRAIN if split == 'train' else ROOT_VAL
-    paths = glob(os.path.join(root, '*.h5'))
-
-    paths = [p for p in paths if all(
-        sh >= psh for sh, psh in zip(open_file(p, 'r')[raw_key].shape, patch_shape)
-    )]
-    return paths
-
-
-def get_loader(split, patch_shape, batch_size,
-               n_samples=None, roi=None):
-    raw_key = 'raw'
-    label_key = 'label'
-    paths = get_paths(split, patch_shape, raw_key)
-
+def get_loader(split, patch_shape, batch_size, n_samples=None, roi=None):
     sampler = torch_em.data.MinForegroundSampler(min_fraction=0.1, p_reject=1.)
-    label_transform = partial(torch_em.transform.label.connected_components, ensure_zero=True)
-
-    return torch_em.default_segmentation_loader(
-        paths, raw_key,
-        paths, label_key,
-        batch_size=batch_size,
-        patch_shape=patch_shape,
-        label_transform=label_transform,
-        sampler=sampler,
-        n_samples=n_samples,
-        num_workers=8*batch_size,
-        shuffle=True,
-        label_dtype=torch.int64,
-        ndim=2
+    return get_plantseg_loader(
+        args.input, "ovules", split, patch_shape, download=True, ndim=2,
+        batch_size=batch_size, sampler=sampler, n_samples=n_samples,
+        num_workers=8*batch_size, shuffle=True,
+        label_dtype=torch.float32,
     )
-
-
-def get_model(n_out):
-    model = UNet2d(
-        in_channels=1,
-        out_channels=n_out,
-        initial_features=64,
-        gain=2,
-        depth=4,
-        final_activation=None
-    )
-    return model
 
 
 def train_contrastive(args):
-    model = get_model(args.embed_dim)
+    model = UNet2d(
+        in_channels=1, out_channels=args.embed_dim,
+        initial_features=64, gain=2, depth=4,
+        final_activation=None
+    )
     patch_shape = [1, 736, 688]
     # can train with larger batch sizes for scatter
-    batch_size = 4 if args.impl == 'scatter' else 1
+    batch_size = 4 if args.impl == "scatter" else 1
 
     train_loader = get_loader(
-        split='train',
+        split="train",
         patch_shape=patch_shape,
         batch_size=batch_size,
         n_samples=2500
     )
     val_loader = get_loader(
-        split='val',
+        split="val",
         patch_shape=patch_shape,
         batch_size=1,
         n_samples=100
@@ -98,7 +57,7 @@ def train_contrastive(args):
     )
 
     if args.from_checkpoint:
-        trainer.fit(args.iterations, 'latest')
+        trainer.fit(args.iterations, "latest")
     else:
         trainer.fit(args.iterations)
 
@@ -108,22 +67,19 @@ def check(train=True, val=True, n_images=5):
     patch_shape = [1, 512, 512]
     if train:
         print("Check train loader")
-        loader = get_loader('train', patch_shape, batch_size=1)
+        loader = get_loader("train", patch_shape, batch_size=1)
         check_loader(loader, n_images)
     if val:
         print("Check val loader")
-        loader = get_loader('val', patch_shape, batch_size=1)
+        loader = get_loader("val", patch_shape, batch_size=1)
         check_loader(loader, n_images)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--impl', '-i', default='scatter')
-    parser.add_argument('--check', '-c', type=int, default=0)
-    parser.add_argument('--iterations', '-n', type=int, default=int(1e5))
-    parser.add_argument('-d', '--embed_dim', type=int, default=12)
-    parser.add_argument('--from_checkpoint', type=int, default=0)
-
+if __name__ == "__main__":
+    parser = torch_em.util.parser_helper()
+    parser.add_argument("--impl", default="scatter")
+    parser.add_argument("--iterations", "-n", type=int, default=int(1e5))
+    parser.add_argument("-d", "--embed_dim", type=int, default=12)
     args = parser.parse_args()
     if args.check:
         check(train=True, val=True)

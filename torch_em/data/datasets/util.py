@@ -19,7 +19,9 @@ BIOIMAGEIO_IDS = {
     "ovules": "",  # not on bioimageio yet
     "platynereis": "ilastik/platynereis_em_training_data",
     "snemi": "",  # not on bioimagegio yet
-    "vnc": "ilastik/vnc"
+    "vnc": "ilastik/vnc",
+    "plantseg_root": "ilastik/plantseg_root",
+    "plantseg_ovules": "ilastik/plantseg_ovules",
 }
 
 

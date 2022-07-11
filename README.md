@@ -110,7 +110,7 @@ where <ENV>.yaml is either `environment_cpu.yaml` or `environment_gpu.yaml`.
 ## Features
 
 - Training of [2d U-Nets](https://doi.org/10.1007/978-3-319-24574-4_28) and [3d U-Nets](https://doi.org/10.1007/978-3-319-46723-8_49) for various segmentation tasks.
-- Random forest based transfer learning from [Shallow2Deep](https://doi.org/10.1101/2021.11.09.467925 )
+- Random forest based domain adaptation from [Shallow2Deep](https://doi.org/10.1101/2021.11.09.467925)
 - Training models for embedding prediction with sparse instance labels from [SPOCO](https://arxiv.org/abs/2103.14572)
 
 
