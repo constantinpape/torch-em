@@ -20,8 +20,52 @@ def standardize(raw, mean=None, std=None, axis=None, eps=1e-7):
     return raw
 
 
+TORCH_DTYPES = {
+    'float16': torch.float16,
+    'float32': torch.float32,
+    'float64': torch.float64,
+    'complex64': torch.complex64,
+    'complex128': torch.complex128,
+    'uint8': torch.uint8,
+    'int8': torch.int8,
+    'int16': torch.int16,
+    'int32': torch.int32,
+    'int64': torch.int64,
+    'bool': torch.bool,
+}
+
+def cast(inpt, typestring):
+    if torch.is_tensor(inpt):
+        assert typestring in TORCH_DTYPES, f"{typestring} not in TORCH_DTYPES"
+        return inpt.to(TORCH_DTYPES[typestring])
+    return inpt.astype(typestring)
+
+
+def _normalize_torch(tensor, minval=None, maxval=None, axis=None, eps=1e-7):
+    if axis: # torch returns torch.return_types.min or torch.return_types.max
+        minval = tensor.min(dim=axis, keepdim=True).values if minval is None else minval
+        tensor -= minval
+    
+        maxval = tensor.max(dim=axis, keepdim=True).values if maxval is None else maxval
+        tensor /= (maxval + eps)
+
+        return tensor
+
+    # keepdim can only be used in combination with dim
+    minval = tensor.min() if minval is None else minval
+    tensor -= minval
+
+    maxval = tensor.max() if maxval is None else maxval
+    tensor /= (maxval + eps)
+
+    return tensor
+
+
 def normalize(raw, minval=None, maxval=None, axis=None, eps=1e-7):
-    raw = raw.astype('float32')
+    raw = cast(raw, 'float32')
+    
+    if torch.is_tensor(raw):
+        return _normalize_torch(raw, minval=minval, maxval=maxval, axis=axis, eps=eps)
 
     minval = raw.min(axis=axis, keepdims=True) if minval is None else minval
     raw -= minval
@@ -36,18 +80,6 @@ def normalize_percentile(raw, lower=1.0, upper=99.0, axis=None, eps=1e-7):
     v_lower = np.percentile(raw, lower, axis=axis, keepdims=True)
     v_upper = np.percentile(raw, upper, axis=axis, keepdims=True) - v_lower
     return normalize(raw, v_lower, v_upper, eps=eps)
-
-
-def normalize_torch(tensor, minval=None, maxval=None, eps=1e-7):
-    tensor = tensor.type(torch.float32)
-
-    minval = tensor.min() if minval is None else minval
-    tensor -= minval
-
-    maxval = tensor.max() if maxval is None else maxval
-    tensor /= (maxval + eps)
-
-    return tensor
 
 
 # TODO
@@ -103,7 +135,7 @@ def get_default_mean_teacher_augmentations(p=0.5):
         transforms.RandomApply([transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=p),
         transforms.RandomApply([AdditiveGaussianNoise()], p=p),
         transforms.RandomApply([AdditivePoissonNoise()], p=p),
-        normalize_torch,
+        normalize,
         transforms.RandomApply([RandomContrast(clip_kwargs={'a_min': 0, 'a_max': 1})], p=p),
     ])
 
