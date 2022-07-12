@@ -29,8 +29,8 @@ def _preprocess_sem_data(out_path):
     raw_paths = []
     for folder in raw_folders:
         paths = glob(os.path.join(folder, "micr", "*.png"))
-        assert len(paths) == 1
-        raw_paths.append(paths[0])
+        paths.sort()
+        raw_paths.extend(paths)
 
     # get the label paths
     label_folders = glob(os.path.join(
@@ -40,9 +40,9 @@ def _preprocess_sem_data(out_path):
     label_paths = []
     for folder in label_folders:
         paths = glob(os.path.join(folder, "micr", "*axonmyelin-manual.png"))
-        assert len(paths) == 1
-        label_paths.append(paths[0])
-    assert len(raw_paths) == len(label_paths)
+        paths.sort()
+        label_paths.extend(paths)
+    assert len(raw_paths) == len(label_paths), f"{len(raw_paths)}, {len(label_paths)}"
 
     # process raw data and labels
     for i, (rp, lp) in enumerate(zip(raw_paths, label_paths)):
@@ -52,14 +52,22 @@ def _preprocess_sem_data(out_path):
             # raw data: invert to match tem em intensities
             raw = imageio.imread(rp)
             assert np.dtype(raw.dtype) == np.dtype("uint8")
+            if raw.ndim == 3:  # (one of the images is RGBA)
+                raw = np.mean(raw[..., :-3], axis=-1)
             raw = 255 - raw
             f.create_dataset("raw", data=raw, compression="gzip")
 
-            # labels: map from [0, 127, 255] -> [0, 1, 2]
+            # labels: map from
+            # 0 -> 0
+            # 127, 128 -> 1
+            # 255 -> 2
             labels = imageio.imread(lp)
+            assert labels.shape == raw.shape, f"{labels.shape}, {raw.shape}"
             label_vals = np.unique(labels)
-            assert np.array_equal(label_vals, [0, 127, 255])
+            # 127, 128: both myelin labels, 130, 233: noise
+            assert len(np.setdiff1d(label_vals, [0, 127, 128, 130, 233, 255])) == 0, f"{label_vals}"
             labels[labels == 127] = 1
+            labels[labels == 128] = 1
             labels[labels == 255] = 2
             f.create_dataset("labels", data=labels, compression="gzip")
 
@@ -87,13 +95,30 @@ def _require_axondeepseg_data(path, name, download):
 
 
 # add instance segmentation representations?
-def get_axondeepseg_loader(path, name, download=False, to_one_hot=False, **kwargs):
+def get_axondeepseg_loader(path, name,
+                           download=False, one_hot_encoding=False,
+                           data_fraction=None, split=None, **kwargs):
     data_root = _require_axondeepseg_data(path, name, download)
     paths = glob(os.path.join(data_root, "*.h5"))
+    paths.sort()
+    if data_fraction is not None:
+        assert split is not None
+        n_samples = int(len(paths) * data_fraction)
+        paths = paths[:n_samples] if split == "train" else paths[:-n_samples]
 
-    if to_one_hot:
-        # add transformation to go from [0, 1, 2] to one hot encoding
-        label_transform = torch_em.transform.label.OneHotTransform(class_ids=[0, 1, 2])
+    if one_hot_encoding:
+        if isinstance(one_hot_encoding, bool):
+            # add transformation to go from [0, 1, 2] to one hot encoding
+            class_ids = [0, 1, 2]
+        elif isinstance(one_hot_encoding, int):
+            class_ids = list(range(one_hot_encoding))
+        elif isinstance(one_hot_encoding, (list, tuple)):
+            class_ids = list(one_hot_encoding)
+        else:
+            raise ValueError(
+                f"Invalid value {one_hot_encoding} passed for 'one_hot_encoding', expect bool, int or list."
+            )
+        label_transform = torch_em.transform.label.OneHotTransform(class_ids=class_ids)
         msg = "'one_hot' is set to True, but 'label_transform' is in the kwargs. It will be over-ridden."
         kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
