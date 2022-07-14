@@ -10,11 +10,11 @@ from .util import download_source, unzip, update_kwargs
 
 URLS = {
     "sem": "https://github.com/axondeepseg/data_axondeepseg_sem/archive/refs/heads/master.zip",
-    "tem": ""
+    "tem": "https://osf.io/download/uewd9"
 }
 CHECKSUMS = {
     "sem": "d334cbacf548f78ce8dd4a597bf86b884bd15a47a230a0ccc46e1ffa94d58426",
-    "tem": "a"
+    "tem": "e4657280808f3b80d3bf1fba87d1cbbf2455f519baf1a7b16d2ddf2e54739a95"
 }
 
 
@@ -66,16 +66,42 @@ def _preprocess_sem_data(out_path):
             label_vals = np.unique(labels)
             # 127, 128: both myelin labels, 130, 233: noise
             assert len(np.setdiff1d(label_vals, [0, 127, 128, 130, 233, 255])) == 0, f"{label_vals}"
-            labels[labels == 127] = 1
-            labels[labels == 128] = 1
-            labels[labels == 255] = 2
-            f.create_dataset("labels", data=labels, compression="gzip")
+            new_labels = np.zeros_like(labels)
+            new_labels[labels == 127] = 1
+            new_labels[labels == 128] = 1
+            new_labels[labels == 255] = 2
+            f.create_dataset("labels", data=new_labels, compression="gzip")
 
     # clean up
     rmtree(data_root)
 
 
-# TODO figure out what to do for the git annexed tem data
+def _preprocess_tem_data(out_path):
+    data_root = os.path.join(out_path, "TEM_dataset")
+    folder_names = os.listdir(data_root)
+    folders = [os.path.join(data_root, fname) for fname in folder_names
+               if os.path.isdir(os.path.join(data_root, fname))]
+    for i, folder in enumerate(folders):
+        data_out = os.path.join(out_path, f"tem_{i}.h5")
+        with h5py.File(data_out, "w") as f:
+            im = imageio.imread(os.path.join(folder, "image.png"))
+            f.create_dataset("raw", data=im, compression="gzip")
+
+            # labels: map from
+            # 0 -> 0
+            # 128 -> 1
+            # 255 -> 2
+            # the rest are noise
+            labels = imageio.imread(os.path.join(folder, "mask.png"))
+            new_labels = np.zeros_like(labels)
+            new_labels[labels == 128] = 1
+            new_labels[labels == 255] = 2
+            f.create_dataset("labels", data=new_labels, compression="gzip")
+
+    # clean up
+    rmtree(data_root)
+
+
 def _require_axondeepseg_data(path, name, download):
 
     # download and unzip the data
@@ -84,12 +110,15 @@ def _require_axondeepseg_data(path, name, download):
     out_path = os.path.join(path, name)
     if os.path.exists(out_path):
         return out_path
+
     tmp_path = os.path.join(path, f"{name}.zip")
     download_source(tmp_path, url, download, checksum=checksum)
     unzip(tmp_path, out_path, remove=True)
 
     if name == "sem":
         _preprocess_sem_data(out_path)
+    elif name == "tem":
+        _preprocess_tem_data(out_path)
 
     return out_path
 
