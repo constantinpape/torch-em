@@ -63,7 +63,7 @@ def download_source(path, url, download, checksum=None, verify=True):
                 "The checksum of the download does not match the expected checksum."
                 f"Expected: {checksum}, got: {this_checksum}"
             )
-        print("Download successfull and checksums agree.")
+        print("Download successful and checksums agree.")
     else:
         warn("The file was downloaded, but no checksum was provided, so the file may be corrupted.")
 

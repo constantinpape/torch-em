@@ -127,13 +127,20 @@ def _require_axondeepseg_data(path, name, download):
 def get_axondeepseg_loader(path, name,
                            download=False, one_hot_encoding=False,
                            data_fraction=None, split=None, **kwargs):
-    data_root = _require_axondeepseg_data(path, name, download)
-    paths = glob(os.path.join(data_root, "*.h5"))
-    paths.sort()
-    if data_fraction is not None:
-        assert split is not None
-        n_samples = int(len(paths) * data_fraction)
-        paths = paths[:n_samples] if split == "train" else paths[:-n_samples]
+    if isinstance(name, str):
+        name = [name]
+    assert isinstance(name, (tuple, list))
+
+    all_paths = []
+    for nn in name:
+        data_root = _require_axondeepseg_data(path, nn, download)
+        paths = glob(os.path.join(data_root, "*.h5"))
+        paths.sort()
+        if data_fraction is not None:
+            assert split is not None
+            n_samples = int(len(paths) * data_fraction)
+            paths = paths[:n_samples] if split == "train" else paths[:-n_samples]
+        all_paths.extend(paths)
 
     if one_hot_encoding:
         if isinstance(one_hot_encoding, bool):
@@ -153,5 +160,5 @@ def get_axondeepseg_loader(path, name,
 
     raw_key, label_key = "raw", "labels"
     return torch_em.default_segmentation_loader(
-        paths, raw_key, paths, label_key, **kwargs
+        all_paths, raw_key, all_paths, label_key, **kwargs
     )
