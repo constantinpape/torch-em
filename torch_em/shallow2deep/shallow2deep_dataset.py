@@ -1,4 +1,5 @@
 import pickle
+import warnings
 
 import numpy as np
 import torch
@@ -42,12 +43,7 @@ class Shallow2DeepDataset(SegmentationDataset):
             assert isinstance(value, tuple)
             self._rf_channels = value
 
-    def _predict_rf(self, raw):
-        n_rfs = len(self._rf_paths)
-        rf_path = self._rf_paths[np.random.randint(0, n_rfs)]
-        with open(rf_path, "rb") as f:
-            rf = pickle.load(f)
-        filters_and_sigmas = _get_filters(self.ndim, self._filter_config)
+    def _predict(self, raw, rf, filters_and_sigmas):
         features = _apply_filters(raw, filters_and_sigmas)
         assert rf.n_features_in_ == features.shape[1], f"{rf.n_features_in_}, {features.shape[1]}"
 
@@ -56,7 +52,7 @@ class Shallow2DeepDataset(SegmentationDataset):
             assert pred_.shape[1] > max(self.rf_channels), f"{pred_.shape}, {self.rf_channels}"
             pred_ = pred_[:, self.rf_channels]
         except IndexError:
-            print("Prediction failed:", features.shape)
+            warnings.warn(f"Random forest prediction failed for input features of shape: {features.shape}")
             pred_shape = (len(features), len(self.rf_channels))
             pred_ = np.zeros(pred_shape, dtype="float32")
 
@@ -65,6 +61,29 @@ class Shallow2DeepDataset(SegmentationDataset):
         prediction = np.zeros(out_shape, dtype="float32")
         for chan in range(pred_.shape[1]):
             prediction[chan] = pred_[:, chan].reshape(spatial_shape)
+
+        return prediction
+
+    def _predict_rf(self, raw):
+        n_rfs = len(self._rf_paths)
+        rf_path = self._rf_paths[np.random.randint(0, n_rfs)]
+        with open(rf_path, "rb") as f:
+            rf = pickle.load(f)
+        filters_and_sigmas = _get_filters(self.ndim, self._filter_config)
+        return self._predict(raw, rf, filters_and_sigmas)
+
+    def _predict_rf_anisotropic(self, raw):
+        n_rfs = len(self._rf_paths)
+        rf_path = self._rf_paths[np.random.randint(0, n_rfs)]
+        with open(rf_path, "rb") as f:
+            rf = pickle.load(f)
+        filters_and_sigmas = _get_filters(2, self._filter_config)
+
+        n_channels = len(self.rf_channels)
+        prediction = np.zeros((n_channels,) + raw.shape, dtype="float32")
+        for z in range(raw.shape[0]):
+            pred = self._predict(raw[z], rf, filters_and_sigmas)
+            prediction[:, z] = pred
 
         return prediction
 
@@ -97,15 +116,24 @@ class Shallow2DeepDataset(SegmentationDataset):
             )
 
         # NOTE we assume single channel raw data here; this needs to be changed for multi-channel
-        prediction = self._predict_rf(raw[0].numpy())
+        if getattr(self, "is_anisotropic", False):
+            prediction = self._predict_rf_anisotropic(raw[0].numpy())
+        else:
+            prediction = self._predict_rf(raw[0].numpy())
         prediction = ensure_tensor_with_channels(prediction, ndim=self._ndim, dtype=self.dtype)
         labels = ensure_tensor_with_channels(labels, ndim=self._ndim, dtype=self.label_dtype)
         return prediction, labels
 
 
-def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_paths, rf_channels, **kwargs):
+def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_paths, rf_channels, ndim, **kwargs):
     rois = kwargs.pop("rois", None)
     filter_config = kwargs.pop("filter_config", None)
+    if ndim == "anisotropic":
+        ndim = 3
+        is_anisotropic = True
+    else:
+        is_anisotropic = False
+
     if isinstance(raw_paths, str):
         if rois is not None:
             assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
@@ -113,6 +141,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
         ds.rf_paths = rf_paths
         ds.filter_config = filter_config
         ds.rf_channels = rf_channels
+        ds.is_anisotropic = is_anisotropic
     else:
         assert len(raw_paths) > 0
         if rois is not None:
@@ -132,6 +161,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
             dset.rf_paths = rf_paths
             dset.filter_config = filter_config
             dset.rf_channels = rf_channels
+            dset.is_anisotropic = is_anisotropic
             ds.append(dset)
         ds = ConcatDataset(*ds)
     return ds
@@ -169,7 +199,8 @@ def get_shallow2deep_dataset(
     # we always use augmentations in the convenience function
     if transform is None:
         transform = _get_default_transform(
-            raw_paths if isinstance(raw_paths, str) else raw_paths[0], raw_key, is_seg_dataset, ndim
+            raw_paths if isinstance(raw_paths, str) else raw_paths[0], raw_key, is_seg_dataset,
+            3 if ndim == "anisotropic" else ndim
         )
 
     if is_seg_dataset:
