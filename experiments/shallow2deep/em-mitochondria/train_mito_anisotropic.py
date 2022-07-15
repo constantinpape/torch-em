@@ -62,6 +62,7 @@ def require_rfs_ds(dataset, n_rfs, sampling_strategy):
             is_seg_dataset=True,
         )
     else:
+        sampling_strategy = "worst_points" if sampling_strategy is None else sampling_strategy
         shallow2deep.prepare_shallow2deep_advanced(
             raw_paths=paths, raw_key=raw_key, label_paths=paths, label_key=label_key,
             patch_shape_min=patch_shape_min, patch_shape_max=patch_shape_max,
