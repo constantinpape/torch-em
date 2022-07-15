@@ -375,23 +375,20 @@ def prepare_shallow2deep(
         list(tqdm(tp.map(_train_rf, range(n_forests)), desc="Train RFs", total=n_forests))
 
 
-def worst_points(
+def _score_based_points(
+    score_function,
     features, labels, rf_id,
     forests, forests_per_stage,
     sample_fraction_per_stage,
-    accumulate_samples=True,
+    accumulate_samples,
 ):
     # get the corresponding random forest from the last stage
     # and predict with it
     last_forest = forests[rf_id - forests_per_stage]
     pred = last_forest.predict_proba(features)
 
-    # labels to one-hot encoding
-    unique, inverse = np.unique(labels, return_inverse=True)
-    onehot = np.eye(unique.shape[0])[inverse]
-    # compute the difference between labels and prediction
-    diff = np.abs(onehot - pred).sum(axis=1)
-    assert len(diff) == len(features)
+    score = score_function(pred, labels)
+    assert len(score) == len(features)
 
     # get training samples based on the label-prediction diff
     samples = []
@@ -400,7 +397,7 @@ def worst_points(
     n_samples = int(sample_fraction_per_stage * len(features))
     n_samples_class = n_samples // nc
     for class_id in range(nc):
-        this_samples = np.argsort(diff[labels == class_id])[::-1][:n_samples_class]
+        this_samples = np.argsort(score[labels == class_id])[::-1][:n_samples_class]
         samples.append(this_samples)
     samples = np.concatenate(samples)
 
@@ -411,6 +408,66 @@ def worst_points(
         labels = np.concatenate([last_forest.train_labels, labels], axis=0)
 
     return features, labels
+
+
+def worst_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+    accumulate_samples=True,
+):
+    def score(pred, labels):
+        # labels to one-hot encoding
+        unique, inverse = np.unique(labels, return_inverse=True)
+        onehot = np.eye(unique.shape[0])[inverse]
+        # compute the difference between labels and prediction
+        return np.abs(onehot - pred).sum(axis=1)
+
+    return _score_based_points(
+        score, features, labels, rf_id, forests, forests_per_stage, sample_fraction_per_stage, accumulate_samples
+    )
+
+
+def uncertain_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+    accumulate_samples=True,
+):
+    def score(pred, labels):
+        assert pred.ndim == 2
+        channel_sorted = np.sort(pred, axis=1)
+        uncertainty = channel_sorted[:, -1] - channel_sorted[:, -2]
+        return uncertainty
+
+    return _score_based_points(
+        score, features, labels, rf_id, forests, forests_per_stage, sample_fraction_per_stage, accumulate_samples
+    )
+
+
+def uncertain_worst_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+    accumulate_samples=True,
+    alpha=0.5,
+):
+    def score(pred, labels):
+        assert pred.ndim == 2
+
+        # labels to one-hot encoding
+        unique, inverse = np.unique(labels, return_inverse=True)
+        onehot = np.eye(unique.shape[0])[inverse]
+        # compute the difference between labels and prediction
+        diff = np.abs(onehot - pred).sum(axis=1)
+
+        channel_sorted = np.sort(pred, axis=1)
+        uncertainty = channel_sorted[:, -1] - channel_sorted[:, -2]
+        return alpha * diff + (1.0 - alpha) * uncertainty
+
+    return _score_based_points(
+        score, features, labels, rf_id, forests, forests_per_stage, sample_fraction_per_stage, accumulate_samples
+    )
 
 
 def random_points(
@@ -434,8 +491,10 @@ def random_points(
 
 
 SAMPLING_STRATEGIES = {
-    "worst_points": worst_points,
     "random_points": random_points,
+    "uncertain_points": uncertain_points,
+    "uncertain_worst_points": uncertain_worst_points,
+    "worst_points": worst_points,
 }
 
 
