@@ -137,7 +137,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
     if isinstance(raw_paths, str):
         if rois is not None:
             assert len(rois) == 3 and all(isinstance(roi, slice) for roi in rois)
-        ds = Shallow2DeepDataset(raw_paths, raw_key, label_paths, label_key, roi=rois, **kwargs)
+        ds = Shallow2DeepDataset(raw_paths, raw_key, label_paths, label_key, roi=rois, ndim=ndim, **kwargs)
         ds.rf_paths = rf_paths
         ds.filter_config = filter_config
         ds.rf_channels = rf_channels
@@ -156,7 +156,7 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
         for i, (raw_path, label_path) in enumerate(zip(raw_paths, label_paths)):
             roi = None if rois is None else rois[i]
             dset = Shallow2DeepDataset(
-                raw_path, raw_key, label_path, label_key, roi=roi, n_samples=samples_per_ds[i], **kwargs
+                raw_path, raw_key, label_path, label_key, roi=roi, n_samples=samples_per_ds[i], ndim=ndim, **kwargs
             )
             dset.rf_paths = rf_paths
             dset.filter_config = filter_config
