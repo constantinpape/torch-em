@@ -329,6 +329,15 @@ def _prepare_shallow2deep(
     return ds, filters_and_sigmas
 
 
+def _serialize_feature_config(filters_and_sigmas):
+    feature_config = [
+        (filt.func.__name__ if isinstance(filt, partial) else filt.__name__,
+         sigma)
+        for filt, sigma in filters_and_sigmas
+    ]
+    return feature_config
+
+
 def prepare_shallow2deep(
     raw_paths,
     raw_key,
@@ -356,6 +365,7 @@ def prepare_shallow2deep(
         raw_transform, label_transform, rois, is_seg_dataset,
         filter_config, sampler,
     )
+    serialized_feature_config = _serialize_feature_config(filters_and_sigmas)
 
     def _train_rf(rf_id):
         # sample random patch with dataset
@@ -367,6 +377,9 @@ def prepare_shallow2deep(
         features, labels = _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels)
         rf = RandomForestClassifier(**rf_kwargs)
         rf.fit(features, labels)
+        # monkey patch these so that we know the feature config and dimensionality
+        rf.feature_ndim = ndim
+        rf.feature_config = serialized_feature_config
         out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")
         with open(out_path, "wb") as f:
             pickle.dump(rf, f)
@@ -539,6 +552,8 @@ def prepare_shallow2deep_advanced(
         raw_transform, label_transform, rois, is_seg_dataset,
         filter_config, sampler,
     )
+    serialized_feature_config = _serialize_feature_config(filters_and_sigmas)
+
     forests = []
     n_stages = n_forests // forests_per_stage if n_forests % forests_per_stage == 0 else\
         n_forests // forests_per_stage + 1
@@ -581,6 +596,9 @@ def prepare_shallow2deep_advanced(
             assert len(features) == len(labels)
             rf = RandomForestClassifier(**rf_kwargs)
             rf.fit(features, labels)
+            # monkey patch these so that we know the feature config and dimensionality
+            rf.feature_ndim = ndim
+            rf.feature_config = serialized_feature_config
 
             # save the random forest, update pbar, return it
             out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")
