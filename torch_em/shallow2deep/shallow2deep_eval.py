@@ -27,9 +27,12 @@ def visualize_pretrained_rfs(checkpoint, raw, n_forests,
     """
     import napari
 
-    rf_folder = os.path.join(checkpoint, "rfs")
-    assert os.path.exists(rf_folder), rf_folder
-    rf_paths = glob(os.path.join(rf_folder, "*.pkl"))
+    rf_paths = glob(os.path.join(checkpoint, "*.pkl"))
+    if len(rf_paths) == 0:
+        rf_folder = os.path.join(checkpoint, "rfs")
+        assert os.path.exists(rf_folder), rf_folder
+        rf_paths = glob(os.path.join(rf_folder, "*.pkl"))
+    assert len(rf_paths) > 0
     rf_paths.sort()
     if sample_random:
         rf_paths = np.random.choice(rf_paths, size=n_forests)
