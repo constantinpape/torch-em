@@ -142,14 +142,13 @@ def get_enhancers(root):
     enhancers_2d, enhancers_anisotropic = {}, {}
     for name in names:
         parts = name.split("-")
-        dim = parts[-2]
-        rf = parts[-1]
+        sampling_strategy, dim = parts[-1], parts[-2]
         path = os.path.join(root, name, f"{name}.zip")
         assert os.path.exists(path)
         if dim == "anisotropic":
-            enhancers_anisotropic[f"{dim}-{rf}"] = path
+            enhancers_anisotropic[f"{dim}-{sampling_strategy}"] = path
         elif dim == "2d":
-            enhancers_2d[f"{dim}-{rf}"] = path
+            enhancers_2d[f"{dim}-{sampling_strategy}"] = path
     assert len(enhancers_2d) > 0
     assert len(enhancers_anisotropic) > 0
     return enhancers_2d, enhancers_anisotropic
@@ -175,6 +174,7 @@ def run_evaluation(data_path, save_path, eval_path):
     return scores
 
 
+# TODO
 def to_table(scores):
     pass
 
@@ -184,33 +184,21 @@ def evaluation_v4():
     rf_folder = "/g/kreshuk/pape/Work/data/epfl/ilastik-projects"
     save_path = "./bio-models/v4/prediction.h5"
 
-    # rfs = {
-    #     "few-labels": os.path.join(rf_folder, "2d-1.ilp"),
-    #     "medium-labels": os.path.join(rf_folder, "2d-2.ilp"),
-    #     "many-labels": os.path.join(rf_folder, "2d-3.ilp"),
-    # }
-    # require_rfs(data_path, rfs, save_path)
-
-    # enhancers_2d, enhancers_anisotropic = get_enhancers("./bio-models/v4")
-    # require_enhancers_2d(rfs, enhancers_2d, save_path)
-    # require_enhancers_3d(rfs, enhancers_anisotropic, save_path)
-
-    # net2d = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
-    # require_net_2d(data_path, net2d, "direct2d", save_path)
-    # net3d = "./bio-models/v3/DirectModel/mitochondriaemsegmentationboundarymodel_pytorch_state_dict.zip"
-    # require_net_3d(data_path, net3d, "direct3d", save_path)
-
-    # for debugging
     rfs = {
+        "few-labels": os.path.join(rf_folder, "2d-1.ilp"),
+        "medium-labels": os.path.join(rf_folder, "2d-2.ilp"),
         "many-labels": os.path.join(rf_folder, "2d-3.ilp"),
     }
     require_rfs(data_path, rfs, save_path)
 
-    enhancers_2d = {
-        "enhancer": "./bio-models/v2/EnhancerMitochondriaEM2D-advanced-traing/EnhancerMitochondriaEM2D.zip"
-    }
+    enhancers_2d, enhancers_anisotropic = get_enhancers("./bio-models/v4")
     require_enhancers_2d(rfs, enhancers_2d, save_path)
-    return
+    require_enhancers_3d(rfs, enhancers_anisotropic, save_path)
+
+    net2d = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
+    require_net_2d(data_path, net2d, "direct2d", save_path)
+    net3d = "./bio-models/v3/DirectModel/mitochondriaemsegmentationboundarymodel_pytorch_state_dict.zip"
+    require_net_3d(data_path, net3d, "direct3d", save_path)
 
     eval_path = "./bio-models/v4/eval.json"
     scores = run_evaluation(data_path, save_path, eval_path)
@@ -247,5 +235,5 @@ def debug_v4():
 
 if __name__ == "__main__":
     # prepare_eval_v4()
-    # evaluation_v4()
-    debug_v4()
+    evaluation_v4()
+    # debug_v4()
