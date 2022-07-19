@@ -410,7 +410,8 @@ def _score_based_points(
     n_samples = int(sample_fraction_per_stage * len(features))
     n_samples_class = n_samples // nc
     for class_id in range(nc):
-        this_samples = np.argsort(score[labels == class_id])[::-1][:n_samples_class]
+        class_indices = np.where(labels == class_id)[0]
+        this_samples = class_indices[np.argsort(score[class_indices])[::-1][:n_samples_class]]
         samples.append(this_samples)
     samples = np.concatenate(samples)
 
