@@ -1,8 +1,28 @@
-# Shallow2Deep for mitochondria
+# Shallow2Deep for Mitochondria in EM
 
 ## Evaluation
 
-Evaluation of different shallow2deep setups on EM-Mitochondria. All scores are measured with a soft dice score.
+Evaluation of different shallow2deep setups for mitochondria segmentation in EM.
+The enhancers are (potentially) trained on multiple datasets, evaluation is always on the EPFL dataset (which is ofc not part of the training set).
+All scores are measured with a soft dice score.
+
+
+### V4
+
+- 2d enhancer: trained on mito-em and vnc
+- anisotropic enhancer: random forests are trained in 2d, enhancer trained in 3d, trained on mito-em
+- direct-nets: 2d and 3d networks trained on mito-em
+- different strategies for training the initial rfs:
+    - `vanilla`: random forests are trained on randomly sampled dense patches
+    - `worst_points`: initial stage of forests (25 forests) are trained on random samples, forests in the next stages add worst predictions from prev. stage to their training set
+    - `uncertain_worst_points`: same as `worst_points`, but points are selected based on linear combination of uncertainty and worst predictions
+
+a
+
+
+## Old evaluation
+
+Evaluation of older set-ups.
 
 ### V1
 

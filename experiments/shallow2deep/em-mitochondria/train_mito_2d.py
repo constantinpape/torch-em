@@ -143,6 +143,19 @@ def train_shallow2deep(args):
     trainer.fit(args.n_iterations)
 
 
+def check(args, train=True, val=True, n_images=2):
+    from torch_em.util.debug import check_loader
+    datasets = normalize_datasets(args.datasets)
+    if train:
+        print("Check train loader")
+        loader = get_loader(args, "train", datasets)
+        check_loader(loader, n_images)
+    if val:
+        print("Check val loader")
+        loader = get_loader(args, "val", datasets)
+        check_loader(loader, n_images)
+
+
 if __name__ == "__main__":
     parser = torch_em.util.parser_helper(require_input=False, default_batch_size=4)
     parser.add_argument("--datasets", "-d", nargs="+", default=DATASETS)
@@ -150,4 +163,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_threads", type=int, default=32)
     parser.add_argument("--sampling_strategy", "-s", default=None)
     args = parser.parse_args()
-    train_shallow2deep(args)
+    if args.check:
+        check(args, n_images=3)
+    else:
+        train_shallow2deep(args)
