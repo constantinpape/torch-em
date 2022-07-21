@@ -102,14 +102,14 @@ def export_enhancer(input_, is3d, checkpoint=None, version=None, name=None):
         out_folder = f"./bio-models/v{version}"
 
     if is3d == "anisotropic":
-        rf_path = "/scratch/pape/s2d-mitochondria/rfs2d/mitoem/rf_0499.pkl"
+        rf_path = "/scratch/pape/s2d-mitochondria/rfs2d-worst_points/mitoem/rf_0499.pkl"
         input_data = create_input_anisotropic(input_, rf_path)
         is3d = True
     elif is3d:
         assert False, "Currently don't have 3d rfs for mitos"
         input_data = create_input_3d(input_, rf_path)
     else:
-        rf_path = "/scratch/pape/s2d-mitochondria/rfs2d/mitoem/rf_0499.pkl"
+        rf_path = "/scratch/pape/s2d-mitochondria/rfs2d-worst_points/mitoem/rf_0499.pkl"
         input_data = create_input_2d(input_, rf_path)
 
     name, description = _get_name_and_description(is3d, name)
@@ -168,17 +168,13 @@ def export_version(args):
             return x
         elif x == "3d":
             return True
-        return None
+        raise ValueError(x)
 
     checkpoints = glob("./checkpoints/s2d-em-mitos-*")
     for ckpt in checkpoints:
         name = os.path.basename(ckpt)
         parts = name.split("-")
-        is3d = _get_ndim(parts[-1])
-        if is3d is None:
-            is3d = _get_ndim(parts[-2])
-        else:
-            name += "-worst_points"
+        is3d = _get_ndim(parts[-2])
         assert is3d is not None
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")

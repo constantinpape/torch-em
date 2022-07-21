@@ -171,12 +171,15 @@ def run_evaluation(data_path, save_path, eval_path):
             pred = ds[:]
             score = dice_metric(pred, labels)
             scores[name] = float(score)
+
+    with open(save_path, "w") as f:
+        json.dump(scores, f)
     return scores
 
 
 # TODO
 def to_table(scores):
-    pass
+    breakpoint()
 
 
 def evaluation_v4():
