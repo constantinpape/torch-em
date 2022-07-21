@@ -488,6 +488,7 @@ def random_points(
     features, labels, rf_id,
     forests, forests_per_stage,
     sample_fraction_per_stage,
+    accumulate_samples=True,
 ):
     samples = []
     nc = len(np.unique(labels))
@@ -501,7 +502,14 @@ def random_points(
         )
         samples.append(this_samples)
     samples = np.concatenate(samples)
-    return features[samples], labels[samples]
+    features, labels = features[samples], labels[samples]
+
+    if accumulate_samples and rf_id >= forests_per_stage:
+        last_forest = forests[rf_id - forests_per_stage]
+        features = np.concatenate([last_forest.train_features, features], axis=0)
+        labels = np.concatenate([last_forest.train_labels, labels], axis=0)
+
+    return features, labels
 
 
 SAMPLING_STRATEGIES = {
