@@ -6,8 +6,9 @@ from glob import glob
 from functools import partial
 
 import numpy as np
-import torch
 import torch_em
+from scipy.ndimage import gaussian_filter, convolve
+from skimage.feature import peak_local_max
 from sklearn.ensemble import RandomForestClassifier
 from torch_em.segmentation import check_paths, is_segmentation_dataset, samples_to_datasets
 from tqdm import tqdm
@@ -431,7 +432,6 @@ def worst_points(
     forests, forests_per_stage,
     sample_fraction_per_stage,
     accumulate_samples=True,
-    sampling_kwargs={},
 ):
     def score(pred, labels):
         # labels to one-hot encoding
@@ -450,7 +450,6 @@ def uncertain_points(
     forests, forests_per_stage,
     sample_fraction_per_stage,
     accumulate_samples=True,
-    sampling_kwargs={},
 ):
     def score(pred, labels):
         assert pred.ndim == 2
@@ -469,7 +468,6 @@ def uncertain_worst_points(
     sample_fraction_per_stage,
     accumulate_samples=True,
     alpha=0.5,
-    sampling_kwargs={},
 ):
     def score(pred, labels):
         assert pred.ndim == 2
@@ -513,14 +511,15 @@ def worst_tiles(
     features, labels, rf_id,
     forests, forests_per_stage,
     sample_fraction_per_stage,
-    sampling_kwargs,
+    img_shape,
+    tiles_shape=[51, 51],
+    smoothing_sigma=None,
     accumulate_samples=True,
 ):
     # check inputs
-    img_shape = sampling_kwargs.get('img_shape', None)
-    assert len(img_shape) in [2, 3], img_shape
-    tiles_shape = sampling_kwargs.get('tiles_shape', None)
-    assert len(tiles_shape) in [2, 3], tiles_shape
+    ndim = len(img_shape)
+    assert ndim in [2, 3], img_shape
+    assert len(tiles_shape) == ndim, tiles_shape
 
     # get the corresponding random forest from the last stage
     # and predict with it
@@ -535,52 +534,43 @@ def worst_tiles(
     diff = np.abs(onehot - pred).sum(axis=1)
     assert len(diff) == len(features)
 
-    # reshape diff to image shape and apply convolution with 1-kernel
-    diff_img = torch.Tensor(diff.reshape(img_shape)[None, None])
-    kernel = torch.Tensor(np.ones(tiles_shape)[None, None])
-    diff_img_smooth = torch.nn.functional.conv2d(diff_img, weight=kernel) if len(img_shape)==2 \
-        else torch.nn.functional.conv3d(diff_img, weight=kernel)
-    diff_img_smooth = diff_img_smooth.detach().numpy().squeeze()
-    diff_img_shape = diff_img_smooth.shape
-    diff_img_smooth = diff_img_smooth.flatten()
+    # reshape diff to image shape
+    diff_img = diff.reshape(img_shape)
 
-    # define lambda functions for better readability
-    # need to add tiles_shape[i] // 2 to get indices in original img
-    start = lambda i: 0 # -(tiles_shape[i] // 2)
-    end = lambda i: tiles_shape[i] # tiles_shape[i] // 2 + 1
+    # smooth either with gaussian or 1-kernel
+    if smoothing_sigma:
+        diff_img_smooth = gaussian_filter(diff_img, smoothing_sigma, mode='constant')
+    else:
+        kernel = np.ones(tiles_shape)
+        diff_img_smooth = convolve(diff_img, kernel, mode='constant')
 
-    # get training samples based on tiles around maxima
-    # of the label-prediction diff
-    nc = len(np.unique(labels))
-    n_samples_class = int(sample_fraction_per_stage * len(features)) // nc
+    # get training samples based on tiles around maxima of the label-prediction diff
+    # get maxima of the label-prediction diff (they seem to be sorted already)
+    max_centers = peak_local_max(
+        diff_img_smooth,
+        min_distance=max(tiles_shape),
+        exclude_border=tuple([s // 2 for s in tiles_shape])
+    )
+
+    # get indices of tiles around maxima
+    tiles = []
+    for center in max_centers:
+        tile_slice = tuple([slice(center[d]-tiles_shape[d]//2,
+            center[d]+tiles_shape[d]//2 + 1, None) for d in range(ndim)])
+        grid = np.mgrid[tile_slice]
+        samples_in_tile = grid.reshape(ndim, -1)
+        samples_in_tile = np.ravel_multi_index(samples_in_tile, img_shape)
+        tiles.append(samples_in_tile)
+    tiles = np.concatenate(tiles)
 
     # sample in a class balanced way
-    samples_per_class = [[]]*nc
-    indices_per_class = [np.where(labels == class_id)[0] for class_id in range(nc)]
-
-    # get maxima of the label-prediction diff
-    max_centers = np.argsort(diff_img_smooth)[::-1]
-    max_centers = np.unravel_index(max_centers, diff_img_shape)
-    max_centers = np.array(max_centers).swapaxes(0, 1)
-    for center in max_centers:
-        # get tile for each maximum
-        samples_in_tile = [(center[0]+y, center[1]+x) for y in range(start(0), end(0)) for x in range(start(1), end(1))] if len(center) == 2 \
-            else [(center[0]+z, center[1]+y, center[2]+x) for z in range(start(0), end(0)) for y in range(start(1), end(1)) for x in range(start(2), end(2))]
-        samples_in_tile = np.array(samples_in_tile).swapaxes(0, 1)
-        samples_in_tile = np.ravel_multi_index(samples_in_tile, img_shape)
-
-        for samples_this_class, indices_this_class in zip(samples_per_class, indices_per_class):
-            # check if current class is already full
-            if len(samples_this_class) < n_samples_class:
-                intersect = np.intersect1d(indices_this_class, samples_in_tile)
-                # make sure to not use duplicates
-                samples_this_class.extend(intersect.tolist())
-                samples_this_class = list(dict.fromkeys(samples_this_class))
-
-        # stop when there are enough samples in each class
-        if all([len(samples_this_class) >= n_samples_class for samples_this_class in samples_per_class]):
-            break
-    samples = np.concatenate(samples_per_class)
+    nc = len(np.unique(labels))
+    n_samples_class = int(sample_fraction_per_stage * len(features)) // nc
+    samples = []
+    for class_id in range(nc):
+        this_samples = tiles[labels[tiles] == class_id][:n_samples_class]
+        samples.append(this_samples)
+    samples = np.concatenate(samples)
 
     # get the features and labels, add from previous rf if specified
     features, labels = features[samples], labels[samples]
@@ -666,7 +656,7 @@ def prepare_shallow2deep_advanced(
             assert raw.ndim == labels.ndim == ndim, f"{raw.ndim}, {labels.ndim}, {ndim}"
 
             # monkey patch original shape to sampling_kwargs
-            # deepcopy needed due to multiprocessing
+            # deepcopy needed due to multithreading
             current_kwargs = copy.deepcopy(sampling_kwargs)
             current_kwargs['img_shape'] = raw.shape
 
@@ -679,7 +669,7 @@ def prepare_shallow2deep_advanced(
                     features, labels, rf_id,
                     forests, forests_per_stage,
                     sample_fraction_per_stage,
-                    sampling_kwargs=current_kwargs,
+                    **current_kwargs,
                 )
             else:  # sample randomly
                 features, labels = random_points(
