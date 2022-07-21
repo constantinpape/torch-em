@@ -17,11 +17,12 @@ BIOIMAGEIO_IDS = {
     "mitoem": "ilastik/mitoem_segmentation_challenge",
     "monuseg": "deepimagej/monuseg_digital_pathology_miccai2018",
     "ovules": "",  # not on bioimageio yet
-    "platynereis": "ilastik/platynereis_em_training_data",
-    "snemi": "",  # not on bioimagegio yet
-    "vnc": "ilastik/vnc",
     "plantseg_root": "ilastik/plantseg_root",
     "plantseg_ovules": "ilastik/plantseg_ovules",
+    "platynereis": "ilastik/platynereis_em_training_data",
+    "snemi": "",  # not on bioimagegio yet
+    "uro_cell": "",  # not on bioimageio yet: https://doi.org/10.1016/j.compbiomed.2020.103693
+    "vnc": "ilastik/vnc",
 }
 
 
