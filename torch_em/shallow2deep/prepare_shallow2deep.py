@@ -512,7 +512,7 @@ def worst_tiles(
     forests, forests_per_stage,
     sample_fraction_per_stage,
     img_shape,
-    tiles_shape=[51, 51],
+    tiles_shape=[25, 25],
     smoothing_sigma=None,
     accumulate_samples=True,
 ):
@@ -531,43 +531,45 @@ def worst_tiles(
     onehot = np.eye(unique.shape[0])[inverse]
 
     # compute the difference between labels and prediction
-    diff = np.abs(onehot - pred).sum(axis=1)
+    diff = np.abs(onehot - pred)
     assert len(diff) == len(features)
 
     # reshape diff to image shape
-    diff_img = diff.reshape(img_shape)
-
-    # smooth either with gaussian or 1-kernel
-    if smoothing_sigma:
-        diff_img_smooth = gaussian_filter(diff_img, smoothing_sigma, mode='constant')
-    else:
-        kernel = np.ones(tiles_shape)
-        diff_img_smooth = convolve(diff_img, kernel, mode='constant')
-
-    # get training samples based on tiles around maxima of the label-prediction diff
-    # get maxima of the label-prediction diff (they seem to be sorted already)
-    max_centers = peak_local_max(
-        diff_img_smooth,
-        min_distance=max(tiles_shape),
-        exclude_border=tuple([s // 2 for s in tiles_shape])
-    )
-
-    # get indices of tiles around maxima
-    tiles = []
-    for center in max_centers:
-        tile_slice = tuple([slice(center[d]-tiles_shape[d]//2,
-            center[d]+tiles_shape[d]//2 + 1, None) for d in range(ndim)])
-        grid = np.mgrid[tile_slice]
-        samples_in_tile = grid.reshape(ndim, -1)
-        samples_in_tile = np.ravel_multi_index(samples_in_tile, img_shape)
-        tiles.append(samples_in_tile)
-    tiles = np.concatenate(tiles)
+    diff_img = diff.reshape(img_shape + (-1,))
 
     # sample in a class balanced way
     nc = len(np.unique(labels))
     n_samples_class = int(sample_fraction_per_stage * len(features)) // nc
     samples = []
     for class_id in range(nc):
+        # smooth either with gaussian or 1-kernel
+        if smoothing_sigma:
+            diff_img_smooth = gaussian_filter(diff_img[..., class_id], smoothing_sigma, mode='constant')
+        else:
+            kernel = np.ones(tiles_shape)
+            diff_img_smooth = convolve(diff_img[..., class_id], kernel, mode='constant')
+
+        # get training samples based on tiles around maxima of the label-prediction diff
+        # do this in a class-specific way to ensure that each class is sampled
+        # get maxima of the label-prediction diff (they seem to be sorted already)
+        max_centers = peak_local_max(
+            diff_img_smooth,
+            min_distance=max(tiles_shape),
+            exclude_border=tuple([s // 2 for s in tiles_shape])
+        )
+
+        # get indices of tiles around maxima
+        tiles = []
+        for center in max_centers:
+            tile_slice = tuple([slice(center[d]-tiles_shape[d]//2,
+                center[d]+tiles_shape[d]//2 + 1, None) for d in range(ndim)])
+            grid = np.mgrid[tile_slice]
+            samples_in_tile = grid.reshape(ndim, -1)
+            samples_in_tile = np.ravel_multi_index(samples_in_tile, img_shape)
+            tiles.append(samples_in_tile)
+        tiles = np.concatenate(tiles)
+
+        # take samples that belong to the current class
         this_samples = tiles[labels[tiles] == class_id][:n_samples_class]
         samples.append(this_samples)
     samples = np.concatenate(samples)
