@@ -432,6 +432,7 @@ def worst_points(
     forests, forests_per_stage,
     sample_fraction_per_stage,
     accumulate_samples=True,
+    **kwargs,
 ):
     def score(pred, labels):
         # labels to one-hot encoding
@@ -450,6 +451,7 @@ def uncertain_points(
     forests, forests_per_stage,
     sample_fraction_per_stage,
     accumulate_samples=True,
+    **kwargs,
 ):
     def score(pred, labels):
         assert pred.ndim == 2
@@ -468,6 +470,7 @@ def uncertain_worst_points(
     sample_fraction_per_stage,
     accumulate_samples=True,
     alpha=0.5,
+    **kwargs,
 ):
     def score(pred, labels):
         assert pred.ndim == 2
@@ -492,6 +495,7 @@ def random_points(
     forests, forests_per_stage,
     sample_fraction_per_stage,
     accumulate_samples=True,
+    **kwargs,
 ):
     samples = []
     nc = len(np.unique(labels))
@@ -523,6 +527,7 @@ def worst_tiles(
     tiles_shape=[25, 25],
     smoothing_sigma=None,
     accumulate_samples=True,
+    **kwargs,
 ):
     # check inputs
     ndim = len(img_shape)
@@ -569,8 +574,13 @@ def worst_tiles(
         # get indices of tiles around maxima
         tiles = []
         for center in max_centers:
-            tile_slice = tuple([slice(center[d]-tiles_shape[d]//2,
-                center[d]+tiles_shape[d]//2 + 1, None) for d in range(ndim)])
+            tile_slice = tuple(
+                slice(
+                    center[d]-tiles_shape[d]//2,
+                    center[d]+tiles_shape[d]//2 + 1,
+                    None
+                ) for d in range(ndim)
+            )
             grid = np.mgrid[tile_slice]
             samples_in_tile = grid.reshape(ndim, -1)
             samples_in_tile = np.ravel_multi_index(samples_in_tile, img_shape)
@@ -668,7 +678,7 @@ def prepare_shallow2deep_advanced(
             # monkey patch original shape to sampling_kwargs
             # deepcopy needed due to multithreading
             current_kwargs = copy.deepcopy(sampling_kwargs)
-            current_kwargs['img_shape'] = raw.shape
+            current_kwargs["img_shape"] = raw.shape
 
             # only balance samples for the first (densely trained) rfs
             features, labels = _get_features_and_labels(
