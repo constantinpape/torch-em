@@ -4,7 +4,9 @@ from .cremi import get_cremi_loader
 from .dsb import get_dsb_loader
 from .hpa import get_hpa_segmentation_loader
 from .isbi2012 import get_isbi_loader
+from .kasthuri import get_kasthuri_loader
 from .livecell import get_livecell_loader
+from .lucchi import get_lucchi_loader
 from .mitoem import get_mitoem_loader
 from .monuseg import get_monuseg_loader
 from .mouse_embryo import get_mouse_embryo_loader
