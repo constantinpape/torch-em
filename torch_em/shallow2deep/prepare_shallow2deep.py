@@ -665,10 +665,11 @@ def prepare_shallow2deep_advanced(
             raw, labels = raw.numpy().squeeze(), labels.numpy().astype("int8").squeeze()
             assert raw.ndim == labels.ndim == ndim, f"{raw.ndim}, {labels.ndim}, {ndim}"
 
-            # monkey patch original shape to sampling_kwargs
+            # monkey patch original shape to sampling_kwargs for worst_tiles
             # deepcopy needed due to multithreading
             current_kwargs = copy.deepcopy(sampling_kwargs)
-            current_kwargs['img_shape'] = raw.shape
+            if sampling_strategy == worst_tiles:
+                current_kwargs['img_shape'] = raw.shape
 
             # only balance samples for the first (densely trained) rfs
             features, labels = _get_features_and_labels(
