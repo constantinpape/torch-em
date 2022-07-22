@@ -13,7 +13,9 @@ BIOIMAGEIO_IDS = {
     "dsb": "ilastik/stardist_dsb_training_data",
     "hpa": "",  # not on bioimageio yet
     "isbi2012": "ilastik/isbi2012_neuron_segmentation_challenge",
+    "kasthuri": "",  # not on bioimageio yet:
     "livecell": "ilastik/livecell_dataset",
+    "lucchi": "",  # not on bioimageio yet:
     "mitoem": "ilastik/mitoem_segmentation_challenge",
     "monuseg": "deepimagej/monuseg_digital_pathology_miccai2018",
     "ovules": "",  # not on bioimageio yet
