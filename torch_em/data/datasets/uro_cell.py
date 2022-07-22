@@ -13,13 +13,13 @@ CHECKSUM = "1cfc83792c7ec2d201b95b6b919d119d594f453822de3ad24486019979387d1d"
 
 
 def _require_urocell_data(path, download):
-    # download and unzip the data
     if os.path.exists(path):
         return path
 
     # add nifti file format support in elf by wrapping nibabel?
     import nibabel as nib
 
+    # download and unzip the data
     os.makedirs(path)
     tmp_path = os.path.join(path, "uro_cell.zip")
     download_source(tmp_path, URL, download, checksum=CHECKSUM)
