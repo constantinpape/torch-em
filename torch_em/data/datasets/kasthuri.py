@@ -54,7 +54,7 @@ def _create_data(root, inputs, out_path):
     assert raw.shape == labels.shape, f"{raw.shape}, {labels.shape}"
     with h5py.File(out_path, "w") as f:
         f.create_dataset("raw", data=raw, compression="gzip")
-        f.create_dataset("labels", data=labels.astype("uint8"), compression="gzip")
+        f.create_dataset("labels", data=labels, compression="gzip")
 
 
 def _require_kasthuri_data(path, download):
