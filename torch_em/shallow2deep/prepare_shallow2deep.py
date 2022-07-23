@@ -1,6 +1,7 @@
 import os
 import copy
 import pickle
+import warnings
 from concurrent import futures
 from glob import glob
 from functools import partial
@@ -595,13 +596,20 @@ def worst_tiles(
             samples.append(this_samples)
         except ValueError:
             pass
-    samples = np.concatenate(samples)
 
-    # get the features and labels, add from previous rf if specified
-    features, labels = features[samples], labels[samples]
-    if accumulate_samples:
-        features = np.concatenate([last_forest.train_features, features], axis=0)
-        labels = np.concatenate([last_forest.train_labels, labels], axis=0)
+    try:
+        samples = np.concatenate(samples)
+        features, labels = features[samples], labels[samples]
+
+        # get the features and labels, add from previous rf if specified
+        if accumulate_samples:
+            features = np.concatenate([last_forest.train_features, features], axis=0)
+            labels = np.concatenate([last_forest.train_labels, labels], axis=0)
+    except ValueError:
+        features, labels = last_forest.train_features, last_forest.train_labels
+        warnings.warn(
+            f"No features were sampled for forest {rf_id} using features of forest {rf_id - forests_per_stage}"
+        )
 
     return features, labels
 
