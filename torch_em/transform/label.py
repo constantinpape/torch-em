@@ -34,7 +34,7 @@ def label_consecutive(labels, with_background=True):
         return seg
 
 
-# TODO ignore label + mask, smoothing
+# TODO smoothing
 class BoundaryTransform:
     def __init__(self, mode="thick", add_binary_target=False, ndim=None):
         self.mode = mode
@@ -52,12 +52,14 @@ class BoundaryTransform:
         return target
 
 
+# TODO smoothing
 class NoToBackgroundBoundaryTransform:
-    def __init__(self, bg_label=0, mask_label=-1, mode="thick", ndim=None):
+    def __init__(self, bg_label=0, mask_label=-1, mode="thick", add_binary_target=False, ndim=None):
         self.bg_label = bg_label
         self.mask_label = mask_label
         self.mode = mode
         self.ndim = ndim
+        self.add_binary_target = add_binary_target
 
     def __call__(self, labels):
         labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
@@ -71,7 +73,15 @@ class NoToBackgroundBoundaryTransform:
         # mask the to-background-boundaries
         boundaries = boundaries.astype(np.int8)
         boundaries[to_bg_boundaries] = self.mask_label
-        return boundaries
+
+        if self.add_binary_target:
+            binary = labels_to_binary(labels, self.bg_label).astype(boundaries.dtype)
+            binary[labels == self.mask_label] = self.mask_label
+            target = np.concatenate([binary[None], boundaries], axis=0)
+        else:
+            target = boundaries
+
+        return target
 
 
 # TODO affinity smoothing
