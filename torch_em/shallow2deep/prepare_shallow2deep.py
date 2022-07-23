@@ -524,7 +524,7 @@ def worst_tiles(
     forests, forests_per_stage,
     sample_fraction_per_stage,
     img_shape,
-    tiles_shape=[25, 25],
+    tile_shape=[25, 25],
     smoothing_sigma=None,
     accumulate_samples=True,
     **kwargs,
@@ -532,7 +532,7 @@ def worst_tiles(
     # check inputs
     ndim = len(img_shape)
     assert ndim in [2, 3], img_shape
-    assert len(tiles_shape) == ndim, tiles_shape
+    assert len(tile_shape) == ndim, tile_shape
 
     # get the corresponding random forest from the last stage
     # and predict with it
@@ -559,7 +559,7 @@ def worst_tiles(
         if smoothing_sigma:
             diff_img_smooth = gaussian_filter(diff_img[..., class_id], smoothing_sigma, mode='constant')
         else:
-            kernel = np.ones(tiles_shape)
+            kernel = np.ones(tile_shape)
             diff_img_smooth = convolve(diff_img[..., class_id], kernel, mode='constant')
 
         # get training samples based on tiles around maxima of the label-prediction diff
@@ -567,8 +567,8 @@ def worst_tiles(
         # get maxima of the label-prediction diff (they seem to be sorted already)
         max_centers = peak_local_max(
             diff_img_smooth,
-            min_distance=max(tiles_shape),
-            exclude_border=tuple([s // 2 for s in tiles_shape])
+            min_distance=max(tile_shape),
+            exclude_border=tuple([s // 2 for s in tile_shape])
         )
 
         # get indices of tiles around maxima
@@ -576,8 +576,8 @@ def worst_tiles(
         for center in max_centers:
             tile_slice = tuple(
                 slice(
-                    center[d]-tiles_shape[d]//2,
-                    center[d]+tiles_shape[d]//2 + 1,
+                    center[d]-tile_shape[d]//2,
+                    center[d]+tile_shape[d]//2 + 1,
                     None
                 ) for d in range(ndim)
             )
@@ -585,11 +585,16 @@ def worst_tiles(
             samples_in_tile = grid.reshape(ndim, -1)
             samples_in_tile = np.ravel_multi_index(samples_in_tile, img_shape)
             tiles.append(samples_in_tile)
-        tiles = np.concatenate(tiles)
 
-        # take samples that belong to the current class
-        this_samples = tiles[labels[tiles] == class_id][:n_samples_class]
-        samples.append(this_samples)
+        # this (very rarely) fails due to empty tile list. Since we usually
+        # accumulate the features this doesn't hurt much and we can continue
+        try:
+            tiles = np.concatenate(tiles)
+            # take samples that belong to the current class
+            this_samples = tiles[labels[tiles] == class_id][:n_samples_class]
+            samples.append(this_samples)
+        except ValueError:
+            pass
     samples = np.concatenate(samples)
 
     # get the features and labels, add from previous rf if specified
