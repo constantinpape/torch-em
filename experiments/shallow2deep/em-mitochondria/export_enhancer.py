@@ -171,8 +171,11 @@ def export_version(args):
         raise ValueError(x)
 
     checkpoints = glob("./checkpoints/s2d-em-mitos-*")
+    out_folder = f"./bio-models/v{args.version}"
     for ckpt in checkpoints:
         name = os.path.basename(ckpt)
+        if(os.path.exists(os.path.join(out_folder, name))):
+            continue
         parts = name.split("-")
         is3d = _get_ndim(parts[-2])
         assert is3d is not None

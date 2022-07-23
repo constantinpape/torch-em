@@ -148,7 +148,7 @@ if __name__ == "__main__":
     parser.add_argument("--datasets", "-d", nargs="+", default=DATASETS)
     parser.add_argument("--n_rfs", type=int, default=500)
     parser.add_argument("--n_threads", type=int, default=32)
-    parser.add_argument("--sampling_strategy", "-s", default="worst_points")
+    parser.add_argument("--sampling_strategy", "-s", default="worst_tiles")
     args = parser.parse_args()
     if args.check:
         check(args, n_images=5, val=False)
