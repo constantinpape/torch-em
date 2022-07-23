@@ -1,17 +1,19 @@
+import os
 import pickle
 import warnings
+from glob import glob
 
 import numpy as np
 import torch
 from torch_em.segmentation import (check_paths, is_segmentation_dataset,
                                    get_data_loader, get_raw_transform,
                                    samples_to_datasets, _get_default_transform)
-from torch_em.data import ConcatDataset, SegmentationDataset
+from torch_em.data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
 from .prepare_shallow2deep import _get_filters, _apply_filters
 from ..util import ensure_tensor_with_channels, ensure_spatial_array
 
 
-class Shallow2DeepDataset(SegmentationDataset):
+class _Shallow2DeepBase:
     _rf_paths = None
     _filter_config = None
 
@@ -87,6 +89,8 @@ class Shallow2DeepDataset(SegmentationDataset):
 
         return prediction
 
+
+class Shallow2DeepDataset(SegmentationDataset, _Shallow2DeepBase):
     def __getitem__(self, index):
         assert self._rf_paths is not None
         raw, labels = self._get_sample(index)
@@ -125,7 +129,44 @@ class Shallow2DeepDataset(SegmentationDataset):
         return prediction, labels
 
 
-def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_paths, rf_channels, ndim, **kwargs):
+class Shallow2DeepImageCollectionDataset(ImageCollectionDataset, _Shallow2DeepBase):
+    def __getitem__(self, index):
+        raw, labels = self._get_sample(index)
+        initial_label_dtype = labels.dtype
+
+        if self.raw_transform is not None:
+            raw = self.raw_transform(raw)
+
+        if self.label_transform is not None:
+            labels = self.label_transform(labels)
+
+        if self.transform is not None:
+            raw, labels = self.transform(raw, labels)
+
+        # support enlarging bounding box here as well (for affinity transform) ?
+        if self.label_transform2 is not None:
+            labels = ensure_spatial_array(labels, self.ndim, dtype=initial_label_dtype)
+            labels = self.label_transform2(labels)
+
+        if isinstance(raw, (list, tuple)):  # this can be a list or tuple due to transforms
+            assert len(raw) == 1
+            raw = raw[0]
+        raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
+        if raw.shape[0] > 1:
+            raise NotImplementedError(
+                f"Shallow2Deep training not implemented for multi-channel input yet; got {raw.shape[0]} channels"
+            )
+
+        # NOTE we assume single channel raw data here; this needs to be changed for multi-channel
+        prediction = self._predict_rf(raw[0].numpy())
+        prediction = ensure_tensor_with_channels(prediction, ndim=self._ndim, dtype=self.dtype)
+        labels = ensure_tensor_with_channels(labels, ndim=self._ndim, dtype=self.label_dtype)
+        return prediction, labels
+
+
+def _load_shallow2deep_segmentation_dataset(
+    raw_paths, raw_key, label_paths, label_key, rf_paths, rf_channels, ndim, **kwargs
+):
     rois = kwargs.pop("rois", None)
     filter_config = kwargs.pop("filter_config", None)
     if ndim == "anisotropic":
@@ -167,6 +208,32 @@ def _load_shallow2deep_dataset(raw_paths, raw_key, label_paths, label_key, rf_pa
     return ds
 
 
+def _load_shallow2deep_image_collection_dataset(
+    raw_paths, raw_key, label_paths, label_key, rf_paths, rf_channels, patch_shape, **kwargs
+):
+    if isinstance(raw_paths, str):
+        assert isinstance(label_paths, str)
+        raw_file_paths = glob(os.path.join(raw_paths, raw_key))
+        raw_file_paths.sort()
+        label_file_paths = glob(os.path.join(label_paths, label_key))
+        label_file_paths.sort()
+        ds = Shallow2DeepImageCollectionDataset(raw_file_paths, label_file_paths, patch_shape, **kwargs)
+    elif isinstance(raw_paths, list) and raw_key is None:
+        assert isinstance(label_paths, list)
+        assert label_key is None
+        assert all(os.path.exists(pp) for pp in raw_paths)
+        assert all(os.path.exists(pp) for pp in label_paths)
+        ds = Shallow2DeepDataset(raw_paths, label_paths, patch_shape, **kwargs)
+    else:
+        raise NotImplementedError
+
+    filter_config = kwargs.pop("filter_config", None)
+    ds.rf_paths = rf_paths
+    ds.filter_config = filter_config
+    ds.rf_channels = rf_channels
+    return ds
+
+
 def get_shallow2deep_dataset(
     raw_paths,
     raw_key,
@@ -204,7 +271,7 @@ def get_shallow2deep_dataset(
         )
 
     if is_seg_dataset:
-        ds = _load_shallow2deep_dataset(
+        ds = _load_shallow2deep_segmentation_dataset(
             raw_paths,
             raw_key,
             label_paths,
@@ -224,7 +291,13 @@ def get_shallow2deep_dataset(
             rf_channels=rf_channels,
         )
     else:
-        raise NotImplementedError("Image collection dataset for shallow2deep not implemented yet.")
+        if rois is not None:
+            raise NotImplementedError
+        ds = _load_shallow2deep_image_collection_dataset(
+            raw_paths, raw_key, label_paths, label_key, rf_paths, rf_channels, patch_shape,
+            raw_transform=raw_transform, label_transform=label_transform,
+            transform=transform, dtype=dtype, n_samples=n_samples,
+        )
     return ds
 
 
