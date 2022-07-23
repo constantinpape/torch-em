@@ -158,6 +158,8 @@ def _load_rf_image_collection_dataset(
     if isinstance(raw_paths, str):
         raw_paths, label_paths = _get_paths(raw_paths, raw_key, label_paths, label_key, roi)
         ds = RFImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape_min, **kwargs)
+        ds.patch_shape_min = patch_shape_min
+        ds.patch_shape_max = patch_shape_max
     elif raw_key is None:
         assert label_key is None
         assert isinstance(raw_paths, (list, tuple)) and isinstance(label_paths, (list, tuple))
