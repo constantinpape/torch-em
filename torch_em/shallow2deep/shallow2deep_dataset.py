@@ -223,7 +223,7 @@ def _load_shallow2deep_image_collection_dataset(
         assert label_key is None
         assert all(os.path.exists(pp) for pp in raw_paths)
         assert all(os.path.exists(pp) for pp in label_paths)
-        ds = Shallow2DeepDataset(raw_paths, label_paths, patch_shape, **kwargs)
+        ds = Shallow2DeepImageCollectionDataset(raw_paths, label_paths, patch_shape, **kwargs)
     else:
         raise NotImplementedError
 
