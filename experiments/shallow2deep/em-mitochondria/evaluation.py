@@ -152,7 +152,7 @@ def require_net_3d(data_path, model_path, model_name, save_path, tiling):
 
 def get_enhancers(root):
     names = [os.path.basename(path) for path in glob(os.path.join(root, "s2d-em*"))]
-    enhancers_2d, enhancers_anisotropic = {}, {}
+    enhancers_2d, enhancers_anisotropic, enhancers_3d = {}, {}, {}
     for name in names:
         parts = name.split("-")
         sampling_strategy, dim = parts[-1], parts[-2]
@@ -162,9 +162,12 @@ def get_enhancers(root):
             enhancers_anisotropic[f"{dim}-{sampling_strategy}"] = path
         elif dim == "2d":
             enhancers_2d[f"{dim}-{sampling_strategy}"] = path
+        elif dim == "3d":
+            enhancers_3d[f"{dim}-{sampling_strategy}"] = path
     assert len(enhancers_2d) > 0
     assert len(enhancers_anisotropic) > 0
-    return enhancers_2d, enhancers_anisotropic
+    assert len(enhancers_3d) > 0
+    return enhancers_2d, enhancers_anisotropic, enhancers_3d
 
 
 def run_evaluation(data_path, save_path, eval_path, label_key="label"):
@@ -254,7 +257,7 @@ def evaluate_lucchi(version):
         "medium-labels": os.path.join(rf_folder, "2.ilp"),
         "many-labels": os.path.join(rf_folder, "3.ilp"),
     }
-    enhancers_2d, enhancers_anisotropic = get_enhancers(f"./bio-models/v{version}")
+    enhancers_2d, enhancers_anisotropic, enhancers_3d = get_enhancers(f"./bio-models/v{version}")
     net2d = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
     net_aniso = "./bio-models/v3/DirectModel/mitochondriaemsegmentationboundarymodel_pytorch_state_dict.zip"
 
@@ -262,7 +265,7 @@ def evaluate_lucchi(version):
 
     require_enhancers_2d(rfs, enhancers_2d, save_path)
     require_enhancers_3d(rfs, enhancers_anisotropic, save_path)
-    # TODO add the 3d enhancers
+    require_enhancers_3d(rfs, enhancers_3d, save_path)
 
     require_net_2d(data_path, net2d, "direct_2d", save_path)
     tiling_aniso = {
