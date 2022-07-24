@@ -6,7 +6,67 @@ from skimage.transform import resize
 from ..util import ensure_tensor
 
 
-# TODO RandomElastic3D ?
+class RandomElasticDeformation3D(kornia.augmentation.AugmentationBase3D):
+    def __init__(self,
+                 control_point_spacing=1,
+                 sigma=(32., 32.),
+                 alpha=(4., 4.),
+                 interpolation=kornia.constants.Resample.BILINEAR,
+                 p=0.5,
+                 keepdim=False,
+                 same_on_batch=True):
+        super().__init__(p=p,  # keepdim=keepdim,
+                         same_on_batch=same_on_batch)
+        if isinstance(control_point_spacing, int):
+            self.control_point_spacing = [control_point_spacing] * 2
+        else:
+            self.control_point_spacing = control_point_spacing
+        assert len(self.control_point_spacing) == 2
+        self.interpolation = interpolation
+        self.flags = dict(
+            interpolation=torch.tensor(self.interpolation.value),
+            sigma=sigma,
+            alpha=alpha
+        )
+
+    # The same transformation applied to all samples in a batch
+    def generate_parameters(self, batch_shape):
+        assert len(batch_shape) == 5
+        shape = batch_shape[3:]
+        control_shape = tuple(
+            sh // spacing for sh, spacing in zip(shape, self.control_point_spacing)
+        )
+        deformation_fields = [
+            np.random.uniform(-1, 1, control_shape),
+            np.random.uniform(-1, 1, control_shape)
+        ]
+        deformation_fields = [
+            resize(df, shape, order=3)[None] for df in deformation_fields
+        ]
+        noise = np.concatenate(deformation_fields, axis=0)[None].astype('float32')
+        noise = torch.from_numpy(noise)
+        return {'noise': noise}
+
+    def __call__(self, input, params=None):
+        assert(len(input.shape) == 5)
+        if params is None:
+            params = self.generate_parameters(input.shape)
+            self._params = params
+
+        noise = params['noise']
+        mode = 'bilinear' if (self.flags['interpolation'] == 1).all() else 'nearest'
+        noise_ch = noise.expand(input.shape[1], -1, -1, -1)
+        input_transformed = []
+        for i, x in enumerate(torch.unbind(input, dim=0)):
+            x_transformed = kornia.geometry.transform.elastic_transform2d(
+                            x, noise_ch, sigma=self.flags['sigma'],
+                            alpha=self.flags['alpha'], mode=mode,
+                            padding_mode="reflection"
+                            )
+            input_transformed.append(x_transformed)
+        input_transformed = torch.stack(input_transformed)
+        return input_transformed
+
 
 
 class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
@@ -129,7 +189,7 @@ AUGMENTATIONS = {
     "RandomRotation": {"degrees": 90},
     "RandomRotation3D": {"degrees": (90, 90, 90)},
     "RandomVerticalFlip": {},
-    "RandomVerticalFlip3D": {},
+    "RandomVerticalFlip3D": {}
 }
 
 
