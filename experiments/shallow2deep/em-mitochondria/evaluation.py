@@ -1,219 +1,317 @@
+import json
 import os
+from glob import glob
 
 import bioimageio.core
 import numpy as np
+import pandas as pd
+
 from elf.io import open_file
 from elf.evaluation import dice_score
-from sklearn.metrics import f1_score
-from torch_em.shallow2deep import evaluate_enhancers
+from ilastik.experimental.api import from_project_file
+from tqdm import trange, tqdm
+from xarray import DataArray
 
 
-# make cut-outs from mito-em for ilastik training and evaluation
-def prepare_eval_v1():
-    out_folder = "/g/kreshuk/pape/Work/data/mito_em/data/crops"
-    os.makedirs(out_folder, exist_ok=True)
-
-    train_bb = np.s_[:50, :1024, :1024]
-    test_bb = np.s_[50:, -1024:, -1024:]
-
-    input_path = "/scratch/pape/mito-em/human_val.n5"
-    with open_file(input_path, "r") as f:
-        dsr = f["raw"]
-        dsr.n_threads = 8
-        raw_train, raw_test = dsr[train_bb], dsr[test_bb]
-
-        dsl = f["labels"]
-        dsl.n_threads = 8
-        labels_train, labels_test = dsl[train_bb], dsl[test_bb]
-
-    with open_file(os.path.join(out_folder, "crop_train.h5"), "a") as f:
-        f.create_dataset("raw", data=raw_train, compression="gzip")
-        f.create_dataset("labels", data=labels_train, compression="gzip")
-
-    with open_file(os.path.join(out_folder, "crop_test.h5"), "a") as f:
-        f.create_dataset("raw", data=raw_test, compression="gzip")
-        f.create_dataset("labels", data=labels_test, compression="gzip")
-
-
-def prepare_eval_v2():
-    in_path = "/g/kreshuk/data/VNC/data_labeled_mito.h5"
-    out_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
-    with open_file(in_path, "r") as f:
-        raw = f["raw"][:]
-        labels = f["label"][:]
-    raw = raw.astype("float32") / 255.0
-    with open_file(out_path, "a") as f:
-        f.create_dataset("raw", data=raw, compression="gzip")
-        f.create_dataset("labels", data=labels, compression="gzip")
-
-
-def dice_metric(pred, label):
-    assert pred.shape[2:] == label.shape
-    return dice_score(pred[0, 0], label, threshold_seg=None)
-
-
-def f1_metric(pred, label):
-    assert pred.shape[2:] == label.shape
-    return f1_score(label.ravel() > 0, pred[0, 0].ravel() > 0.5)
-
-
-def _evaluation(
-    data_path, rfs, enhancers, rf_channel, save_path, metric=dice_metric, raw_key="raw", label_key="labels", is2d=True
-):
-    with open_file(data_path, "r") as f:
-        raw = f[raw_key][:]
-        labels = f[label_key][:]
-    if is2d:
-        prediction_function = None
-    else:
-        prediction_function = bioimageio.core.predict_with_tiling
-    scores = evaluate_enhancers(
-        raw, labels, enhancers, rfs,
-        metric=metric, is2d=is2d, rf_channel=rf_channel, save_path=save_path,
-        prediction_function=prediction_function
+def prepare_eval_v4():
+    path = "/g/kreshuk/pape/Work/data/kasthuri/kasthuri_test.h5"
+    with open_file(path, "r") as f:
+        # raw = f["raw"][:]
+        label = f["labels"][:]
+    print(label.shape)
+    fg = np.concatenate(
+        [(label != 255).all(axis=0)[None]] * label.shape[0],
+        axis=0
     )
+
+    # import napari
+    # v = napari.Viewer()
+    # v.add_labels(label)
+    # v.add_labels(fg)
+    # napari.run()
+
+    fg = np.where(fg)
+    fg_bb = tuple(
+        slice(int(gg.min()), int(gg.max()) + 1) for gg in fg
+    )
+    label = label[fg_bb]
+    print(label.shape)
+
+
+def dice_metric(pred, label, mask=None):
+    if pred.ndim == 4:
+        pred = pred[0]
+    assert pred.shape == label.shape
+    # deal with potential ignore label
+    if mask is not None:
+        pred, label = pred[mask], label[mask]
+        assert pred.shape == label.shape
+    return dice_score(pred, label, threshold_seg=None)
+
+
+def require_rfs(data_path, rfs, save_path):
+    # check if we need to run any of the predictions
+    with open_file(save_path, "a") as f_save:
+        if all(name in f_save for name in rfs):
+            return
+
+        with open_file(data_path, "r") as f:
+            data = f["raw"][:]
+        data = DataArray(data, dims=tuple("zyx"))
+
+        for name, ilp_path in rfs.items():
+            if name in f_save:
+                continue
+            print("Run prediction for ILP", name, ":", ilp_path, "...")
+            assert os.path.exists(ilp_path)
+            ilp = from_project_file(ilp_path)
+            pred = ilp.predict(data).values[..., 1]
+            assert pred.shape == data.shape
+            f_save.create_dataset(name, data=pred, compression="gzip")
+
+
+def require_enhancers_2d(rfs, enhancers, save_path):
+    with open_file(save_path, "a") as f:
+        rf_data = {}
+        for enhancer_name, enhancer_path in enhancers.items():
+            save_names = [f"{enhancer_name}-{rf_name}" for rf_name in rfs]
+            if all(name in f for name in save_names):
+                continue
+            enhancer = bioimageio.core.load_resource_description(enhancer_path)
+            with bioimageio.core.create_prediction_pipeline(enhancer) as pp:
+                for rf_name in rfs:
+                    save_name = f"{enhancer_name}-{rf_name}"
+                    if save_name in f:
+                        continue
+                    if rf_name not in rf_data:
+                        rf_data[rf_name] = f[rf_name][:]
+                    rf_pred = rf_data[rf_name]
+                    pred = np.zeros((2,) + rf_pred.shape, dtype="float32")
+                    for z in trange(rf_pred.shape[0], desc=f"Run prediction for {enhancer_name}-{rf_name}"):
+                        inp = DataArray(rf_pred[z][None, None], dims=tuple("bcyx"))
+                        predz = bioimageio.core.predict_with_padding(pp, inp)[0].values[0]
+                        pred[:, z] = predz
+                    f.create_dataset(save_name, data=pred, compression="gzip")
+
+
+def require_enhancers_3d(rfs, enhancers, save_path):
+    tiling = {
+        "tile": {"z": 32, "y": 256, "x": 256},
+        "halo": {"z": 4, "y": 32, "x": 32}
+    }
+    with open_file(save_path, "a") as f:
+        rf_data = {}
+        for enhancer_name, enhancer_path in enhancers.items():
+            save_names = [f"{enhancer_name}-{rf_name}" for rf_name in rfs]
+            if all(name in f for name in save_names):
+                continue
+            enhancer = bioimageio.core.load_resource_description(enhancer_path)
+            with bioimageio.core.create_prediction_pipeline(enhancer) as pp:
+                for rf_name in rfs:
+                    save_name = f"{enhancer_name}-{rf_name}"
+                    if save_name in f:
+                        continue
+                    if rf_name not in rf_data:
+                        rf_data[rf_name] = f[rf_name][:]
+                    rf_pred = rf_data[rf_name]
+                    inp = DataArray(rf_pred[None, None], dims=tuple("bczyx"))
+                    pred = bioimageio.core.predict_with_tiling(pp, inp, tiling=tiling, verbose=True)[0].values[0]
+                    f.create_dataset(save_name, data=pred, compression="gzip")
+
+
+def require_net_2d(data_path, model_path, model_name, save_path):
+    with open_file(save_path, "a") as f_save:
+        if model_name in f_save:
+            return
+        model = bioimageio.core.load_resource_description(model_path)
+        with open_file(data_path, "r") as f:
+            raw = f["raw"][:]
+
+        pred = np.zeros((2,) + raw.shape, dtype="float32")
+        with bioimageio.core.create_prediction_pipeline(model) as pp:
+            for z in trange(raw.shape[0], desc=f"Run prediction for model {model_name}"):
+                inp = DataArray(raw[z][None, None], dims=tuple("bcyx"))
+                pred[:, z] = bioimageio.core.predict_with_padding(pp, inp)[0].values[0]
+        f_save.create_dataset(model_name, data=pred, compression="gzip")
+
+
+def require_net_3d(data_path, model_path, model_name, save_path, tiling):
+    with open_file(save_path, "a") as f_save:
+        if model_name in f_save:
+            return
+        model = bioimageio.core.load_resource_description(model_path)
+        with open_file(data_path, "r") as f:
+            raw = f["raw"][:]
+
+        pred = np.zeros((2,) + raw.shape, dtype="float32")
+        with bioimageio.core.create_prediction_pipeline(model) as pp:
+            inp = DataArray(raw[None, None], dims=tuple("bczyx"))
+            pred = bioimageio.core.predict_with_tiling(pp, inp, tiling=tiling, verbose=True)[0].values[0]
+        f_save.create_dataset(model_name, data=pred, compression="gzip")
+
+
+def get_enhancers(root):
+    names = [os.path.basename(path) for path in glob(os.path.join(root, "s2d-em*"))]
+    enhancers_2d, enhancers_anisotropic, enhancers_3d = {}, {}, {}
+    for name in names:
+        parts = name.split("-")
+        sampling_strategy, dim = parts[-1], parts[-2]
+        path = os.path.join(root, name, f"{name}.zip")
+        assert os.path.exists(path)
+        if dim == "anisotropic":
+            enhancers_anisotropic[f"{dim}-{sampling_strategy}"] = path
+        elif dim == "2d":
+            enhancers_2d[f"{dim}-{sampling_strategy}"] = path
+        elif dim == "3d":
+            enhancers_3d[f"{dim}-{sampling_strategy}"] = path
+    assert len(enhancers_2d) > 0
+    assert len(enhancers_anisotropic) > 0
+    assert len(enhancers_3d) > 0
+    return enhancers_2d, enhancers_anisotropic, enhancers_3d
+
+
+def run_evaluation(data_path, save_path, eval_path, label_key="label"):
+    if os.path.exists(eval_path):
+        with open(eval_path, "r") as f:
+            scores = json.load(f)
+    else:
+        scores = {}
+
+    def load_labels():
+        with open_file(data_path, "r") as f:
+            labels = f[label_key][:]
+        if 255 in labels:
+            mask = labels != 255
+            print("Have mask!!!!!")
+            # getting rid of boundary artifacts
+            print("Pix in mask before:", mask.sum())
+            mask = np.concatenate(
+                [mask.all(axis=0)[None]] * mask.shape[0],
+                axis=0
+            )
+            print("Pix in mask afer:", mask.sum())
+        else:
+            mask = None
+        return labels, mask
+
+    with open_file(save_path, "r") as f:
+        missing_names = list(
+            set(f.keys()) - set(scores.keys())
+        )
+        if missing_names:
+            labels, mask = load_labels()
+
+        for name in tqdm(missing_names, desc="Run evaluation"):
+            pred = f[name][:]
+            score = dice_metric(pred, labels, mask)
+            scores[name] = float(score)
+
+    with open(eval_path, "w") as f:
+        json.dump(scores, f)
     return scores
 
 
-def _direct_evaluation(data_path, model_path, save_path, raw_key="raw", label_key="labels", metric=dice_metric):
-    import bioimageio.core
-    import xarray
-    from tqdm import trange
+def to_table(scores):
 
-    model = bioimageio.core.load_resource_description(model_path)
+    # sort the results into enhanncers / rfs with few, medium and many labels
+    cols = {"few-labels": {}, "medium-labels": {}, "many-labels": {}}
+    for name, score in scores.items():
+        for col in cols:
+            is_enhancer = False
+            if col in name:
+                # TODO need to adapt this once we also have a 3d rf
+                save_name = "rf3d" if col == name else name.replace(f"-{col}", "")
+                cols[col][save_name] = score
+                is_enhancer = True
+                break
+        # direct prediction: don't fit into the categories here, we just put it in the first col (few)
+        if not is_enhancer:
+            cols["few-labels"][name] = score
+
+    # sort descending after 2d, 3d, anisotropic (alphabetically)
+    name_col = list(cols["few-labels"].keys())
+    name_col.sort()
+    data = []
+    for ndim in ("2d", "anisotropic", "3d"):
+        for name in name_col:
+            if ndim not in name:
+                # print("Skipping", ndim, name)
+                continue
+            row = [name] + [col[name] if name in col else None for col in cols.values()]
+            if name == "rf3d":
+                data = [row] + data
+            else:
+                data.append(row)
+
+    df = pd.DataFrame(data, columns=["method"] + list(cols.keys()))
+    return df
+
+
+def evaluate_lucchi(version):
+    data_path = "/g/kreshuk/pape/Work/data/lucchi/lucchi_test.h5"
+    rf_folder = "/g/kreshuk/pape/Work/data/lucchi/ilp3d"
+    save_path = f"./bio-models/v{version}/prediction_lucchi.h5"
+
+    rfs = {
+        "few-labels": os.path.join(rf_folder, "1.ilp"),
+        "medium-labels": os.path.join(rf_folder, "2.ilp"),
+        "many-labels": os.path.join(rf_folder, "3.ilp"),
+    }
+    enhancers_2d, enhancers_anisotropic, enhancers_3d = get_enhancers(f"./bio-models/v{version}")
+    net2d = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
+    net_aniso = "./bio-models/v3/DirectModel/mitochondriaemsegmentationboundarymodel_pytorch_state_dict.zip"
+
+    require_rfs(data_path, rfs, save_path)
+
+    require_enhancers_2d(rfs, enhancers_2d, save_path)
+    require_enhancers_3d(rfs, enhancers_anisotropic, save_path)
+    require_enhancers_3d(rfs, enhancers_3d, save_path)
+
+    require_net_2d(data_path, net2d, "direct_2d", save_path)
+    tiling_aniso = {
+        "tile": {"z": 32, "y": 256, "x": 256},
+        "halo": {"z": 4, "y": 32, "x": 32}
+    }
+    require_net_3d(data_path, net_aniso, "direct_anisotropic", save_path, tiling_aniso)
+    # TODO train and add the 3d network
+
+    eval_path = f"./bio-models/v{version}/lucchi.json"
+    scores = run_evaluation(data_path, save_path, eval_path, label_key="labels")
+    scores = to_table(scores)
+    print("Evaluation results:")
+    print(scores.to_markdown(floatfmt=".03f"))
+
+
+def debug_v4(pred_filter=None):
+    import napari
+    data_path = "/g/kreshuk/pape/Work/data/kasthuri/kasthuri_test.h5"
+    save_path = "./bio-models/v4/prediction_kasthuri.h5"
+
+    print("Load data")
     with open_file(data_path, "r") as f:
-        raw, labels = f[raw_key][:], f[label_key][:]
-    scores = []
+        data = f["raw"][:]
+        labels = f["labels"][:].astype("uint32")
 
-    save_key = "direct_predictions"
-    with open_file(save_path, "a") as f:
-        if save_key in f:
-            pred = f[save_key][:]
-        else:
-            with bioimageio.core.create_prediction_pipeline(model) as pp:
-                pred = []
-                for z in trange(raw.shape[0]):
-                    inp = xarray.DataArray(raw[z][None, None], dims=tuple("bcyx"))
-                    predz = pp(inp)[0].values
-                    pred.append(predz[None])
-                pred = np.concatenate(pred)
-                f.create_dataset(save_key, data=pred, compression="gzip")
+    with open_file(save_path, "r") as f:
+        preds = {}
+        for name, ds in tqdm(f.items(), total=len(f)):
+            if pred_filter is not None and pred_filter not in name:
+                continue
+            preds[name] = ds[:]
 
-    for z in range(raw.shape[0]):
-        scores.append(metric(pred[z], labels[z]))
-
-    return np.mean(scores)
-
-
-def _direct_evaluation3d(data_path, model_path, save_path, raw_key="raw", label_key="labels", metric=dice_metric):
-    import xarray
-
-    model = bioimageio.core.load_resource_description(model_path)
-    with open_file(data_path, "r") as f:
-        raw, labels = f[raw_key][:], f[label_key][:]
-
-    save_key = "direct_predictions"
-    with open_file(save_path, "a") as f:
-        if save_key in f:
-            pred = f[save_key][:]
-        else:
-            with bioimageio.core.create_prediction_pipeline(model) as pp:
-                inp = xarray.DataArray(raw[None, None], dims=tuple("bczyx"))
-                pred = bioimageio.core.predict_with_tiling(pp, inp, verbose=True)
-                pred = pred[0].values
-            f.create_dataset(save_key, data=pred, compression="gzip")
-
-    score = metric(pred, labels)
-    return score
-
-
-def evaluation_v1():
-    data_root = "/g/kreshuk/pape/Work/data/mito_em/data/crops"
-    data_path = os.path.join(data_root, "crop_test.h5")
-    rfs = {
-        "few-labels": os.path.join(data_root, "rfs", "rf1.ilp"),
-        "many-labels": os.path.join(data_root, "rfs", "rf3.ilp"),
-    }
-    enhancers = {
-        "vanilla-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D/EnhancerMitochondriaEM2D.zip",
-        "advanced-enhancer": "./bio-models/v1/EnhancerMitochondriaEM2D-advanced-traing/EnhancerMitochondriaEM2D.zip",
-    }
-    save_path = "./bio-models/v1/prediction.h5"
-    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path)
-
-    model_path = "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip"
-    score_raw = _direct_evaluation(data_path, model_path, save_path)
-
-    enhancers = {
-        "direct-net": "./bio-models/v1/DirectModel/mitchondriaemsegmentation2d_pytorch_state_dict.zip",
-    }
-    save_path = "./bio-models/v2/prediction-direct.h5"
-    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, save_path=save_path)
-    scores = scores.append(scores_direct.iloc[0])
-
-    print("Evaluation results:")
-    print(scores.to_markdown())
-    print("Raw net evaluation:", score_raw)
-
-
-def evaluation_v2():
-    data_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
-    rf_folder = "/g/kreshuk/pape/Work/data/vnc/ilps"
-    rfs = {
-        "few-labels": os.path.join(rf_folder, "vnc-mito1.ilp"),
-        "medium-labels": os.path.join(rf_folder, "vnc-mito3.ilp"),
-        "many-labels": os.path.join(rf_folder, "vnc-mito6.ilp"),
-    }
-    enhancers = {
-        "vanilla-enhancer": "./bio-models/v2/EnhancerMitochondriaEM2D/EnhancerMitochondriaEM2D.zip",
-        "advanced-enhancer": "./bio-models/v2/EnhancerMitochondriaEM2D-advanced-traing/EnhancerMitochondriaEM2D.zip",
-    }
-    save_path = "./bio-models/v2/prediction.h5"
-    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path)
-
-    model_path = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
-    score_raw = _direct_evaluation(data_path, model_path, save_path)
-
-    enhancers = {
-        "direct-net": "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip",
-    }
-    save_path = "./bio-models/v2/prediction-direct.h5"
-    scores_direct = _evaluation(data_path, rfs, enhancers, rf_channel=0, save_path=save_path)
-    scores = scores.append(scores_direct.iloc[0])
-
-    print("Evaluation results:")
-    print(scores.to_markdown())
-    print("Raw net evaluation:", score_raw)
-
-
-def evaluation_v3():
-    data_path = "/g/kreshuk/pape/Work/data/isbi/vnc-mitos.h5"
-    rf_folder = "/g/kreshuk/pape/Work/data/vnc/ilps3d"
-
-    rfs = {
-        "few-labels": os.path.join(rf_folder, "vnc-mito1.ilp"),
-        "medium-labels": os.path.join(rf_folder, "vnc-mito2.ilp"),
-        "many-labels": os.path.join(rf_folder, "vnc-mito3.ilp"),
-    }
-    enhancers = {
-        "vanilla-enhancer": "./bio-models/v3/EnhancerMitochondriaEM3D/EnhancerMitochondriaEM3D.zip",
-        "advanced-enhancer": "./bio-models/v3/EnhancerMitochondriaEM3D-advanced-traing/EnhancerMitochondriaEM3D.zip",
-    }
-    save_path = "./bio-models/v3/prediction.h5"
-    scores = _evaluation(data_path, rfs, enhancers, rf_channel=1, save_path=save_path, is2d=False)
-
-    model_path = "./bio-models/v3/DirectModel/mitochondriaemsegmentationboundarymodel_pytorch_state_dict.zip"
-    score_raw = _direct_evaluation3d(data_path, model_path, save_path)
-
-    print("Evaluation results:")
-    print(scores.to_markdown())
-    print("Raw net evaluation:", score_raw)
+    print("Start viewer")
+    v = napari.Viewer()
+    v.add_image(data)
+    for name, pred in preds.items():
+        v.add_image(pred, name=name)
+    v.add_labels(labels)
+    napari.run()
 
 
 if __name__ == "__main__":
-    # prepare_eval_v1()
-    # prepare_eval_v2()
+    # prepare_eval_v4()
 
-    # evaluation_v1()
-    # evaluation_v2()
-    evaluation_v3()
+    # debug_v4(pred_filter="few-labels")
+    # debug_v4()
+
+    evaluate_lucchi(version=4)
