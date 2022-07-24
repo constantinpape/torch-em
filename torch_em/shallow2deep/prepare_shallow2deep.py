@@ -281,7 +281,7 @@ def _balance_labels(labels, mask):
     return mask
 
 
-def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels):
+def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels, return_mask=False):
     # find the mask for where we compute filters and labels
     # by default we exclude everything that has label -1
     assert labels.shape == raw.shape
@@ -293,7 +293,10 @@ def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels):
     features = _apply_filters_with_mask(raw, filters_and_sigmas, mask)
     assert features.ndim == 2
     assert len(features) == len(labels)
-    return features, labels
+    if return_mask:
+        return features, labels, mask
+    else:
+        return features, labels
 
 
 def _prepare_shallow2deep(
@@ -527,6 +530,7 @@ def worst_tiles(
     forests, forests_per_stage,
     sample_fraction_per_stage,
     img_shape,
+    mask,
     tile_shape=[25, 25],
     smoothing_sigma=None,
     accumulate_samples=True,
@@ -551,19 +555,37 @@ def worst_tiles(
     assert len(diff) == len(features)
 
     # reshape diff to image shape
-    diff_img = diff.reshape(img_shape + (-1,))
+    # we need to also take into account the mask here, and if we apply any masking
+    # because we can't directly reshape if we have it
+    if mask.sum() != mask.size:
+        # get the diff image
+        diff_img = np.zeros(img_shape + diff.shape[-1:], dtype=diff.dtype)
+        diff_img[mask] = diff
+        # inflate the features
+        full_features = np.zeros((mask.size,) + features.shape[-1:], dtype=features.dtype)
+        full_features[mask.ravel()] = features
+        features = full_features
+        # inflate the labels (with -1 so this will not be sampled)
+        full_labels = np.full(mask.size, -1, dtype="int8")
+        full_labels[mask.ravel()] = labels
+        labels = full_labels
+    else:
+        diff_img = diff.reshape(img_shape + (-1,))
+
+    # get the number of classes (not counting ignore label)
+    class_ids = np.unique(labels)
+    nc = len(class_ids) - 1 if -1 in class_ids else len(class_ids)
 
     # sample in a class balanced way
-    nc = len(np.unique(labels))
     n_samples_class = int(sample_fraction_per_stage * len(features)) // nc
     samples = []
     for class_id in range(nc):
         # smooth either with gaussian or 1-kernel
         if smoothing_sigma:
-            diff_img_smooth = gaussian_filter(diff_img[..., class_id], smoothing_sigma, mode='constant')
+            diff_img_smooth = gaussian_filter(diff_img[..., class_id], smoothing_sigma, mode="constant")
         else:
             kernel = np.ones(tile_shape)
-            diff_img_smooth = convolve(diff_img[..., class_id], kernel, mode='constant')
+            diff_img_smooth = convolve(diff_img[..., class_id], kernel, mode="constant")
 
         # get training samples based on tiles around maxima of the label-prediction diff
         # do this in a class-specific way to ensure that each class is sampled
@@ -696,14 +718,15 @@ def prepare_shallow2deep_advanced(
             current_kwargs["img_shape"] = raw.shape
 
             # only balance samples for the first (densely trained) rfs
-            features, labels = _get_features_and_labels(
-                raw, labels, filters_and_sigmas, balance_labels=False
+            features, labels, mask = _get_features_and_labels(
+                raw, labels, filters_and_sigmas, balance_labels=False, return_mask=True
             )
             if forests:  # we have forests: apply the sampling strategy
                 features, labels = sampling_strategy(
                     features, labels, rf_id,
                     forests, forests_per_stage,
                     sample_fraction_per_stage,
+                    mask=mask,
                     **current_kwargs,
                 )
             else:  # sample randomly
