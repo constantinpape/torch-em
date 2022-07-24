@@ -106,7 +106,7 @@ def export_enhancer(input_, is3d, checkpoint=None, version=None, name=None):
         input_data = create_input_anisotropic(input_, rf_path)
         is3d = True
     elif is3d:
-        assert False, "Currently don't have 3d rfs for mitos"
+        rf_path = "/scratch/pape/s2d-mitochondria/rfs3d-worst_tiles/kasthuri/rf_0499.pkl"
         input_data = create_input_3d(input_, rf_path)
     else:
         rf_path = "/scratch/pape/s2d-mitochondria/rfs2d-worst_points/mitoem/rf_0499.pkl"
@@ -175,6 +175,7 @@ def export_version(args):
     for ckpt in checkpoints:
         name = os.path.basename(ckpt)
         if(os.path.exists(os.path.join(out_folder, name))):
+            print("Already exported::", name)
             continue
         parts = name.split("-")
         is3d = _get_ndim(parts[-2])
