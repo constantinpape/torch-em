@@ -189,7 +189,8 @@ AUGMENTATIONS = {
     "RandomRotation": {"degrees": 90},
     "RandomRotation3D": {"degrees": (90, 90, 90)},
     "RandomVerticalFlip": {},
-    "RandomVerticalFlip3D": {}
+    "RandomVerticalFlip3D": {},
+    "RandomElasticDeformation3D": {"alpha": [5, 5], "sigma": [30, 30]}
 }
 
 
@@ -209,6 +210,14 @@ DEFAULT_ANISOTROPIC_AUGMENTATIONS = [
 ]
 
 
+def create_augmentation(trafo):
+    assert trafo in dir(kornia.augmentation) or trafo in globals().keys(), f"Transformation {trafo} not defined"
+    if trafo in dir(kornia.augmentation):
+        return getattr(kornia.augmentation, trafo)(**AUGMENTATIONS[trafo])
+   
+    return globals()[trafo](**AUGMENTATIONS[trafo])
+    
+
 def get_augmentations(ndim=2,
                       transforms=None,
                       dtype=torch.float32):
@@ -220,10 +229,7 @@ def get_augmentations(ndim=2,
             transforms = DEFAULT_3D_AUGMENTATIONS
         else:
             transforms = DEFAULT_ANISOTROPIC_AUGMENTATIONS
-        transforms = [
-            getattr(kornia.augmentation, trafo)(**AUGMENTATIONS[trafo])
-            for trafo in transforms
-        ]
+    transforms = [create_augmentation(trafo) for trafo in transforms]
 
     assert all(isinstance(trafo, kornia.augmentation.base._AugmentationBase)
                for trafo in transforms)
