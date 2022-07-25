@@ -79,10 +79,10 @@ def _check_napari(loader, n_samples, instance_labels, model=None, device=None):
             pred = None
         else:
             pred = model(x if device is None else x.to(device))
-            pred = ensure_array(pred).squeeze(0)
+            pred = ensure_array(pred)[0]
 
-        x = ensure_array(x).squeeze(0)
-        y = ensure_array(y).squeeze(0)
+        x = ensure_array(x)[0]
+        y = ensure_array(y)[0]
 
         v = napari.Viewer()
         v.add_image(x)
