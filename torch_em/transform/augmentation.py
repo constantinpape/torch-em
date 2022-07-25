@@ -93,7 +93,7 @@ class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
 
     # TODO do we need special treatment for batches, channels > 1?
     def generate_parameters(self, batch_shape):
-        assert len(batch_shape) == 4
+        assert len(batch_shape) == 4, f"{len(batch_shape)}"
         shape = batch_shape[2:]
         control_shape = tuple(
             sh // spacing for sh, spacing in zip(shape, self.control_point_spacing)
@@ -125,7 +125,7 @@ class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
 # so that we can load a bigger block and cut it away
 class KorniaAugmentationPipeline(torch.nn.Module):
     interpolatable_torch_types = [torch.float16, torch.float32, torch.float64]
-    interpolatable_numpy_types = [np.dtype('float32'), np.dtype('float64')]
+    interpolatable_numpy_types = [np.dtype("float32"), np.dtype("float64")]
 
     def __init__(self, *kornia_augmentations, dtype=torch.float32):
         super().__init__()
@@ -134,7 +134,7 @@ class KorniaAugmentationPipeline(torch.nn.Module):
         self.halo = self.compute_halo()
 
     # for now we only add a halo for the random rotation trafos and
-    # also don't compute the halo dynamically based on the input shape
+    # also don"t compute the halo dynamically based on the input shape
     def compute_halo(self):
         halo = None
         for aug in self.augmentations:
@@ -151,11 +151,10 @@ class KorniaAugmentationPipeline(torch.nn.Module):
             return tensor.dtype in self.interpolatable_numpy_types
 
     def transform_tensor(self, augmentation, tensor, interpolatable, params=None):
-        interpolating = 'interpolation' in getattr(augmentation, 'flags', [])
+        interpolating = "interpolation" in getattr(augmentation, "flags", [])
         if interpolating:
-            resampler = kornia.constants.Resample.get('BILINEAR' if interpolatable else 'NEAREST')
-            augmentation.flags['interpolation'] = torch.tensor(resampler.value)
-
+            resampler = kornia.constants.Resample.get("BILINEAR" if interpolatable else "NEAREST")
+            augmentation.flags["interpolation"] = torch.tensor(resampler.value)
         transformed = augmentation(tensor, params)
         return transformed, augmentation._params
 
