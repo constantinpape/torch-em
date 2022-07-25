@@ -49,14 +49,14 @@ def dice_metric(pred, label, mask=None):
     return dice_score(pred, label, threshold_seg=None)
 
 
-def require_rfs(data_path, rfs, save_path):
+def require_rfs(data_path, rfs, save_path, raw_key="raw"):
     # check if we need to run any of the predictions
     with open_file(save_path, "a") as f_save:
         if all(name in f_save for name in rfs):
             return
 
         with open_file(data_path, "r") as f:
-            data = f["raw"][:]
+            data = f[raw_key][:]
         data = DataArray(data, dims=tuple("zyx"))
 
         for name, ilp_path in rfs.items():
@@ -119,13 +119,13 @@ def require_enhancers_3d(rfs, enhancers, save_path):
                     f.create_dataset(save_name, data=pred, compression="gzip")
 
 
-def require_net_2d(data_path, model_path, model_name, save_path):
+def require_net_2d(data_path, model_path, model_name, save_path, raw_key="raw"):
     with open_file(save_path, "a") as f_save:
         if model_name in f_save:
             return
         model = bioimageio.core.load_resource_description(model_path)
         with open_file(data_path, "r") as f:
-            raw = f["raw"][:]
+            raw = f[raw_key][:]
 
         pred = np.zeros((2,) + raw.shape, dtype="float32")
         with bioimageio.core.create_prediction_pipeline(model) as pp:
@@ -135,13 +135,13 @@ def require_net_2d(data_path, model_path, model_name, save_path):
         f_save.create_dataset(model_name, data=pred, compression="gzip")
 
 
-def require_net_3d(data_path, model_path, model_name, save_path, tiling):
+def require_net_3d(data_path, model_path, model_name, save_path, tiling, raw_key="raw"):
     with open_file(save_path, "a") as f_save:
         if model_name in f_save:
             return
         model = bioimageio.core.load_resource_description(model_path)
         with open_file(data_path, "r") as f:
-            raw = f["raw"][:]
+            raw = f[raw_key][:]
 
         pred = np.zeros((2,) + raw.shape, dtype="float32")
         with bioimageio.core.create_prediction_pipeline(model) as pp:
@@ -282,14 +282,60 @@ def evaluate_lucchi(version):
     print(scores.to_markdown(floatfmt=".03f"))
 
 
+def evaluate_platy(version):
+    data_root = "/g/kreshuk/pape/Work/data/platy_training_data/mitos"
+    data_paths = glob(os.path.join(data_root, "*.h5"))
+    data_paths.sort()
+    # we have trained the rf on the first volume and last
+    data_paths = data_paths[1:-1]
+
+    rf_folder = "/g/kreshuk/pape/Work/data/platy_training_data/mitos/ilps3d"
+    save_root = f"./bio-models/v{version}/predictions_platy"
+    os.makedirs(save_root, exist_ok=True)
+
+    rfs = {
+        "few-labels": os.path.join(rf_folder, "1.ilp"),
+        "medium-labels": os.path.join(rf_folder, "2.ilp"),
+        "many-labels": os.path.join(rf_folder, "3.ilp"),
+    }
+    enhancers_2d, enhancers_anisotropic, enhancers_3d = get_enhancers(f"./bio-models/v{version}")
+    net2d = "./bio-models/v2/DirectModel/MitchondriaEMSegmentation2D.zip"
+    net_aniso = "./bio-models/v3/DirectModel/mitochondriaemsegmentationboundarymodel_pytorch_state_dict.zip"
+
+    all_scores = []
+    for data_path in data_paths:
+        save_path = os.path.join(save_root, os.path.basename(data_path))
+        require_rfs(data_path, rfs, save_path, raw_key="raw/cropped")
+
+        require_enhancers_2d(rfs, enhancers_2d, save_path)
+        require_enhancers_3d(rfs, enhancers_anisotropic, save_path)
+        require_enhancers_3d(rfs, enhancers_3d, save_path)
+
+        require_net_2d(data_path, net2d, "direct_2d", save_path, raw_key="raw/cropped")
+        tiling_aniso = {
+            "tile": {"z": 32, "y": 256, "x": 256},
+            "halo": {"z": 4, "y": 32, "x": 32}
+        }
+        require_net_3d(data_path, net_aniso, "direct_anisotropic", save_path, tiling_aniso, raw_key="raw/cropped")
+
+        eval_path = f"./bio-models/v{version}/predictions_platy/{os.path.basename(data_path)}.json"
+        scores = run_evaluation(data_path, save_path, eval_path, label_key="labels")
+        all_scores.append(scores)
+
+    scores = pd.concat([to_table(score) for score in all_scores]).groupby(level=0).mean()
+    print("Evaluation results:")
+    print(scores.to_markdown(floatfmt=".03f"))
+    print()
+
+
 def debug_v4(pred_filter=None):
     import napari
-    data_path = "/g/kreshuk/pape/Work/data/kasthuri/kasthuri_test.h5"
-    save_path = "./bio-models/v4/prediction_kasthuri.h5"
+    data_path = "/g/kreshuk/pape/Work/data/platy_training_data/mitos/mito_gt0.h5"
+    save_path = "./bio-models/v4/predictions_platy/mito_gt0.h5"
 
     print("Load data")
     with open_file(data_path, "r") as f:
-        data = f["raw"][:]
+        data = f["raw/cropped"][:]
         labels = f["labels"][:].astype("uint32")
 
     with open_file(save_path, "r") as f:
@@ -314,4 +360,5 @@ if __name__ == "__main__":
     # debug_v4(pred_filter="few-labels")
     # debug_v4()
 
-    evaluate_lucchi(version=4)
+    # evaluate_lucchi(version=4)
+    evaluate_platy(version=4)
