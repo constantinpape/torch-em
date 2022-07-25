@@ -1,9 +1,9 @@
 # Shallow2Deep for Mitochondria in EM
 
-## Evaluation
+## Set-up
 
 Evaluation of different shallow2deep setups for mitochondria segmentation in EM.
-The enhancers are (potentially) trained on multiple datasets, evaluation is done on the Kasthuri dataset (which is not part of the training set except for one last version that will be the (for now) final one to be uploaded to bioimagei.io).
+The enhancers are (potentially) trained on multiple datasets, evaluation is done on datasets not part of the enhancer training set.
 All scores are measured with a soft dice score.
 
 ## Datasets
@@ -12,9 +12,8 @@ All scores are measured with a soft dice score.
 - VNC
 - Lucchi
 - UroCell
-- Kasthuri
-
-TODO: check if we can add the mito data from platy into the mix! This could be very good for evaluation!
+- Platy
+- Kasthuri <- this is weirdly aligned, so don't use it for now (this is likely why the 3d one is so bad in V4)
 
 
 ### V4
@@ -29,6 +28,8 @@ TODO: check if we can add the mito data from platy into the mix! This could be v
     - `uncertain_worst_points`: same as `worst_points`, but points are selected based on linear combination of uncertainty and worst predictions
     - `random_points`: random points sampled in each stage, points are accumulated over the stages
     - `worst_tiles`: training samples are taken from worst tile predictions
+
+Evaluation on Lucchi:
 
 | method                             |   few-labels |   medium-labels |   many-labels |
 |:-----------------------------------|-------------:|----------------:|--------------:|
@@ -48,17 +49,37 @@ TODO: check if we can add the mito data from platy into the mix! This could be v
 | 3d-random_points                   |        0.344 |           0.381 |         0.353 |
 | 3d-worst_tiles                     |        0.385 |           0.472 |         0.504 |
 
+Evaluation on Platy:
+
+| method                             |   few-labels |   medium-labels |   many-labels |
+|:-----------------------------------|-------------:|----------------:|--------------:|
+| rf3d                               |        0.354 |           0.298 |         0.255 |
+| 2d-random_points                   |        0.185 |           0.242 |         0.237 |
+| 2d-uncertain_worst_points          |        0.202 |           0.255 |         0.229 |
+| 2d-vanilla                         |        0.243 |           0.297 |         0.253 |
+| 2d-worst_points                    |        0.250 |           0.294 |         0.280 |
+| 2d-worst_tiles                     |        0.209 |           0.277 |         0.251 |
+| direct_2d                          |        0.299 |         nan     |       nan     |
+| anisotropic-random_points          |        0.203 |           0.221 |         0.246 |
+| anisotropic-uncertain_worst_points |        0.208 |           0.283 |         0.294 |
+| anisotropic-vanilla                |        0.244 |           0.316 |         0.344 |
+| anisotropic-worst_points           |        0.272 |           0.317 |         0.307 |
+| anisotropic-worst_tiles            |        0.237 |           0.324 |         0.331 |
+| direct_anisotropic                 |        0.235 |         nan     |       nan     |
+| 3d-random_points                   |        0.190 |           0.184 |         0.168 |
+| 3d-worst_tiles                     |        0.172 |           0.200 |         0.213 |
+
 
 ### V5
 
 TODO: (only best sampling from V4)
-- train 2d on Mito-EM, VNC, Kasthuri and UroCell
-- train anisotropic on Mito-EM, Kasthuri and UroCell
-- train 3d on Kasthuri and UroCell
+- train 2d on Mito-EM, VNC, Lucchi
+- train anisotropic on Mito-EM, Lucchi, and UroCell
+- train 3d on Lucchi and UroCell
 
 ## V6
 
-TODO same as V5, but train everything on Lucchi as well and upload the one with best sampling strategy to bioimage.io
+TODO same as V5, but train everything on Platy as well and upload the one with best sampling strategy to bioimage.io
 
 
 ## Old evaluation
