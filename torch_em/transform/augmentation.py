@@ -43,9 +43,9 @@ class RandomElasticDeformation3D(kornia.augmentation.AugmentationBase3D):
         deformation_fields = [
             resize(df, shape, order=3)[None] for df in deformation_fields
         ]
-        noise = np.concatenate(deformation_fields, axis=0)[None].astype('float32')
+        noise = np.concatenate(deformation_fields, axis=0)[None].astype("float32")
         noise = torch.from_numpy(noise)
-        return {'noise': noise}
+        return {"noise": noise}
 
     def __call__(self, input, params=None):
         assert(len(input.shape) == 5)
@@ -53,20 +53,19 @@ class RandomElasticDeformation3D(kornia.augmentation.AugmentationBase3D):
             params = self.generate_parameters(input.shape)
             self._params = params
 
-        noise = params['noise']
-        mode = 'bilinear' if (self.flags['interpolation'] == 1).all() else 'nearest'
+        noise = params["noise"]
+        mode = "bilinear" if (self.flags["interpolation"] == 1).all() else "nearest"
         noise_ch = noise.expand(input.shape[1], -1, -1, -1)
         input_transformed = []
         for i, x in enumerate(torch.unbind(input, dim=0)):
             x_transformed = kornia.geometry.transform.elastic_transform2d(
-                            x, noise_ch, sigma=self.flags['sigma'],
-                            alpha=self.flags['alpha'], mode=mode,
+                            x, noise_ch, sigma=self.flags["sigma"],
+                            alpha=self.flags["alpha"], mode=mode,
                             padding_mode="reflection"
                             )
             input_transformed.append(x_transformed)
         input_transformed = torch.stack(input_transformed)
         return input_transformed
-
 
 
 class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
@@ -79,8 +78,7 @@ class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
                  keepdim=False,
                  same_on_batch=False):
         super().__init__(p=p,  # keepdim=keepdim,
-                         same_on_batch=same_on_batch,
-                         return_transform=False)
+                         same_on_batch=same_on_batch)
         if isinstance(control_point_spacing, int):
             self.control_point_spacing = [control_point_spacing] * 2
         else:
@@ -107,17 +105,19 @@ class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
         deformation_fields = [
             resize(df, shape, order=3)[None] for df in deformation_fields
         ]
-        noise = np.concatenate(deformation_fields, axis=0)[None].astype('float32')
+        noise = np.concatenate(deformation_fields, axis=0)[None].astype("float32")
         noise = torch.from_numpy(noise)
-        return {'noise': noise}
+        return {"noise": noise}
 
-    def apply_transform(self, input, params):
-        noise = params['noise']
-        mode = 'bilinear' if (self.flags['resample'] == 1).all() else 'nearest'
-        # NOTE mode is currently only available on my fork, need kornia PR:
-        # https://github.com/kornia/kornia/pull/883
+    def __call__(self, input, params=None):
+        if params is None:
+            params = self.generate_parameters(input.shape)
+            self._params = params
+        noise = params["noise"]
+        mode = "bilinear" if (self.flags["resample"] == 1).all() else "nearest"
         return kornia.geometry.transform.elastic_transform2d(
-            input, noise, sigma=self.flags['sigma'], alpha=self.flags['alpha'], mode=mode
+            input, noise, sigma=self.flags["sigma"], alpha=self.flags["alpha"], mode=mode,
+            padding_mode="reflection"
         )
 
 
@@ -214,9 +214,9 @@ def create_augmentation(trafo):
     assert trafo in dir(kornia.augmentation) or trafo in globals().keys(), f"Transformation {trafo} not defined"
     if trafo in dir(kornia.augmentation):
         return getattr(kornia.augmentation, trafo)(**AUGMENTATIONS[trafo])
-   
+
     return globals()[trafo](**AUGMENTATIONS[trafo])
-    
+
 
 def get_augmentations(ndim=2,
                       transforms=None,
