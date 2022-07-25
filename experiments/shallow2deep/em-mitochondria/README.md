@@ -14,6 +14,8 @@ All scores are measured with a soft dice score.
 - UroCell
 - Kasthuri
 
+TODO: check if we can add the mito data from platy into the mix! This could be very good for evaluation!
+
 
 ### V4
 
