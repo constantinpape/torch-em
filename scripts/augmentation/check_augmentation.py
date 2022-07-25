@@ -59,7 +59,7 @@ def check_elastic_2d():
     raw, seg = get_data()
     raw, seg = raw[0], seg[0]
 
-    deform = augmentation.RandomElasticDeformation(alpha=(1., 1.), p=1)
+    deform = augmentation.RandomElasticDeformation(alpha=(1.0, 1.0), p=1)
     trafo = augmentation.KorniaAugmentationPipeline(deform)
     transformed_raw, transformed_seg = trafo(raw[None, None], seg[None, None])
     transformed_raw = transformed_raw.numpy().squeeze()
@@ -76,7 +76,7 @@ def check_elastic_2d():
 def check_elastic_3d():
     raw, seg = get_data()
 
-    deform = augmentation.RandomElasticDeformation3D(alpha=(1., 1.), p=1)
+    deform = augmentation.RandomElasticDeformationStacked(alpha=(1.0, 1.0), p=1)
     trafo = augmentation.KorniaAugmentationPipeline(deform)
     transformed_raw, transformed_seg = trafo(raw[None, None], seg[None, None])
     transformed_raw = transformed_raw.numpy().squeeze()

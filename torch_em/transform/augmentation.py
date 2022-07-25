@@ -6,11 +6,11 @@ from skimage.transform import resize
 from ..util import ensure_tensor
 
 
-class RandomElasticDeformation3D(kornia.augmentation.AugmentationBase3D):
+class RandomElasticDeformationStacked(kornia.augmentation.AugmentationBase3D):
     def __init__(self,
                  control_point_spacing=1,
-                 sigma=(32., 32.),
-                 alpha=(4., 4.),
+                 sigma=(32.0, 32.0),
+                 alpha=(4.0, 4.0),
                  interpolation=kornia.constants.Resample.BILINEAR,
                  p=0.5,
                  keepdim=False,
@@ -71,8 +71,8 @@ class RandomElasticDeformation3D(kornia.augmentation.AugmentationBase3D):
 class RandomElasticDeformation(kornia.augmentation.AugmentationBase2D):
     def __init__(self,
                  control_point_spacing=1,
-                 sigma=(4., 4.),
-                 alpha=(32., 32.),
+                 sigma=(4.0, 4.0),
+                 alpha=(32.0, 32.0),
                  resample=kornia.constants.Resample.BILINEAR,
                  p=0.5,
                  keepdim=False,
