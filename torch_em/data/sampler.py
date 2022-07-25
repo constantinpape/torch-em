@@ -9,7 +9,12 @@ class MinForegroundSampler:
 
     def __call__(self, x, y):
         size = float(y.size)
-        foreground_fraction = np.sum(y != self.background_id) / size
+        if isinstance(self.background_id, int):
+            foreground_fraction = np.sum(y != self.background_id) / size
+        else:
+            foreground_fraction = np.sum(
+                np.logical_not(np.isin(y, self.background_id))
+            ) / size
         if foreground_fraction > self.min_fraction:
             return True
         else:

@@ -1,11 +1,15 @@
 import os
+import copy
 import pickle
+import warnings
 from concurrent import futures
 from glob import glob
 from functools import partial
 
 import numpy as np
 import torch_em
+from scipy.ndimage import gaussian_filter, convolve
+from skimage.feature import peak_local_max
 from sklearn.ensemble import RandomForestClassifier
 from torch_em.segmentation import check_paths, is_segmentation_dataset, samples_to_datasets
 from tqdm import tqdm
@@ -154,6 +158,8 @@ def _load_rf_image_collection_dataset(
     if isinstance(raw_paths, str):
         raw_paths, label_paths = _get_paths(raw_paths, raw_key, label_paths, label_key, roi)
         ds = RFImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape_min, **kwargs)
+        ds.patch_shape_min = patch_shape_min
+        ds.patch_shape_max = patch_shape_max
     elif raw_key is None:
         assert label_key is None
         assert isinstance(raw_paths, (list, tuple)) and isinstance(label_paths, (list, tuple))
@@ -275,7 +281,7 @@ def _balance_labels(labels, mask):
     return mask
 
 
-def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels):
+def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels, return_mask=False):
     # find the mask for where we compute filters and labels
     # by default we exclude everything that has label -1
     assert labels.shape == raw.shape
@@ -287,7 +293,10 @@ def _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels):
     features = _apply_filters_with_mask(raw, filters_and_sigmas, mask)
     assert features.ndim == 2
     assert len(features) == len(labels)
-    return features, labels
+    if return_mask:
+        return features, labels, mask
+    else:
+        return features, labels
 
 
 def _prepare_shallow2deep(
@@ -329,6 +338,15 @@ def _prepare_shallow2deep(
     return ds, filters_and_sigmas
 
 
+def _serialize_feature_config(filters_and_sigmas):
+    feature_config = [
+        (filt.func.__name__ if isinstance(filt, partial) else filt.__name__,
+         sigma)
+        for filt, sigma in filters_and_sigmas
+    ]
+    return feature_config
+
+
 def prepare_shallow2deep(
     raw_paths,
     raw_key,
@@ -356,6 +374,7 @@ def prepare_shallow2deep(
         raw_transform, label_transform, rois, is_seg_dataset,
         filter_config, sampler,
     )
+    serialized_feature_config = _serialize_feature_config(filters_and_sigmas)
 
     def _train_rf(rf_id):
         # sample random patch with dataset
@@ -367,6 +386,9 @@ def prepare_shallow2deep(
         features, labels = _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels)
         rf = RandomForestClassifier(**rf_kwargs)
         rf.fit(features, labels)
+        # monkey patch these so that we know the feature config and dimensionality
+        rf.feature_ndim = ndim
+        rf.feature_config = serialized_feature_config
         out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")
         with open(out_path, "wb") as f:
             pickle.dump(rf, f)
@@ -375,23 +397,20 @@ def prepare_shallow2deep(
         list(tqdm(tp.map(_train_rf, range(n_forests)), desc="Train RFs", total=n_forests))
 
 
-def worst_points(
+def _score_based_points(
+    score_function,
     features, labels, rf_id,
     forests, forests_per_stage,
     sample_fraction_per_stage,
-    accumulate_samples=True,
+    accumulate_samples,
 ):
     # get the corresponding random forest from the last stage
     # and predict with it
     last_forest = forests[rf_id - forests_per_stage]
     pred = last_forest.predict_proba(features)
 
-    # labels to one-hot encoding
-    unique, inverse = np.unique(labels, return_inverse=True)
-    onehot = np.eye(unique.shape[0])[inverse]
-    # compute the difference between labels and prediction
-    diff = np.abs(onehot - pred).sum(axis=1)
-    assert len(diff) == len(features)
+    score = score_function(pred, labels)
+    assert len(score) == len(features)
 
     # get training samples based on the label-prediction diff
     samples = []
@@ -400,7 +419,8 @@ def worst_points(
     n_samples = int(sample_fraction_per_stage * len(features))
     n_samples_class = n_samples // nc
     for class_id in range(nc):
-        this_samples = np.argsort(diff[labels == class_id])[::-1][:n_samples_class]
+        class_indices = np.where(labels == class_id)[0]
+        this_samples = class_indices[np.argsort(score[class_indices])[::-1][:n_samples_class]]
         samples.append(this_samples)
     samples = np.concatenate(samples)
 
@@ -413,10 +433,75 @@ def worst_points(
     return features, labels
 
 
+def worst_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+    accumulate_samples=True,
+    **kwargs,
+):
+    def score(pred, labels):
+        # labels to one-hot encoding
+        unique, inverse = np.unique(labels, return_inverse=True)
+        onehot = np.eye(unique.shape[0])[inverse]
+        # compute the difference between labels and prediction
+        return np.abs(onehot - pred).sum(axis=1)
+
+    return _score_based_points(
+        score, features, labels, rf_id, forests, forests_per_stage, sample_fraction_per_stage, accumulate_samples
+    )
+
+
+def uncertain_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+    accumulate_samples=True,
+    **kwargs,
+):
+    def score(pred, labels):
+        assert pred.ndim == 2
+        channel_sorted = np.sort(pred, axis=1)
+        uncertainty = channel_sorted[:, -1] - channel_sorted[:, -2]
+        return uncertainty
+
+    return _score_based_points(
+        score, features, labels, rf_id, forests, forests_per_stage, sample_fraction_per_stage, accumulate_samples
+    )
+
+
+def uncertain_worst_points(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+    accumulate_samples=True,
+    alpha=0.5,
+    **kwargs,
+):
+    def score(pred, labels):
+        assert pred.ndim == 2
+
+        # labels to one-hot encoding
+        unique, inverse = np.unique(labels, return_inverse=True)
+        onehot = np.eye(unique.shape[0])[inverse]
+        # compute the difference between labels and prediction
+        diff = np.abs(onehot - pred).sum(axis=1)
+
+        channel_sorted = np.sort(pred, axis=1)
+        uncertainty = channel_sorted[:, -1] - channel_sorted[:, -2]
+        return alpha * diff + (1.0 - alpha) * uncertainty
+
+    return _score_based_points(
+        score, features, labels, rf_id, forests, forests_per_stage, sample_fraction_per_stage, accumulate_samples
+    )
+
+
 def random_points(
     features, labels, rf_id,
     forests, forests_per_stage,
     sample_fraction_per_stage,
+    accumulate_samples=True,
+    **kwargs,
 ):
     samples = []
     nc = len(np.unique(labels))
@@ -430,12 +515,135 @@ def random_points(
         )
         samples.append(this_samples)
     samples = np.concatenate(samples)
-    return features[samples], labels[samples]
+    features, labels = features[samples], labels[samples]
+
+    if accumulate_samples and rf_id >= forests_per_stage:
+        last_forest = forests[rf_id - forests_per_stage]
+        features = np.concatenate([last_forest.train_features, features], axis=0)
+        labels = np.concatenate([last_forest.train_labels, labels], axis=0)
+
+    return features, labels
+
+
+def worst_tiles(
+    features, labels, rf_id,
+    forests, forests_per_stage,
+    sample_fraction_per_stage,
+    img_shape,
+    mask,
+    tile_shape=[25, 25],
+    smoothing_sigma=None,
+    accumulate_samples=True,
+    **kwargs,
+):
+    # check inputs
+    ndim = len(img_shape)
+    assert ndim in [2, 3], img_shape
+    assert len(tile_shape) == ndim, tile_shape
+
+    # get the corresponding random forest from the last stage
+    # and predict with it
+    last_forest = forests[rf_id - forests_per_stage]
+    pred = last_forest.predict_proba(features)
+
+    # labels to one-hot encoding
+    unique, inverse = np.unique(labels, return_inverse=True)
+    onehot = np.eye(unique.shape[0])[inverse]
+
+    # compute the difference between labels and prediction
+    diff = np.abs(onehot - pred)
+    assert len(diff) == len(features)
+
+    # reshape diff to image shape
+    # we need to also take into account the mask here, and if we apply any masking
+    # because we can't directly reshape if we have it
+    if mask.sum() != mask.size:
+        # get the diff image
+        diff_img = np.zeros(img_shape + diff.shape[-1:], dtype=diff.dtype)
+        diff_img[mask] = diff
+        # inflate the features
+        full_features = np.zeros((mask.size,) + features.shape[-1:], dtype=features.dtype)
+        full_features[mask.ravel()] = features
+        features = full_features
+        # inflate the labels (with -1 so this will not be sampled)
+        full_labels = np.full(mask.size, -1, dtype="int8")
+        full_labels[mask.ravel()] = labels
+        labels = full_labels
+    else:
+        diff_img = diff.reshape(img_shape + (-1,))
+
+    # get the number of classes (not counting ignore label)
+    class_ids = np.unique(labels)
+    nc = len(class_ids) - 1 if -1 in class_ids else len(class_ids)
+
+    # sample in a class balanced way
+    n_samples_class = int(sample_fraction_per_stage * len(features)) // nc
+    samples = []
+    for class_id in range(nc):
+        # smooth either with gaussian or 1-kernel
+        if smoothing_sigma:
+            diff_img_smooth = gaussian_filter(diff_img[..., class_id], smoothing_sigma, mode="constant")
+        else:
+            kernel = np.ones(tile_shape)
+            diff_img_smooth = convolve(diff_img[..., class_id], kernel, mode="constant")
+
+        # get training samples based on tiles around maxima of the label-prediction diff
+        # do this in a class-specific way to ensure that each class is sampled
+        # get maxima of the label-prediction diff (they seem to be sorted already)
+        max_centers = peak_local_max(
+            diff_img_smooth,
+            min_distance=max(tile_shape),
+            exclude_border=tuple([s // 2 for s in tile_shape])
+        )
+
+        # get indices of tiles around maxima
+        tiles = []
+        for center in max_centers:
+            tile_slice = tuple(
+                slice(
+                    center[d]-tile_shape[d]//2,
+                    center[d]+tile_shape[d]//2 + 1,
+                    None
+                ) for d in range(ndim)
+            )
+            grid = np.mgrid[tile_slice]
+            samples_in_tile = grid.reshape(ndim, -1)
+            samples_in_tile = np.ravel_multi_index(samples_in_tile, img_shape)
+            tiles.append(samples_in_tile)
+
+        # this (very rarely) fails due to empty tile list. Since we usually
+        # accumulate the features this doesn't hurt much and we can continue
+        try:
+            tiles = np.concatenate(tiles)
+            # take samples that belong to the current class
+            this_samples = tiles[labels[tiles] == class_id][:n_samples_class]
+            samples.append(this_samples)
+        except ValueError:
+            pass
+
+    try:
+        samples = np.concatenate(samples)
+        features, labels = features[samples], labels[samples]
+
+        # get the features and labels, add from previous rf if specified
+        if accumulate_samples:
+            features = np.concatenate([last_forest.train_features, features], axis=0)
+            labels = np.concatenate([last_forest.train_labels, labels], axis=0)
+    except ValueError:
+        features, labels = last_forest.train_features, last_forest.train_labels
+        warnings.warn(
+            f"No features were sampled for forest {rf_id} using features of forest {rf_id - forests_per_stage}"
+        )
+
+    return features, labels
 
 
 SAMPLING_STRATEGIES = {
-    "worst_points": worst_points,
     "random_points": random_points,
+    "uncertain_points": uncertain_points,
+    "uncertain_worst_points": uncertain_worst_points,
+    "worst_points": worst_points,
+    "worst_tiles": worst_tiles,
 }
 
 
@@ -453,6 +661,7 @@ def prepare_shallow2deep_advanced(
     forests_per_stage,
     sample_fraction_per_stage,
     sampling_strategy="worst_points",
+    sampling_kwargs={},
     raw_transform=None,
     label_transform=None,
     rois=None,
@@ -480,6 +689,8 @@ def prepare_shallow2deep_advanced(
         raw_transform, label_transform, rois, is_seg_dataset,
         filter_config, sampler,
     )
+    serialized_feature_config = _serialize_feature_config(filters_and_sigmas)
+
     forests = []
     n_stages = n_forests // forests_per_stage if n_forests % forests_per_stage == 0 else\
         n_forests // forests_per_stage + 1
@@ -501,15 +712,22 @@ def prepare_shallow2deep_advanced(
             raw, labels = raw.numpy().squeeze(), labels.numpy().astype("int8").squeeze()
             assert raw.ndim == labels.ndim == ndim, f"{raw.ndim}, {labels.ndim}, {ndim}"
 
+            # monkey patch original shape to sampling_kwargs
+            # deepcopy needed due to multithreading
+            current_kwargs = copy.deepcopy(sampling_kwargs)
+            current_kwargs["img_shape"] = raw.shape
+
             # only balance samples for the first (densely trained) rfs
-            features, labels = _get_features_and_labels(
-                raw, labels, filters_and_sigmas, balance_labels=False
+            features, labels, mask = _get_features_and_labels(
+                raw, labels, filters_and_sigmas, balance_labels=False, return_mask=True
             )
             if forests:  # we have forests: apply the sampling strategy
                 features, labels = sampling_strategy(
                     features, labels, rf_id,
                     forests, forests_per_stage,
                     sample_fraction_per_stage,
+                    mask=mask,
+                    **current_kwargs,
                 )
             else:  # sample randomly
                 features, labels = random_points(
@@ -522,6 +740,9 @@ def prepare_shallow2deep_advanced(
             assert len(features) == len(labels)
             rf = RandomForestClassifier(**rf_kwargs)
             rf.fit(features, labels)
+            # monkey patch these so that we know the feature config and dimensionality
+            rf.feature_ndim = ndim
+            rf.feature_config = serialized_feature_config
 
             # save the random forest, update pbar, return it
             out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")

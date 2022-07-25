@@ -1,8 +1,67 @@
-# Shallow2Deep for mitochondria
+# Shallow2Deep for Mitochondria in EM
 
 ## Evaluation
 
-Evaluation of different shallow2deep setups on EM-Mitochondria. All scores are measured with a soft dice score.
+Evaluation of different shallow2deep setups for mitochondria segmentation in EM.
+The enhancers are (potentially) trained on multiple datasets, evaluation is done on the Kasthuri dataset (which is not part of the training set except for one last version that will be the (for now) final one to be uploaded to bioimagei.io).
+All scores are measured with a soft dice score.
+
+## Datasets
+
+- Mito-EM
+- VNC
+- Lucchi
+- UroCell
+- Kasthuri
+
+
+### V4
+
+- 2d enhancer: trained on Mito-EM and VNC
+- anisotropic enhancer: random forests are trained in 2d, enhancer trained in 3d, trained on Mito-EM
+- 3d enhancer: random forests trained in 3d, enhancer trained in 3d, trained on Kasthuri
+- direct-nets: 2d and anisotropic networks trained on Mito-EM, 3d network trained on Kasthuri
+- different strategies for training the initial rfs:
+    - `vanilla`: random forests are trained on randomly sampled dense patches
+    - `worst_points`: initial stage of forests (25 forests) are trained on random samples, forests in the next stages add worst predictions from prev. stage to their training set
+    - `uncertain_worst_points`: same as `worst_points`, but points are selected based on linear combination of uncertainty and worst predictions
+    - `random_points`: random points sampled in each stage, points are accumulated over the stages
+    - `worst_tiles`: training samples are taken from worst tile predictions
+
+| method                             |   few-labels |   medium-labels |   many-labels |
+|:-----------------------------------|-------------:|----------------:|--------------:|
+| rf3d                               |        0.326 |           0.328 |         0.385 |
+| 2d-random_points                   |        0.593 |           0.693 |         0.782 |
+| 2d-uncertain_worst_points          |        0.613 |           0.777 |         0.794 |
+| 2d-vanilla                         |        0.639 |           0.717 |         0.764 |
+| 2d-worst_points                    |        0.549 |           0.711 |         0.730 |
+| 2d-worst_tiles                     |        0.661 |           0.796 |         0.828 |
+| direct_2d                          |        0.849 |         nan     |       nan     |
+| anisotropic-random_points          |        0.521 |           0.566 |         0.671 |
+| anisotropic-uncertain_worst_points |        0.530 |           0.616 |         0.711 |
+| anisotropic-vanilla                |        0.576 |           0.660 |         0.749 |
+| anisotropic-worst_points           |        0.458 |           0.568 |         0.600 |
+| anisotropic-worst_tiles            |        0.614 |           0.728 |         0.788 |
+| direct_anisotropic                 |        0.467 |         nan     |       nan     |
+| 3d-random_points                   |        0.344 |           0.381 |         0.353 |
+| 3d-worst_tiles                     |        0.385 |           0.472 |         0.504 |
+
+
+### V5
+
+TODO: (only best sampling from V4)
+- train 2d on Mito-EM, VNC, Kasthuri and UroCell
+- train anisotropic on Mito-EM, Kasthuri and UroCell
+- train 3d on Kasthuri and UroCell
+
+## V6
+
+TODO same as V5, but train everything on Lucchi as well and upload the one with best sampling strategy to bioimage.io
+
+
+## Old evaluation
+
+Evaluation of older set-ups.
 
 ### V1
 

@@ -64,6 +64,9 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
         file_name = image_metadata["file_name"]
         sub_folder = file_name.split("_")[0]
         image_path = os.path.join(image_folder, sub_folder, file_name)
+        # something changed in the image layout? we keep the old version around in case this chagnes back...
+        if not os.path.exists(image_path):
+            image_path = os.path.join(image_folder, file_name)
         assert os.path.exists(image_path), image_path
         image_paths.append(image_path)
 
