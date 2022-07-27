@@ -322,7 +322,9 @@ def evaluate_platy(version):
         scores = run_evaluation(data_path, save_path, eval_path, label_key="labels")
         all_scores.append(scores)
 
-    scores = pd.concat([to_table(score) for score in all_scores]).groupby(level=0).mean()
+    all_scores = [to_table(score) for score in all_scores]
+    scores = pd.concat(all_scores).groupby(level=0).mean()
+    scores.insert(loc=0, column="method", value=all_scores[0]["method"])
     print("Evaluation results:")
     print(scores.to_markdown(floatfmt=".03f"))
     print()
@@ -361,4 +363,4 @@ if __name__ == "__main__":
     # debug_v4()
 
     # evaluate_lucchi(version=4)
-    evaluate_platy(version=4)
+    evaluate_platy(version=5)
