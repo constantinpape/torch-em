@@ -72,10 +72,25 @@ Evaluation on Platy:
 
 ### V5
 
-TODO: (only best sampling from V4)
-- train 2d on Mito-EM, VNC, Lucchi
-- train anisotropic on Mito-EM, Lucchi, and UroCell
-- train 3d on Lucchi and UroCell
+- 2d: Mito-EM, VNC, Lucchi
+- anisotropic: Mito-EM, Lucchi, and UroCell
+- 3d: Lucchi and UroCell
+
+| method                  |   few-labels |   medium-labels |   many-labels |
+|:------------------------|-------------:|----------------:|--------------:|
+| rf3d                    |        0.354 |           0.298 |         0.255 |
+| 2d-worst_tiles          |        0.223 |           0.289 |         0.261 |
+| direct_2d               |        0.299 |         nan     |       nan     |
+| anisotropic-worst_tiles |        0.281 |           0.325 |         0.291 |
+| direct_anisotropic      |        0.235 |         nan     |       nan     |
+| 3d-worst_tiles          |        0.338 |           0.285 |         0.258 |
+
+Intermediate summary and TODOs:
+- 3d one gets much better with proper training data
+- the others don't change much (mito em is probably dominating performance, but hard to measure with the bad overall performacne)
+- bad random forest predictions are def. the main problem
+- TODO (here and in v4): measure performance of enhancer on source and source net performance on soruce to find the gap between prediction quality there
+
 
 ## V6
 

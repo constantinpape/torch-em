@@ -129,7 +129,7 @@ def get_loader(args, split, dataset_names):
     if "urocell" in dataset_names:
         ds_name = "urocell"
         file_pattern = os.path.join(DATA_ROOT, ds_name, "*.h5")
-        rf_pattern = os.path.join(DATA_ROOT, f"rfs2d-{args.sampling_strategy}", ds_name, "*.pkl")
+        rf_pattern = os.path.join(DATA_ROOT, f"rfs3d-{args.sampling_strategy}", ds_name, "*.pkl")
         path_selection = np.s_[:-1] if split == "train" else np.s_[-1:]
         datasets.append(get_ds(
             file_pattern, rf_pattern, n_samples,
@@ -137,7 +137,7 @@ def get_loader(args, split, dataset_names):
         ))
     ds = torch_em.data.concat_dataset.ConcatDataset(*datasets) if len(datasets) > 1 else datasets[0]
     loader = torch.utils.data.DataLoader(
-        ds, shuffle=True, batch_size=args.batch_size, num_workers=12
+        ds, shuffle=True, batch_size=args.batch_size, num_workers=24
     )
     loader.shuffle = True
     return loader
