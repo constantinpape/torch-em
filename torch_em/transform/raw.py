@@ -130,16 +130,6 @@ class AdditivePoissonNoise():
         return img + poisson_noise
 
 
-def get_default_mean_teacher_augmentations(p=0.5):
-    return transforms.Compose([
-        transforms.RandomApply([transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=p),
-        transforms.RandomApply([AdditiveGaussianNoise()], p=p),
-        transforms.RandomApply([AdditivePoissonNoise()], p=p),
-        normalize,
-        transforms.RandomApply([RandomContrast(clip_kwargs={'a_min': 0, 'a_max': 1})], p=p),
-    ])
-
-
 #
 # default transformation:
 # apply intensity augmentations and normalize
@@ -165,3 +155,21 @@ def get_raw_transform(normalizer=standardize, augmentation1=None, augmentation2=
                         augmentation1=augmentation1,
                         augmentation2=augmentation2)
 
+
+def get_default_mean_teacher_augmentations(p=0.5):
+    norm = normalize
+    aug1 = transforms.Compose([
+        transforms.RandomApply(
+            [transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=p
+        ),
+        transforms.RandomApply([AdditiveGaussianNoise()], p=p),
+        transforms.RandomApply([AdditivePoissonNoise()], p=p)
+    ])
+    aug2 = transforms.RandomApply(
+        [RandomContrast(clip_kwargs={'a_min': 0, 'a_max': 1})], p=p
+    )
+    return get_raw_transform(
+        normalizer=norm,
+        augmentation1=aug1,
+        augmentation2=aug2
+    )
