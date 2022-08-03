@@ -340,8 +340,9 @@ def _prepare_shallow2deep(
 
 def _serialize_feature_config(filters_and_sigmas):
     feature_config = [
-        (filt.func.__name__ if isinstance(filt, partial) else filt.__name__,
-         sigma)
+        (filt if isinstance(filt, str)
+            else (filt.func.__name__ if isinstance(filt, partial) else filt.__name__),
+        sigma)
         for filt, sigma in filters_and_sigmas
     ]
     return feature_config
