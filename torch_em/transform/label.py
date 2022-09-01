@@ -161,11 +161,12 @@ class OneHotTransform:
 
 
 class DistanceTransform:
-    def __init__(self, normalize=True, max_distance=None, foreground_id=1, invert=False):
+    def __init__(self, normalize=True, max_distance=None, foreground_id=1, invert=False, func=None):
         self.normalize = normalize
         self.max_distance = max_distance
         self.foreground_id = foreground_id
         self.invert = invert
+        self.func = func
 
     def __call__(self, labels):
         distances = distance_transform_edt(labels != self.foreground_id)
@@ -175,4 +176,6 @@ class DistanceTransform:
             distances /= distances.max()
         if self.invert:
             distances = distances.max() - distances
+        if self.func is not None:
+            distances = self.func(distances)
         return distances
