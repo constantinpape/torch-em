@@ -1,6 +1,7 @@
 import numpy as np
 import skimage.measure
 import skimage.segmentation
+from scipy.ndimage import distance_transform_edt
 
 from ..util import ensure_array, ensure_spatial_array
 
@@ -157,3 +158,21 @@ class OneHotTransform:
         for i, class_id in enumerate(class_ids):
             one_hot[i][labels == class_id] = 1.0
         return one_hot
+
+
+class DistanceTransform:
+    def __init__(self, normalize=True, max_distance=None, foreground_id=1, invert=False):
+        self.normalize = normalize
+        self.max_distance = max_distance
+        self.foreground_id = foreground_id
+        self.invert = invert
+
+    def __call__(self, labels):
+        distances = distance_transform_edt(labels != self.foreground_id)
+        if self.max_distance is not None:
+            distances = np.clip(distances, 0, self.max_distance)
+        if self.normalize:
+            distances /= distances.max()
+        if self.invert:
+            distances = distances.max() - distances
+        return distances

@@ -116,6 +116,23 @@ class TestLabelTransforms(unittest.TestCase):
         self.assertTrue(np.allclose(affs, expected_affs))
         self.assertTrue(np.allclose(mask, expected_mask))
 
+    def test_distance_transform(self):
+        from torch_em.transform.label import DistanceTransform
+        target = np.random.rand(128, 128) > 0.95
+
+        trafo = DistanceTransform(normalize=True, max_distance=None)
+        tnew = trafo(target)
+        self.assertFalse(np.allclose(tnew, 0))
+        self.assertTrue((tnew >= 0).all())
+        self.assertTrue((tnew <= 1).all())
+
+        trafo = DistanceTransform(normalize=False, max_distance=5)
+        tnew = trafo(target)
+        self.assertFalse(np.allclose(tnew, 0))
+        self.assertTrue((tnew >= 0).all())
+        self.assertTrue((tnew <= 5).all())
+
+
 
 if __name__ == '__main__':
     unittest.main()
