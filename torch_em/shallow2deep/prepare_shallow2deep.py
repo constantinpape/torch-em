@@ -196,6 +196,18 @@ def _get_filters(ndim, filters_and_sigmas):
                    filter_impl.gaussianGradientMagnitude,
                    filter_impl.hessianOfGaussianEigenvalues,
                    filter_impl.structureTensorEigenvalues]
+
+        # fastfilters does not set the `__name__` for its functions correctly,
+        # so we need to do this by hand.
+        if filter_impl.__name__ == "fastfilters":
+            names = ["gaussianSmoothing",
+                     "laplacianOfGaussian",
+                     "gaussianGradientMagnitude",
+                     "hessianOfGaussianEigenvalues",
+                     "structureTensorEigenvalues"]
+            for ff, name in zip(filters, names):
+                ff.__name__ = name
+
         sigmas = [0.7, 1.6, 3.5, 5.0]
         filters_and_sigmas = [
             (filt, sigma) if i != len(filters) - 1 else (partial(filt, outerScale=0.5*sigma), sigma)
