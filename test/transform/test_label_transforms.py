@@ -139,6 +139,14 @@ class TestLabelTransforms(unittest.TestCase):
         abs_dist = np.linalg.norm(vector_distances, axis=0)
         self.assertTrue(np.allclose(distances, abs_dist))
 
+        trafo = DistanceTransform(normalize=True, vector_distances=True)
+        tnew = trafo(target)
+        self.assertEqual(tnew.shape, (3,) + target.shape)
+        distances, vector_distances = tnew[0], tnew[1:]
+
+        self.assertTrue((tnew >= -1).all())
+        self.assertTrue((tnew <= 1).all())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -189,7 +189,7 @@ class DistanceTransform:
         return distances
 
     def _compute_vector_distances(self, indices):
-        coordinates = np.indices(indices.shape[1:])
+        coordinates = np.indices(indices.shape[1:]).astype("float32")
         vector_distances = indices - coordinates
         if self.max_distance is not None:
             vector_distances = np.clip(vector_distances, -self.max_distance, self.max_distance)
