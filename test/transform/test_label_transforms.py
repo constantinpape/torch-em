@@ -116,6 +116,37 @@ class TestLabelTransforms(unittest.TestCase):
         self.assertTrue(np.allclose(affs, expected_affs))
         self.assertTrue(np.allclose(mask, expected_mask))
 
+    def test_distance_transform(self):
+        from torch_em.transform.label import DistanceTransform
+        target = np.random.rand(128, 128) > 0.95
+
+        trafo = DistanceTransform(normalize=True, max_distance=None)
+        tnew = trafo(target)
+        self.assertFalse(np.allclose(tnew, 0))
+        self.assertTrue((tnew >= 0).all())
+        self.assertTrue((tnew <= 1).all())
+
+        trafo = DistanceTransform(normalize=False, max_distance=5)
+        tnew = trafo(target)
+        self.assertFalse(np.allclose(tnew, 0))
+        self.assertTrue((tnew >= 0).all())
+        self.assertTrue((tnew <= 5).all())
+
+        trafo = DistanceTransform(normalize=False, vector_distances=True)
+        tnew = trafo(target)
+        self.assertEqual(tnew.shape, (3,) + target.shape)
+        distances, vector_distances = tnew[0], tnew[1:]
+        abs_dist = np.linalg.norm(vector_distances, axis=0)
+        self.assertTrue(np.allclose(distances, abs_dist))
+
+        trafo = DistanceTransform(normalize=True, vector_distances=True)
+        tnew = trafo(target)
+        self.assertEqual(tnew.shape, (3,) + target.shape)
+        distances, vector_distances = tnew[0], tnew[1:]
+
+        self.assertTrue((tnew >= -1).all())
+        self.assertTrue((tnew <= 1).all())
+
 
 if __name__ == '__main__':
     unittest.main()
