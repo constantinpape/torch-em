@@ -768,6 +768,8 @@ def convert_to_torchscript(spec_path):
 
 
 def add_weight_formats(export_folder, additional_formats):
+    if additional_formats is None:
+        return
     spec_path = os.path.join(export_folder, "rdf.yaml")
     for add_format in additional_formats:
 
