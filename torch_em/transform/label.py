@@ -1,6 +1,7 @@
 import numpy as np
 import skimage.measure
 import skimage.segmentation
+from scipy.ndimage import distance_transform_edt
 
 from ..util import ensure_array, ensure_spatial_array
 
@@ -157,3 +158,64 @@ class OneHotTransform:
         for i, class_id in enumerate(class_ids):
             one_hot[i][labels == class_id] = 1.0
         return one_hot
+
+
+class DistanceTransform:
+    def __init__(
+        self,
+        distances=True, vector_distances=False,
+        normalize=True, max_distance=None,
+        foreground_id=1, invert=False, func=None
+    ):
+        if sum((distances, vector_distances)) == 0:
+            raise ValueError("At least one of 'distances' or 'vector_distances' must be set to 'True'")
+        self.vector_distances = vector_distances
+        self.distances = distances
+        self.normalize = normalize
+        self.max_distance = max_distance
+        self.foreground_id = foreground_id
+        self.invert = invert
+        self.func = func
+
+    def _compute_distances(self, distances):
+        if self.max_distance is not None:
+            distances = np.clip(distances, 0, self.max_distance)
+        if self.normalize:
+            distances /= distances.max()
+        if self.invert:
+            distances = distances.max() - distances
+        if self.func is not None:
+            distances = self.func(distances)
+        return distances
+
+    def _compute_vector_distances(self, indices):
+        coordinates = np.indices(indices.shape[1:]).astype("float32")
+        vector_distances = indices - coordinates
+        if self.max_distance is not None:
+            vector_distances = np.clip(vector_distances, -self.max_distance, self.max_distance)
+        if self.normalize:
+            vector_distances /= vector_distances.max(axis=(1, 2), keepdims=True)
+        if self.invert:
+            vector_distances = vector_distances.max(axis=(1, 2), keepdims=True) - vector_distances
+        if self.func is not None:
+            vector_distances = self.func(vector_distances)
+        return vector_distances
+
+    def __call__(self, labels):
+        data = distance_transform_edt(labels != self.foreground_id,
+                                      return_distances=self.distances,
+                                      return_indices=self.vector_distances)
+        if self.distances:
+            distances = data[0] if self.vector_distances else data
+            distances = self._compute_distances(distances)
+
+        if self.vector_distances:
+            indices = data[1] if self.distances else data
+            vector_distances = self._compute_vector_distances(indices)
+
+        if self.distances and self.vector_distances:
+            return np.concatenate((distances[None], vector_distances), axis=0)
+        if self.distances:
+            return distances
+        if self.vector_distances:
+            return vector_distances
