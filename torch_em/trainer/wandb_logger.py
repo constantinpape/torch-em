@@ -22,6 +22,7 @@ class WandbLogger(TorchEmLogger):
     def __init__(
         self,
         trainer,
+        save_root,
         *,
         project_name: Optional[str] = None,
         log_model: Optional[Literal["gradients", "parameters", "all"]] = "all",
@@ -35,9 +36,9 @@ class WandbLogger(TorchEmLogger):
         if wandb is None:
             raise RuntimeError("WandbLogger is not available")
 
-        super().__init__(trainer)
+        super().__init__(trainer, save_root)
 
-        self.log_dir = "./logs"
+        self.log_dir = "./logs" if save_root is None else os.path.join(save_root, "logs")
         os.makedirs(self.log_dir, exist_ok=True)
 
         config = dict(config or {})

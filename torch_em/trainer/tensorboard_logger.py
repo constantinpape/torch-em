@@ -85,9 +85,10 @@ def make_embedding_image(image, y, prediction, selection, gradients=None):
 
 
 class TensorboardLogger(TorchEmLogger):
-    def __init__(self, trainer, **unused_kwargs):
-        super().__init__(trainer)
-        self.log_dir = f"./logs/{trainer.name}"
+    def __init__(self, trainer, save_root, **unused_kwargs):
+        super().__init__(trainer, save_root)
+        self.log_dir = f"./logs/{trainer.name}" if save_root is None else\
+            os.path.join(save_root, "logs", trainer.name)
         os.makedirs(self.log_dir, exist_ok=True)
 
         if SummaryWriter is None:
