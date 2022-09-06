@@ -38,6 +38,7 @@ class DefaultTrainer:
         logger=TensorboardLogger,
         logger_kwargs: Optional[Dict[str, Any]] = None,
         id_: Optional[str] = None,
+        save_root: Optional[str] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
@@ -57,6 +58,7 @@ class DefaultTrainer:
         self.device = device
         self.lr_scheduler = lr_scheduler
         self.log_image_interval = log_image_interval
+        self.save_root = save_root
 
         self._iteration = 0
         self._epoch = 0
@@ -74,7 +76,12 @@ class DefaultTrainer:
     @property  # because the logger may generate and set trainer.id on logger.__init__
     def checkpoint_folder(self):
         assert self.id_ is not None
-        return os.path.join("./checkpoints", self.id_)
+        # save_root enables saving the checkpoints somewhere else than in the local
+        # folder. This is handy for filesystems with limited space, where saving the checkpoints
+        # and log files can easily lead to running out of space.
+        save_root = getattr(self, "save_root", None)
+        return os.path.join("./checkpoints", self.id_) if save_root is None else\
+            os.path.join(save_root, "./checkpoints", self.id_)
 
     @property
     def iteration(self):
@@ -358,7 +365,8 @@ class DefaultTrainer:
             self.logger = None
         else:
             # may set self.name if self.name is None
-            self.logger = self.logger_class(self, **(self.logger_kwargs or {}))
+            save_root = getattr(self, "save_root", None)
+            self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
 
         os.makedirs(self.checkpoint_folder, exist_ok=True)
 

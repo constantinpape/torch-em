@@ -5,8 +5,9 @@ except ImportError:
 
 
 class TorchEmLogger:
-    def __init__(self, trainer, **kwargs):
+    def __init__(self, trainer, save_root, **kwargs):
         self.trainer = trainer
+        self.save_root = save_root
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
         raise NotImplementedError
