@@ -41,21 +41,6 @@ class LossWrapper(nn.Module):
 # Loss transformations
 #
 
-class ApplyAndRemoveMask:
-    def __call__(self, prediction, target):
-        assert target.dim() == prediction.dim(), f"{target.dim()}, {prediction.dim()}"
-        assert target.size(1) == 2 * prediction.size(1), f"{target.size(1)}, {prediction.size(1)}"
-        assert target.shape[2:] == prediction.shape[2:], f"{str(target.shape)}, {str(prediction.shape)}"
-
-        seperating_channel = target.size(1) // 2
-        mask = target[:, seperating_channel:]
-        target = target[:, :seperating_channel]
-        mask.requires_grad = False
-
-        # mask the prediction
-        prediction = prediction * mask
-        return prediction, target
-
 
 class ApplyMask:
     def __call__(self, prediction, target, mask):
@@ -65,13 +50,23 @@ class ApplyMask:
         return prediction, target
 
 
+class ApplyAndRemoveMask:
+    def __call__(self, prediction, target):
+        assert target.dim() == prediction.dim(), f"{target.dim()}, {prediction.dim()}"
+        assert target.size(1) == 2 * prediction.size(1), f"{target.size(1)}, {prediction.size(1)}"
+        assert target.shape[2:] == prediction.shape[2:], f"{str(target.shape)}, {str(prediction.shape)}"
+        seperating_channel = target.size(1) // 2
+        mask = target[:, seperating_channel:]
+        target = target[:, :seperating_channel]
+        prediction, target = ApplyMask()(prediction, target, mask)
+        return prediction, target
+
+
 class MaskIgnoreLabel:
     def __init__(self, ignore_label=-1):
         self.ignore_label = ignore_label
 
     def __call__(self, prediction, target):
         mask = (target != self.ignore_label)
-        mask.requires_grad = False
-        prediction = prediction * mask
-        target = target * mask
+        prediction, target = ApplyMask()(prediction, target, mask)
         return prediction, target
