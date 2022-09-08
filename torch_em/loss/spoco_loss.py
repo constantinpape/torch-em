@@ -285,12 +285,14 @@ class ContrastiveLossBase(nn.Module):
 
 
 class ExtendedContrastiveLoss(ContrastiveLossBase):
-    """Contrastive loss extended with instance-based loss term and unlabeled push term
-    (if training done in semi-supervised mode).
+    """Contrastive loss extended with instance-based loss term and background push term.
+
+    Based on:
+    "Sparse Object-level Supervision for Instance Segmentation with Pixel Embeddings": https://arxiv.org/abs/2103.14572
     """
 
     def __init__(self, delta_var, delta_dist, norm="fro", alpha=1.0, beta=1.0, gamma=0.001,
-                 unlabeled_push_weight=0.0, instance_term_weight=1.0, aux_loss="dice", pmaps_threshold=0.9, **kwargs):
+                 unlabeled_push_weight=1.0, instance_term_weight=1.0, aux_loss="dice", pmaps_threshold=0.9, **kwargs):
 
         super().__init__(delta_var, delta_dist, norm=norm, alpha=alpha, beta=beta, gamma=gamma,
                          unlabeled_push_weight=unlabeled_push_weight,
@@ -390,15 +392,17 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
 
 
 class SPOCOLoss(ExtendedContrastiveLoss):
-    """The SPOCO Loss for instance segmentation training with sparse instance labeling.
+    """The full SPOCO Loss for instance segmentation training with sparse instance labels.
 
-    Extends the "classic" contrastive loss with instance-based term unlabeled push term and embedding consistency term.
+    Extends the "classic" contrastive loss with an instance-based term and a embedding consistency term.
+    (The unlabeled push term is turned off by default, since we assume sparse instance labels).
+
     Based on:
     "Sparse Object-level Supervision for Instance Segmentation with Pixel Embeddings": https://arxiv.org/abs/2103.14572
     """
 
     def __init__(self, delta_var, delta_dist, norm="fro", alpha=1.0, beta=1.0, gamma=0.001,
-                 unlabeled_push_weight=1.0, instance_term_weight=1.0, consistency_term_weight=1.0,
+                 unlabeled_push_weight=0.0, instance_term_weight=1.0, consistency_term_weight=1.0,
                  aux_loss="dice", pmaps_threshold=0.9, max_anchors=20, volume_threshold=0.05, **kwargs):
 
         super().__init__(delta_var, delta_dist, norm=norm, alpha=alpha, beta=beta, gamma=gamma,
@@ -472,6 +476,7 @@ class SPOCOLoss(ExtendedContrastiveLoss):
         # compute extended contrastive loss only on the embeddings coming from q
         contrastive_loss = super().forward(emb_q, target)
 
+        # TODO enable computing the consistency on all pixels!
         # compute consistency term
         for e_q, e_k, t in zip(emb_q, emb_k, target):
             unlabeled_mask = (t[0] == 0).int()
@@ -483,6 +488,7 @@ class SPOCOLoss(ExtendedContrastiveLoss):
         return contrastive_loss
 
 
+# FIXME clarify what this is!
 class SPOCOConsistencyLoss(nn.Module):
     def __init__(self, delta_var, pmaps_threshold, max_anchors=30, norm="fro"):
         super().__init__()
