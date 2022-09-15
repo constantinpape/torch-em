@@ -194,7 +194,7 @@ class DistanceTransform:
         if self.max_distance is not None:
             vector_distances = np.clip(vector_distances, -self.max_distance, self.max_distance)
         if self.normalize:
-            vector_distances /= vector_distances.max(axis=(1, 2), keepdims=True)
+            vector_distances /= np.abs(vector_distances).max(axis=(1, 2), keepdims=True)
         if self.invert:
             vector_distances = vector_distances.max(axis=(1, 2), keepdims=True) - vector_distances
         if self.func is not None:
