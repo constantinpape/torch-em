@@ -1,10 +1,10 @@
 import os
 
+import torch_em
 from elf.io import open_file
 from torch_em.data.datasets import get_bioimageio_dataset_id
-from torch_em.util import (add_weight_formats, export_parser_helper,
-                           export_bioimageio_model, get_default_citations,
-                           get_training_summary)
+from torch_em.util.modelzoo import (add_weight_formats, export_parser_helper,
+                                    export_bioimageio_model, get_default_citations)
 
 
 def _get_name_and_description(is_aff):
@@ -35,7 +35,7 @@ def _get_doc(is_aff_model, ckpt, name):
         pred_type = "boundary maps"
         pp = "The boundaries can be processed with Multicut to obtain an instance segmentation."
 
-    training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
+    training_summary = torch_em.util.get_training_summary(ckpt, to_md=True, lr=1.0e-4)
     model_tag = name.lower()
     doc = f"""# U-Net for Mitochondria Segmentation
 
