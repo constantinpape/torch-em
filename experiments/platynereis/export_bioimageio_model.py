@@ -1,10 +1,10 @@
 import os
 
+import torch_em
 from elf.io import open_file
 from torch_em.data.datasets import get_bioimageio_dataset_id
-from torch_em.util import (add_weight_formats, export_parser_helper,
-                           export_bioimageio_model, get_default_citations,
-                           get_training_summary)
+from torch_em.util.modelzoo import (add_weight_formats, export_parser_helper,
+                                    export_bioimageio_model, get_default_citations)
 
 
 def _load_data(input_, organelle):
@@ -32,7 +32,7 @@ def _get_name_and_description(is_aff, organelle):
 
 
 def _get_doc(ckpt, name, organelle):
-    training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
+    training_summary = torch_em.util.get_training_summary(ckpt, to_md=True, lr=1.0e-4)
     model_tag = name.lower()
     doc = f"""# U-Net for {organelle} segmentation in platynereis
 

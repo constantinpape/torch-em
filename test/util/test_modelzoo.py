@@ -13,18 +13,18 @@ from torch_em.trainer import DefaultTrainer
 
 
 class TestModelzoo(unittest.TestCase):
-    data_path = './data.h5'
-    checkpoint_folder = './checkpoints'
-    save_folder = './zoo_export'
-    name = 'test'
+    data_path = "./data.h5"
+    checkpoint_folder = "./checkpoints"
+    save_folder = "./zoo_export"
+    name = "test"
 
     def setUp(self):
         shape = (8, 128, 128)
         chunks = (1, 128, 128)
-        with h5py.File(self.data_path, 'w') as f:
-            f.create_dataset('raw', data=np.random.rand(*shape),
+        with h5py.File(self.data_path, "w") as f:
+            f.create_dataset("raw", data=np.random.rand(*shape),
                              chunks=chunks)
-            f.create_dataset('labels', data=np.random.randint(0, 32, size=shape),
+            f.create_dataset("labels", data=np.random.randint(0, 32, size=shape),
                              chunks=chunks)
 
     def tearDown(self):
@@ -37,8 +37,8 @@ class TestModelzoo(unittest.TestCase):
 
     def _create_checkpoint(self, n_channels):
         loader = default_segmentation_loader(
-            raw_paths=self.data_path, raw_key='raw',
-            label_paths=self.data_path, label_key='labels',
+            raw_paths=self.data_path, raw_key="raw",
+            label_paths=self.data_path, label_key="labels",
             batch_size=1, patch_shape=(1, 128, 128), ndim=2
         )
         model = UNet2d(in_channels=1, out_channels=n_channels,
@@ -47,7 +47,7 @@ class TestModelzoo(unittest.TestCase):
         trainer = DefaultTrainer(
             name=self.name, train_loader=loader, val_loader=loader,
             model=model, loss=DiceLoss(), metric=DiceLoss(),
-            optimizer=optimizer, device=torch.device('cpu'),
+            optimizer=optimizer, device=torch.device("cpu"),
             mixed_precision=False, logger=None
         )
         trainer.fit(10)
@@ -59,13 +59,13 @@ class TestModelzoo(unittest.TestCase):
         success = export_bioimageio_model(
             os.path.join(self.checkpoint_folder, self.name),
             self.save_folder,
-            input_data=np.random.rand(128, 128).astype('float32'),
+            input_data=np.random.rand(128, 128).astype("float32"),
             input_optional_parameters=False
 
         )
         self.assertTrue(success)
         self.assertTrue(os.path.exists(self.save_folder))
-        self.assertTrue(os.path.exists(os.path.join(self.save_folder, 'rdf.yaml')))
+        self.assertTrue(os.path.exists(os.path.join(self.save_folder, "rdf.yaml")))
 
     def test_export_single_channel(self):
         self._test_export(1)
@@ -82,5 +82,5 @@ class TestModelzoo(unittest.TestCase):
         self.assertTrue(os.path.join(self.save_folder, "weigths-torchscript.pt"))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
