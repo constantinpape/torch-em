@@ -3,13 +3,13 @@ import os
 from glob import glob
 
 import numpy as np
+import torch_em
 from elf.io import open_file
 from torch_em.data.datasets import get_bioimageio_dataset_id
-from torch_em.util import (add_weight_formats,
-                           export_bioimageio_model,
-                           get_default_citations,
-                           get_shallow2deep_config,
-                           get_training_summary)
+from torch_em.util.modelzoo import (add_weight_formats,
+                                    export_bioimageio_model,
+                                    get_default_citations,
+                                    get_shallow2deep_config)
 from torch_em.shallow2deep.shallow2deep_model import RFWithFilters, _get_filters
 
 
@@ -21,7 +21,7 @@ def _get_name_and_description(is3d, name):
 
 
 def _get_doc(ckpt, name, is3d):
-    training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
+    training_summary = torch_em.util.get_training_summary(ckpt, to_md=True, lr=1.0e-4)
     doc = f"""#Prediction Enhancer for Mitochondrion Segmentation in EM
 
 This model was trained with the [Shallow2Deep](https://doi.org/10.3389/fcomp.2022.805166)
@@ -174,7 +174,7 @@ def export_version(args):
     out_folder = f"./bio-models/v{args.version}"
     for ckpt in checkpoints:
         name = os.path.basename(ckpt)
-        if(os.path.exists(os.path.join(out_folder, name))):
+        if os.path.exists(os.path.join(out_folder, name)):
             print("Already exported::", name)
             continue
         parts = name.split("-")

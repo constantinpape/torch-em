@@ -142,8 +142,6 @@ class TestLabelTransforms(unittest.TestCase):
         trafo = DistanceTransform(normalize=True, vector_distances=True)
         tnew = trafo(target)
         self.assertEqual(tnew.shape, (3,) + target.shape)
-        distances, vector_distances = tnew[0], tnew[1:]
-
         self.assertTrue((tnew >= -1).all())
         self.assertTrue((tnew <= 1).all())
 
