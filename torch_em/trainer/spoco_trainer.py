@@ -25,6 +25,7 @@ class SPOCOTrainer(DefaultTrainer):
         assert (semisupervised_loss is None) == (semisupervised_loader is None)
         self.semisupervised_loader = semisupervised_loader
         self.semisupervised_loss = semisupervised_loss
+        self._kwargs = kwargs
 
     def _momentum_update(self):
         for param1, param2 in zip(self.model.parameters(), self.model2.parameters()):
