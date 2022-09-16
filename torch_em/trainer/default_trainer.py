@@ -321,6 +321,8 @@ class DefaultTrainer:
         def dump_data_loader(self, kwarg_name: str) -> None:
             assert hasattr(self.trainer, kwarg_name)
             loader = getattr(self.trainer, kwarg_name)
+            if loader is None:
+                return
             self.init_data.update(
                 {
                     f"{kwarg_name.replace('_loader', '_dataset')}": loader.dataset,
@@ -334,6 +336,18 @@ class DefaultTrainer:
     def _build_init(self) -> Dict[str, Any]:
         serializer = self.Serializer(self)
         for name in inspect.signature(self.__class__).parameters:
+            # special rules to serialize kwargs
+            # if a trainer class inherits from DefaultTrainer and has **kwargs
+            # they need to be saved in self._kwargs
+            if name == "kwargs":
+                if not hasattr(self, "_kwargs"):
+                    msg = "The trainer class has **kwargs in its signature, but is missing the _kwargs attribute. " +\
+                          "Please add self._kwargs to its __init__ function"
+                    raise RuntimeError(msg)
+                kwargs = getattr(self, "_kwargs")
+                for kwarg_name in kwargs:
+                    serializer.dump(kwarg_name)
+                continue
             serializer.dump(name)
 
         return serializer.init_data
