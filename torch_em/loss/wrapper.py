@@ -50,7 +50,7 @@ class ApplyMask:
         # masks per channel
         assert mask.shape[channel_dim] == 1
         # remove singleton axis
-        mask = mask.squeeze()
+        mask = mask.squeeze(channel_dim)
         # move channel axis to end
         prediction = prediction.moveaxis(channel_dim, -1)
         target = target.moveaxis(channel_dim, -1)
