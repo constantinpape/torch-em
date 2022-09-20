@@ -32,6 +32,50 @@ class TestLossWrapper(unittest.TestCase):
         # print((grad[~mask] == 0).sum())
         self.assertTrue((grad[~mask] == 0).all())
 
+    def test_ApplyMask_output_shape_crop(self):
+        from torch_em.loss import ApplyMask
+
+        # _crop batch_size=1
+        shape = (1, 1, 10, 128, 128)
+        p = torch.rand(*shape)
+        t = torch.rand(*shape)
+        m = torch.rand(*shape) > .5
+        p_masked, t_masked = ApplyMask()(p, t, m)
+        out_shape = (m.sum(), 1)
+        self.assertTrue(p_masked.shape == out_shape)
+        self.assertTrue(t_masked.shape == out_shape)
+
+        # _crop batch_size>1
+        shape = (5, 1, 10, 128, 128)
+        p = torch.rand(*shape)
+        t = torch.rand(*shape)
+        m = torch.rand(*shape) > .5
+        p_masked, t_masked = ApplyMask()(p, t, m)
+        out_shape = (m.sum(), 1)
+        self.assertTrue(p_masked.shape == out_shape)
+        self.assertTrue(t_masked.shape == out_shape)
+
+        # _crop n_channels>1
+        shape = (1, 2, 10, 128, 128)
+        p = torch.rand(*shape)
+        t = torch.rand(*shape)
+        m = torch.rand(*shape) > .5
+        with self.assertRaises(ValueError):
+            p_masked, t_masked = ApplyMask()(p, t, m)
+
+    def test_ApplyMask_output_shape_multiply(self):
+        from torch_em.loss import ApplyMask
+
+        # _multiply
+        shape = (2, 5, 10, 128, 128)
+        p = torch.rand(*shape)
+        t = torch.rand(*shape)
+        m = torch.rand(*shape) > .5
+
+        p_masked, t_masked = ApplyMask(masking_method="multiply")(p, t, m)
+        self.assertTrue(p_masked.shape == shape)
+        self.assertTrue(t_masked.shape == shape)
+
 
 if __name__ == '__main__':
     unittest.main()
