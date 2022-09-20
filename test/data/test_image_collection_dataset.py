@@ -51,9 +51,6 @@ def generate_sample_data(folder, n_images, shape):
         tifffile.imwrite(os.path.join(label_folder, f"test_{i}.tif"), label)
 
 
-
-
-
 class TestChannelsDataset(unittest.TestCase):
     def test_channel_end(self):
         from torch_em.data import ImageCollectionDataset
