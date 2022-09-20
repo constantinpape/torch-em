@@ -45,10 +45,12 @@ class LossWrapper(nn.Module):
 
 class ApplyMask:
     def _crop(prediction, target, mask, channel_dim):
+        if mask.shape[channel_dim] != 1:
+            raise ValueError(
+                "_crop only supports a mask with a singleton channel axis. \
+                Please consider using masking_method=multiply."
+            )
         mask = mask.type(torch.bool)
-        # TODO: make this work for different
-        # masks per channel
-        assert mask.shape[channel_dim] == 1
         # remove singleton axis
         mask = mask.squeeze(channel_dim)
         # move channel axis to end
