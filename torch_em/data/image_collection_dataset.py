@@ -117,7 +117,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         label = np.array(label[bb])
 
         # to channel first
-        if have_raw_channels:
+        if have_raw_channels and len(prefix_box) == 0:
             raw = raw.transpose((2, 0, 1))
 
         return raw, label
