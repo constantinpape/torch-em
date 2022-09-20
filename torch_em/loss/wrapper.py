@@ -46,24 +46,17 @@ class LossWrapper(nn.Module):
 class ApplyMask:
     def _crop(prediction, target, mask, channel_dim):
         mask = mask.type(torch.bool)
-        pred = []
-        trgt = []
-        n_channels = prediction.shape[channel_dim]
-        # for now only support same mask for all channels
-        # to be able to stack/concat afterwards
-        # TODO: make this more efficient, and for different
+        # TODO: make this work for different
         # masks per channel
         assert mask.shape[channel_dim] == 1
-        for c in range(n_channels):
-            p = torch.index_select(prediction, channel_dim, torch.LongTensor([c]))
-            t = torch.index_select(target, channel_dim, torch.LongTensor([c]))
-            pred.append(p[mask])
-            trgt.append(t[mask])
-        # transpose to have N x C
-        # needed in torch_em.loss.dice.flatten_samples
-        pred = torch.stack(pred).transpose(0, 1)
-        trgt = torch.stack(trgt).transpose(0, 1)
-        return pred, trgt
+        # remove singleton axis
+        mask = mask.squeeze()
+        # move channel axis to end
+        prediction = prediction.moveaxis(channel_dim, -1)
+        target = target.moveaxis(channel_dim, -1)
+        # output has shape N x C
+        # correct for torch_em.loss.dice.flatten_samples
+        return prediction[mask], target[mask]
 
     def _multiply(prediction, target, mask, channel_dim):
         prediction = prediction * mask
