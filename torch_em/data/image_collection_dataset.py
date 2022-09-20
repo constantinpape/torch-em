@@ -102,13 +102,13 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
         shape = raw.shape
         # we assume images are loaded with channel last!
+        prefix_box = tuple()
         if have_raw_channels:
             if shape[0] < 16:
                 shape = shape[1:]
                 prefix_box = (slice(None), )
             else:
                 shape = shape[:-1]
-                prefix_box = tuple()
 
         # sample random bounding box for this image
         bb = self._sample_bounding_box(shape)
