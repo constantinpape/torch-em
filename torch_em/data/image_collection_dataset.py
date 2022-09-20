@@ -108,7 +108,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
                 prefix_box = (slice(None), )
             else:
                 shape = shape[:-1]
-                prefix_box = (, )
+                prefix_box = tuple()
 
         # sample random bounding box for this image
         bb = self._sample_bounding_box(shape)
