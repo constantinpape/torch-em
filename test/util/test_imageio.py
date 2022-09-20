@@ -11,7 +11,7 @@ class TestImageRead(unittest.TestCase):
         from torch_em.util.image import load_image, supports_memmap
 
         with tempfile.TemporaryDirectory() as td:
-            tifffile.imwrite(os.path.join(td, "test.tif"), np.zeros(10, 10, 2))
+            tifffile.imwrite(os.path.join(td, "test.tif"), np.zeros((10, 10, 2)))
             self.assert_(supports_memmap(os.path.join(td, "test.tif")))
             data = load_image(os.path.join(td, "test.tif"))
             self.assertEqual(data.shape, (10, 10, 2))
@@ -20,7 +20,7 @@ class TestImageRead(unittest.TestCase):
         from torch_em.util.image import load_image
 
         with tempfile.TemporaryDirectory() as td:
-            tifffile.imwrite(os.path.join(td, "test.tif"), np.zeros(10, 10, 2), compression="ADOBE_DEFLATE")
+            tifffile.imwrite(os.path.join(td, "test.tif"), np.zeros((10, 10, 2)), compression="ADOBE_DEFLATE")
             data = load_image(os.path.join(td, "test.tif"))
             self.assertEqual(data.shape, (10, 10, 2))
 
