@@ -28,7 +28,13 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
                 # we assume axis last
                 if is_multichan:
-                    shape = shape[:-1]
+                    # use heuristic to decide whether the data is stored in channel last or channel first order:
+                    # if the last axis has a length smaller than 16 we assume that it's the channel axis,
+                    # otherwise we assume it's a spatial axis and that the first axis is the channel axis.
+                    if shape[-1] < 16:
+                        shape = shape[:-1]
+                    else:
+                        shape = shape[1:]
 
                 label_shape = load_image(label_im).shape
                 if shape != label_shape:
@@ -80,7 +86,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
     def _sample_bounding_box(self, shape):
         if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
-            raise NotImplementedError("Image padding is not supported yet.")
+            raise NotImplementedError("Image padding is not supported yet. Data shape {shape}, patch shape {self.patch_shape}")
         bb_start = [
             np.random.randint(0, sh - psh) if sh - psh > 0 else 0
             for sh, psh in zip(shape, self.patch_shape)

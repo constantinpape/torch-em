@@ -40,14 +40,14 @@ class TestSegmentationDataset(unittest.TestCase):
             self.assertEqual(y.shape, expected_shape)
 
 
-def generate_sample_data(folder, n_images, shape):
+def generate_sample_data(folder, n_images, image_shape, label_shape):
     im_folder = os.path.join(folder, "images")
     label_folder = os.path.join(folder, "labels")
     os.makedirs(im_folder)
     os.makedirs(label_folder)
     for i in range(n_images):
-        raw = np.empty(shape, dtype=np.uint8)
-        label = np.ones(shape, dtype=np.float32)
+        raw = np.empty(image_shape, dtype=np.uint8)
+        label = np.ones(label_shape, dtype=np.float32)
         tifffile.imwrite(os.path.join(im_folder, f"test_{i}.tif"), raw)
         tifffile.imwrite(os.path.join(label_folder, f"test_{i}.tif"), label)
 
@@ -59,10 +59,11 @@ class TestChannelsDataset(unittest.TestCase):
         patch_shape = (256, 256)
 
         with tempfile.TemporaryDirectory() as td:
+            generate_sample_data(td, 10, (256, 256, 2), (256, 256))
             raw_paths = glob(os.path.join(td, "images", "*.tif"))
             label_paths = glob(os.path.join(td, "labels", "*.tif"))
 
-            generate_sample_data(td, 10, (64, 64, 2))
+
             ds = ImageCollectionDataset(raw_paths, label_paths,
                                     patch_shape=patch_shape)
             self.assertEqual(len(ds), 10)
@@ -74,10 +75,10 @@ class TestChannelsDataset(unittest.TestCase):
         patch_shape = (256, 256)
 
         with tempfile.TemporaryDirectory() as td:
+            generate_sample_data(td, 10, (2, 256, 256), (256, 256))
             raw_paths = glob(os.path.join(td, "images", "*.tif"))
             label_paths = glob(os.path.join(td, "labels", "*.tif"))
 
-            generate_sample_data(td, 10, (2, 64, 64))
             ds = ImageCollectionDataset(raw_paths, label_paths,
                                     patch_shape=patch_shape)
             self.assertEqual(len(ds), 10)
