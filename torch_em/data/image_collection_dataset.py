@@ -101,7 +101,8 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
             raise NotImplementedError("Multi-channel labels are not supported.")
 
         shape = raw.shape
-        # we assume images are loaded with channel last!
+        # we determine if image has channels as te first or last axis base on array shape. 
+        # This will work only for images with less than 16 channels. 
         prefix_box = tuple()
         if have_raw_channels:
             if shape[-1] < 16:
