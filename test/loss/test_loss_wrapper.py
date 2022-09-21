@@ -41,7 +41,7 @@ class TestLossWrapper(unittest.TestCase):
         t = torch.rand(*shape)
         m = torch.rand(*shape) > .5
         p_masked, t_masked = ApplyMask()(p, t, m)
-        out_shape = (m.sum(), 1)
+        out_shape = (m.sum(), shape[1])
         self.assertTrue(p_masked.shape == out_shape)
         self.assertTrue(t_masked.shape == out_shape)
 
@@ -51,7 +51,7 @@ class TestLossWrapper(unittest.TestCase):
         t = torch.rand(*shape)
         m = torch.rand(*shape) > .5
         p_masked, t_masked = ApplyMask()(p, t, m)
-        out_shape = (m.sum(), 1)
+        out_shape = (m.sum(), shape[1])
         self.assertTrue(p_masked.shape == out_shape)
         self.assertTrue(t_masked.shape == out_shape)
 
@@ -62,6 +62,17 @@ class TestLossWrapper(unittest.TestCase):
         m = torch.rand(*shape) > .5
         with self.assertRaises(ValueError):
             p_masked, t_masked = ApplyMask()(p, t, m)
+
+        # _crop different shapes
+        shape_pt = (5, 2, 10, 128, 128)
+        p = torch.rand(*shape_pt)
+        t = torch.rand(*shape_pt)
+        shape_m = (5, 1, 10, 128, 128)
+        m = torch.rand(*shape_m) > .5
+        p_masked, t_masked = ApplyMask()(p, t, m)
+        out_shape = (m.sum(), shape_pt[1])
+        self.assertTrue(p_masked.shape == out_shape)
+        self.assertTrue(t_masked.shape == out_shape)
 
     def test_ApplyMask_output_shape_multiply(self):
         from torch_em.loss import ApplyMask
