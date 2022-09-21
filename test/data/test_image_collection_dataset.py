@@ -59,8 +59,8 @@ class TestChannelsDataset(unittest.TestCase):
         patch_shape = (256, 256)
 
         with tempfile.TemporaryDirectory() as td:
-            im_folder = glob(os.path.join(td, "images", "*.tif"))
-            label_folder = glob(os.path.join(td, "labels", "*.tif"))
+            raw_paths = glob(os.path.join(td, "images", "*.tif"))
+            label_paths = glob(os.path.join(td, "labels", "*.tif"))
 
             generate_sample_data(td, 10, (64, 64, 2))
             ds = ImageCollectionDataset(raw_paths, label_paths,
@@ -74,8 +74,8 @@ class TestChannelsDataset(unittest.TestCase):
         patch_shape = (256, 256)
 
         with tempfile.TemporaryDirectory() as td:
-            im_folder = glob(os.path.join(td, "images", "*.tif"))
-            label_folder = glob(os.path.join(td, "labels", "*.tif"))
+            raw_paths = glob(os.path.join(td, "images", "*.tif"))
+            label_paths = glob(os.path.join(td, "labels", "*.tif"))
 
             generate_sample_data(td, 10, (2, 64, 64))
             ds = ImageCollectionDataset(raw_paths, label_paths,
