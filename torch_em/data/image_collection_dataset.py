@@ -105,6 +105,9 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         # This will work only for images with less than 16 channels. 
         prefix_box = tuple()
         if have_raw_channels:
+            # use heuristic to decide whether the data is stored in channel last or channel first order:
+            # if the last axis has a length smaller than 16 we assume that it's the channel axis,
+            # otherwise we assume it's a spatial axis and that the first axis is the channel axis.
             if shape[-1] < 16:
                 shape = shape[:-1]
             else:
