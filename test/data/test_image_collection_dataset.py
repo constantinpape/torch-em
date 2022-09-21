@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 from glob import glob
 from shutil import rmtree
