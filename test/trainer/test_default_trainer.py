@@ -6,8 +6,7 @@ import h5py
 import numpy as np
 import torch
 
-from torch_em import default_segmentation_loader
-from torch_em.loss import DiceLoss
+import torch_em
 from torch_em.model import UNet2d
 
 
@@ -34,7 +33,7 @@ class TestDefaultTrainer(unittest.TestCase):
 
     def _get_kwargs(self, with_roi=False):
         roi = np.s_[:6, :, :] if with_roi else None
-        loader = default_segmentation_loader(
+        loader = torch_em.default_segmentation_loader(
             raw_paths=self.data_path, raw_key="raw",
             label_paths=self.data_path, label_key="labels",
             batch_size=1, patch_shape=(1, 128, 128), ndim=2,
@@ -47,8 +46,8 @@ class TestDefaultTrainer(unittest.TestCase):
             "train_loader": loader,
             "val_loader": loader,
             "model": model,
-            "loss": DiceLoss(),
-            "metric": DiceLoss(),
+            "loss": torch_em.loss.DiceLoss(),
+            "metric": torch_em.loss.DiceLoss(),
             "optimizer": torch.optim.Adam(model.parameters(), lr=1e-5),
             "device": torch.device("cpu"),
             "mixed_precision": False,
@@ -79,6 +78,7 @@ class TestDefaultTrainer(unittest.TestCase):
         from torch_em.trainer import DefaultTrainer
         trainer = DefaultTrainer(**self._get_kwargs(with_roi=True))
         trainer.fit(10)
+        exp_model = trainer.model
         exp_data_shape = trainer.train_loader.dataset.raw.shape
 
         trainer2 = DefaultTrainer.from_checkpoint(
@@ -87,6 +87,7 @@ class TestDefaultTrainer(unittest.TestCase):
         )
         self.assertEqual(trainer.iteration, trainer2.iteration)
         self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
+        self.assertTrue(torch_em.util.model_is_equal(exp_model, trainer2.model))
 
         # make sure that the optimizer was loaded properly
         lr1 = [pm["lr"] for pm in trainer.optimizer.param_groups][0]

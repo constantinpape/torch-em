@@ -6,7 +6,6 @@ import torch.cuda.amp as amp
 from .default_trainer import DefaultTrainer
 
 
-# TODO over-ride from_checkpoint, load_checkpoint to load the model
 class SPOCOTrainer(DefaultTrainer):
     def __init__(
         self,
@@ -34,6 +33,12 @@ class SPOCOTrainer(DefaultTrainer):
     def save_checkpoint(self, name, best_metric):
         model2_state = {"model2_state": self.model2.state_dict()}
         super().save_checkpoint(name, best_metric, **model2_state)
+
+    def load_checkpoint(self, checkpoint="best"):
+        save_dict = super().load_checkpoint(checkpoint)
+        self.model2.load_state_dict(save_dict["model2_state"])
+        self.model2.to(self.device)
+        return save_dict
 
     def _initialize(self, iterations, load_from_checkpoint):
         best_metric = super()._initialize(iterations, load_from_checkpoint)
