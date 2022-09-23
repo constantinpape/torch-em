@@ -1,9 +1,10 @@
 import os
 
 import imageio
+import torch_em
 from torch_em.data.datasets import get_bioimageio_dataset_id
-from torch_em.util import (add_weight_formats, export_bioimageio_model, export_parser_helper,
-                           get_default_citations, get_training_summary)
+from torch_em.util.modelzoo import (add_weight_formats, export_bioimageio_model, export_parser_helper,
+                                    get_default_citations)
 
 
 def _get_name_and_description(is_aff):
@@ -24,7 +25,7 @@ def _get_doc(is_aff_model, ckpt, name):
         pred_type = "boundary maps"
         pp = "The boundaries can be processed e.g. with Multicut or Watershed to obtain an instance segmentation."
 
-    training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
+    training_summary = torch_em.util.get_training_summary(ckpt, to_md=True, lr=1.0e-4)
     model_tag = name.lower()
     doc = f"""# U-Net for Nucleus Segmentation
 

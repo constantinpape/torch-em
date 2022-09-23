@@ -72,7 +72,8 @@ import imageio
 from torch_em.util import export_bioimageio_model
 
 # load one of the images to use as reference image image
-test_im = imageio.imread(glob(f"{data_path}/test/images/*.tif")[0])
+# and crop it to a shape that is guaranteed to fit the network
+test_im = imageio.imread(glob(f"{data_path}/test/images/*.tif")[0])[:256, :256]
 
 export_bioimageio_model("./checkpoints/dsb-boundary-model", "./bioimageio-model", test_im)
 ```

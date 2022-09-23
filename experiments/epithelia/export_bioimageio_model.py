@@ -1,5 +1,5 @@
 import z5py
-from torch_em.util import export_bioimageio_model, get_default_citations, export_parser_helper
+from torch_em.util.modelzoo import export_bioimageio_model, get_default_citations, export_parser_helper
 
 
 def _load_data():
