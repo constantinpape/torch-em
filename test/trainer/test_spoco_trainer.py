@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 import torch
 
-from torch_em import default_segmentation_loader
+import torch_em
 from torch_em.model import UNet2d
 
 
@@ -45,7 +45,7 @@ class TestSpocoTrainer(unittest.TestCase):
 
     def _get_kwargs(self, with_roi=False):
         roi = np.s_[:6, :, :] if with_roi else None
-        loader = default_segmentation_loader(
+        loader = torch_em.default_segmentation_loader(
             raw_paths=self.data_path, raw_key="raw",
             label_paths=self.data_path, label_key="labels",
             batch_size=1, patch_shape=(1, 128, 128), ndim=2,
@@ -65,6 +65,7 @@ class TestSpocoTrainer(unittest.TestCase):
             "optimizer": torch.optim.Adam(model.parameters(), lr=1e-5),
             "device": torch.device("cpu"),
             "mixed_precision": False,
+            "momentum": 0.95,
         }
         return kwargs
 
@@ -91,17 +92,20 @@ class TestSpocoTrainer(unittest.TestCase):
 
     def test_from_checkpoint(self):
         from torch_em.trainer.spoco_trainer import SPOCOTrainer
-        trainer = SPOCOTrainer(**self._get_kwargs(with_roi=True))
+        init_kwargs = self._get_kwargs(with_roi=True)
+        trainer = SPOCOTrainer(**init_kwargs)
         trainer.fit(10)
         exp_data_shape = trainer.train_loader.dataset.raw.shape
 
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11")
         trainer2 = SPOCOTrainer.from_checkpoint(
             os.path.join(self.checkpoint_folder, self.name),
             name="latest"
         )
         self.assertEqual(trainer.iteration, trainer2.iteration)
         self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
+        self.assertEqual(trainer.momentum, trainer2.momentum)
+        self.assertTrue(torch_em.util.model_is_equal(trainer.model, trainer2.model))
+        self.assertTrue(torch_em.util.model_is_equal(trainer.model2, trainer2.model2))
 
         # make sure that the optimizer was loaded properly
         lr1 = [pm["lr"] for pm in trainer.optimizer.param_groups][0]

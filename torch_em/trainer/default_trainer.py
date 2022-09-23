@@ -453,6 +453,8 @@ class DefaultTrainer:
         if self.lr_scheduler is not None:
             self.lr_scheduler.load_state_dict(save_dict["scheduler_state"])
 
+        return save_dict
+
     def fit(self, iterations, load_from_checkpoint=None):
         best_metric = self._initialize(iterations, load_from_checkpoint)
         print(
