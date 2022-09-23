@@ -85,32 +85,31 @@ class TestSpocoTrainer(unittest.TestCase):
         trainer.fit(2)
         self.assertEqual(trainer.iteration, 12)
 
-        # TODO implement proper loading from checkpoints for spoco trainer
-        # trainer = DefaultTrainer(**self._get_kwargs())
-        # trainer.fit(8, load_from_checkpoint="latest")
-        # self.assertEqual(trainer.iteration, 20)
+        trainer = SPOCOTrainer(**self._get_kwargs())
+        trainer.fit(8, load_from_checkpoint="latest")
+        self.assertEqual(trainer.iteration, 20)
 
-    # TODO implement proper loading from checkpoints for spoco trainer
-    # def test_from_checkpoint(self):
-    #     from torch_em.trainer import DefaultTrainer
-    #     trainer = DefaultTrainer(**self._get_kwargs(with_roi=True))
-    #     trainer.fit(10)
-    #     exp_data_shape = trainer.train_loader.dataset.raw.shape
+    def test_from_checkpoint(self):
+        from torch_em.trainer.spoco_trainer import SPOCOTrainer
+        trainer = SPOCOTrainer(**self._get_kwargs(with_roi=True))
+        trainer.fit(10)
+        exp_data_shape = trainer.train_loader.dataset.raw.shape
 
-    #     trainer2 = DefaultTrainer.from_checkpoint(
-    #         os.path.join(self.checkpoint_folder, self.name),
-    #         name="latest"
-    #     )
-    #     self.assertEqual(trainer.iteration, trainer2.iteration)
-    #     self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11")
+        trainer2 = SPOCOTrainer.from_checkpoint(
+            os.path.join(self.checkpoint_folder, self.name),
+            name="latest"
+        )
+        self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
 
-    #     # make sure that the optimizer was loaded properly
-    #     lr1 = [pm["lr"] for pm in trainer.optimizer.param_groups][0]
-    #     lr2 = [pm["lr"] for pm in trainer2.optimizer.param_groups][0]
-    #     self.assertEqual(lr1, lr2)
+        # make sure that the optimizer was loaded properly
+        lr1 = [pm["lr"] for pm in trainer.optimizer.param_groups][0]
+        lr2 = [pm["lr"] for pm in trainer2.optimizer.param_groups][0]
+        self.assertEqual(lr1, lr2)
 
-    #     trainer2.fit(10)
-    #     self.assertEqual(trainer2.iteration, 20)
+        trainer2.fit(10)
+        self.assertEqual(trainer2.iteration, 20)
 
 
 if __name__ == "__main__":
