@@ -201,8 +201,29 @@ class DefaultTrainer:
         save_path = os.path.join(checkpoint_folder, f"{name}.pt")
         save_dict = cls._get_save_dict(save_path, device)
         deserializer = cls.Deserializer(save_dict["init"], save_path, device)
+
+        has_kwargs = False
+        deserialized = []
         for name, parameter in inspect.signature(cls).parameters.items():
+            if name == "kwargs":
+                has_kwargs = True
+                continue
             deserializer.load(name, optional=parameter.default is not inspect.Parameter.empty)
+            deserialized.append(name)
+
+        # to deserialze kwargs we can't rely on inspecting the signature, so we
+        # go through the remaning kwarg names in init data instead
+        if has_kwargs:
+            kwarg_names = list(set(deserializer.init_data.keys()) - set(deserialized))
+            for name in kwarg_names:
+                if name.endswith("_kwargs"):
+                    continue
+                elif name.endswith("_dataset"):
+                    deserializer.load(name.replace("dataset", "loader"), optional=False)
+                elif name.endswith("_class"):
+                    deserializer.load(name.replace("_class", ""), optional=False)
+                else:
+                    deserializer.load(name, optional=False)
 
         trainer = cls(**deserializer.trainer_kwargs)
         trainer._initialize(0, save_dict)
