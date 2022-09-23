@@ -1,12 +1,12 @@
 import argparse
 import os
 
+import torch_em
 from elf.io import open_file
 # from torch_em.data.datasets import get_bioimageio_dataset_id
-from torch_em.util import (add_weight_formats,
-                           export_bioimageio_model,
-                           get_default_citations,
-                           get_training_summary)
+from torch_em.util.modelzoo import (add_weight_formats,
+                                    export_bioimageio_model,
+                                    get_default_citations)
 from torch_em.shallow2deep.shallow2deep_model import RFWithFilters, _get_filters
 
 
@@ -17,7 +17,7 @@ def _get_name_and_description(is3d):
 
 
 def _get_doc(ckpt, name, is3d):
-    training_summary = get_training_summary(ckpt, to_md=True, lr=1.0e-4)
+    training_summary = torch_em.util.get_training_summary(ckpt, to_md=True, lr=1.0e-4)
     doc = f"""#Prediction Enhancer for Membrane Segmentation in LM
 
 This model was trained with the [Shallow2Deep](https://doi.org/10.3389/fcomp.2022.805166)
