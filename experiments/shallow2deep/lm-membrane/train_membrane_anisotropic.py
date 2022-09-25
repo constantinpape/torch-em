@@ -4,9 +4,11 @@ from glob import glob
 import torch
 import torch_em
 import torch_em.shallow2deep as shallow2deep
+from elf.io import open_file
 from torch_em.model import AnisotropicUNet
 from torch_em.data.datasets.mouse_embryo import _require_embryo_data
 from torch_em.data.datasets.plantseg import _require_plantseg_data
+from torch_em.data.datasets.pnas_arabidopsis import _require_pnas_data
 
 
 # any more publicly available datasets?
@@ -20,6 +22,22 @@ def normalize_datasets(datasets):
         raise ValueError(f"Unkown datasets: {wrong_ds}. Only {DATASETS} are supported")
     datasets = list(sorted(datasets))
     return datasets
+
+
+def _get_pnas_paths(pnas_root, split):
+    folders = glob(os.path.join(pnas_root, "plant*"))
+    folders.sort()
+    paths = []
+    for folder in folders:
+        all_paths = glob(os.path.join(folder, "*.h5"))
+        all_paths.sort()
+        this_paths = [
+            pp for pp in all_paths if "labels/membrane" in open_file(pp, "r")
+        ]
+        paths.extend(
+            this_paths[:-2] if split == "train" else this_paths[-2:]
+        )
+    return paths
 
 
 def require_ds(dataset):
@@ -40,6 +58,10 @@ def require_ds(dataset):
         paths = glob(os.path.join(data_path, "root_train", "*.h5"))
         label_paths = paths
         raw_key, label_key = "raw", "label"
+    elif dataset == "pnas":
+        _require_pnas_data(data_path, True)
+        paths = _get_pnas_paths(data_path, split="train")
+        raw_key, label_key = "raw/membrane", "labels/membrane"
     return paths, label_paths, raw_key, label_key
 
 

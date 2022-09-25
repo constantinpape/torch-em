@@ -93,23 +93,26 @@ def create_input_3d(input_path, rf_path):
 
 def export_enhancer(input_, is3d, checkpoint=None, version=None, name=None):
 
+    if isinstance(is3d, str) and is3d != "anisotropic":
+        is3d = bool(int(is3d))
+
     if checkpoint is None:
-        checkpoint = "./checkpoints/shallow2deep-mitoem3d" if is3d else\
-            "./checkpoints/shallow2deep-mitoem2d"
+        checkpoint = "checkpoints/s2d-em-mitos-lucchi_urocell-3d-worst_tiles/" if is3d else\
+            "./checkpoints/s2d-em-mitos-lucchi_mitoem_vnc-2d-worst_tiles/"
         out_folder = "./bio-models"
     else:
         assert version is not None
         out_folder = f"./bio-models/v{version}"
 
     if is3d == "anisotropic":
-        rf_path = "/scratch/pape/s2d-mitochondria/rfs2d-worst_points/mitoem/rf_0499.pkl"
+        rf_path = "/scratch/pape/s2d-mitochondria/rfs2d-worst_tiles/mitoem/rf_0499.pkl"
         input_data = create_input_anisotropic(input_, rf_path)
         is3d = True
     elif is3d:
         rf_path = "/scratch/pape/s2d-mitochondria/rfs3d-worst_tiles/kasthuri/rf_0499.pkl"
         input_data = create_input_3d(input_, rf_path)
     else:
-        rf_path = "/scratch/pape/s2d-mitochondria/rfs2d-worst_points/mitoem/rf_0499.pkl"
+        rf_path = "/scratch/pape/s2d-mitochondria/rfs2d-worst_tiles/mitoem/rf_0499.pkl"
         input_data = create_input_2d(input_, rf_path)
 
     name, description = _get_name_and_description(is3d, name)
@@ -123,7 +126,8 @@ def export_enhancer(input_, is3d, checkpoint=None, version=None, name=None):
     cite.append({"text": "data", "doi": mitoem_doi})
     cite.append({"text": "shallow2deep", "doi": s2d_doi})
     doc = _get_doc(checkpoint, name, is3d)
-    additional_formats = ["torchscript"]
+    # additional_formats = ["torchscript"]
+    additional_formats = None
 
     os.makedirs(out_folder, exist_ok=True)
     output = os.path.join(out_folder, name)
@@ -149,7 +153,7 @@ def export_enhancer(input_, is3d, checkpoint=None, version=None, name=None):
         cite=cite,
         input_optional_parameters=False,
         # need custom deepimagej fields if we have torchscript export
-        for_deepimagej="torchscript" in additional_formats,
+        for_deepimagej=False if additional_formats is None else ("torchscript" in additional_formats),
         training_data={"id": get_bioimageio_dataset_id("mitoem")},
         maintainers=[{"github_user": "constantinpape"}],
         min_shape=min_shape,
