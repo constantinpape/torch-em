@@ -4,14 +4,16 @@ from glob import glob
 import torch
 import torch_em
 import torch_em.shallow2deep as shallow2deep
+from elf.io import open_file
 from torch_em.model import UNet3d
 from torch_em.data.datasets.mouse_embryo import _require_embryo_data
 from torch_em.data.datasets.plantseg import _require_plantseg_data
+from torch_em.data.datasets.pnas_arabidopsis import _require_pnas_data
 
 
 # any more publicly available datasets?
 DATA_ROOT = "/scratch/pape/s2d-lm-boundaries"
-DATASETS = ["mouse-embryo", "ovules", "root"]
+DATASETS = ["mouse-embryo", "ovules", "pnas", "root"]
 
 
 def normalize_datasets(datasets):
@@ -20,6 +22,22 @@ def normalize_datasets(datasets):
         raise ValueError(f"Unkown datasets: {wrong_ds}. Only {DATASETS} are supported")
     datasets = list(sorted(datasets))
     return datasets
+
+
+def _get_pnas_paths(pnas_root, split):
+    folders = glob(os.path.join(pnas_root, "plant*"))
+    folders.sort()
+    paths = []
+    for folder in folders:
+        all_paths = glob(os.path.join(folder, "*.h5"))
+        all_paths.sort()
+        this_paths = [
+            pp for pp in all_paths if "labels/membrane" in open_file(pp, "r")
+        ]
+        paths.extend(
+            this_paths[:-2] if split == "train" else this_paths[-2:]
+        )
+    return paths
 
 
 def require_ds(dataset):
@@ -33,6 +51,10 @@ def require_ds(dataset):
         _require_plantseg_data(data_path, True, "ovules", "train")
         paths = glob(os.path.join(data_path, "ovules_train", "*.h5"))
         raw_key, label_key = "raw", "label"
+    elif dataset == "pnas":
+        _require_pnas_data(data_path, True)
+        paths = _get_pnas_paths(data_path, split="train")
+        raw_key, label_key = "raw/membrane", "labels/membrane"
     elif dataset == "mouse-embryo":
         _require_embryo_data(data_path, True)
         paths = glob(os.path.join(data_path, "Membrane", "train", "*.h5"))
@@ -77,8 +99,11 @@ def get_ds(file_pattern, rf_pattern, n_samples, sampler):
     label_transform = torch_em.transform.BoundaryTransform(ndim=3, add_binary_target=False)
     patch_shape = [64, 128, 128]
     raw_key, label_key = "raw", "label"
-    paths = glob(file_pattern)
-    paths.sort()
+    if isinstance(file_pattern, str):
+        paths = glob(file_pattern)
+        paths.sort()
+    else:
+        paths = file_pattern
     assert len(paths) > 0
     rf_paths = glob(rf_pattern)
     rf_paths.sort()
@@ -107,6 +132,13 @@ def get_loader(args, split, dataset_names):
         rf_pattern = os.path.join(DATA_ROOT, f"rfs3d-{args.sampling_strategy}", ds_name, "*.pkl")
         sampler = torch_em.data.MinForegroundSampler(min_fraction=0.25, background_id=0)
         datasets.append(get_ds(file_pattern, rf_pattern, n_samples, sampler))
+    if "pnas" in dataset_names:
+        ds_name = "pnas"
+        files = _get_pnas_paths(os.path.join(DATA_ROOT, ds_name), split=split)
+        rf_pattern = os.path.join(DATA_ROOT, f"rfs2d-{args.sampling_strategy}", ds_name, "*.pkl")
+        sampler = torch_em.data.MinForegroundSampler(min_fraction=0.4, background_id=0)
+        datasets.append(get_ds(files, rf_pattern, n_samples, sampler=sampler,
+                               raw_key="raw/membrane", label_key="labels/membrane"))
     if "root" in dataset_names:
         ds_name = "root"
         _require_plantseg_data(os.path.join(DATA_ROOT, ds_name), True, ds_name, split)

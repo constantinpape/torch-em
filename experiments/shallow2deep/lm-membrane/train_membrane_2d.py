@@ -5,16 +5,18 @@ import numpy as np
 import torch
 import torch_em
 import torch_em.shallow2deep as shallow2deep
+from elf.io import open_file
 from torch_em.model import UNet2d
 from torch_em.data.datasets.covid_if import _download_covid_if
 from torch_em.data.datasets.mouse_embryo import _require_embryo_data
 from torch_em.data.datasets.plantseg import _require_plantseg_data
+from torch_em.data.datasets.pnas_arabidopsis import _require_pnas_data
 from torch_em.data.datasets.livecell import _download_livecell_images, _download_livecell_annotations
 
 
 # any more publicly available datasets?
 DATA_ROOT = "/scratch/pape/s2d-lm-boundaries"
-DATASETS = ["covid-if", "livecell", "mouse-embryo", "ovules", "root"]
+DATASETS = ["covid-if", "livecell", "mouse-embryo", "ovules", "pnas", "root"]
 
 
 def normalize_datasets(datasets):
@@ -29,6 +31,22 @@ def _require_livecell_data(data_path, split):
     _download_livecell_images(data_path, True)
     image_paths, label_paths = _download_livecell_annotations(data_path, split, True)
     return image_paths, label_paths
+
+
+def _get_pnas_paths(pnas_root, split):
+    folders = glob(os.path.join(pnas_root, "plant*"))
+    folders.sort()
+    paths = []
+    for folder in folders:
+        all_paths = glob(os.path.join(folder, "*.h5"))
+        all_paths.sort()
+        this_paths = [
+            pp for pp in all_paths if "labels/membrane" in open_file(pp, "r")
+        ]
+        paths.extend(
+            this_paths[:-2] if split == "train" else this_paths[-2:]
+        )
+    return paths
 
 
 def require_ds(dataset):
@@ -54,6 +72,11 @@ def require_ds(dataset):
         paths = glob(os.path.join(data_path, "ovules_train", "*.h5"))
         label_paths = paths
         raw_key, label_key = "raw", "label"
+    elif dataset == "pnas":
+        _require_pnas_data(data_path, True)
+        paths = _get_pnas_paths(data_path, split="train")
+        label_paths = paths
+        raw_key, label_key = "raw/membrane", "labels/membrane"
     elif dataset == "root":
         _require_plantseg_data(data_path, True, "root", "train")
         paths = glob(os.path.join(data_path, "root_train", "*.h5"))
@@ -108,8 +131,11 @@ def get_ds(
     raw_transform = torch_em.transform.raw.normalize
     label_transform = torch_em.transform.BoundaryTransform(ndim=2, add_binary_target=False)
     patch_shape = [1, 256, 256] if is3d_data else [256, 256]
-    paths = glob(file_pattern)
-    paths.sort()
+    if isinstance(file_pattern, str):
+        paths = glob(file_pattern)
+        paths.sort()
+    else:
+        paths = file_pattern
     assert len(paths) > 0
     if path_selection is not None:
         paths = paths[path_selection]
@@ -161,6 +187,13 @@ def get_loader(args, split, dataset_names):
         rf_pattern = os.path.join(DATA_ROOT, f"rfs2d-{args.sampling_strategy}", ds_name, "*.pkl")
         sampler = torch_em.data.MinForegroundSampler(min_fraction=0.4, background_id=0)
         datasets.append(get_ds(file_pattern, rf_pattern, n_samples, sampler=sampler))
+    if "pnas" in dataset_names:
+        ds_name = "pnas"
+        files = _get_pnas_paths(os.path.join(DATA_ROOT, ds_name), split=split)
+        rf_pattern = os.path.join(DATA_ROOT, f"rfs2d-{args.sampling_strategy}", ds_name, "*.pkl")
+        sampler = torch_em.data.MinForegroundSampler(min_fraction=0.4, background_id=0)
+        datasets.append(get_ds(files, rf_pattern, n_samples, sampler=sampler,
+                               raw_key="raw/membrane", label_key="labels/membrane"))
     if "root" in dataset_names:
         ds_name = "root"
         _require_plantseg_data(os.path.join(DATA_ROOT, ds_name), True, ds_name, split)
@@ -171,7 +204,7 @@ def get_loader(args, split, dataset_names):
     assert len(datasets) > 0
     ds = torch_em.data.concat_dataset.ConcatDataset(*datasets)
     loader = torch.utils.data.DataLoader(
-        ds, shuffle=True, batch_size=args.batch_size, num_workers=12
+        ds, shuffle=True, batch_size=args.batch_size, num_workers=24
     )
     loader.shuffle = True
     return loader
@@ -214,7 +247,7 @@ def check(args, train=True, val=True, n_images=2):
 
 
 if __name__ == "__main__":
-    parser = torch_em.util.parser_helper(require_input=False, default_batch_size=4)
+    parser = torch_em.util.parser_helper(require_input=False, default_batch_size=8)
     parser.add_argument("--datasets", "-d", nargs="+", default=DATASETS)
     parser.add_argument("--n_rfs", type=int, default=500, help="Number of forests per dataset")
     parser.add_argument("--n_threads", type=int, default=32)
