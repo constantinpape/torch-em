@@ -9,7 +9,7 @@ from torchvision import transforms
 
 
 def standardize(raw, mean=None, std=None, axis=None, eps=1e-7):
-    raw = raw.astype('float32')
+    raw = raw.astype("float32")
 
     mean = raw.mean(axis=axis, keepdims=True) if mean is None else mean
     raw -= mean
@@ -21,17 +21,17 @@ def standardize(raw, mean=None, std=None, axis=None, eps=1e-7):
 
 
 TORCH_DTYPES = {
-    'float16': torch.float16,
-    'float32': torch.float32,
-    'float64': torch.float64,
-    'complex64': torch.complex64,
-    'complex128': torch.complex128,
-    'uint8': torch.uint8,
-    'int8': torch.int8,
-    'int16': torch.int16,
-    'int32': torch.int32,
-    'int64': torch.int64,
-    'bool': torch.bool,
+    "float16": torch.float16,
+    "float32": torch.float32,
+    "float64": torch.float64,
+    "complex64": torch.complex64,
+    "complex128": torch.complex128,
+    "uint8": torch.uint8,
+    "int8": torch.int8,
+    "int16": torch.int16,
+    "int32": torch.int32,
+    "int64": torch.int64,
+    "bool": torch.bool,
 }
 
 def cast(inpt, typestring):
@@ -45,7 +45,7 @@ def _normalize_torch(tensor, minval=None, maxval=None, axis=None, eps=1e-7):
     if axis: # torch returns torch.return_types.min or torch.return_types.max
         minval = tensor.min(dim=axis, keepdim=True).values if minval is None else minval
         tensor -= minval
-    
+
         maxval = tensor.max(dim=axis, keepdim=True).values if maxval is None else maxval
         tensor /= (maxval + eps)
 
@@ -62,8 +62,8 @@ def _normalize_torch(tensor, minval=None, maxval=None, axis=None, eps=1e-7):
 
 
 def normalize(raw, minval=None, maxval=None, axis=None, eps=1e-7):
-    raw = cast(raw, 'float32')
-    
+    raw = cast(raw, "float32")
+
     if torch.is_tensor(raw):
         return _normalize_torch(raw, minval=minval, maxval=maxval, axis=axis, eps=eps)
 
@@ -91,7 +91,7 @@ class RandomContrast():
     """
     Adjust contrast by scaling image to `mean + alpha * (image - mean)`.
     """
-    def __init__(self, alpha=(0.5, 1.5), mean=0.0, clip_kwargs={}): # {'a_min': 0, 'a_max': 1}):
+    def __init__(self, alpha=(0.5, 1.5), mean=0.0, clip_kwargs={}): # {"a_min": 0, "a_max": 1}):
         self.alpha = alpha
         self.mean = mean
         self.clip_kwargs = clip_kwargs
@@ -166,7 +166,7 @@ def get_default_mean_teacher_augmentations(p=0.5):
         transforms.RandomApply([AdditivePoissonNoise()], p=p)
     ])
     aug2 = transforms.RandomApply(
-        [RandomContrast(clip_kwargs={'a_min': 0, 'a_max': 1})], p=p
+        [RandomContrast(clip_kwargs={"a_min": 0, "a_max": 1})], p=p
     )
     return get_raw_transform(
         normalizer=norm,
