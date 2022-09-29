@@ -118,7 +118,7 @@ class TestLabelTransforms(unittest.TestCase):
 
     def test_distance_transform(self):
         from torch_em.transform.label import DistanceTransform
-        target = np.random.rand(128, 128) > 0.95
+        target = (np.random.rand(128, 128) > 0.95).astype("uint8")
 
         trafo = DistanceTransform(normalize=True, max_distance=None)
         tnew = trafo(target)
@@ -144,6 +144,11 @@ class TestLabelTransforms(unittest.TestCase):
         self.assertEqual(tnew.shape, (3,) + target.shape)
         self.assertTrue((tnew >= -1).all())
         self.assertTrue((tnew <= 1).all())
+
+        trafo = DistanceTransform(invert=True, max_distance=10, normalize=True)
+        target = np.zeros((128, 128), dtype="uint8")
+        tnew = trafo(target)
+        self.assertTrue(np.allclose(tnew, 0.0))
 
 
 if __name__ == '__main__':
