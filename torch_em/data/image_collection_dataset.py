@@ -6,6 +6,7 @@ from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
 
 # TODO pad images that are too small for the patch shape
 class ImageCollectionDataset(torch.utils.data.Dataset):
+    max_sampling_attempts = 500
 
     def _check_inputs(self, raw_images, label_images):
         if len(raw_images) != len(label_images):
@@ -53,6 +54,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         dtype=torch.float32,
         label_dtype=torch.float32,
         n_samples=None,
+        sampler=None,
     ):
         self._check_inputs(raw_image_paths, label_image_paths)
         self.raw_images = raw_image_paths
@@ -66,6 +68,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         self.label_transform = label_transform
         self.label_transform2 = label_transform2
         self.transform = transform
+        self.sampler = sampler
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -86,7 +89,9 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
     def _sample_bounding_box(self, shape):
         if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
-            raise NotImplementedError("Image padding is not supported yet. Data shape {shape}, patch shape {self.patch_shape}")
+            raise NotImplementedError(
+                "Image padding is not supported yet. Data shape {shape}, patch shape {self.patch_shape}"
+            )
         bb_start = [
             np.random.randint(0, sh - psh) if sh - psh > 0 else 0
             for sh, psh in zip(shape, self.patch_shape)
@@ -107,8 +112,8 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
             raise NotImplementedError("Multi-channel labels are not supported.")
 
         shape = raw.shape
-        # we determine if image has channels as te first or last axis base on array shape. 
-        # This will work only for images with less than 16 channels. 
+        # we determine if image has channels as te first or last axis base on array shape.
+        # This will work only for images with less than 16 channels.
         prefix_box = tuple()
         if have_raw_channels:
             # use heuristic to decide whether the data is stored in channel last or channel first order:
@@ -119,19 +124,27 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
             else:
                 shape = shape[1:]
                 prefix_box = (slice(None), )
-                
 
         # sample random bounding box for this image
         bb = self._sample_bounding_box(shape)
+        raw_patch = np.array(raw[prefix_box + bb])
+        label_patch = np.array(label[bb])
 
-        raw = np.array(raw[prefix_box + bb])
-        label = np.array(label[bb])
+        if self.sampler is not None:
+            sample_id = 0
+            while not self.sampler(raw_patch, label_patch):
+                bb = self._sample_bounding_box(shape)
+                raw_patch = np.array(raw[prefix_box + bb])
+                label_patch = np.array(label[bb])
+                sample_id += 1
+                if sample_id > self.max_sampling_attempts:
+                    raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
         # to channel first
         if have_raw_channels and len(prefix_box) == 0:
-            raw = raw.transpose((2, 0, 1))
+            raw_patch = raw_patch.transpose((2, 0, 1))
 
-        return raw, label
+        return raw_patch, label_patch
 
     def __getitem__(self, index):
         raw, labels = self._get_sample(index)
