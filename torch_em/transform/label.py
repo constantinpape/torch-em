@@ -161,6 +161,8 @@ class OneHotTransform:
 
 
 class DistanceTransform:
+    eps = 1e-7
+
     def __init__(
         self,
         distances=True, vector_distances=False,
@@ -181,7 +183,7 @@ class DistanceTransform:
         if self.max_distance is not None:
             distances = np.clip(distances, 0, self.max_distance)
         if self.normalize:
-            distances /= distances.max()
+            distances /= (distances.max() + self.eps)
         if self.invert:
             distances = distances.max() - distances
         if self.func is not None:
@@ -194,7 +196,7 @@ class DistanceTransform:
         if self.max_distance is not None:
             vector_distances = np.clip(vector_distances, -self.max_distance, self.max_distance)
         if self.normalize:
-            vector_distances /= np.abs(vector_distances).max(axis=(1, 2), keepdims=True)
+            vector_distances /= (np.abs(vector_distances).max(axis=(1, 2), keepdims=True) + self.eps)
         if self.invert:
             vector_distances = vector_distances.max(axis=(1, 2), keepdims=True) - vector_distances
         if self.func is not None:
@@ -202,9 +204,19 @@ class DistanceTransform:
         return vector_distances
 
     def __call__(self, labels):
-        data = distance_transform_edt(labels != self.foreground_id,
-                                      return_distances=self.distances,
-                                      return_indices=self.vector_distances)
+        # something is wrong if the labels are all zero
+        distance_mask = labels != self.foreground_id
+        if distance_mask.sum() != distance_mask.size:
+            data = distance_transform_edt(distance_mask,
+                                          return_distances=self.distances,
+                                          return_indices=self.vector_distances)
+        elif self.distances and self.vector_distances:
+            data = (np.zeros(labels.shape), np.zeros((labels.ndim,) + labels.shape))
+        elif self.distances:
+            data = np.zeros(labels.shape)
+        elif self.vector_distances:
+            data = np.zeros((labels.ndim,) + labels.shape)
+
         if self.distances:
             distances = data[0] if self.vector_distances else data
             distances = self._compute_distances(distances)
