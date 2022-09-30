@@ -37,7 +37,7 @@ def create_all_sparse_labels(label_root):
 
 
 def main():
-    data_root = "/home/pape/Work/data/dsb"
+    data_root = "/g/kreshuk/pape/Work/data/data_science_bowl/dsb2018/"
     create_all_sparse_labels(os.path.join(data_root, "train"))
     create_all_sparse_labels(os.path.join(data_root, "test"))
 

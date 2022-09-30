@@ -1,7 +1,10 @@
 # TODO this should be partially refactored into elf.io before the next elf release
 # and then be used in image_stack_wrapper as welll
 import os
-import imageio.v2 as imageio
+try:
+    import imageio.v2 as imageio
+except ImportError:
+    import imageio
 
 try:
     import tifffile
