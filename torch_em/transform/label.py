@@ -203,19 +203,29 @@ class DistanceTransform:
             vector_distances = self.func(vector_distances)
         return vector_distances
 
+    def _get_distances_for_empty_labels(self, labels):
+        shape = labels.shape
+        fill_value = 0.0 if self.invert else np.linalg.norm(list(shape))
+        if self.distances and self.vector_distances:
+            data = (np.full(shape, fill_value), np.full((labels.ndim,) + shape, fill_value))
+        elif self.distances:
+            data = np.full(shape, fill_value)
+        elif self.vector_distances:
+            data = np.full((labels.ndim,) + shape, fill_value)
+        else:
+            raise RuntimeError
+        return data
+
     def __call__(self, labels):
-        # something is wrong if the labels are all zero
         distance_mask = labels != self.foreground_id
-        if distance_mask.sum() != distance_mask.size:
+        # the distances are not computed corrected if they are all zero
+        # so this case needs to be handled separately
+        if distance_mask.sum() == distance_mask.size:
+            data = self._get_distances_for_empty_labels(labels)
+        else:
             data = distance_transform_edt(distance_mask,
                                           return_distances=self.distances,
                                           return_indices=self.vector_distances)
-        elif self.distances and self.vector_distances:
-            data = (np.zeros(labels.shape), np.zeros((labels.ndim,) + labels.shape))
-        elif self.distances:
-            data = np.zeros(labels.shape)
-        elif self.vector_distances:
-            data = np.zeros((labels.ndim,) + labels.shape)
 
         if self.distances:
             distances = data[0] if self.vector_distances else data

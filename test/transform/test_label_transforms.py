@@ -145,10 +145,29 @@ class TestLabelTransforms(unittest.TestCase):
         self.assertTrue((tnew >= -1).all())
         self.assertTrue((tnew <= 1).all())
 
-        trafo = DistanceTransform(invert=True, max_distance=10, normalize=True)
+    def test_distance_transform_empty_labels(self):
+        from torch_em.transform.label import DistanceTransform
         target = np.zeros((128, 128), dtype="uint8")
+
+        trafo = DistanceTransform(invert=True, normalize=True)
         tnew = trafo(target)
         self.assertTrue(np.allclose(tnew, 0.0))
+
+        trafo = DistanceTransform(invert=True, normalize=False)
+        tnew = trafo(target)
+        self.assertTrue(np.allclose(tnew, 0.0))
+
+        trafo = DistanceTransform(invert=False, normalize=False)
+        tnew = trafo(target)
+        self.assertTrue(np.allclose(tnew, np.linalg.norm([128, 128])))
+
+        trafo = DistanceTransform(invert=False, normalize=False, max_distance=10)
+        tnew = trafo(target)
+        self.assertTrue(np.allclose(tnew, 10.0))
+
+        trafo = DistanceTransform(invert=False, normalize=True)
+        tnew = trafo(target)
+        self.assertTrue(np.allclose(tnew, 1.0))
 
 
 if __name__ == '__main__':
