@@ -122,6 +122,7 @@ class AdditivePoissonNoise():
     """
     Add random Poisson noise to image.
     """
+    # TODO: not sure if this does make sense for data that is already normalized
     def __init__(self, lam=(0.0, 0.75)):
         self.lam = lam
 
@@ -129,6 +130,23 @@ class AdditivePoissonNoise():
         lam = np.random.uniform(self.lam[0], self.lam[1])
         poisson_noise = np.random.poisson(lam, size=img.shape)
         return img + poisson_noise
+
+
+class PoissonNoise():
+    """
+    Add random data-dependent Poisson noise to image.
+    """
+    def __init__(self, multiplier=(1.0, 10.0), clip_kwargs={'a_min': 0, 'a_max': 1}):
+        self.multiplier = multiplier
+        self.clip_kwargs = clip_kwargs
+
+    def __call__(self, img, multiplier=None):
+        multiplier = np.random.uniform(self.multiplier[0], self.multiplier[1])
+        offset = img.min()
+        poisson_noise = np.random.poisson((img - offset) * multiplier) / multiplier + offset
+        if self.clip_kwargs:
+            return np.clip(poisson_noise, **self.clip_kwargs)
+        return poisson_noise
 
 
 class GaussianBlur():
@@ -182,7 +200,7 @@ def get_default_mean_teacher_augmentations(p=0.5):
         normalize,
         transforms.RandomApply([GaussianBlur()], p=p),
         transforms.RandomApply([AdditiveGaussianNoise()], p=p),
-        transforms.RandomApply([AdditivePoissonNoise()], p=p)
+        transforms.RandomApply([PoissonNoise()], p=p)
     ])
     aug2 = transforms.RandomApply([RandomContrast()], p=p)
     return get_raw_transform(
