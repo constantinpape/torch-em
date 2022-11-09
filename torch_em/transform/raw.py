@@ -144,10 +144,13 @@ class PoissonNoise():
         self.multiplier = multiplier
         self.clip_kwargs = clip_kwargs
 
-    def __call__(self, img, multiplier=None):
+    def __call__(self, img):
         multiplier = np.random.uniform(self.multiplier[0], self.multiplier[1])
         offset = img.min()
-        poisson_noise = np.random.poisson((img - offset) * multiplier) / multiplier + offset
+        poisson_noise = np.random.poisson((img - offset) * multiplier)
+        if isinstance(img, torch.Tensor):
+            poisson_noise = torch.Tensor(poisson_noise)
+        poisson_noise = poisson_noise / multiplier + offset
         if self.clip_kwargs:
             return np.clip(poisson_noise, **self.clip_kwargs)
         return poisson_noise
