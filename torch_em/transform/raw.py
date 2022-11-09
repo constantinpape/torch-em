@@ -122,13 +122,17 @@ class AdditivePoissonNoise():
     """
     Add random Poisson noise to image.
     """
-    # TODO: not sure if this does make sense for data that is already normalized
-    def __init__(self, lam=(0.0, 0.75)):
+    # TODO: not sure if Poisson noise like this does make sense
+    # for data that is already normalized
+    def __init__(self, lam=(0.0, 0.3), clip_kwargs={'a_min': 0, 'a_max': 1}):
         self.lam = lam
+        self.clip_kwargs = clip_kwargs
 
     def __call__(self, img):
         lam = np.random.uniform(self.lam[0], self.lam[1])
-        poisson_noise = np.random.poisson(lam, size=img.shape)
+        poisson_noise = np.random.poisson(lam, size=img.shape) / lam
+        if self.clip_kwargs:
+            return np.clip(img + poisson_noise, 0, 1)
         return img + poisson_noise
 
 
