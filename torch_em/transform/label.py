@@ -161,6 +161,8 @@ class OneHotTransform:
 
 
 class DistanceTransform:
+    eps = 1e-7
+
     def __init__(
         self,
         distances=True, vector_distances=False,
@@ -181,7 +183,7 @@ class DistanceTransform:
         if self.max_distance is not None:
             distances = np.clip(distances, 0, self.max_distance)
         if self.normalize:
-            distances /= distances.max()
+            distances /= (distances.max() + self.eps)
         if self.invert:
             distances = distances.max() - distances
         if self.func is not None:
@@ -194,17 +196,37 @@ class DistanceTransform:
         if self.max_distance is not None:
             vector_distances = np.clip(vector_distances, -self.max_distance, self.max_distance)
         if self.normalize:
-            vector_distances /= np.abs(vector_distances).max(axis=(1, 2), keepdims=True)
+            vector_distances /= (np.abs(vector_distances).max(axis=(1, 2), keepdims=True) + self.eps)
         if self.invert:
             vector_distances = vector_distances.max(axis=(1, 2), keepdims=True) - vector_distances
         if self.func is not None:
             vector_distances = self.func(vector_distances)
         return vector_distances
 
+    def _get_distances_for_empty_labels(self, labels):
+        shape = labels.shape
+        fill_value = 0.0 if self.invert else np.linalg.norm(list(shape))
+        if self.distances and self.vector_distances:
+            data = (np.full(shape, fill_value), np.full((labels.ndim,) + shape, fill_value))
+        elif self.distances:
+            data = np.full(shape, fill_value)
+        elif self.vector_distances:
+            data = np.full((labels.ndim,) + shape, fill_value)
+        else:
+            raise RuntimeError
+        return data
+
     def __call__(self, labels):
-        data = distance_transform_edt(labels != self.foreground_id,
-                                      return_distances=self.distances,
-                                      return_indices=self.vector_distances)
+        distance_mask = labels != self.foreground_id
+        # the distances are not computed corrected if they are all zero
+        # so this case needs to be handled separately
+        if distance_mask.sum() == distance_mask.size:
+            data = self._get_distances_for_empty_labels(labels)
+        else:
+            data = distance_transform_edt(distance_mask,
+                                          return_distances=self.distances,
+                                          return_indices=self.vector_distances)
+
         if self.distances:
             distances = data[0] if self.vector_distances else data
             distances = self._compute_distances(distances)
