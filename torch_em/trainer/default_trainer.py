@@ -199,10 +199,34 @@ class DefaultTrainer:
     @classmethod
     def from_checkpoint(cls, checkpoint_folder, name="best", device=None):
         save_path = os.path.join(checkpoint_folder, f"{name}.pt")
+        # make sure the correct device is set if we don't have access to CUDA
+        if not torch.cuda.is_available():
+            device = "cpu"
         save_dict = cls._get_save_dict(save_path, device)
         deserializer = cls.Deserializer(save_dict["init"], save_path, device)
+
+        has_kwargs = False
+        deserialized = []
         for name, parameter in inspect.signature(cls).parameters.items():
+            if name == "kwargs":
+                has_kwargs = True
+                continue
             deserializer.load(name, optional=parameter.default is not inspect.Parameter.empty)
+            deserialized.append(name)
+
+        # to deserialze kwargs we can't rely on inspecting the signature, so we
+        # go through the remaning kwarg names in init data instead
+        if has_kwargs:
+            kwarg_names = list(set(deserializer.init_data.keys()) - set(deserialized))
+            for name in kwarg_names:
+                if name.endswith("_kwargs"):
+                    continue
+                elif name.endswith("_dataset"):
+                    deserializer.load(name.replace("dataset", "loader"), optional=False)
+                elif name.endswith("_class"):
+                    deserializer.load(name.replace("_class", ""), optional=False)
+                else:
+                    deserializer.load(name, optional=False)
 
         trainer = cls(**deserializer.trainer_kwargs)
         trainer._initialize(0, save_dict)
@@ -321,6 +345,8 @@ class DefaultTrainer:
         def dump_data_loader(self, kwarg_name: str) -> None:
             assert hasattr(self.trainer, kwarg_name)
             loader = getattr(self.trainer, kwarg_name)
+            if loader is None:
+                return
             self.init_data.update(
                 {
                     f"{kwarg_name.replace('_loader', '_dataset')}": loader.dataset,
@@ -334,6 +360,18 @@ class DefaultTrainer:
     def _build_init(self) -> Dict[str, Any]:
         serializer = self.Serializer(self)
         for name in inspect.signature(self.__class__).parameters:
+            # special rules to serialize kwargs
+            # if a trainer class inherits from DefaultTrainer and has **kwargs
+            # they need to be saved in self._kwargs
+            if name == "kwargs":
+                if not hasattr(self, "_kwargs"):
+                    msg = "The trainer class has **kwargs in its signature, but is missing the _kwargs attribute. " +\
+                          "Please add self._kwargs to its __init__ function"
+                    raise RuntimeError(msg)
+                kwargs = getattr(self, "_kwargs")
+                for kwarg_name in kwargs:
+                    serializer.dump(kwarg_name)
+                continue
             serializer.dump(name)
 
         return serializer.init_data
@@ -417,6 +455,8 @@ class DefaultTrainer:
             self.scaler.load_state_dict(save_dict["scaler_state"])
         if self.lr_scheduler is not None:
             self.lr_scheduler.load_state_dict(save_dict["scheduler_state"])
+
+        return save_dict
 
     def fit(self, iterations, load_from_checkpoint=None):
         best_metric = self._initialize(iterations, load_from_checkpoint)

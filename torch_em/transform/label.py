@@ -25,14 +25,14 @@ def labels_to_binary(labels, background_label=0):
 
 def label_consecutive(labels, with_background=True):
     if with_background:
-        return skimage.segmentation.relabel_sequential(labels)[0]
+        seg = skimage.segmentation.relabel_sequential(labels)[0]
     else:
         if 0 in labels:
             labels += 1
         seg = skimage.segmentation.relabel_sequential(labels)[0]
         assert seg.min() == 1
         seg -= 1
-        return seg
+    return seg
 
 
 # TODO smoothing
