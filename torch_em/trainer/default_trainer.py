@@ -199,6 +199,9 @@ class DefaultTrainer:
     @classmethod
     def from_checkpoint(cls, checkpoint_folder, name="best", device=None):
         save_path = os.path.join(checkpoint_folder, f"{name}.pt")
+        # make sure the correct device is set if we don't have access to CUDA
+        if not torch.cuda.is_available():
+            device = "cpu"
         save_dict = cls._get_save_dict(save_path, device)
         deserializer = cls.Deserializer(save_dict["init"], save_path, device)
 
