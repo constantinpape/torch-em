@@ -6,16 +6,16 @@ import torch.cuda.amp as amp
 from .default_trainer import DefaultTrainer
 
 
-# TODO over-ride from_checkpoint, load_checkpoint to load the model
 class SPOCOTrainer(DefaultTrainer):
     def __init__(
         self,
+        model,
         momentum=0.999,
         semisupervised_loss=None,
         semisupervised_loader=None,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(model=model, **kwargs)
         self.momentum = momentum
         # copy the model and don"t require gradients for it
         self.model2 = deepcopy(self.model)
@@ -25,6 +25,7 @@ class SPOCOTrainer(DefaultTrainer):
         assert (semisupervised_loss is None) == (semisupervised_loader is None)
         self.semisupervised_loader = semisupervised_loader
         self.semisupervised_loss = semisupervised_loss
+        self._kwargs = kwargs
 
     def _momentum_update(self):
         for param1, param2 in zip(self.model.parameters(), self.model2.parameters()):
@@ -33,6 +34,12 @@ class SPOCOTrainer(DefaultTrainer):
     def save_checkpoint(self, name, best_metric):
         model2_state = {"model2_state": self.model2.state_dict()}
         super().save_checkpoint(name, best_metric, **model2_state)
+
+    def load_checkpoint(self, checkpoint="best"):
+        save_dict = super().load_checkpoint(checkpoint)
+        self.model2.load_state_dict(save_dict["model2_state"])
+        self.model2.to(self.device)
+        return save_dict
 
     def _initialize(self, iterations, load_from_checkpoint):
         best_metric = super()._initialize(iterations, load_from_checkpoint)
