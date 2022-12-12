@@ -26,6 +26,8 @@ def compute_cluster_means(embeddings, target, n_instances):
     assert scatter_mean is not None, "torch_scatter is required"
     embeddings = embeddings.flatten(1)
     target = target.flatten()
+    assert target.min() == 0,\
+        "The target min value has to be zero, otherwise this will lead to errors in scatter"
     mean_embeddings = scatter_mean(embeddings, target, dim_size=n_instances)
     return mean_embeddings.transpose(1, 0)
 
@@ -201,7 +203,7 @@ class ContrastiveLossBase(nn.Module):
 
     def compute_instance_term(self, embeddings, cluster_means, target):
         """Computes auxiliary loss based on embeddings and a given list of target
-        instances together with their mean embeddings
+        instances together with their mean embeddings.
 
         Args:
             embeddings (torch.tensor): pixel embeddings (ExSPATIAL)

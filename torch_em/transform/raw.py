@@ -34,6 +34,7 @@ TORCH_DTYPES = {
     "bool": torch.bool,
 }
 
+
 def cast(inpt, typestring):
     if torch.is_tensor(inpt):
         assert typestring in TORCH_DTYPES, f"{typestring} not in TORCH_DTYPES"
@@ -42,7 +43,7 @@ def cast(inpt, typestring):
 
 
 def _normalize_torch(tensor, minval=None, maxval=None, axis=None, eps=1e-7):
-    if axis: # torch returns torch.return_types.min or torch.return_types.max
+    if axis:  # torch returns torch.return_types.min or torch.return_types.max
         minval = tensor.min(dim=axis, keepdim=True).values if minval is None else minval
         tensor -= minval
 
@@ -86,12 +87,13 @@ def normalize_percentile(raw, lower=1.0, upper=99.0, axis=None, eps=1e-7):
 #
 # intensity augmentations / noise augmentations
 #
+
 # modified from https://github.com/kreshuklab/spoco/blob/main/spoco/transforms.py
 class RandomContrast():
     """
     Adjust contrast by scaling image to `mean + alpha * (image - mean)`.
     """
-    def __init__(self, alpha=(0.5, 1.5), mean=0.0, clip_kwargs={}): # {"a_min": 0, "a_max": 1}):
+    def __init__(self, alpha=(0.05, 4), mean=0.5, clip_kwargs={'a_min': 0, 'a_max': 1}):
         self.alpha = alpha
         self.mean = mean
         self.clip_kwargs = clip_kwargs
@@ -108,7 +110,7 @@ class AdditiveGaussianNoise():
     """
     Add random Gaussian noise to image.
     """
-    def __init__(self, scale=(0.0, 1.0)):
+    def __init__(self, scale=(0.0, 0.75)):
         self.scale = scale
 
     def __call__(self, img):
@@ -121,13 +123,29 @@ class AdditivePoissonNoise():
     """
     Add random Poisson noise to image.
     """
-    def __init__(self, lam=(0.0, 1.0)):
+    def __init__(self, lam=(0.0, 0.75)):
         self.lam = lam
 
     def __call__(self, img):
         lam = np.random.uniform(self.lam[0], self.lam[1])
         poisson_noise = np.random.poisson(lam, size=img.shape)
         return img + poisson_noise
+
+
+class GaussianBlur():
+    """
+    Blur the image.
+    """
+    def __init__(self, kernel_size=(2, 24), sigma=(0, 5)):
+        self.kernel_size = kernel_size
+        self.sigma = sigma
+
+    def __call__(self, img):
+        # sample kernel_size and make sure it is odd
+        kernel_size = 2 * (np.random.randint(self.kernel_size[0], self.kernel_size[1]) // 2) + 1
+        # switch boundaries to make sure 0 is excluded from sampling
+        sigma = np.random.uniform(self.sigma[1], self.sigma[0])
+        return transforms.GaussianBlur(kernel_size, sigma=sigma)(img)
 
 
 #
@@ -156,12 +174,14 @@ def get_raw_transform(normalizer=standardize, augmentation1=None, augmentation2=
                         augmentation2=augmentation2)
 
 
+# The default values are made for an image with pixel values in
+# range [0, 1]. That the image is in this range is ensured by an
+# initial normalizations step.
 def get_default_mean_teacher_augmentations(p=0.5):
     norm = normalize
     aug1 = transforms.Compose([
-        transforms.RandomApply(
-            [transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=p
-        ),
+        normalize,
+        transforms.RandomApply([GaussianBlur()], p=p),
         transforms.RandomApply([AdditiveGaussianNoise()], p=p),
         transforms.RandomApply([AdditivePoissonNoise()], p=p)
     ])
