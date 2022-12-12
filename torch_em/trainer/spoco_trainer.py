@@ -9,12 +9,13 @@ from .default_trainer import DefaultTrainer
 class SPOCOTrainer(DefaultTrainer):
     def __init__(
         self,
+        model,
         momentum=0.999,
         semisupervised_loss=None,
         semisupervised_loader=None,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(model=model, **kwargs)
         self.momentum = momentum
         # copy the model and don"t require gradients for it
         self.model2 = deepcopy(self.model)
