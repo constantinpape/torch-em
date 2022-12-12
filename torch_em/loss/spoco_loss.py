@@ -200,7 +200,8 @@ class ContrastiveLossBase(nn.Module):
         return torch.sum(norms) / cluster_means.size(0)
 
     def compute_instance_term(self, embeddings, cluster_means, target):
-        """Computes auxiliary loss based on embeddings and a given list of target instances together with their mean embeddings
+        """Computes auxiliary loss based on embeddings and a given list of target
+        instances together with their mean embeddings
 
         Args:
             embeddings (torch.tensor): pixel embeddings (ExSPATIAL)
