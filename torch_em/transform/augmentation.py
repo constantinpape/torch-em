@@ -48,7 +48,7 @@ class RandomElasticDeformationStacked(kornia.augmentation.AugmentationBase3D):
         return {"noise": noise}
 
     def __call__(self, input, params=None):
-        assert(len(input.shape) == 5)
+        assert len(input.shape) == 5
         if params is None:
             params = self.generate_parameters(input.shape)
             self._params = params
@@ -134,7 +134,7 @@ class KorniaAugmentationPipeline(torch.nn.Module):
         self.halo = self.compute_halo()
 
     # for now we only add a halo for the random rotation trafos and
-    # also don"t compute the halo dynamically based on the input shape
+    # also don't compute the halo dynamically based on the input shape
     def compute_halo(self):
         halo = None
         for aug in self.augmentations:
