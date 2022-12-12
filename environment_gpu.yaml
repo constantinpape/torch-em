@@ -1,14 +1,14 @@
 channels:
     - pytorch
+    - nvidia
     - conda-forge
 name:
     torch-em
 dependencies:
     - affogato
     - bioimageio.core >=0.5.0
-    - cudatoolkit>=11,<12  # set correct cuda version for your system
     - python-elf
-    - pytorch
+    - pytorch-cuda=11.6  # you may need to update the pytorch version to match your system
     - tensorboard
     - tifffile
     - torchvision

@@ -16,7 +16,7 @@ URLS = {
               "LIVECell/livecell_coco_train.json"),
     "val": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/"
             "LIVECell/livecell_coco_val.json"),
-    "test": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/",
+    "test": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/"
              "LIVECell/livecell_coco_test.json")
 }
 # TODO
@@ -44,7 +44,7 @@ def _download_annotation_file(path, split, download):
         url = URLS[split]
         print("Downloading livecell annotation file from", url)
         with requests.get(url, stream=True) as r:
-            with open(annotation_file, 'wb') as f:
+            with open(annotation_file, "wb") as f:
                 copyfileobj(r.raw, f)
     return annotation_file
 
@@ -122,11 +122,9 @@ def _livecell_segmentation_loader(
     **loader_kwargs
 ):
 
-    # we always use a raw transform in the convenience function
+    # add default data normalization and augmentations
     if raw_transform is None:
         raw_transform = torch_em.transform.get_raw_transform()
-
-    # we always use augmentations in the convenience function
     if transform is None:
         transform = torch_em.transform.get_augmentations(ndim=2)
 
@@ -138,11 +136,7 @@ def _livecell_segmentation_loader(
                                               label_dtype=label_dtype,
                                               transform=transform,
                                               n_samples=n_samples)
-
-    loader = torch.utils.data.DataLoader(ds, batch_size=batch_size, **loader_kwargs)
-    # monkey patch shuffle attribute to the loader
-    loader.shuffle = loader_kwargs.get('shuffle', False)
-    return loader
+    return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)
 
 
 # TODO add support for the different benchmark tasks
