@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -43,14 +44,49 @@ class LossWrapper(nn.Module):
 
 
 class ApplyMask:
-    def __call__(self, prediction, target, mask):
-        mask.requires_grad = False
+    def _crop(prediction, target, mask, channel_dim):
+        if mask.shape[channel_dim] != 1:
+            raise ValueError(
+                "_crop only supports a mask with a singleton channel axis. \
+                Please consider using masking_method=multiply."
+            )
+        mask = mask.type(torch.bool)
+        # remove singleton axis
+        mask = mask.squeeze(channel_dim)
+        # move channel axis to end
+        prediction = prediction.moveaxis(channel_dim, -1)
+        target = target.moveaxis(channel_dim, -1)
+        # output has shape N x C
+        # correct for torch_em.loss.dice.flatten_samples
+        return prediction[mask], target[mask]
+
+    def _multiply(prediction, target, mask, channel_dim):
         prediction = prediction * mask
         target = target * mask
         return prediction, target
 
+    MASKING_FUNCS = {
+        "crop": _crop,
+        "multiply": _multiply,
+    }
 
-class ApplyAndRemoveMask:
+    def __init__(self, masking_method="crop", channel_dim=1):
+        if masking_method not in self.MASKING_FUNCS.keys():
+            raise ValueError(f"{masking_method} is not available, please use one of {list(self.MASKING_FUNCS.keys())}.")
+        self.masking_func = self.MASKING_FUNCS[masking_method]
+        self.channel_dim = channel_dim
+
+        self.init_kwargs = {
+            "masking_method": masking_method,
+            "channel_dim": channel_dim,
+        }
+
+    def __call__(self, prediction, target, mask):
+        mask.requires_grad = False
+        return self.masking_func(prediction, target, mask, self.channel_dim)
+
+
+class ApplyAndRemoveMask(ApplyMask):
     def __call__(self, prediction, target):
         assert target.dim() == prediction.dim(), f"{target.dim()}, {prediction.dim()}"
         assert target.size(1) == 2 * prediction.size(1), f"{target.size(1)}, {prediction.size(1)}"
@@ -58,15 +94,17 @@ class ApplyAndRemoveMask:
         seperating_channel = target.size(1) // 2
         mask = target[:, seperating_channel:]
         target = target[:, :seperating_channel]
-        prediction, target = ApplyMask()(prediction, target, mask)
+        prediction, target = super().__call__(prediction, target, mask)
         return prediction, target
 
 
-class MaskIgnoreLabel:
-    def __init__(self, ignore_label=-1):
+class MaskIgnoreLabel(ApplyMask):
+    def __init__(self, ignore_label=-1, masking_method="crop", channel_dim=1):
+        super().__init__(masking_method, channel_dim)
         self.ignore_label = ignore_label
+        self.init_kwargs["ignore_label"] = ignore_label
 
     def __call__(self, prediction, target):
         mask = (target != self.ignore_label)
-        prediction, target = ApplyMask()(prediction, target, mask)
+        prediction, target = super().__call__(prediction, target, mask)
         return prediction, target
