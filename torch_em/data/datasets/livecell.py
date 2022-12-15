@@ -16,7 +16,7 @@ URLS = {
               "LIVECell/livecell_coco_train.json"),
     "val": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/"
             "LIVECell/livecell_coco_val.json"),
-    "test": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/"
+    "test": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/",
              "LIVECell/livecell_coco_test.json")
 }
 # TODO
@@ -44,7 +44,7 @@ def _download_annotation_file(path, split, download):
         url = URLS[split]
         print("Downloading livecell annotation file from", url)
         with requests.get(url, stream=True) as r:
-            with open(annotation_file, "wb") as f:
+            with open(annotation_file, 'wb') as f:
                 copyfileobj(r.raw, f)
     return annotation_file
 
@@ -101,16 +101,16 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
     return image_paths, seg_paths
 
 
-def _download_livecell_annotations(path, split, download, cell_types):
+def _download_livecell_annotations(path, split, download, cell_types, label_path):
     annotation_file = _download_annotation_file(path, split, download)
     if split == "test":
         split_name = "livecell_test_images"
-        image_folder = os.path.join(path, "images", split_name)
-        seg_folder = os.path.join(path, "annotations", split_name)
     else:
         split_name = "livecell_train_val_images"
-        image_folder = os.path.join(path, "images", split_name)
-        seg_folder = os.path.join(path, "annotations", split_name)
+    
+    image_folder = os.path.join(path, "images", split_name)
+    seg_folder = os.path.join(path, "annotations", split_name) if label_path is None else os.path.join(label_path, "annotations", split_name)
+
     assert os.path.exists(image_folder), image_folder
 
     return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types)
@@ -129,9 +129,11 @@ def _livecell_segmentation_loader(
     **loader_kwargs
 ):
 
-    # add default data normalization and augmentations
+    # we always use a raw transform in the convenience function
     if raw_transform is None:
         raw_transform = torch_em.transform.get_raw_transform()
+
+    # we always use augmentations in the convenience function
     if transform is None:
         transform = torch_em.transform.get_augmentations(ndim=2)
 
@@ -143,19 +145,23 @@ def _livecell_segmentation_loader(
                                               label_dtype=label_dtype,
                                               transform=transform,
                                               n_samples=n_samples)
-    return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)
+
+    loader = torch.utils.data.DataLoader(ds, batch_size=batch_size, **loader_kwargs)
+    # monkey patch shuffle attribute to the loader
+    loader.shuffle = loader_kwargs.get('shuffle', False)
+    return loader
 
 
 def get_livecell_loader(path, patch_shape, split, download=False,
                         offsets=None, boundaries=False, binary=False,
-                        cell_types=None, **kwargs):
+                        cell_types=None, label_path=None, **kwargs):
     assert split in ("train", "val", "test")
     if cell_types is not None:
         assert isinstance(cell_types, (list, tuple)),\
             f"cell_types must be passed as a list or tuple instead of {cell_types}"
     
     _download_livecell_images(path, download)
-    image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types)
+    image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
 
     assert sum((offsets is not None, boundaries, binary)) <= 1
     label_dtype = torch.int64
