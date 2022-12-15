@@ -16,7 +16,7 @@ URLS = {
               "LIVECell/livecell_coco_train.json"),
     "val": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/"
             "LIVECell/livecell_coco_val.json"),
-    "test": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/",
+    "test": ("http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/"
              "LIVECell/livecell_coco_test.json")
 }
 # TODO
@@ -145,11 +145,8 @@ def _livecell_segmentation_loader(
                                               label_dtype=label_dtype,
                                               transform=transform,
                                               n_samples=n_samples)
-
-    loader = torch.utils.data.DataLoader(ds, batch_size=batch_size, **loader_kwargs)
-    # monkey patch shuffle attribute to the loader
-    loader.shuffle = loader_kwargs.get('shuffle', False)
-    return loader
+    
+    return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)
 
 
 def get_livecell_loader(path, patch_shape, split, download=False,
