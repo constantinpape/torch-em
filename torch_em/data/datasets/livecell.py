@@ -151,7 +151,7 @@ def _livecell_segmentation_loader(
 
 def get_livecell_loader(path, patch_shape, split, download=False,
                         offsets=None, boundaries=False, binary=False,
-                        cell_types=None, label_path=None, **kwargs):
+                        cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs):
     assert split in ("train", "val", "test")
     if cell_types is not None:
         assert isinstance(cell_types, (list, tuple)),\
@@ -161,7 +161,6 @@ def get_livecell_loader(path, patch_shape, split, download=False,
     image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
 
     assert sum((offsets is not None, boundaries, binary)) <= 1
-    label_dtype = torch.int64
     if offsets is not None:
         # we add a binary target channel for foreground background segmentation
         label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
