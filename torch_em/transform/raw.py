@@ -44,10 +44,10 @@ def cast(inpt, typestring):
 
 def _normalize_torch(tensor, minval=None, maxval=None, axis=None, eps=1e-7):
     if axis:  # torch returns torch.return_types.min or torch.return_types.max
-        minval = tensor.min(dim=axis, keepdim=True).values if minval is None else minval
+        minval = torch.amin(tensor, dim=axis, keepdim=True) if minval is None else minval
         tensor -= minval
 
-        maxval = tensor.max(dim=axis, keepdim=True).values if maxval is None else maxval
+        maxval = torch.amax(tensor, dim=axis, keepdim=True) if maxval is None else maxval
         tensor /= (maxval + eps)
 
         return tensor
@@ -83,7 +83,6 @@ def normalize_percentile(raw, lower=1.0, upper=99.0, axis=None, eps=1e-7):
     return normalize(raw, v_lower, v_upper, eps=eps)
 
 
-# TODO
 #
 # intensity augmentations / noise augmentations
 #
@@ -173,7 +172,10 @@ class GaussianBlur():
         kernel_size = 2 * (np.random.randint(self.kernel_size[0], self.kernel_size[1]) // 2) + 1
         # switch boundaries to make sure 0 is excluded from sampling
         sigma = np.random.uniform(self.sigma[1], self.sigma[0])
-        return transforms.GaussianBlur(kernel_size, sigma=sigma)(img)
+        if isinstance(img, np.ndarray):
+            img = torch.from_numpy(img)
+        out = transforms.GaussianBlur(kernel_size, sigma=sigma)(img)
+        return out
 
 
 #
@@ -205,10 +207,11 @@ def get_raw_transform(normalizer=standardize, augmentation1=None, augmentation2=
 # The default values are made for an image with pixel values in
 # range [0, 1]. That the image is in this range is ensured by an
 # initial normalizations step.
-def get_default_mean_teacher_augmentations(p=0.3):
-    norm = normalize
+def get_default_mean_teacher_augmentations(p=0.3, norm=None):
+    if norm is None:
+        norm = normalize
     aug1 = transforms.Compose([
-        normalize,
+        norm,
         transforms.RandomApply([GaussianBlur()], p=p),
         transforms.RandomApply([PoissonNoise()], p=p/2),
         transforms.RandomApply([AdditiveGaussianNoise()], p=p/2),
