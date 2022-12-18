@@ -9,6 +9,46 @@ from tqdm import tqdm
 from ..transform.raw import standardize
 
 
+def predict_with_padding(model, input_, min_divisible, device, with_channels=False):
+    """Run prediction with padding for a model that can only deal with
+    inputs divisible by specific factors.
+
+    Arguments:
+        model [torch.nn.Module]: the model
+        input_ [np.ndarray]: the input ()
+        min_divisible [tuple]: the divisibe shape factors
+            (e.g. (16, 16) for a model that needs inputs divisible by at least 16 pixels)
+        device [str, torch.device]: the device of the model
+        with_channels [bool]: Whether the input data contains channels (default: False)
+
+    Returns:
+        np.ndarray: the ouptut of the model
+    """
+
+    if any(sh % md != 0 for sh, md in zip(input_.shape, min_divisible)):
+        pad_width = tuple(
+            (0, 0 if sh % md == 0 else md - sh % md)
+            for sh, md in zip(input_.shape, min_divisible)
+        )
+        crop_padding = tuple(slice(0, sh) for sh in input_.shape)
+        input_ = np.pad(input_, pad_width, mode="reflect")
+    else:
+        crop_padding = None
+
+    ndim = input_.ndim
+    ndim_model = 1 + ndim if with_channels else 2 + ndim
+
+    expand_dim = (None,) * (ndim_model - ndim)
+    with torch.no_grad():
+        output = model(torch.from_numpy(input_[expand_dim]).to(device)).cpu().numpy()
+
+    if crop_padding is not None:
+        crop_padding = (slice(None),) * (output.ndim - len(crop_padding)) + crop_padding
+        output = output[crop_padding]
+
+    return output
+
+
 def _load_block(input_, offset, block_shape, halo, padding_mode="reflect", with_channels=False):
     shape = input_.shape
     if with_channels:

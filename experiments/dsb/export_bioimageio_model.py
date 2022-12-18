@@ -87,7 +87,7 @@ def export_to_bioimageio(checkpoint, output, input_, affs_to_bd, additional_form
     cite = get_default_citations(
         model="UNet2d", model_output="affinities" if is_aff_model else "boundaries"
     )
-    cite["data"] = "https://www.nature.com/articles/s41592-019-0612-7"
+    cite.append({"text": "data", "doi": "https://www.nature.com/articles/s41592-019-0612-7"})
 
     doc = _get_doc(is_aff_model, checkpoint, name)
     if is_aff_model:
