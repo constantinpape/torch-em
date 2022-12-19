@@ -37,6 +37,17 @@ class TestDiceLoss(unittest.TestCase):
         lval = loss(x, y)
         self.assertAlmostEqual(lval.item(), 1.0)
 
+    def test_dice_invalid(self):
+        from torch_em.loss import DiceLoss
+        loss = DiceLoss()
+
+        shape1 = (1, 1, 32, 32)
+        shape2 = (1, 2, 32, 32)
+        x = torch.rand(*shape1)
+        y = torch.rand(*shape2)
+        with self.assertRaises(ValueError):
+            loss(x, y)
+
 
 if __name__ == '__main__':
     unittest.main()
