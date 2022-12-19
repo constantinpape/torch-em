@@ -24,6 +24,8 @@ def flatten_samples(input_):
 
 
 def dice_score(input_, target, invert=False, channelwise=True, eps=1e-7):
+    if input_.shape != target.shape:
+        raise ValueError(f"Expect input and target of same shape, got: {input_.shape}, {target.shape}.")
     if channelwise:
         # Flatten input and target to have the shape (C, N),
         # where N is the number of samples
