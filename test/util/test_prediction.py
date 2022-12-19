@@ -63,6 +63,28 @@ class TestPrediction(unittest.TestCase):
         self.assertEqual(out.shape, expected_shape)
         self.assertFalse(np.allclose(out, 0))
 
+    def test_predict_with_padding(self):
+        from torch_em.model import UNet2d
+        from torch_em.util.prediction import predict_with_padding
+
+        model = UNet2d(in_channels=1, out_channels=3, initial_features=4, depth=3)
+        shapes = [(128, 128), (133, 33), (64, 49), (27, 97)]
+        for shape in shapes:
+            input_ = np.random.rand(*shape).astype("float32")
+            out = predict_with_padding(model, input_, min_divisible=(8, 8), device="cpu")
+            self.assertEqual(out.shape[2:], shape)
+
+    def test_predict_with_padding_and_channels(self):
+        from torch_em.model import UNet2d
+        from torch_em.util.prediction import predict_with_padding
+
+        model = UNet2d(in_channels=3, out_channels=3, initial_features=4, depth=3)
+        shapes = [(3, 128, 128), (3, 133, 33), (3, 64, 49), (3, 27, 97)]
+        for shape in shapes:
+            input_ = np.random.rand(*shape).astype("float32")
+            out = predict_with_padding(model, input_, min_divisible=(1, 8, 8), device="cpu", with_channels=True)
+            self.assertEqual(out.shape[1:], shape)
+
 
 if __name__ == "__main__":
     unittest.main()

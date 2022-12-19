@@ -12,6 +12,15 @@ from torch_em.model import UNet2d
 from torch_em.trainer import DefaultTrainer
 
 
+class ExpandChannels:
+    def __init__(self, n_channels):
+        self.n_channels = n_channels
+
+    def __call__(self, labels):
+        labels = np.concatenate([labels[None]] * self.n_channels, axis=0)
+        return labels
+
+
 class TestModelzoo(unittest.TestCase):
     data_path = "./data.h5"
     checkpoint_folder = "./checkpoints"
@@ -36,10 +45,17 @@ class TestModelzoo(unittest.TestCase):
             os.remove(self.data_path)
 
     def _create_checkpoint(self, n_channels):
+        if n_channels > 1:
+            label_transform = ExpandChannels(n_channels)
+        else:
+            label_transform = None
+        label_transform = label_transform
+
         loader = default_segmentation_loader(
             raw_paths=self.data_path, raw_key="raw",
             label_paths=self.data_path, label_key="labels",
-            batch_size=1, patch_shape=(1, 128, 128), ndim=2
+            batch_size=1, patch_shape=(1, 128, 128), ndim=2,
+            label_transform=label_transform,
         )
         model = UNet2d(in_channels=1, out_channels=n_channels,
                        depth=2, initial_features=4, norm="BatchNorm")
@@ -71,7 +87,7 @@ class TestModelzoo(unittest.TestCase):
         self._test_export(1)
 
     def test_export_multi_channel(self):
-        self._test_export(8)
+        self._test_export(4)
 
     def test_add_weights(self):
         from torch_em.util.modelzoo import add_weight_formats
