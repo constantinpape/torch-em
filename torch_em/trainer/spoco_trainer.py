@@ -28,8 +28,8 @@ class SPOCOTrainer(DefaultTrainer):
         self._kwargs = kwargs
 
     def _momentum_update(self):
-        for param1, param2 in zip(self.model.parameters(), self.model2.parameters()):
-            param2.data = param1.data * self.momentum + param2.data * (1. - self.momentum)
+        for param_model, param_teacher in zip(self.model.parameters(), self.model2.parameters()):
+            param_teacher.data = param_teacher.data * self.momentum + param_model.data * (1. - self.momentum)
 
     def save_checkpoint(self, name, best_metric):
         model2_state = {"model2_state": self.model2.state_dict()}
