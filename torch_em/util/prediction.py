@@ -108,6 +108,8 @@ def predict_with_halo(
     postprocess=None,
     with_channels=False,
     skip_block=None,
+    disable_tqdm=False,
+    tqdm_desc='predict with halo'
 ):
     """ Run block-wise network prediction with halo.
 
@@ -125,6 +127,8 @@ def predict_with_halo(
         postprocess [callable] - function to postprocess the network predictions (default: None)
         with_channels [bool] - whether the input has a channel axis (default: False)
         skip_block [callable] - function to evaluate wheter a given input block should be skipped (default: None)
+        disable_tqdm [bool] - flag that allows to disable tqdm output (e.g. if function is called multiple times)
+        tqdm_desc [str] - description shown by the tqdm output
     """
     devices = [torch.device(gpu) for gpu in gpu_ids]
     models = [
@@ -191,6 +195,6 @@ def predict_with_halo(
 
     n_blocks = blocking.numberOfBlocks
     with futures.ThreadPoolExecutor(n_workers) as tp:
-        list(tqdm(tp.map(predict_block, range(n_blocks)), total=n_blocks))
+        list(tqdm(tp.map(predict_block, range(n_blocks)), total=n_blocks, disable=disable_tqdm, desc=tqdm_desc))
 
     return output
