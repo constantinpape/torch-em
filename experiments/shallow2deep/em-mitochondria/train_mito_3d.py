@@ -1,16 +1,18 @@
 import os
 from glob import glob
 
+import numpy as np
 import torch
 import torch_em
 import torch_em.shallow2deep as shallow2deep
+from elf.io import open_file
 from torch_em.model import UNet3d
 from torch_em.data.datasets.lucchi import _require_lucchi_data
-from torch_em.data.datasets.kasthuri import _require_kasthuri_data
+from torch_em.data.datasets.uro_cell import _require_urocell_data
 
 
 DATA_ROOT = "/scratch/pape/s2d-mitochondria"
-DATASETS = ["kasthuri", "lucchi"]
+DATASETS = ["lucchi", "platy", "urocell"]
 
 
 def normalize_datasets(datasets):
@@ -24,20 +26,22 @@ def normalize_datasets(datasets):
 def require_ds(dataset):
     os.makedirs(DATA_ROOT, exist_ok=True)
     data_path = os.path.join(DATA_ROOT, dataset)
-    if dataset == "kasthuri":
-        _require_kasthuri_data(data_path, download=True)
-        paths = [
-            os.path.join(data_path, "kasthuri_train.h5"),
-        ]
-        assert all(os.path.exists(pp) for pp in paths), f"{paths}"
-        raw_key, label_key = "raw", "labels"
-    elif dataset == "lucchi":
+    if dataset == "lucchi":
         _require_lucchi_data(data_path, download=True)
         paths = [
             os.path.join(data_path, "lucchi_train.h5"),
         ]
         assert all(os.path.exists(pp) for pp in paths), f"{paths}"
         raw_key, label_key = "raw", "labels"
+    elif dataset == "platy":
+        raise NotImplementedError
+    elif dataset == "urocell":
+        _require_urocell_data(data_path, download=True)
+        paths = glob(os.path.join(data_path, "*.h5"))
+        paths.sort()
+        paths = [pp for pp in paths if "labels/mito" in open_file(pp, "r")]
+        paths = paths[:-1]
+        raw_key, label_key = "raw", "labels/mito"
     return paths, raw_key, label_key
 
 
@@ -53,11 +57,6 @@ def require_rfs_ds(dataset, n_rfs, sampling_strategy):
     raw_transform = torch_em.transform.raw.normalize
     label_transform = shallow2deep.ForegroundTransform(ndim=3)
 
-    if dataset == "kasthuri":
-        sampler = torch_em.data.sampler.MinForegroundSampler(min_fraction=0.05, background_id=[-1, 0])
-    else:
-        sampler = None
-
     paths, raw_key, label_key = require_ds(dataset)
     if sampling_strategy == "vanilla":
         shallow2deep.prepare_shallow2deep(
@@ -66,7 +65,7 @@ def require_rfs_ds(dataset, n_rfs, sampling_strategy):
             n_forests=args.n_rfs, n_threads=args.n_threads,
             output_folder=out_folder, ndim=3,
             raw_transform=raw_transform, label_transform=label_transform,
-            is_seg_dataset=True, sampler=sampler
+            is_seg_dataset=True
         )
     else:
         sampling_kwargs = {}
@@ -80,7 +79,7 @@ def require_rfs_ds(dataset, n_rfs, sampling_strategy):
             output_folder=out_folder, ndim=3,
             raw_transform=raw_transform, label_transform=label_transform,
             is_seg_dataset=True, sampling_strategy=sampling_strategy,
-            sampler=sampler, sampling_kwargs=sampling_kwargs,
+            sampling_kwargs=sampling_kwargs,
         )
 
 
@@ -89,20 +88,24 @@ def require_rfs(datasets, n_rfs, sampling_strategy):
         require_rfs_ds(ds, n_rfs, sampling_strategy)
 
 
-def get_ds(file_pattern, rf_pattern, n_samples, label_key="labels", with_ignore=False):
+def get_ds(file_pattern, rf_pattern, n_samples, label_key="labels",
+           path_selection=None, check_labels=False):
     raw_transform = torch_em.transform.raw.normalize
     label_transform = torch_em.transform.BoundaryTransform(ndim=3, add_binary_target=True)
-    if with_ignore:
-        sampler = torch_em.data.sampler.MinForegroundSampler(min_fraction=0.05, background_id=[-1, 0])
-    else:
-        sampler = None
     patch_shape = (64, 256, 256)
+
     paths = glob(file_pattern)
     paths.sort()
+    if check_labels:
+        paths = [pp for pp in paths if label_key in open_file(pp, "r")]
+    if path_selection:
+        paths = paths[path_selection]
     assert len(paths) > 0
+
     rf_paths = glob(rf_pattern)
     rf_paths.sort()
     assert len(rf_paths) > 0
+
     raw_key = "raw"
     return shallow2deep.shallow2deep_dataset.get_shallow2deep_dataset(
         paths, raw_key, paths, label_key, rf_paths,
@@ -110,20 +113,12 @@ def get_ds(file_pattern, rf_pattern, n_samples, label_key="labels", with_ignore=
         raw_transform=raw_transform,
         label_transform=label_transform,
         n_samples=n_samples, ndim=3,
-        sampler=sampler,
     )
 
 
 def get_loader(args, split, dataset_names):
     datasets = []
     n_samples = 500 if split == "train" else 25
-    if "kasthuri" in dataset_names:
-        ds_name = "kasthuri"
-        # we need to use the test split here, because val is too small in z
-        split_ = "test" if split == "val" else split
-        file_pattern = os.path.join(DATA_ROOT, ds_name, f"*_{split_}.h5")
-        rf_pattern = os.path.join(DATA_ROOT, f"rfs3d-{args.sampling_strategy}", ds_name, "*.pkl")
-        datasets.append(get_ds(file_pattern, rf_pattern, n_samples, with_ignore=True))
     if "lucchi" in dataset_names:
         ds_name = "kasthuri"
         # we need to use the test split here, because val is too small in z
@@ -131,9 +126,18 @@ def get_loader(args, split, dataset_names):
         file_pattern = os.path.join(DATA_ROOT, ds_name, f"*_{split_}.h5")
         rf_pattern = os.path.join(DATA_ROOT, f"rfs3d-{args.sampling_strategy}", ds_name, "*.pkl")
         datasets.append(get_ds(file_pattern, rf_pattern, n_samples))
+    if "urocell" in dataset_names:
+        ds_name = "urocell"
+        file_pattern = os.path.join(DATA_ROOT, ds_name, "*.h5")
+        rf_pattern = os.path.join(DATA_ROOT, f"rfs3d-{args.sampling_strategy}", ds_name, "*.pkl")
+        path_selection = np.s_[:-1] if split == "train" else np.s_[-1:]
+        datasets.append(get_ds(
+            file_pattern, rf_pattern, n_samples,
+            label_key="labels/mito", path_selection=path_selection, check_labels=True
+        ))
     ds = torch_em.data.concat_dataset.ConcatDataset(*datasets) if len(datasets) > 1 else datasets[0]
     loader = torch.utils.data.DataLoader(
-        ds, shuffle=True, batch_size=args.batch_size, num_workers=12
+        ds, shuffle=True, batch_size=args.batch_size, num_workers=24
     )
     loader.shuffle = True
     return loader

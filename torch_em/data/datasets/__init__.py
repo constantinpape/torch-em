@@ -13,6 +13,7 @@ from .mouse_embryo import get_mouse_embryo_loader
 from .plantseg import get_plantseg_loader
 from .platynereis import (get_platynereis_cell_loader,
                           get_platynereis_nuclei_loader)
+from .pnas_arabidopsis import get_pnas_membrane_loader, get_pnas_nucleus_loader
 from .snemi import get_snemi_loader
 from .util import get_bioimageio_dataset_id
 from .vnc import get_vnc_mito_loader

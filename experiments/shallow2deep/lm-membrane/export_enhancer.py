@@ -1,5 +1,6 @@
 import argparse
 import os
+from glob import glob
 
 import torch_em
 from elf.io import open_file
@@ -8,12 +9,6 @@ from torch_em.util.modelzoo import (add_weight_formats,
                                     export_bioimageio_model,
                                     get_default_citations)
 from torch_em.shallow2deep.shallow2deep_model import RFWithFilters, _get_filters
-
-
-def _get_name_and_description(is3d):
-    name = "EnhancerMembranesLM3D" if is3d else "EnhancerMembranesLM2D"
-    description = "Prediction enhancer for segmenting membranes in light microscopy."
-    return name, description
 
 
 def _get_doc(ckpt, name, is3d):
@@ -59,7 +54,7 @@ def create_input_2d():
     input_path = "/scratch/pape/s2d-lm-boundaries/mouse-embryo/Membrane/train/ginst_membrane_filt_E2_last_predictions_gasp_average_raw_corrected.h5"
     with open_file(input_path, "r") as f:
         data = f["raw"][-1, :512, :512]
-    rf_path = "/scratch/pape/s2d-lm-boundaries/rfs2d/mouse-embryo/rf_0049.pkl"
+    rf_path = "/scratch/pape/s2d-lm-boundaries/rfs2d-worst_tiles/mouse-embryo/rf_0499.pkl"
     filter_config = _get_filters(2, None)
     rf = RFWithFilters(rf_path, ndim=2, filter_config=filter_config, output_channel=1)
     pred = rf(data)
@@ -70,20 +65,18 @@ def create_input_3d():
     input_path = "/scratch/pape/s2d-lm-boundaries/mouse-embryo/Membrane/train/ginst_membrane_filt_E2_last_predictions_gasp_average_raw_corrected.h5"
     with open_file(input_path, "r") as f:
         data = f["raw"][:32, :256, :256]
-    rf_path = "/scratch/pape/s2d-lm-boundaries/rfs3d/mouse-embryo/rf_0049.pkl"
+    rf_path = "/scratch/pape/s2d-lm-boundaries/rfs3d-worst_tiles/mouse-embryo/rf_0499.pkl"
     filter_config = _get_filters(2, None)
     rf = RFWithFilters(rf_path, ndim=3, filter_config=filter_config, output_channel=1)
     pred = rf(data)
     return pred[None]
 
 
-def export_enhancer(is3d):
+def export_enhancer(is3d, checkpoint, version, name):
 
-    checkpoint = "./checkpoints/s2d-lm-membrane-mouse-embryo_ovules-3d" if is3d else\
-        "./checkpoints/s2d-lm-membrane-covid-if_mouse-embryo_ovules-2d"
     input_data = create_input_3d() if is3d else create_input_2d()
 
-    name, description = _get_name_and_description(is3d)
+    description = "Prediction enhancer for segmenting membranes in light microscopy."
     tags = ["unet", "mitochondria", "electron-microscopy", "instance-segmentation", "shallow2deep"]
     tags += ["3d"] if is3d else ["2d"]
 
@@ -96,7 +89,7 @@ def export_enhancer(is3d):
     doc = _get_doc(checkpoint, name, is3d)
     additional_formats = ["torchscript"]
 
-    out_folder = "./bio-models"
+    out_folder = f"./bio-models/v{version}"
     os.makedirs(out_folder, exist_ok=True)
     output = os.path.join(out_folder, name)
 
@@ -129,11 +122,41 @@ def export_enhancer(is3d):
     add_weight_formats(output, additional_formats)
 
 
+def export_version(args):
+
+    def _get_ndim(x):
+        if x == "2d":
+            return False
+        elif x == "anisotropic":
+            return x
+        elif x == "3d":
+            return True
+        raise ValueError(x)
+
+    checkpoints = glob("./checkpoints/s2d-lm-membrane-*")
+    out_folder = f"./bio-models/v{args.version}"
+    for ckpt in checkpoints:
+        name = os.path.basename(ckpt)
+        if(os.path.exists(os.path.join(out_folder, name))):
+            print("Already exported::", name)
+            continue
+        parts = name.split("-")
+        is3d = _get_ndim(parts[-2])
+        assert is3d is not None
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("Exporting:", ckpt)
+        print(name)
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        export_enhancer(is3d, checkpoint=ckpt, version=args.version, name=name)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--is3d", default=0)
+    parser.add_argument("-v", "--version", required=True, type=int)
     args = parser.parse_args()
-    export_enhancer(args.is3d)
+    export_version(args)
 
 
 if __name__ == "__main__":
