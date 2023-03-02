@@ -62,11 +62,11 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
         # get the path for the image data and make sure the corresponding image exists
         image_metadata = coco.loadImgs(image_id)[0]
         file_name = image_metadata["file_name"]
-        
+
         # if cell_type names are given we only select file names that match a cell_type
         if cell_types is not None and (not any([cell_type in file_name for cell_type in cell_types])):
             continue
-        
+
         sub_folder = file_name.split("_")[0]
         image_path = os.path.join(image_folder, sub_folder, file_name)
         # something changed in the image layout? we keep the old version around in case this chagnes back...
@@ -97,7 +97,8 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
         imageio.imwrite(seg_path, seg)
 
     assert len(image_paths) == len(seg_paths)
-    assert len(image_paths) > 0, f"No matching image paths were found. Did you pass invalid cell type naems ({cell_types})?"
+    assert len(image_paths) > 0,\
+        f"No matching image paths were found. Did you pass invalid cell type naems ({cell_types})?"
     return image_paths, seg_paths
 
 
@@ -107,9 +108,10 @@ def _download_livecell_annotations(path, split, download, cell_types, label_path
         split_name = "livecell_test_images"
     else:
         split_name = "livecell_train_val_images"
-    
+
     image_folder = os.path.join(path, "images", split_name)
-    seg_folder = os.path.join(path, "annotations", split_name) if label_path is None else os.path.join(label_path, "annotations", split_name)
+    seg_folder = os.path.join(path, "annotations", split_name) if label_path is None\
+        else os.path.join(label_path, "annotations", split_name)
 
     assert os.path.exists(image_folder), image_folder
 
@@ -145,7 +147,7 @@ def _livecell_segmentation_loader(
                                               label_dtype=label_dtype,
                                               transform=transform,
                                               n_samples=n_samples)
-    
+
     return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)
 
 
@@ -156,7 +158,7 @@ def get_livecell_loader(path, patch_shape, split, download=False,
     if cell_types is not None:
         assert isinstance(cell_types, (list, tuple)),\
             f"cell_types must be passed as a list or tuple instead of {cell_types}"
-    
+
     _download_livecell_images(path, download)
     image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
 
