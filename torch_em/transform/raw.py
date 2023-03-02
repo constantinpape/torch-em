@@ -207,14 +207,17 @@ def get_raw_transform(normalizer=standardize, augmentation1=None, augmentation2=
 # The default values are made for an image with pixel values in
 # range [0, 1]. That the image is in this range is ensured by an
 # initial normalizations step.
-def get_default_mean_teacher_augmentations(p=0.3, norm=None):
+def get_default_mean_teacher_augmentations(
+    p=0.3, norm=None,
+    blur_kwargs=None, poisson_kwargs=None, gaussian_kwargs=None
+):
     if norm is None:
         norm = normalize
     aug1 = transforms.Compose([
         norm,
-        transforms.RandomApply([GaussianBlur()], p=p),
-        transforms.RandomApply([PoissonNoise()], p=p/2),
-        transforms.RandomApply([AdditiveGaussianNoise()], p=p/2),
+        transforms.RandomApply([GaussianBlur(**({} if blur_kwargs is None else blur_kwargs))], p=p),
+        transforms.RandomApply([PoissonNoise(**({} if poisson_kwargs is None else poisson_kwargs))], p=p/2),
+        transforms.RandomApply([AdditiveGaussianNoise(**({} if gaussian_kwargs is None else gaussian_kwargs))], p=p/2),
     ])
     aug2 = transforms.RandomApply(
         [RandomContrast(clip_kwargs={"a_min": 0, "a_max": 1})], p=p
