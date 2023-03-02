@@ -68,12 +68,18 @@ def _check_plt(loader, n_samples, instance_labels, model=None, device=None):
     plt.show()
 
 
-def _check_napari(loader, n_samples, instance_labels, model=None, device=None):
+def _check_napari(loader, n_samples, instance_labels, model=None, device=None, rgb=False):
     import napari
 
-    for ii, (x, y) in enumerate(loader):
+    for ii, sample in enumerate(loader):
         if ii >= n_samples:
             break
+
+        try:
+            x, y = sample
+        except ValueError:
+            x = sample
+            y = None
 
         if model is None:
             pred = None
@@ -82,14 +88,18 @@ def _check_napari(loader, n_samples, instance_labels, model=None, device=None):
             pred = ensure_array(pred)[0]
 
         x = ensure_array(x)[0]
-        y = ensure_array(y)[0]
+        if rgb:
+            assert x.shape[0] == 3
+            x = x.transpose((1, 2, 0))
 
         v = napari.Viewer()
         v.add_image(x)
-        if instance_labels:
-            v.add_labels(y.astype("uint32"))
-        else:
-            v.add_image(y)
+        if y is not None:
+            y = ensure_array(y)[0]
+            if instance_labels:
+                v.add_labels(y.astype("uint32"))
+            else:
+                v.add_image(y)
         if pred is not None:
             v.add_image(pred)
         napari.run()
@@ -108,8 +118,8 @@ def check_trainer(trainer, n_samples, instance_labels=False, split="val", loader
             _check_napari(loader, n_samples, instance_labels, model=model, device=trainer.device)
 
 
-def check_loader(loader, n_samples, instance_labels=False, plt=False):
+def check_loader(loader, n_samples, instance_labels=False, plt=False, rgb=False):
     if plt:
         _check_plt(loader, n_samples, instance_labels)
     else:
-        _check_napari(loader, n_samples, instance_labels)
+        _check_napari(loader, n_samples, instance_labels, rgb=rgb)

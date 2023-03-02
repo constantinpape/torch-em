@@ -10,6 +10,7 @@ from .lucchi import get_lucchi_loader
 from .mitoem import get_mitoem_loader
 from .monuseg import get_monuseg_loader
 from .mouse_embryo import get_mouse_embryo_loader
+from .neurips_cell_seg import get_neurips_cellseg_supervised_loader, get_neurips_cellseg_unsupervised_loader
 from .plantseg import get_plantseg_loader
 from .platynereis import (get_platynereis_cell_loader,
                           get_platynereis_nuclei_loader)
