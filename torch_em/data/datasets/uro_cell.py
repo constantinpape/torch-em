@@ -9,7 +9,7 @@ from .util import download_source, unzip, update_kwargs
 
 
 URL = "https://github.com/MancaZerovnikMekuc/UroCell/archive/refs/heads/master.zip"
-CHECKSUM = "1cfc83792c7ec2d201b95b6b919d119d594f453822de3ad24486019979387d1d"
+CHECKSUM = "c1f83ebe60bd2c69d70fa8c9f3a809323f7d449ce6ec3c01fdbfe38f0afef856"
 
 
 def _require_urocell_data(path, download):
