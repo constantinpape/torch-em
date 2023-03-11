@@ -27,6 +27,18 @@ def simple_unsupervised_loss_and_metric(model, model_input, pseudo_labels, label
     return loss, loss
 
 
+def simple_supervised_loss(model, input_, labels):
+    pred = model(input_)
+    loss = torch_em.loss.dice_score(pred, labels, invert=True)
+    return loss
+
+
+def simple_supervised_loss_and_metric(model, input_, labels):
+    pred = model(input_)
+    loss = torch_em.loss.dice_score(pred, labels, invert=True)
+    return loss, loss
+
+
 class TestMeanTeacher(unittest.TestCase):
     tmp_folder = "./tmp"
     data_path = "./tmp/data.h5"
@@ -63,8 +75,9 @@ class TestMeanTeacher(unittest.TestCase):
         model = UNet2d(in_channels=1, out_channels=1, initial_features=8, depth=3)
         optimizer = torch.optim.Adam(model.parameters())
 
+        name = "mt-test"
         trainer = MeanTeacherTrainer(
-            name="mt-test",
+            name=name,
             model=model,
             optimizer=optimizer,
             device=torch.device("cpu"),
@@ -81,9 +94,19 @@ class TestMeanTeacher(unittest.TestCase):
             mixed_precision=False,
         )
         trainer.fit(53)
-        self.assertTrue("./checkpoints/best.pt")
-        self.assertTrue("./checkpoints/latest.pt")
-        # TODO check that deserializing and continuing to train works
+        self.assertTrue(os.path.exists(f"./checkpoints/{name}/best.pt"))
+        self.assertTrue(os.path.exists(f"./checkpoints/{name}/latest.pt"))
+
+        # TODO
+        # # make sure that the trainer can be deserialized from the checkpoint
+        # trainer2 = MeanTeacherTrainer.from_checkpoint(os.path.join("./checkpoints", name), name="latest")
+        # self.assertEqual(trainer.iteration, trainer2.iteration)
+        # self.assertTrue(torch_em.util.model_is_equal(trainer.model, trainer2.model))
+        # self.assertTrue(torch_em.util.model_is_equal(trainer.teacher, trainer2.teacher))
+
+        # # and that it can be trained further
+        # trainer2.fit(10)
+        # self.assertEqual(trainer2.iteration, 63)
 
     def get_unsupervised_loader(self, n_samples):
         augmentations = (
@@ -101,12 +124,34 @@ class TestMeanTeacher(unittest.TestCase):
         loader = torch_em.segmentation.get_data_loader(ds, batch_size=1, shuffle=True)
         return loader
 
+    def get_supervised_loader(self, n_samples):
+        ds = torch_em.data.SegmentationDataset(
+            raw_path=self.data_path, raw_key=self.raw_key,
+            label_path=self.data_path, label_key=self.label_key,
+            patch_shape=(1, 64, 64), ndim=2,
+            n_samples=n_samples,
+        )
+        loader = torch_em.segmentation.get_data_loader(ds, batch_size=1, shuffle=True)
+        return loader
+
     def test_mean_teacher_unsupervised(self):
         unsupervised_train_loader = self.get_unsupervised_loader(n_samples=50)
         unsupervised_val_loader = self.get_unsupervised_loader(n_samples=4)
         self._test_mean_teacher(
-            unsupervised_train_loader,
+            unsupervised_train_loader=unsupervised_train_loader,
             unsupervised_val_loader=unsupervised_val_loader
+        )
+
+    def test_mean_teacher_semisupervised(self):
+        unsupervised_train_loader = self.get_unsupervised_loader(n_samples=50)
+        supervised_train_loader = self.get_supervised_loader(n_samples=50)
+        supervised_val_loader = self.get_supervised_loader(n_samples=4)
+        self._test_mean_teacher(
+            unsupervised_train_loader=unsupervised_train_loader,
+            supervised_train_loader=supervised_train_loader,
+            supervised_val_loader=supervised_val_loader,
+            supervised_loss=simple_supervised_loss,
+            supervised_loss_and_metric=simple_supervised_loss_and_metric,
         )
 
 

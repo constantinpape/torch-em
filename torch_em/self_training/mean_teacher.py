@@ -92,8 +92,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
 
         # Check that we have at least one of supvervised / unsupervised val loader.
         assert sum((
-            supervised_val_loader is None,
-            unsupervised_val_loader is None,
+            supervised_val_loader is not None,
+            unsupervised_val_loader is not None,
         )) > 0
         self.supervised_val_loader = supervised_val_loader
         self.unsupervised_val_loader = unsupervised_val_loader
@@ -105,8 +105,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
 
         # Check that we have at least one of supvervised / unsupervised loss and metric.
         assert sum((
-            supervised_loss_and_metric is None,
-            unsupervised_loss_and_metric is None,
+            supervised_loss_and_metric is not None,
+            unsupervised_loss_and_metric is not None,
         )) > 0
         self.supervised_loss_and_metric = supervised_loss_and_metric
         self.unsupervised_loss_and_metric = unsupervised_loss_and_metric
@@ -221,7 +221,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         t_per_iter = time.time()
 
         # Sample from both the supervised and unsupervised loader.
-        for (xs, ys), (xu1, xu2) in zip(self.source_train_loader, self.target_train_loader):
+        for (xs, ys), (xu1, xu2) in zip(self.supervised_train_loader, self.unsupervised_train_loader):
             xs, ys = xs.to(self.device), ys.to(self.device)
             xu1, xu2 = xu1.to(self.device), xu2.to(self.device)
 
