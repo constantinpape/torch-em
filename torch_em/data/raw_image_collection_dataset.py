@@ -105,22 +105,25 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         if have_raw_channels:
             raw = raw.transpose((2, 0, 1))
 
-        if self.augmentations is not None:
-            aug1, aug2 = self.augmentations
-            raw1, raw2 = aug1(raw), aug2(raw)
-            return raw1, raw2
-
         return raw
 
     def __getitem__(self, index):
         raw = self._get_sample(index)
+
         if self.raw_transform is not None:
             raw = self.raw_transform(raw)
+
         if self.transform is not None:
             raw = self.transform(raw)
             assert len(raw) == 1
             raw = raw[0]
             # if self.trafo_halo is not None:
             #     raw = self.crop(raw)
+
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
+        if self.augmentations is not None:
+            aug1, aug2 = self.augmentations
+            raw1, raw2 = aug1(raw), aug2(raw)
+            return raw1, raw2
+
         return raw

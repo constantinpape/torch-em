@@ -8,18 +8,6 @@ from torchvision import transforms
 #
 
 
-def standardize(raw, mean=None, std=None, axis=None, eps=1e-7):
-    raw = raw.astype("float32")
-
-    mean = raw.mean(axis=axis, keepdims=True) if mean is None else mean
-    raw -= mean
-
-    std = raw.std(axis=axis, keepdims=True) if std is None else std
-    raw /= (std + eps)
-
-    return raw
-
-
 TORCH_DTYPES = {
     "float16": torch.float16,
     "float32": torch.float32,
@@ -42,7 +30,19 @@ def cast(inpt, typestring):
     return inpt.astype(typestring)
 
 
-def _normalize_torch(tensor, minval=None, maxval=None, axis=None, eps=1e-7):
+def standardize(raw, mean=None, std=None, axis=None, eps=1e-7):
+    raw = cast(raw, "float32")
+
+    mean = raw.mean(axis=axis, keepdims=True) if mean is None else mean
+    raw -= mean
+
+    std = raw.std(axis=axis, keepdims=True) if std is None else std
+    raw /= (std + eps)
+
+    return raw
+
+
+def _normalize_torch(tensor, minval, maxval, axis, eps):
     if axis:  # torch returns torch.return_types.min or torch.return_types.max
         minval = torch.amin(tensor, dim=axis, keepdim=True) if minval is None else minval
         tensor -= minval
