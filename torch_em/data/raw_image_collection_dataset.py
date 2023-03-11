@@ -5,12 +5,13 @@ from ..util import ensure_tensor_with_channels, load_image, supports_memmap
 
 # TODO pad images that are too small for the patch shape
 class RawImageCollectionDataset(torch.utils.data.Dataset):
+    max_sampling_attempts = 500
 
     def _check_inputs(self, raw_images):
         is_multichan = None
         for raw_im in raw_images:
 
-            # we only check for compatible shapes if both images support memmap, because
+            # we only check for compatible shapes if images support memmap, because
             # we don't want to load everything into ram
             if supports_memmap(raw_im):
                 shape = load_image(raw_im).shape
@@ -34,6 +35,7 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         transform=None,
         dtype=torch.float32,
         n_samples=None,
+        sampler=None,
     ):
         self._check_inputs(raw_image_paths)
         self.raw_images = raw_image_paths
@@ -45,6 +47,7 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         self.raw_transform = raw_transform
         self.transform = transform
         self.dtype = dtype
+        self.sampler = sampler
 
         if n_samples is None:
             self._len = len(self.raw_images)
@@ -83,6 +86,15 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         # sample random bounding box for this image
         bb = self._sample_bounding_box(shape)
         raw = np.array(raw[bb])
+
+        if self.sampler is not None:
+            sample_id = 0
+            while not self.sampler(raw):
+                bb = self._sample_bounding_box(shape)
+                raw = np.array(raw[bb])
+                sample_id += 1
+                if sample_id > self.max_sampling_attempts:
+                    raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
         # to channel first
         if have_raw_channels:
