@@ -57,8 +57,7 @@ class TestSegmentation(unittest.TestCase):
                                                mixed_precision=False,
                                                device=torch.device("cpu"),
                                                logger=None)
-        train_iters = 51
-        trainer.fit(train_iters)
+        trainer.fit(n_iterations)
 
         def _test_checkpoint(cp_path, check_progress):
             self.assertTrue(os.path.exists(cp_path))
@@ -71,7 +70,7 @@ class TestSegmentation(unittest.TestCase):
             loaded_model.load_state_dict(checkpoint["model_state"])
 
             if check_progress:
-                self.assertEqual(checkpoint["iteration"], train_iters)
+                self.assertEqual(checkpoint["iteration"], n_iterations)
                 self.assertEqual(checkpoint["epoch"], 2)
 
         _test_checkpoint("./checkpoints/test/latest.pt", True)
