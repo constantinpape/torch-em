@@ -117,6 +117,7 @@ def predict_with_halo(
     postprocess=None,
     with_channels=False,
     skip_block=None,
+    mask=None,
     disable_tqdm=False,
     tqdm_desc="predict with halo",
     prediction_function=None,
@@ -137,6 +138,7 @@ def predict_with_halo(
         postprocess [callable] - function to postprocess the network predictions (default: None)
         with_channels [bool] - whether the input has a channel axis (default: False)
         skip_block [callable] - function to evaluate wheter a given input block should be skipped (default: None)
+        mask [arraylike] - elements outside the mask will be ignored in the prediction (default: None)
         disable_tqdm [bool] - flag that allows to disable tqdm output (e.g. if function is called multiple times)
         tqdm_desc [str] - description shown by the tqdm output
         prediction_function [callable] - A wrapper function for prediction to enable custom prediction procedures
@@ -167,6 +169,14 @@ def predict_with_halo(
         with torch.no_grad():
             block = blocking.getBlock(block_id)
             offset = [beg for beg in block.begin]
+            inner_bb = tuple(slice(ha, ha + bs) for ha, bs in zip(halo, block.shape))
+
+            if mask is not None:
+                mask_block, _ = _load_block(mask, offset, block_shape, halo, with_channels=False)
+                mask_block = mask_block[inner_bb]
+                if mask_block.sum() == 0:
+                    return
+
             inp, _ = _load_block(input_, offset, block_shape, halo, with_channels=with_channels)
 
             if skip_block is not None and skip_block(inp):
@@ -190,10 +200,14 @@ def predict_with_halo(
             if postprocess is not None:
                 prediction = postprocess(prediction)
 
-            inner_bb = tuple(slice(ha, ha + bs) for ha, bs in zip(halo, block.shape))
             if prediction.ndim == ndim + 1:
                 inner_bb = (slice(None),) + inner_bb
             prediction = prediction[inner_bb]
+
+            if mask is not None:
+                if prediction.ndim == ndim + 1:
+                    mask_block = np.concatenate(prediction.shape[0] * [mask_block[None]], axis=0)
+                prediction[~mask_block] = 0
 
             bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
             if isinstance(output, list):  # we have multiple outputs and split the prediction channels
