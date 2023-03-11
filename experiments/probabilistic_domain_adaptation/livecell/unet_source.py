@@ -1,10 +1,7 @@
-import argparse
-
 import torch_em
 from torch_em.model import UNet2d
 from torch_em.data.datasets import get_livecell_loader
-
-CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
+from common import get_parser
 
 
 def _get_loader(args, split, cell_type):
@@ -12,7 +9,7 @@ def _get_loader(args, split, cell_type):
     loader = get_livecell_loader(
         args.input, patch_shape, split,
         download=True, binary=True, batch_size=args.batch_size,
-        cell_types=[cell_type]
+        cell_types=[cell_type], num_workers=8, shuffle=True,
     )
     return loader
 
@@ -30,6 +27,7 @@ def _train_cell_type(args, cell_type):
         learning_rate=1e-4,
         mixed_precision=True,
         log_image_interval=100,
+        save_root=args.save_root,
     )
     trainer.fit(iterations=args.n_iterations)
 
@@ -57,23 +55,16 @@ def run_evaluation(args):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", required=True)
-    parser.add_argument("-p", "--phase", required=True)
-    parser.add_argument("-b", "--batch_size", default=8, type=int)
-    parser.add_argument("-n", "--n_iterations", default=int(1e5), type=int)
-    parser.add_argument("--cell_types", nargs="+", default=CELL_TYPES)
+    parser = get_parser(default_iterations=50000)
     args = parser.parse_args()
-
-    phase = args.phase
-    if phase in ("c", "check"):
+    if args.phase in ("c", "check"):
         check_loader(args)
-    elif phase in ("t", "train"):
+    elif args.phase in ("t", "train"):
         run_training(args)
-    elif phase in ("e", "evaluate"):
+    elif args.phase in ("e", "evaluate"):
         run_evaluation(args)
     else:
-        raise ValueError(f"Got phase={phase}, expect one of check, train, evaluate.")
+        raise ValueError(f"Got phase={args.phase}, expect one of check, train, evaluate.")
 
 
 if __name__ == "__main__":
