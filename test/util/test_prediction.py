@@ -82,7 +82,7 @@ class TestPrediction(unittest.TestCase):
         shapes = [(3, 128, 128), (3, 133, 33), (3, 64, 49), (3, 27, 97)]
         for shape in shapes:
             input_ = np.random.rand(*shape).astype("float32")
-            out = predict_with_padding(model, input_, min_divisible=(1, 8, 8), device="cpu", with_channels=True)
+            out = predict_with_padding(model, input_, min_divisible=(8, 8), device="cpu", with_channels=True)
             self.assertEqual(out.shape[1:], shape)
 
 

@@ -85,6 +85,37 @@ class NoToBackgroundBoundaryTransform:
         return target
 
 
+# TODO smoothing
+class BoundaryTransformWithIgnoreLabel:
+    def __init__(self, ignore_label=-1, mode="thick", add_binary_target=False, ndim=None):
+        self.ignore_label = ignore_label
+        self.mode = mode
+        self.ndim = ndim
+        self.add_binary_target = add_binary_target
+
+    def __call__(self, labels):
+        labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
+        # calculate the normal boundaries
+        boundaries = skimage.segmentation.find_boundaries(labels, mode=self.mode)[None]
+
+        # calculate the boundaries for the ignore label
+        labels_ignore = (labels == self.ignore_label)
+        to_ignore_boundaries = skimage.segmentation.find_boundaries(labels_ignore, mode=self.mode)[None]
+
+        # mask the to-background-boundaries
+        boundaries = boundaries.astype(np.int8)
+        boundaries[to_ignore_boundaries] = self.ignore_label
+
+        if self.add_binary_target:
+            binary = labels_to_binary(labels).astype(boundaries.dtype)
+            binary[labels == self.ignore_label] = self.ignore_label
+            target = np.concatenate([binary[None], boundaries], axis=0)
+        else:
+            target = boundaries
+
+        return target
+
+
 # TODO affinity smoothing
 class AffinityTransform:
     def __init__(self, offsets,

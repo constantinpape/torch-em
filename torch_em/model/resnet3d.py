@@ -7,9 +7,9 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from torchvision.models._api import WeightsEnum
-from torchvision.models._utils import _ovewrite_named_param
-from torchvision.utils import _log_api_usage_once
+# from torchvision.models._api import WeightsEnum
+# from torchvision.models._utils import _ovewrite_named_param
+# from torchvision.utils import _log_api_usage_once
 
 
 __all__ = [
@@ -165,9 +165,10 @@ class ResNet3d(nn.Module):
         width_per_group: int = 64,
         replace_stride_with_dilation: Optional[List[bool]] = None,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
+        stride_conv1: bool = True,
     ) -> None:
         super().__init__()
-        _log_api_usage_once(self)
+        # _log_api_usage_once(self)
         if norm_layer is None:
             norm_layer = nn.BatchNorm3d
         self._norm_layer = norm_layer
@@ -188,7 +189,9 @@ class ResNet3d(nn.Module):
             )
         self.groups = groups
         self.base_width = width_per_group
-        self.conv1 = nn.Conv3d(in_channels, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv3d(
+            in_channels, self.inplanes, kernel_size=7, stride=2 if stride_conv1 else 1, padding=3, bias=False
+        )
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
@@ -282,7 +285,7 @@ class ResNet3d(nn.Module):
 def _resnet(
     block: Type[Union[BasicBlock, Bottleneck]],
     layers: List[int],
-    weights: Optional[WeightsEnum],
+    weights: Any,
     progress: bool,
     **kwargs: Any,
 ) -> ResNet3d:
