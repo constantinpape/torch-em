@@ -19,7 +19,7 @@ class DefaultPseudoLabeler:
     def _compute_label_mask_both_sides(self, pseudo_labels):
         upper_threshold = self.confidence_threshold
         lower_threshold = 1.0 - self.confidence_threshold
-        mask = (pseudo_labels >= upper_threshold) + (pseudo_labels <= lower_threshold)
+        mask = ((pseudo_labels >= upper_threshold) + (pseudo_labels <= lower_threshold)).to(dtype=torch.float32)
         return mask
 
     def _compute_label_mask_one_side(self, pseudo_labels):
