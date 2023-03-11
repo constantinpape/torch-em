@@ -22,7 +22,7 @@ class DefaultPseudoLabeler:
         mask = (pseudo_labels >= upper_threshold) + (pseudo_labels <= lower_threshold)
         return mask
 
-    def _compute_label_mask_one_sides(self, pseudo_labels):
+    def _compute_label_mask_one_side(self, pseudo_labels):
         mask = (pseudo_labels >= self.confidence_threshold)
         return mask
 
@@ -33,6 +33,6 @@ class DefaultPseudoLabeler:
         if self.confidence_threshold is None:
             label_mask = None
         else:
-            label_mask = self._compute_label_mask_both_side(pseudo_labels) if self.threshold_from_both_sides\
-                else self._compute_label_mask_one_sides(pseudo_labels)
+            label_mask = self._compute_label_mask_both_sides(pseudo_labels) if self.threshold_from_both_sides\
+                else self._compute_label_mask_one_side(pseudo_labels)
         return pseudo_labels, label_mask

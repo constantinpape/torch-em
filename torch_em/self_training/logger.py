@@ -3,8 +3,10 @@ import os
 import torch
 import torch_em
 
+from torchvision.utils import make_grid
 
-class SelfTrainingTensorboardLogger(torch_em.traner.logger_base.TorchEmLogger):
+
+class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
     def __init__(self, trainer, save_root, **unused_kwargs):
         super().__init__(trainer, save_root)
         self.my_root = save_root
@@ -15,13 +17,25 @@ class SelfTrainingTensorboardLogger(torch_em.traner.logger_base.TorchEmLogger):
         self.tb = torch.utils.tensorboard.SummaryWriter(self.log_dir)
         self.log_image_interval = trainer.log_image_interval
 
-    # TODO make a grid image
-    def _add_supervised_images(self):
-        pass
+    # TODO deal with 3d data
+    def _add_supervised_images(self, step, name, x, y, pred):
+        grid = make_grid([x[0], y[0], pred[0]], padding=8)
+        self.tb.add_image(tag=f"{name}/supervised/input-labels-prediction", img_tensor=grid, global_step=step)
 
-    # TODO make a grid image
-    def _add_unsupervised_images(self):
-        pass
+    # TODO deal with 3d data
+    def _add_unsupervised_images(self, step, name, x1, x2, pred, pseudo_labels, label_filter):
+        # from torch_em.transform.raw import _normalize_torch
+        images = [
+            torch_em.transform.raw.normalize(x1[0]),
+            torch_em.transform.raw.normalize(x2[0]),
+            pred[0], pseudo_labels[0],
+        ]
+        im_name = f"{name}/unsupervised/aug1-aug2-prediction-pseudolabels"
+        if label_filter is not None:
+            images.append(label_filter[0])
+            name += "-labelfilter"
+        grid = make_grid(images, nrow=2, padding=8)
+        self.tb.add_image(tag=im_name, img_tensor=grid, global_step=step)
 
     def log_combined_loss(self, step, loss):
         self.tb.add_scalar(tag="train/combined_loss", scalar_value=loss, global_step=step)
