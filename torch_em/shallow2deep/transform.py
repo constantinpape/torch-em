@@ -5,13 +5,14 @@ from torch_em.util import ensure_array, ensure_spatial_array
 
 
 class ForegroundTransform:
-    def __init__(self, ndim=None, ignore_radius=1):
+    def __init__(self, label_id=None, ndim=None, ignore_radius=1):
+        self.label_id = label_id
         self.ndim = ndim
         self.ignore_radius = ignore_radius
 
     def __call__(self, labels):
         labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
-        target = labels > 0
+        target = labels > 0 if self.label_id is None else labels == self.label_id
         if self.ignore_radius > 0:
             dist = distance_transform_edt(target == 0)
             ignore_mask = np.logical_and(dist <= self.ignore_radius, target == 0)

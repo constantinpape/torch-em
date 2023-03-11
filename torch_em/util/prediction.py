@@ -9,7 +9,7 @@ from tqdm import tqdm
 from ..transform.raw import standardize
 
 
-def predict_with_padding(model, input_, min_divisible, device, with_channels=False):
+def predict_with_padding(model, input_, min_divisible, device, with_channels=False, prediction_function=None):
     """Run prediction with padding for a model that can only deal with
     inputs divisible by specific factors.
 
@@ -20,15 +20,22 @@ def predict_with_padding(model, input_, min_divisible, device, with_channels=Fal
             (e.g. (16, 16) for a model that needs inputs divisible by at least 16 pixels)
         device [str, torch.device]: the device of the model
         with_channels [bool]: Whether the input data contains channels (default: False)
-
+        prediction_function [callable] - A wrapper function for prediction to enable custom prediction procedures
+            (default: None)
     Returns:
         np.ndarray: the ouptut of the model
     """
+    if with_channels:
+        assert len(min_divisible) + 1 == input_.ndim, f"{min_divisible}, {input_.ndim}"
+        min_divisible_ = (1,) + min_divisible
+    else:
+        assert len(min_divisible) == input_.ndim
+        min_divisible_ = min_divisible
 
-    if any(sh % md != 0 for sh, md in zip(input_.shape, min_divisible)):
+    if any(sh % md != 0 for sh, md in zip(input_.shape, min_divisible_)):
         pad_width = tuple(
             (0, 0 if sh % md == 0 else md - sh % md)
-            for sh, md in zip(input_.shape, min_divisible)
+            for sh, md in zip(input_.shape, min_divisible_)
         )
         crop_padding = tuple(slice(0, sh) for sh in input_.shape)
         input_ = np.pad(input_, pad_width, mode="reflect")
@@ -40,7 +47,9 @@ def predict_with_padding(model, input_, min_divisible, device, with_channels=Fal
 
     expand_dim = (None,) * (ndim_model - ndim)
     with torch.no_grad():
-        output = model(torch.from_numpy(input_[expand_dim]).to(device)).cpu().numpy()
+        model_input = torch.from_numpy(input_[expand_dim]).to(device)
+        output = model(model_input) if prediction_function is None else prediction_function(model, model_input)
+        output = output.cpu().numpy()
 
     if crop_padding is not None:
         crop_padding = (slice(None),) * (output.ndim - len(crop_padding)) + crop_padding
@@ -108,7 +117,10 @@ def predict_with_halo(
     postprocess=None,
     with_channels=False,
     skip_block=None,
-    mask=None
+    mask=None,
+    disable_tqdm=False,
+    tqdm_desc="predict with halo",
+    prediction_function=None,
 ):
     """ Run block-wise network prediction with halo.
 
@@ -126,7 +138,11 @@ def predict_with_halo(
         postprocess [callable] - function to postprocess the network predictions (default: None)
         with_channels [bool] - whether the input has a channel axis (default: False)
         skip_block [callable] - function to evaluate wheter a given input block should be skipped (default: None)
-        mask [arraylike] -
+        mask [arraylike] - elements outside the mask will be ignored in the prediction (default: None)
+        disable_tqdm [bool] - flag that allows to disable tqdm output (e.g. if function is called multiple times)
+        tqdm_desc [str] - description shown by the tqdm output
+        prediction_function [callable] - A wrapper function for prediction to enable custom prediction procedures
+            (default: None)
     """
     devices = [torch.device(gpu) for gpu in gpu_ids]
     models = [
@@ -173,7 +189,7 @@ def predict_with_halo(
             expand_dims = np.s_[None] if with_channels else np.s_[None, None]
             inp = torch.from_numpy(inp[expand_dims]).to(device)
 
-            prediction = net(inp)
+            prediction = net(inp) if prediction_function is None else prediction_function(net, inp)
             # allow for list of tensors
             try:
                 prediction = prediction.cpu().numpy().squeeze(0)
@@ -205,6 +221,6 @@ def predict_with_halo(
 
     n_blocks = blocking.numberOfBlocks
     with futures.ThreadPoolExecutor(n_workers) as tp:
-        list(tqdm(tp.map(predict_block, range(n_blocks)), total=n_blocks))
+        list(tqdm(tp.map(predict_block, range(n_blocks)), total=n_blocks, disable=disable_tqdm, desc=tqdm_desc))
 
     return output
