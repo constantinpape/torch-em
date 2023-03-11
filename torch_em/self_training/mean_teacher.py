@@ -5,6 +5,10 @@ import torch
 import torch_em
 
 
+class Dummy(torch.nn.Module):
+    pass
+
+
 class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
     """This trainer implements self-traning for semi-supervised learning and domain following the 'MeanTeacher' approach
     of Tarvainen & Vapola (https://arxiv.org/abs/1703.01780). This approach uses a teacher model derived from the
@@ -15,6 +19,9 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
     This class expects the following data loaders:
     - unsupervised_train_loader: Returns two augmentations of the same input.
     - supervised_train_loader (optional): Returns input and labels.
+    - unsupervised_val_loader (optional): Same as unsupervised_train_loader
+    - supervised_val_loader (optional): Same as supervised_train_loader
+    At least one of unsupervised_val_loader and supervised_val_loader must be given.
 
     And the following elements to customize the pseudo labeling:
     - pseudo_labeler: to compute the psuedo-labels
@@ -60,6 +67,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         unsupervised_loss,
         pseudo_labeler,
         supervised_train_loader=None,
+        unsupervised_val_loader=None,
+        supervised_val_loader=None,
         supervised_loss=None,
         supervised_loss_and_metric=None,
         unsupervised_loss_and_metric=None,
@@ -78,8 +87,23 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             train_loader = supervised_train_loader if len(supervised_train_loader) < len(unsupervised_train_loader)\
                 else unsupervised_train_loader
             self._train_epoch_impl = self._train_epoch_semisupervised
+        self.unsupervised_train_loader = unsupervised_train_loader
+        self.supervised_train_loader = supervised_train_loader
 
-        # Check that we have at least one of supvervised / unsuperrvised loss and metric
+        # Check that we have at least one of supvervised / unsupervised val loader.
+        assert sum((
+            supervised_val_loader is None,
+            unsupervised_val_loader is None,
+        )) > 0
+        self.supervised_val_loader = supervised_val_loader
+        self.unsupervised_val_loader = unsupervised_val_loader
+
+        if self.unsupervised_val_loader is None:
+            val_loader = self.supervised_val_loader
+        else:
+            val_loader = self.unsupervised_train_loader
+
+        # Check that we have at least one of supvervised / unsupervised loss and metric.
         assert sum((
             supervised_loss_and_metric is None,
             unsupervised_loss_and_metric is None,
@@ -87,9 +111,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         self.supervised_loss_and_metric = supervised_loss_and_metric
         self.unsupervised_loss_and_metric = unsupervised_loss_and_metric
 
-        super().__init__(train_loader=train_loader, **kwargs)
-        self.unsupervised_train_loader = unsupervised_train_loader
-        self.supervised_train_loader = supervised_train_loader
+        # TODO we need to recover which loadder is which, and take care of the correct deserialization!
+        super().__init__(train_loader=train_loader, val_loader=val_loader, loss=Dummy(), metric=Dummy(), **kwargs)
 
         self.unsupervised_loss = unsupervised_loss
         self.supervised_loss = supervised_loss
@@ -159,7 +182,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         t_per_iter = time.time()
 
         # Sample from both the supervised and unsupervised loader.
-        for xu1, xu2 in self.target_train_loader:
+        for xu1, xu2 in self.unsupervised_train_loader:
             xu1, xu2 = xu1.to(self.device), xu2.to(self.device)
 
             teacher_input, model_input = xu1, xu2
@@ -278,8 +301,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             loss_val += loss.item()
             metric_val += metric.item()
 
-        metric_val /= len(self.supervised_val_loader)
-        loss_val /= len(self.supervised_val_loader)
+        metric_val /= len(self.unsupervised_val_loader)
+        loss_val /= len(self.unsupervised_val_loader)
 
         if self.logger is not None:
             with forward_context():
@@ -303,9 +326,9 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             if self.unsupervised_val_loader is None:
                 unsupervised_metric = None
             else:
-                unsuperised_metric = self._validate_unsupervised(forward_context)
+                unsupervised_metric = self._validate_unsupervised(forward_context)
 
-        if unsuperised_metric is None:
+        if unsupervised_metric is None:
             metric = supervised_metric
         elif supervised_metric is None:
             metric = unsupervised_metric
