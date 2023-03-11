@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -98,7 +99,7 @@ class BCEDiceLossWithLogits(nn.Module):
 
     def forward(self, input_, target):
         loss_dice = dice_score(
-            nn.functional.sigmoid(input_),
+            torch.sigmoid(input_),
             target,
             invert=True,
             channelwise=self.channelwise,
