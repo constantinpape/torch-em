@@ -200,7 +200,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                     self._iteration, loss, xu1, xu2, pred, pseudo_labels, label_filter
                 )
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
-                self.logger.log_lr(lr)
+                self.logger.log_lr(self._iteration, lr)
 
             with torch.no_grad():
                 self._momentum_update()
@@ -251,9 +251,9 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                     self._iteration, unsupervised_loss, xu1, xu2, unsup_pred, pseudo_labels, label_filter
                 )
 
-                self.logger.log_combined_loss(loss)
+                self.logger.log_combined_loss(self._iteration, loss)
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
-                self.logger.log_lr(lr)
+                self.logger.log_lr(self._iteration, lr)
 
             with torch.no_grad():
                 self._momentum_update()
