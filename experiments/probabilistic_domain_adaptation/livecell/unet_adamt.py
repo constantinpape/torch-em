@@ -85,7 +85,7 @@ def run_evaluation(args):
 
 
 def main():
-    parser = get_parser(default_iterations=75000)
+    parser = get_parser(default_iterations=75000, default_batch_size=4)
     parser.add_argument("--confidence_threshold", default=0.9)
     args = parser.parse_args()
     if args.phase in ("c", "check"):

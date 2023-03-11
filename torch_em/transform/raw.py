@@ -33,10 +33,12 @@ def cast(inpt, typestring):
 def standardize(raw, mean=None, std=None, axis=None, eps=1e-7):
     raw = cast(raw, "float32")
 
-    mean = raw.mean(axis=axis, keepdims=True) if mean is None else mean
+    # mean = raw.mean(axis=axis, keepdims=True) if mean is None else mean
+    mean = raw.mean() if mean is None else mean
     raw -= mean
 
-    std = raw.std(axis=axis, keepdims=True) if std is None else std
+    # std = raw.std(axis=axis, keepdims=True) if std is None else std
+    std = raw.std() if std is None else std
     raw /= (std + eps)
 
     return raw

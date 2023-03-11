@@ -19,7 +19,10 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
 
     # TODO deal with 3d data
     def _add_supervised_images(self, step, name, x, y, pred):
-        grid = make_grid([x[0], y[0], pred[0]], padding=8)
+        grid = make_grid(
+            [torch_em.transform.raw.normalize(x[0]), y[0], pred[0]],
+            padding=8
+        )
         self.tb.add_image(tag=f"{name}/supervised/input-labels-prediction", img_tensor=grid, global_step=step)
 
     # TODO deal with 3d data
