@@ -63,9 +63,7 @@ def check_loader(args, train=True, val=True, n_images=5):
 
 
 if __name__ == '__main__':
-    parser = torch_em.util.parser_helper(
-        default_batch_size=1
-    )
+    parser = torch_em.util.parser_helper(default_batch_size=8)
     parser.add_argument("--cell_type", default=None)
     args = parser.parse_args()
 
