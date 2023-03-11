@@ -4,39 +4,9 @@ from shutil import rmtree
 
 import torch
 import torch_em
+import torch_em.self_training as self_training
 from torch_em.model import UNet2d
 from torch_em.util.test import create_segmentation_test_data
-
-
-def simple_pseudo_labeler(teacher, input_):
-    pseudo_labels = teacher(input_)
-    return pseudo_labels, None
-
-
-def simple_unsupservised_loss(model, model_input, pseudo_labels, label_filter):
-    assert label_filter is None
-    pred = model(model_input)
-    loss = torch_em.loss.dice_score(pred, pseudo_labels, invert=True)
-    return loss
-
-
-def simple_unsupervised_loss_and_metric(model, model_input, pseudo_labels, label_filter):
-    assert label_filter is None
-    pred = model(model_input)
-    loss = torch_em.loss.dice_score(pred, pseudo_labels, invert=True)
-    return loss, loss
-
-
-def simple_supervised_loss(model, input_, labels):
-    pred = model(input_)
-    loss = torch_em.loss.dice_score(pred, labels, invert=True)
-    return loss
-
-
-def simple_supervised_loss_and_metric(model, input_, labels):
-    pred = model(input_)
-    loss = torch_em.loss.dice_score(pred, labels, invert=True)
-    return loss, loss
 
 
 class TestMeanTeacher(unittest.TestCase):
@@ -69,29 +39,28 @@ class TestMeanTeacher(unittest.TestCase):
         supervised_val_loader=None,
         supervised_loss=None,
         supervised_loss_and_metric=None,
+        unsupervised_loss_and_metric=None,
     ):
-        from torch_em.self_training import MeanTeacherTrainer
-
         model = UNet2d(in_channels=1, out_channels=1, initial_features=8, depth=3)
         optimizer = torch.optim.Adam(model.parameters())
 
         name = "mt-test"
-        trainer = MeanTeacherTrainer(
+        trainer = self_training.MeanTeacherTrainer(
             name=name,
             model=model,
             optimizer=optimizer,
-            device=torch.device("cpu"),
+            pseudo_labeler=self_training.DefaultPseudoLabeler(),
+            unsupervised_loss=self_training.DefaultSelfTrainingLoss(),
+            unsupervised_loss_and_metric=unsupervised_loss_and_metric,
             unsupervised_train_loader=unsupervised_train_loader,
             supervised_train_loader=supervised_train_loader,
             unsupervised_val_loader=unsupervised_val_loader,
             supervised_val_loader=supervised_val_loader,
-            pseudo_labeler=simple_pseudo_labeler,
-            unsupervised_loss=simple_unsupservised_loss,
-            unsupervised_loss_and_metric=simple_unsupervised_loss_and_metric,
             supervised_loss=supervised_loss,
             supervised_loss_and_metric=supervised_loss_and_metric,
             logger=None,
             mixed_precision=False,
+            device=torch.device("cpu"),
         )
         trainer.fit(53)
         self.assertTrue(os.path.exists(f"./checkpoints/{name}/best.pt"))
@@ -139,7 +108,8 @@ class TestMeanTeacher(unittest.TestCase):
         unsupervised_val_loader = self.get_unsupervised_loader(n_samples=4)
         self._test_mean_teacher(
             unsupervised_train_loader=unsupervised_train_loader,
-            unsupervised_val_loader=unsupervised_val_loader
+            unsupervised_val_loader=unsupervised_val_loader,
+            unsupervised_loss_and_metric=self_training.DefaultSelfTrainingLossAndMetric(),
         )
 
     def test_mean_teacher_semisupervised(self):
@@ -150,8 +120,8 @@ class TestMeanTeacher(unittest.TestCase):
             unsupervised_train_loader=unsupervised_train_loader,
             supervised_train_loader=supervised_train_loader,
             supervised_val_loader=supervised_val_loader,
-            supervised_loss=simple_supervised_loss,
-            supervised_loss_and_metric=simple_supervised_loss_and_metric,
+            supervised_loss=self_training.DefaultSelfTrainingLoss(),
+            supervised_loss_and_metric=self_training.DefaultSelfTrainingLossAndMetric(),
         )
 
 
