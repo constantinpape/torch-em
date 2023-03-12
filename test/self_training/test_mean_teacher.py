@@ -58,7 +58,6 @@ class TestMeanTeacher(unittest.TestCase):
             supervised_val_loader=supervised_val_loader,
             supervised_loss=supervised_loss,
             supervised_loss_and_metric=supervised_loss_and_metric,
-            logger=None,
             mixed_precision=False,
             device=torch.device("cpu"),
         )
@@ -66,16 +65,18 @@ class TestMeanTeacher(unittest.TestCase):
         self.assertTrue(os.path.exists(f"./checkpoints/{name}/best.pt"))
         self.assertTrue(os.path.exists(f"./checkpoints/{name}/latest.pt"))
 
-        # TODO
-        # # make sure that the trainer can be deserialized from the checkpoint
-        # trainer2 = MeanTeacherTrainer.from_checkpoint(os.path.join("./checkpoints", name), name="latest")
-        # self.assertEqual(trainer.iteration, trainer2.iteration)
-        # self.assertTrue(torch_em.util.model_is_equal(trainer.model, trainer2.model))
-        # self.assertTrue(torch_em.util.model_is_equal(trainer.teacher, trainer2.teacher))
+        # make sure that the trainer can be deserialized from the checkpoint
+        trainer2 = self_training.MeanTeacherTrainer.from_checkpoint(os.path.join("./checkpoints", name), name="latest")
+        self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertTrue(torch_em.util.model_is_equal(trainer.model, trainer2.model))
+        self.assertTrue(torch_em.util.model_is_equal(trainer.teacher, trainer2.teacher))
+        self.assertEqual(len(trainer.unsupervised_train_loader), len(trainer2.unsupervised_train_loader))
+        if supervised_train_loader is not None:
+            self.assertEqual(len(trainer.supervised_train_loader), len(trainer2.supervised_train_loader))
 
-        # # and that it can be trained further
-        # trainer2.fit(10)
-        # self.assertEqual(trainer2.iteration, 63)
+        # and that it can be trained further
+        trainer2.fit(10)
+        self.assertEqual(trainer2.iteration, 63)
 
     def get_unsupervised_loader(self, n_samples):
         augmentations = (
@@ -114,7 +115,7 @@ class TestMeanTeacher(unittest.TestCase):
 
     def test_mean_teacher_semisupervised(self):
         unsupervised_train_loader = self.get_unsupervised_loader(n_samples=50)
-        supervised_train_loader = self.get_supervised_loader(n_samples=50)
+        supervised_train_loader = self.get_supervised_loader(n_samples=51)
         supervised_val_loader = self.get_supervised_loader(n_samples=4)
         self._test_mean_teacher(
             unsupervised_train_loader=unsupervised_train_loader,
