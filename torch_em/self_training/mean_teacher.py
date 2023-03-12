@@ -4,6 +4,8 @@ from copy import deepcopy
 import torch
 import torch_em
 
+from .logger import SelfTrainingTensorboardLogger
+
 
 class Dummy(torch.nn.Module):
     pass
@@ -50,12 +52,14 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
     for setting the ratio between supervised and unsupervised training samples
 
     Parameters:
+        model [nn.Module] -
         unsupervised_train_loader [torch.DataLoader] -
         unsupervised_loss [callable] -
         supervised_train_loader [torch.DataLoader] - (default: None)
         supervised_loss [callable] - (default: None)
         unsupervised_loss_and_metric [callable] - (default: None)
         supervised_loss_and_metric [callable] - (default: None)
+        logger [TorchEmLogger] - (default: SelfTrainingTensorboardLogger)
         momentum [float] - (default: 0.999)
         reinit_teacher [bool] - (default: None)
         **kwargs - keyword arguments for torch_em.DataLoader
@@ -63,6 +67,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
 
     def __init__(
         self,
+        model,
         unsupervised_train_loader,
         unsupervised_loss,
         pseudo_labeler,
@@ -70,8 +75,9 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         unsupervised_val_loader=None,
         supervised_val_loader=None,
         supervised_loss=None,
-        supervised_loss_and_metric=None,
         unsupervised_loss_and_metric=None,
+        supervised_loss_and_metric=None,
+        logger=SelfTrainingTensorboardLogger,
         momentum=0.999,
         reinit_teacher=None,
         **kwargs
@@ -111,8 +117,10 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         self.supervised_loss_and_metric = supervised_loss_and_metric
         self.unsupervised_loss_and_metric = unsupervised_loss_and_metric
 
-        # TODO we need to recover which loadder is which, and take care of the correct deserialization!
-        super().__init__(train_loader=train_loader, val_loader=val_loader, loss=Dummy(), metric=Dummy(), **kwargs)
+        super().__init__(
+            model=model, train_loader=train_loader, val_loader=val_loader,
+            loss=Dummy(), metric=Dummy(), logger=logger, **kwargs
+        )
 
         self.unsupervised_loss = unsupervised_loss
         self.supervised_loss = supervised_loss
@@ -120,7 +128,6 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         self.pseudo_labeler = pseudo_labeler
 
         self.momentum = momentum
-        self._kwargs = {"momentum": momentum, "reinit_teacher": reinit_teacher, **kwargs}
 
         # determine how we initialize the teacher weights (copy or reinitialization)
         if reinit_teacher is None:
@@ -138,6 +145,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                         layer.reset_parameters()
             for param in self.teacher.parameters():
                 param.requires_grad = False
+
+        self._kwargs = kwargs
 
     def _momentum_update(self):
         # if we reinit the teacher we perform much faster updates (low momentum) in the first iterations
