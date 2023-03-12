@@ -195,6 +195,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             xu1, xu2 = xu1.to(self.device), xu2.to(self.device)
 
             teacher_input, model_input = xu1, xu2
+
+            self.optimizer.zero_grad()
             # Perform unsupervised training
             with forward_context():
                 # Compute the pseudo labels.
