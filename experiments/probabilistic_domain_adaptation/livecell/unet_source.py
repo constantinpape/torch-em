@@ -1,6 +1,21 @@
+import os
+from glob import glob
+
+import torch
 import torch_em
+import numpy as np
+import pandas as pd
+try:
+    import imageio.v2 as imageio
+except ImportError:
+    import imageio
+
+from elf.evaluation import dice_score
 from torch_em.model import UNet2d
-from common import get_parser, get_supervised_loader
+from torch_em.util.prediction import predict_with_padding
+from tqdm import tqdm
+
+from common import CELL_TYPES, get_parser, get_supervised_loader
 
 
 def _train_cell_type(args, cell_type):
@@ -38,9 +53,45 @@ def check_loader(args, n_images=5):
     check_loader(loader, n_images)
 
 
-# TODO
+def _eval_src(args, ct_src):
+    ckpt = f"checkpoints/unet_source/{ct_src}"
+    model = torch_em.util.get_trainer(ckpt).model
+
+    image_folder = os.path.join(args.input, "images", "livecell_test_images")
+    label_root = os.path.join(args.input, "annotations", "livecell_test_images")
+
+    results = {"src": [ct_src]}
+    device = torch.device("cuda")
+
+    with torch.no_grad():
+        for ct_trg in CELL_TYPES:
+            label_paths = glob(os.path.join(label_root, ct_trg, "*.tif"))
+            scores = []
+            for label_path in tqdm(label_paths, desc=f"Predict for src={ct_src}, trgt={ct_trg}"):
+                image_path = os.path.join(image_folder, os.path.basename(label_path))
+                assert os.path.exists(image_path)
+                image = imageio.imread(image_path)
+                image = torch_em.transform.raw.standardize(image)
+                pred = predict_with_padding(model, image, min_divisible=(16, 16), device=device).squeeze()
+                labels = imageio.imread(label_path)
+                assert image.shape == labels.shape
+                score = dice_score(pred, labels, threshold_seg=None, threshold_gt=0)
+                scores.append(score)
+            results[ct_trg] = np.mean(scores)
+    return pd.DataFrame(results)
+
+
 def run_evaluation(args):
-    pass
+    results = []
+    for ct in args.cell_types:
+        res = _eval_src(args, ct)
+        results.append(res)
+    results = pd.concat(results)
+    print("Evaluation results:")
+    print(results)
+    result_folder = "./results"
+    os.makedirs(result_folder, exist_ok=True)
+    results.to_csv(os.path.join(result_folder, "unet_source.csv"), index=False)
 
 
 def main():
