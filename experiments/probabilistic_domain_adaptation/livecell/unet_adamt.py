@@ -3,7 +3,6 @@ import os
 import pandas as pd
 import torch
 import torch_em.self_training as self_training
-from torch_em.model import UNet2d
 
 import common
 
@@ -23,7 +22,7 @@ def check_loader(args, n_images=5):
 
 
 def _train_source_target(args, source_cell_type, target_cell_type):
-    model = UNet2d(in_channels=1, out_channels=1, initial_features=64, final_activation="Sigmoid")
+    model = common.get_model()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
 
@@ -66,6 +65,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         mixed_precision=True,
         device=device,
         log_image_interval=100,
+        save_root=args.save_root,
     )
     trainer.fit(args.n_iterations)
 

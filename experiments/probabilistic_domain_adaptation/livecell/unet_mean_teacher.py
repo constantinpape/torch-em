@@ -64,6 +64,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         mixed_precision=True,
         device=device,
         log_image_interval=100,
+        save_root=args.save_root,
     )
     trainer.fit(args.n_iterations)
 
