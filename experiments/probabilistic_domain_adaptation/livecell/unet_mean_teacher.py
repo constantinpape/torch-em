@@ -1,10 +1,10 @@
 import os
 
+import pandas as pd
 import torch
 import torch_em.self_training as self_training
-from torch_em.model import UNet2d
 
-from common import CELL_TYPES, get_parser, get_unsupervised_loader
+import common
 
 
 def check_loader(args, n_images=5):
@@ -14,21 +14,18 @@ def check_loader(args, n_images=5):
     print("The cell types", cell_types, "were selected.")
     print("Checking the unsupervised loader for the first cell type", cell_types[0])
 
-    loader = get_unsupervised_loader(
+    loader = common.get_unsupervised_loader(
         args, "train", cell_types[0],
         teacher_augmentation="weak", student_augmentation="weak",
     )
     check_loader(loader, n_images)
 
 
-def _load_model(model, checkpoint):
-    state = torch.load(os.path.join(checkpoint, "best.pt"))["model_state"]
-    model.load_state_dict(state)
-    return model
-
-
 def _train_source_target(args, source_cell_type, target_cell_type):
-    model = UNet2d(in_channels=1, out_channels=1, initial_features=64, final_activation="Sigmoid")
+    model = common.get_unet()
+    src_checkpoint = f"./checkpoints/unet_source/{source_cell_type}"
+    model = common.load_model(model, src_checkpoint)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
 
@@ -39,19 +36,16 @@ def _train_source_target(args, source_cell_type, target_cell_type):
     loss_and_metric = self_training.DefaultSelfTrainingLossAndMetric()
 
     # data loaders
-    unsupervised_train_loader = get_unsupervised_loader(
+    unsupervised_train_loader = common.get_unsupervised_loader(
         args, "train", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
-    unsupervised_val_loader = get_unsupervised_loader(
+    unsupervised_val_loader = common.get_unsupervised_loader(
         args, "val", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-    src_checkpoint = f"./checkpoints/unet_source/{source_cell_type}"
-    model = _load_model(model, src_checkpoint)
 
     name = f"unet_mean_teacher/thresh-{thresh}/{source_cell_type}/{target_cell_type}"
     trainer = self_training.MeanTeacherTrainer(
@@ -75,7 +69,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
 
 
 def _train_source(args, cell_type):
-    for target_cell_type in CELL_TYPES:
+    for target_cell_type in common.CELL_TYPES:
         if target_cell_type == cell_type:
             continue
         _train_source_target(args, cell_type, target_cell_type)
@@ -88,11 +82,20 @@ def run_training(args):
 
 
 def run_evaluation(args):
-    pass
+    results = []
+    for ct in args.cell_types:
+        res = common.evaluate_transfered_model(args, ct, "unet_mean_teacher", model_state="teacher_state")
+        results.append(res)
+    results = pd.concat(results)
+    print("Evaluation results:")
+    print(results)
+    result_folder = "./results"
+    os.makedirs(result_folder, exist_ok=True)
+    results.to_csv(os.path.join(result_folder, "unet_mean_teacher.csv"), index=False)
 
 
 def main():
-    parser = get_parser(default_iterations=25000, default_batch_size=8)
+    parser = common.get_parser(default_iterations=25000, default_batch_size=8)
     parser.add_argument("--confidence_threshold", default=0.9)
     args = parser.parse_args()
     if args.phase in ("c", "check"):
