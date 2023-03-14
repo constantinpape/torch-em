@@ -118,7 +118,9 @@ def _write_depedencies(export_folder, dependencies):
     if dependencies is None:
         ver = torch.__version__
         major, minor = list(map(int, ver.split(".")[:2]))
-        assert major == 1
+        assert major in (1, 2)
+        if major == 2:
+            warn("Modelzoo functionality is not fully tested for PyTorch 2")
         # the torch zip layout changed for a few versions:
         torch_min_version = "1.0"
         if minor > 6 and minor < 10:
@@ -129,7 +131,7 @@ def _write_depedencies(export_folder, dependencies):
         dependencies = {
             "channels": ["pytorch", "conda-forge"],
             "name": "torch-em-deploy",
-            "dependencies": [f"pytorch>={torch_min_version},<2.0"]
+            "dependencies": [f"pytorch>={torch_min_version}"]
         }
         with open(dep_path, "w") as f:
             yaml.dump(dependencies, f)
