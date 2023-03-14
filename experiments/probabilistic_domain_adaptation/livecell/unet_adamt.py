@@ -1,8 +1,11 @@
+import os
+
+import pandas as pd
 import torch
 import torch_em.self_training as self_training
 from torch_em.model import UNet2d
 
-from common import CELL_TYPES, get_parser, get_supervised_loader, get_unsupervised_loader
+import common
 
 
 def check_loader(args, n_images=5):
@@ -12,7 +15,7 @@ def check_loader(args, n_images=5):
     print("The cell types", cell_types, "were selected.")
     print("Checking the unsupervised loader for the first cell type", cell_types[0])
 
-    loader = get_unsupervised_loader(
+    loader = common.get_unsupervised_loader(
         args, "train", cell_types[0],
         teacher_augmentation="weak", student_augmentation="weak",
     )
@@ -31,13 +34,13 @@ def _train_source_target(args, source_cell_type, target_cell_type):
     loss_and_metric = self_training.DefaultSelfTrainingLossAndMetric()
 
     # data loaders
-    supervised_train_loader = get_supervised_loader(args, "train", source_cell_type)
-    supervised_val_loader = get_supervised_loader(args, "val", source_cell_type)
-    unsupervised_train_loader = get_unsupervised_loader(
+    supervised_train_loader = common.get_supervised_loader(args, "train", source_cell_type)
+    supervised_val_loader = common.get_supervised_loader(args, "val", source_cell_type)
+    unsupervised_train_loader = common.get_unsupervised_loader(
         args, "train", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
-    unsupervised_val_loader = get_unsupervised_loader(
+    unsupervised_val_loader = common.get_unsupervised_loader(
         args, "val", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
@@ -68,7 +71,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
 
 
 def _train_source(args, cell_type):
-    for target_cell_type in CELL_TYPES:
+    for target_cell_type in common.CELL_TYPES:
         if target_cell_type == cell_type:
             continue
         _train_source_target(args, cell_type, target_cell_type)
@@ -81,11 +84,20 @@ def run_training(args):
 
 
 def run_evaluation(args):
-    pass
+    results = []
+    for ct in args.cell_types:
+        res = common.evaluate_transfered_model(args, ct, "unet_adamt", model_state="teacher_state")
+        results.append(res)
+    results = pd.concat(results)
+    print("Evaluation results:")
+    print(results)
+    result_folder = "./results"
+    os.makedirs(result_folder, exist_ok=True)
+    results.to_csv(os.path.join(result_folder, "unet_adamt.csv"), index=False)
 
 
 def main():
-    parser = get_parser(default_iterations=75000, default_batch_size=4)
+    parser = common.get_parser(default_iterations=75000, default_batch_size=4)
     parser.add_argument("--confidence_threshold", default=0.9)
     args = parser.parse_args()
     if args.phase in ("c", "check"):
