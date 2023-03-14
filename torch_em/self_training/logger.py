@@ -17,25 +17,36 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         self.tb = torch.utils.tensorboard.SummaryWriter(self.log_dir)
         self.log_image_interval = trainer.log_image_interval
 
-    # TODO deal with 3d data
     def _add_supervised_images(self, step, name, x, y, pred):
+        if x.ndim == 5:
+            assert y.ndim == pred.ndim == 5
+            zindex = x.shape[2] // 2
+            x, y, pred = x[:, :, zindex], y[:, :, zindex], pred[:, :, zindex]
+
         grid = make_grid(
-            [torch_em.transform.raw.normalize(x[0]), y[0], pred[0]],
+            [torch_em.transform.raw.normalize(x[0]), y[0, 0:1], pred[0, 0:1]],
             padding=8
         )
         self.tb.add_image(tag=f"{name}/supervised/input-labels-prediction", img_tensor=grid, global_step=step)
 
-    # TODO deal with 3d data
     def _add_unsupervised_images(self, step, name, x1, x2, pred, pseudo_labels, label_filter):
-        # from torch_em.transform.raw import _normalize_torch
+        if x1.ndim == 5:
+            assert x2.ndim == pred.ndim == pseudo_labels.ndim == 5
+            zindex = x1.shape[2] // 2
+            x1, x2, pred = x1[:, :, zindex], x2[:, :, zindex], pred[:, :, zindex]
+            pseudo_labels = pseudo_labels[:, :, zindex]
+            if label_filter is not None:
+                assert label_filter.ndim == 5
+                label_filter = label_filter[:, :, zindex]
+
         images = [
             torch_em.transform.raw.normalize(x1[0]),
             torch_em.transform.raw.normalize(x2[0]),
-            pred[0], pseudo_labels[0],
+            pred[0, 0:1], pseudo_labels[0, 0:1],
         ]
         im_name = f"{name}/unsupervised/aug1-aug2-prediction-pseudolabels"
         if label_filter is not None:
-            images.append(label_filter[0])
+            images.append(label_filter[0, 0:1])
             name += "-labelfilter"
         grid = make_grid(images, nrow=2, padding=8)
         self.tb.add_image(tag=im_name, img_tensor=grid, global_step=step)

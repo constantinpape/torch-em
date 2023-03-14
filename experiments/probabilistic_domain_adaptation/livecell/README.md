@@ -1,2 +1,4 @@
-TODO: double check the unet-src results with the results from Anwai.
-Results are in `results/unet_source.csv`.
+# Prelim. results
+
+-> UNet results are a bit worse than from Anwai, double check how the training differs.
+-> Mean Teacher improves results.

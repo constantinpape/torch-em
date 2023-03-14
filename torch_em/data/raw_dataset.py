@@ -129,6 +129,9 @@ class RawDataset(torch.utils.data.Dataset):
 
         if self.transform is not None:
             raw = self.transform(raw)
+            if isinstance(raw, list):
+                assert len(raw) == 1
+                raw = raw[0]
             if self.trafo_halo is not None:
                 raw = self.crop(raw)
 
