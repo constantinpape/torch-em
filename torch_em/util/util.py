@@ -5,6 +5,14 @@ import numpy as np
 import torch
 import torch_em
 
+# this is a fairly brittle way to check if a module is compiled.
+# would be good to find a better solution, ideall something like
+# model.is_compiled()
+try:
+    from torch._dynamo.eval_frame import OptimizedModule
+except ImportError:
+    OptimizedModule = None
+
 # torch doesn't support most unsigned types,
 # so we map them to their signed equivalent
 DTYPE_MAP = {
@@ -30,7 +38,7 @@ def auto_compile(model, compile_model, default_compile=True):
     if compile_model is None:
         if torch_major < 2:
             compile_model = False
-        elif isinstance(model, torch._dynamo.eval_frame.OptimizedModule):  # model is already compiled
+        elif isinstance(model, OptimizedModule):  # model is already compiled
             compile_model = False
         else:
             compile_model = default_compile
@@ -38,6 +46,7 @@ def auto_compile(model, compile_model, default_compile=True):
     if compile_model:
         if torch_major < 2:
             raise RuntimeError("Model compilation is only supported for pytorch 2")
+        print("Compiling pytorch model ...")
         if isinstance(compile_model, str):
             model = torch.compile(model, mode=compile_model)
         else:
