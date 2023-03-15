@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from .tensorboard_logger import TensorboardLogger
 from .wandb_logger import WandbLogger
-from ..util import get_constructor_arguments
+from ..util import auto_compile, get_constructor_arguments
 
 
 class DefaultTrainer:
@@ -39,6 +39,7 @@ class DefaultTrainer:
         logger_kwargs: Optional[Dict[str, Any]] = None,
         id_: Optional[str] = None,
         save_root: Optional[str] = None,
+        compile_model: Optional[Union[bool, str]] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
@@ -59,6 +60,7 @@ class DefaultTrainer:
         self.lr_scheduler = lr_scheduler
         self.log_image_interval = log_image_interval
         self.save_root = save_root
+        self.compile_model = compile_model
 
         self._iteration = 0
         self._epoch = 0
@@ -391,6 +393,9 @@ class DefaultTrainer:
         self.max_iteration = self._iteration + iterations
         epochs = int(np.ceil(float(iterations) / len(self.train_loader)))
         self.max_epoch = self._epoch + epochs
+
+        # check if we compile the model (only supported by pytorch 2)
+        self.model = auto_compile(self.model, self.compile_model)
 
         self.model.to(self.device)
         self.loss.to(self.device)

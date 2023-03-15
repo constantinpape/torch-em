@@ -40,7 +40,7 @@ data_path = "./dsb"  # the training data will be downloaded and saved here
 train_loader = get_dsb_loader(
     data_path, 
     patch_shape=(1, 256, 256),
-    batch_size=8
+    batch_size=8,
     split="train",
     download=True,
     label_transform=label_transform
