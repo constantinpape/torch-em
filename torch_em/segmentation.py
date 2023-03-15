@@ -330,6 +330,7 @@ def default_segmentation_trainer(
     trainer_class=DefaultTrainer,
     id_=None,
     save_root=None,
+    compile_model=None,
 ):
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, **optimizer_kwargs)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)
@@ -363,5 +364,6 @@ def default_segmentation_trainer(
         logger_kwargs=logger_kwargs,
         id_=id_,
         save_root=save_root,
+        compile_model=compile_model,
     )
     return trainer

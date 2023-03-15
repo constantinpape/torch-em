@@ -14,6 +14,38 @@ DTYPE_MAP = {
 }
 
 
+def auto_compile(model, compile_model, default_compile=True):
+    """Model compilation for pytorch >= 2
+
+    Parameters:
+        model [torch.nn.Module] - the model
+        compile_model [None, bool, str] - whether to comile the model.
+            If None, it will not be compiled for torch < 2, and for torch > 2 the behavior
+            specificed by 'default_compile' will be used. If a string is given it will be
+            intepreted as the compile mode (torch.compile(model, mode=compile_model)) (default: None)
+        default_compile [bool] - the default compilation behavior for torch 2
+    """
+    torch_major = int(torch.__version__.split(".")[0])
+
+    if compile_model is None:
+        if torch_major < 2:
+            compile_model = False
+        elif isinstance(model, torch._dynamo.eval_frame.OptimizedModule):  # model is already compiled
+            compile_model = False
+        else:
+            compile_model = default_compile
+
+    if compile_model:
+        if torch_major < 2:
+            raise RuntimeError("Model compilation is only supported for pytorch 2")
+        if isinstance(compile_model, str):
+            model = torch.compile(model, mode=compile_model)
+        else:
+            model = torch.compile(model)
+
+    return model
+
+
 def ensure_tensor(tensor, dtype=None):
 
     if isinstance(tensor, np.ndarray):
