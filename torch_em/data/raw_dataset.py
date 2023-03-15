@@ -31,6 +31,7 @@ class RawDataset(torch.utils.data.Dataset):
         sampler=None,
         ndim=None,
         with_channels=False,
+        augmentations=None,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -59,6 +60,10 @@ class RawDataset(torch.utils.data.Dataset):
         self.transform = transform
         self.sampler = sampler
         self.dtype = dtype
+
+        if augmentations is not None:
+            assert len(augmentations) == 2
+        self.augmentations = augmentations
 
         self._len = self.compute_len(self.shape, self.patch_shape) if n_samples is None else n_samples
 
@@ -124,10 +129,18 @@ class RawDataset(torch.utils.data.Dataset):
 
         if self.transform is not None:
             raw = self.transform(raw)
+            if isinstance(raw, list):
+                assert len(raw) == 1
+                raw = raw[0]
             if self.trafo_halo is not None:
                 raw = self.crop(raw)
 
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
+        if self.augmentations is not None:
+            aug1, aug2 = self.augmentations
+            raw1, raw2 = aug1(raw), aug2(raw)
+            return raw1, raw2
+
         return raw
 
     # need to overwrite pickle to support h5py

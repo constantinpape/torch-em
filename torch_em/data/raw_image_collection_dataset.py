@@ -36,6 +36,7 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         dtype=torch.float32,
         n_samples=None,
         sampler=None,
+        augmentations=None,
     ):
         self._check_inputs(raw_image_paths)
         self.raw_images = raw_image_paths
@@ -55,6 +56,10 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         else:
             self._len = n_samples
             self.sample_random_index = True
+
+        if augmentations is not None:
+            assert len(augmentations) == 2
+        self.augmentations = augmentations
 
     def __len__(self):
         return self._len
@@ -104,13 +109,21 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         raw = self._get_sample(index)
+
         if self.raw_transform is not None:
             raw = self.raw_transform(raw)
+
         if self.transform is not None:
             raw = self.transform(raw)
             assert len(raw) == 1
             raw = raw[0]
             # if self.trafo_halo is not None:
             #     raw = self.crop(raw)
+
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
+        if self.augmentations is not None:
+            aug1, aug2 = self.augmentations
+            raw1, raw2 = aug1(raw), aug2(raw)
+            return raw1, raw2
+
         return raw
