@@ -11,6 +11,11 @@ from torch_em.loss import DiceLoss
 from torch_em.model import UNet2d
 from torch_em.trainer import DefaultTrainer
 
+try:
+    import onnx
+except ImportError:
+    onnx = None
+
 
 class ExpandChannels:
     def __init__(self, n_channels):
@@ -89,13 +94,20 @@ class TestModelzoo(unittest.TestCase):
     def test_export_multi_channel(self):
         self._test_export(4)
 
-    def test_add_weights(self):
+    def test_add_weights_torchscript(self):
         from torch_em.util.modelzoo import add_weight_formats
         self._test_export(1)
-        additional_formats = ["onnx", "torchscript"]
+        additional_formats = ["torchscript"]
+        add_weight_formats(self.save_folder, additional_formats)
+        self.assertTrue(os.path.join(self.save_folder, "weigths-torchscript.pt"))
+
+    @unittest.skipIf(onnx is None, "Needs onnx")
+    def test_add_weights_onnx(self):
+        from torch_em.util.modelzoo import add_weight_formats
+        self._test_export(1)
+        additional_formats = ["onnx"]
         add_weight_formats(self.save_folder, additional_formats)
         self.assertTrue(os.path.join(self.save_folder, "weigths.onnx"))
-        self.assertTrue(os.path.join(self.save_folder, "weigths-torchscript.pt"))
 
 
 if __name__ == "__main__":
