@@ -8,7 +8,8 @@ dependencies:
     - affogato
     - bioimageio.core >=0.5.0
     - python-elf
-    - pytorch-cuda=11.6  # you may need to update the pytorch version to match your system
+    - pytorch >=2.0
+    - pytorch-cuda>=11.7  # you may need to update the pytorch version to match your system
     - tensorboard
     - tifffile
     - torchvision
