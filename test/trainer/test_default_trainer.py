@@ -31,7 +31,7 @@ class TestDefaultTrainer(unittest.TestCase):
         if os.path.exists(self.log_folder):
             rmtree(self.log_folder)
 
-    def _get_kwargs(self, with_roi=False):
+    def _get_kwargs(self, with_roi=False, compile_model=False):
         roi = np.s_[:6, :, :] if with_roi else None
         loader = torch_em.default_segmentation_loader(
             raw_paths=self.data_path, raw_key="raw",
@@ -51,6 +51,7 @@ class TestDefaultTrainer(unittest.TestCase):
             "optimizer": torch.optim.Adam(model.parameters(), lr=1e-5),
             "device": torch.device("cpu"),
             "mixed_precision": False,
+            "compile_model": compile_model,
         }
         return kwargs
 
@@ -93,6 +94,24 @@ class TestDefaultTrainer(unittest.TestCase):
         lr1 = [pm["lr"] for pm in trainer.optimizer.param_groups][0]
         lr2 = [pm["lr"] for pm in trainer2.optimizer.param_groups][0]
         self.assertEqual(lr1, lr2)
+
+        trainer2.fit(10)
+        self.assertEqual(trainer2.iteration, 20)
+
+    def test_compiled_model(self):
+        from torch_em.trainer import DefaultTrainer
+        trainer = DefaultTrainer(**self._get_kwargs(compile_model=True))
+        trainer.fit(10)
+        exp_model = trainer.model
+        exp_data_shape = trainer.train_loader.dataset.raw.shape
+
+        trainer2 = DefaultTrainer.from_checkpoint(
+            os.path.join(self.checkpoint_folder, self.name),
+            name="latest"
+        )
+        self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
+        self.assertTrue(torch_em.util.model_is_equal(exp_model, trainer2.model))
 
         trainer2.fit(10)
         self.assertEqual(trainer2.iteration, 20)

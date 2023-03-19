@@ -5,6 +5,14 @@ import numpy as np
 import torch
 import torch_em
 
+# this is a fairly brittle way to check if a module is compiled.
+# would be good to find a better solution, ideall something like
+# model.is_compiled()
+try:
+    from torch._dynamo.eval_frame import OptimizedModule
+except ImportError:
+    OptimizedModule = None
+
 # torch doesn't support most unsigned types,
 # so we map them to their signed equivalent
 DTYPE_MAP = {
@@ -12,6 +20,45 @@ DTYPE_MAP = {
     np.dtype("uint32"): np.int32,
     np.dtype("uint64"): np.int64
 }
+
+
+def is_compiled(model):
+    if OptimizedModule is None:
+        return False
+    return isinstance(model, OptimizedModule)
+
+
+def auto_compile(model, compile_model, default_compile=True):
+    """Model compilation for pytorch >= 2
+
+    Parameters:
+        model [torch.nn.Module] - the model
+        compile_model [None, bool, str] - whether to comile the model.
+            If None, it will not be compiled for torch < 2, and for torch > 2 the behavior
+            specificed by 'default_compile' will be used. If a string is given it will be
+            intepreted as the compile mode (torch.compile(model, mode=compile_model)) (default: None)
+        default_compile [bool] - the default compilation behavior for torch 2
+    """
+    torch_major = int(torch.__version__.split(".")[0])
+
+    if compile_model is None:
+        if torch_major < 2:
+            compile_model = False
+        elif is_compiled(model):  # model is already compiled
+            compile_model = False
+        else:
+            compile_model = default_compile
+
+    if compile_model:
+        if torch_major < 2:
+            raise RuntimeError("Model compilation is only supported for pytorch 2")
+        print("Compiling pytorch model ...")
+        if isinstance(compile_model, str):
+            model = torch.compile(model, mode=compile_model)
+        else:
+            model = torch.compile(model)
+
+    return model
 
 
 def ensure_tensor(tensor, dtype=None):
