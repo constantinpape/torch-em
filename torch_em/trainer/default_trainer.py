@@ -233,6 +233,7 @@ class DefaultTrainer:
 
         trainer = cls(**deserializer.trainer_kwargs)
         trainer._initialize(0, save_dict)
+        trainer._is_initialized = True
         return trainer
 
     class Serializer:
@@ -406,34 +407,35 @@ class DefaultTrainer:
         epochs = int(np.ceil(float(iterations) / len(self.train_loader)))
         self.max_epoch = self._epoch + epochs
 
-        # check if we compile the model (only supported by pytorch 2)
-        # to enable (de)serialization of compiled models, we keep track of the model class and kwargs
-        if is_compiled(self.model):
-            warnings.warn(
-                "You have passed a compiled model to the trainer."
-                "It will not be possible to (de)serialize the trainer with it."
-                "If you want to be able to do this please pass the normal model."
-                "It can be automatically compiled by setting 'compile_model' to True"
-            )
-        self._model_class = f"{self.model.__class__.__module__}.{self.model.__class__.__name__}"
-        self._model_kwargs = get_constructor_arguments(self.model)
-        self.model = auto_compile(self.model, self.compile_model)
+        if not getattr(self, "_is_initialized", False):
+            # check if we compile the model (only supported by pytorch 2)
+            # to enable (de)serialization of compiled models, we keep track of the model class and kwargs
+            if is_compiled(self.model):
+                warnings.warn(
+                    "You have passed a compiled model to the trainer."
+                    "It will not be possible to (de)serialize the trainer with it."
+                    "If you want to be able to do this please pass the normal model."
+                    "It can be automatically compiled by setting 'compile_model' to True"
+                )
+            self._model_class = f"{self.model.__class__.__module__}.{self.model.__class__.__name__}"
+            self._model_kwargs = get_constructor_arguments(self.model)
+            self.model = auto_compile(self.model, self.compile_model)
 
-        self.model.to(self.device)
-        self.loss.to(self.device)
+            self.model.to(self.device)
+            self.loss.to(self.device)
 
-        # this saves all the information that is necessary
-        # to fully load the trainer from the checkpoint
-        self.init_data = self._build_init()
+            # this saves all the information that is necessary
+            # to fully load the trainer from the checkpoint
+            self.init_data = self._build_init()
 
-        if self.logger_class is None:
-            self.logger = None
-        else:
-            # may set self.name if self.name is None
-            save_root = getattr(self, "save_root", None)
-            self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
+            if self.logger_class is None:
+                self.logger = None
+            else:
+                # may set self.name if self.name is None
+                save_root = getattr(self, "save_root", None)
+                self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
 
-        os.makedirs(self.checkpoint_folder, exist_ok=True)
+            os.makedirs(self.checkpoint_folder, exist_ok=True)
 
         best_metric = np.inf
         return best_metric

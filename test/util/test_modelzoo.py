@@ -69,7 +69,7 @@ class TestModelzoo(unittest.TestCase):
             name=self.name, train_loader=loader, val_loader=loader,
             model=model, loss=DiceLoss(), metric=DiceLoss(),
             optimizer=optimizer, device=torch.device("cpu"),
-            mixed_precision=False, logger=None
+            mixed_precision=False, logger=None, compile_model=False,
         )
         trainer.fit(10)
 
