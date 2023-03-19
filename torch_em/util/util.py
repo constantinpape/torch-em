@@ -22,6 +22,12 @@ DTYPE_MAP = {
 }
 
 
+def is_compiled(model):
+    if OptimizedModule is None:
+        return False
+    return isinstance(model, OptimizedModule)
+
+
 def auto_compile(model, compile_model, default_compile=True):
     """Model compilation for pytorch >= 2
 
@@ -38,7 +44,7 @@ def auto_compile(model, compile_model, default_compile=True):
     if compile_model is None:
         if torch_major < 2:
             compile_model = False
-        elif isinstance(model, OptimizedModule):  # model is already compiled
+        elif is_compiled(model):  # model is already compiled
             compile_model = False
         else:
             compile_model = default_compile
