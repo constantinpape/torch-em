@@ -60,6 +60,7 @@ class TestMeanTeacher(unittest.TestCase):
             supervised_loss_and_metric=supervised_loss_and_metric,
             mixed_precision=False,
             device=torch.device("cpu"),
+            compile_model=False,
         )
         trainer.fit(53)
         self.assertTrue(os.path.exists(f"./checkpoints/{name}/best.pt"))
