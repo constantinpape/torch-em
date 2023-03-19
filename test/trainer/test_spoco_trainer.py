@@ -66,6 +66,7 @@ class TestSpocoTrainer(unittest.TestCase):
             "device": torch.device("cpu"),
             "mixed_precision": False,
             "momentum": 0.95,
+            "compile_model": False,
         }
         return kwargs
 

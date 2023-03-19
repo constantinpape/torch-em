@@ -5,6 +5,7 @@ import inspect
 import os
 import time
 import warnings
+from collections import OrderedDict
 from importlib import import_module
 from typing import Any, Callable, Dict, Optional, Union
 
@@ -15,7 +16,7 @@ from tqdm import tqdm
 
 from .tensorboard_logger import TensorboardLogger
 from .wandb_logger import WandbLogger
-from ..util import get_constructor_arguments
+from ..util import auto_compile, get_constructor_arguments, is_compiled
 
 
 class DefaultTrainer:
@@ -39,6 +40,7 @@ class DefaultTrainer:
         logger_kwargs: Optional[Dict[str, Any]] = None,
         id_: Optional[str] = None,
         save_root: Optional[str] = None,
+        compile_model: Optional[Union[bool, str]] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
@@ -59,6 +61,7 @@ class DefaultTrainer:
         self.lr_scheduler = lr_scheduler
         self.log_image_interval = log_image_interval
         self.save_root = save_root
+        self.compile_model = compile_model
 
         self._iteration = 0
         self._epoch = 0
@@ -230,6 +233,7 @@ class DefaultTrainer:
 
         trainer = cls(**deserializer.trainer_kwargs)
         trainer._initialize(0, save_dict)
+        trainer._is_initialized = True
         return trainer
 
     class Serializer:
@@ -357,6 +361,17 @@ class DefaultTrainer:
         def dump_logger(self, kwarg_name: str):  # todo: remove and rename kwarg 'logger' to 'logger_class'
             self.dump_generic_class(f"{kwarg_name}_class")
 
+        def dump_model(self, kwarg_name: str):
+            if is_compiled(self.trainer.model):
+                self.init_data.update(
+                    {
+                        "model_class": self.trainer._model_class,
+                        "model_kwargs": self.trainer._model_kwargs,
+                    }
+                )
+            else:
+                self.dump_generic_instance("model")
+
     def _build_init(self) -> Dict[str, Any]:
         serializer = self.Serializer(self)
         for name in inspect.signature(self.__class__).parameters:
@@ -392,21 +407,35 @@ class DefaultTrainer:
         epochs = int(np.ceil(float(iterations) / len(self.train_loader)))
         self.max_epoch = self._epoch + epochs
 
-        self.model.to(self.device)
-        self.loss.to(self.device)
+        if not getattr(self, "_is_initialized", False):
+            # check if we compile the model (only supported by pytorch 2)
+            # to enable (de)serialization of compiled models, we keep track of the model class and kwargs
+            if is_compiled(self.model):
+                warnings.warn(
+                    "You have passed a compiled model to the trainer."
+                    "It will not be possible to (de)serialize the trainer with it."
+                    "If you want to be able to do this please pass the normal model."
+                    "It can be automatically compiled by setting 'compile_model' to True"
+                )
+            self._model_class = f"{self.model.__class__.__module__}.{self.model.__class__.__name__}"
+            self._model_kwargs = get_constructor_arguments(self.model)
+            self.model = auto_compile(self.model, self.compile_model)
 
-        # this saves all the information that is necessary
-        # to fully load the trainer from the checkpoint
-        self.init_data = self._build_init()
+            self.model.to(self.device)
+            self.loss.to(self.device)
 
-        if self.logger_class is None:
-            self.logger = None
-        else:
-            # may set self.name if self.name is None
-            save_root = getattr(self, "save_root", None)
-            self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
+            # this saves all the information that is necessary
+            # to fully load the trainer from the checkpoint
+            self.init_data = self._build_init()
 
-        os.makedirs(self.checkpoint_folder, exist_ok=True)
+            if self.logger_class is None:
+                self.logger = None
+            else:
+                # may set self.name if self.name is None
+                save_root = getattr(self, "save_root", None)
+                self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
+
+            os.makedirs(self.checkpoint_folder, exist_ok=True)
 
         best_metric = np.inf
         return best_metric
@@ -446,7 +475,13 @@ class DefaultTrainer:
         self._best_epoch = save_dict["best_epoch"]
         self.best_metric = save_dict["best_metric"]
 
-        self.model.load_state_dict(save_dict["model_state"])
+        model_state = save_dict["model_state"]
+        # to enable loading compiled models
+        compiled_prefix = "_orig_mod."
+        model_state = OrderedDict(
+            [(k[len(compiled_prefix):] if k.startswith(compiled_prefix) else k, v) for k, v in model_state.items()]
+        )
+        self.model.load_state_dict(model_state)
         # we need to send the network to the device before loading the optimizer state!
         self.model.to(self.device)
 
