@@ -5,6 +5,7 @@ import inspect
 import os
 import time
 import warnings
+from collections import OrderedDict
 from importlib import import_module
 from typing import Any, Callable, Dict, Optional, Union
 
@@ -15,7 +16,7 @@ from tqdm import tqdm
 
 from .tensorboard_logger import TensorboardLogger
 from .wandb_logger import WandbLogger
-from ..util import auto_compile, get_constructor_arguments
+from ..util import auto_compile, get_constructor_arguments, is_compiled
 
 
 class DefaultTrainer:
@@ -359,6 +360,17 @@ class DefaultTrainer:
         def dump_logger(self, kwarg_name: str):  # todo: remove and rename kwarg 'logger' to 'logger_class'
             self.dump_generic_class(f"{kwarg_name}_class")
 
+        def dump_model(self, kwarg_name: str):
+            if is_compiled(self.trainer.model):
+                self.init_data.update(
+                    {
+                        "model_class": self.trainer._model_class,
+                        "model_kwargs": self.trainer._model_kwargs,
+                    }
+                )
+            else:
+                self.dump_generic_instance("model")
+
     def _build_init(self) -> Dict[str, Any]:
         serializer = self.Serializer(self)
         for name in inspect.signature(self.__class__).parameters:
@@ -395,6 +407,16 @@ class DefaultTrainer:
         self.max_epoch = self._epoch + epochs
 
         # check if we compile the model (only supported by pytorch 2)
+        # to enable (de)serialization of compiled models, we keep track of the model class and kwargs
+        if is_compiled(self.model):
+            warnings.warn(
+                "You have passed a compiled model to the trainer."
+                "It will not be possible to (de)serialize the trainer with it."
+                "If you want to be able to do this please pass the normal model."
+                "It can be automatically compiled by setting 'compile_model' to True"
+            )
+        self._model_class = f"{self.model.__class__.__module__}.{self.model.__class__.__name__}"
+        self._model_kwargs = get_constructor_arguments(self.model)
         self.model = auto_compile(self.model, self.compile_model)
 
         self.model.to(self.device)
@@ -451,7 +473,13 @@ class DefaultTrainer:
         self._best_epoch = save_dict["best_epoch"]
         self.best_metric = save_dict["best_metric"]
 
-        self.model.load_state_dict(save_dict["model_state"])
+        model_state = save_dict["model_state"]
+        # to enable loading compiled models
+        compiled_prefix = "_orig_mod."
+        model_state = OrderedDict(
+            [(k[len(compiled_prefix):] if k.startswith(compiled_prefix) else k, v) for k, v in model_state.items()]
+        )
+        self.model.load_state_dict(model_state)
         # we need to send the network to the device before loading the optimizer state!
         self.model.to(self.device)
 
