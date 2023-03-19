@@ -100,7 +100,7 @@ class TestDefaultTrainer(unittest.TestCase):
 
     def test_compiled_model(self):
         from torch_em.trainer import DefaultTrainer
-        trainer = DefaultTrainer(**self._get_kwargs(compiled_model=True))
+        trainer = DefaultTrainer(**self._get_kwargs(compile_model=True))
         trainer.fit(10)
         exp_model = trainer.model
         exp_data_shape = trainer.train_loader.dataset.raw.shape
