@@ -56,7 +56,7 @@ class TestSegmentation(unittest.TestCase):
                                                train_loader, val_loader,
                                                mixed_precision=False,
                                                device=torch.device("cpu"),
-                                               logger=None)
+                                               logger=None, compile_model=False)
         trainer.fit(n_iterations)
 
         def _test_checkpoint(cp_path, check_progress):
