@@ -8,8 +8,8 @@ import common
 
 def _train_cell_type(args, cell_type):
     model = common.get_unet()
-    train_loader = common.get_supervised_loader(args, "train", cell_type)
-    val_loader = common.get_supervised_loader(args, "val", cell_type)
+    train_loader = common.get_supervised_loader(args, "train", cell_type, args.batch_size)
+    val_loader = common.get_supervised_loader(args, "val", cell_type, 1)
     name = f"unet_source/{cell_type}"
     trainer = torch_em.default_segmentation_trainer(
         name=name,

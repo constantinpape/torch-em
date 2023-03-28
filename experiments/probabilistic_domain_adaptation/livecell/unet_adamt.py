@@ -33,8 +33,8 @@ def _train_source_target(args, source_cell_type, target_cell_type):
     loss_and_metric = self_training.DefaultSelfTrainingLossAndMetric()
 
     # data loaders
-    supervised_train_loader = common.get_supervised_loader(args, "train", source_cell_type)
-    supervised_val_loader = common.get_supervised_loader(args, "val", source_cell_type)
+    supervised_train_loader = common.get_supervised_loader(args, "train", source_cell_type, args.batch_size)
+    supervised_val_loader = common.get_supervised_loader(args, "val", source_cell_type, 1)
     unsupervised_train_loader = common.get_unsupervised_loader(
         args, "train", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
