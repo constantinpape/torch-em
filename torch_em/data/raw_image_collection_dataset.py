@@ -3,11 +3,13 @@ import torch
 from ..util import ensure_tensor_with_channels, load_image, supports_memmap
 
 
-# TODO pad images that are too small for the patch shape
 class RawImageCollectionDataset(torch.utils.data.Dataset):
     max_sampling_attempts = 500
 
-    def _check_inputs(self, raw_images):
+    def _check_inputs(self, raw_images, full_check):
+        if not full_check:
+            return
+
         is_multichan = None
         for raw_im in raw_images:
 
@@ -37,8 +39,9 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         n_samples=None,
         sampler=None,
         augmentations=None,
+        full_check=False,
     ):
-        self._check_inputs(raw_image_paths)
+        self._check_inputs(raw_image_paths, full_check)
         self.raw_images = raw_image_paths
         self._ndim = 2
 
@@ -69,19 +72,29 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         return self._ndim
 
     def _sample_bounding_box(self, shape):
-        if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
-            raise NotImplementedError("Image padding is not supported yet.")
         bb_start = [
             np.random.randint(0, sh - psh) if sh - psh > 0 else 0
             for sh, psh in zip(shape, self.patch_shape)
         ]
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
 
+    def _ensure_patch_shape(self, raw, have_raw_channels):
+        shape = raw.shape
+        if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
+            if have_raw_channels:
+                raise NotImplementedError("Padding is not implemented for data with channels")
+            assert len(shape) == len(self.patch_shape)
+            pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
+            raw = np.pad(raw, pw)
+        return raw
+
     def _get_sample(self, index):
         if self.sample_random_index:
             index = np.random.randint(0, len(self.raw_images))
         raw = load_image(self.raw_images[index])
         have_raw_channels = raw.ndim == 3
+
+        raw = self._ensure_patch_shape(raw, have_raw_channels)
 
         shape = raw.shape
         # we assume images are loaded with channel last!

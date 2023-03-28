@@ -121,6 +121,7 @@ def predict_with_halo(
     disable_tqdm=False,
     tqdm_desc="predict with halo",
     prediction_function=None,
+    roi=None,
 ):
     """ Run block-wise network prediction with halo.
 
@@ -141,8 +142,9 @@ def predict_with_halo(
         mask [arraylike] - elements outside the mask will be ignored in the prediction (default: None)
         disable_tqdm [bool] - flag that allows to disable tqdm output (e.g. if function is called multiple times)
         tqdm_desc [str] - description shown by the tqdm output
-        prediction_function [callable] - A wrapper function for prediction to enable custom prediction procedures
+        prediction_function [callable] - a wrapper function for prediction to enable custom prediction procedures.
             (default: None)
+        roi [tuple[slice]] - a region of interest for which to run prediction. (default: None)
     """
     devices = [torch.device(gpu) for gpu in gpu_ids]
     models = [
@@ -156,7 +158,14 @@ def predict_with_halo(
         shape = shape[1:]
     ndim = len(shape)
     assert len(block_shape) == len(halo) == ndim
-    blocking = nt.blocking([0] * ndim, shape, block_shape)
+
+    if roi is None:
+        blocking = nt.blocking([0] * ndim, shape, block_shape)
+    else:
+        assert len(roi) == ndim
+        blocking_start = [0 if ro.start is None else ro.start for ro in roi]
+        blocking_stop = [sh if ro.stop is None else ro.stop for ro, sh in zip(roi, shape)]
+        blocking = nt.blocking(blocking_start, blocking_stop, block_shape)
 
     if output is None:
         n_out = models[0][0].out_channels
@@ -190,6 +199,7 @@ def predict_with_halo(
             inp = torch.from_numpy(inp[expand_dims]).to(device)
 
             prediction = net(inp) if prediction_function is None else prediction_function(net, inp)
+
             # allow for list of tensors
             try:
                 prediction = prediction.cpu().numpy().squeeze(0)
