@@ -104,5 +104,5 @@ class TestImageCollectionDatasetWithChannels(unittest.TestCase):
             self.assertEqual(ds._get_sample(0)[0].shape[0], 2)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

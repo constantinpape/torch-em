@@ -97,8 +97,10 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         ]
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
 
-    def _ensure_patch_shape(self, raw, labels, have_raw_channels, have_label_channels):
+    def _ensure_patch_shape(self, raw, labels, have_raw_channels, have_label_channels, channel_first):
         shape = raw.shape
+        if have_raw_channels and channel_first:
+            shape = shape[1:]
         if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
             if have_raw_channels or have_label_channels:
                 raise NotImplementedError("Padding is not implemented for data with channels")
@@ -120,21 +122,24 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         if have_label_channels:
             raise NotImplementedError("Multi-channel labels are not supported.")
 
-        raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels)
+        # We determine if the image has channels as the first or last axis based on the array shape.
+        # This will work only for images with less than 16 channels!
+        # If the last axis has a length smaller than 16 we assume that it is the channel axis,
+        # otherwise we assume it is a spatial axis and that the first axis is the channel axis.
+        channel_first = None
+        if have_raw_channels:
+            channel_first = raw.shape[-1] > 16
 
+        raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels, channel_first)
         shape = raw.shape
-        # we determine if image has channels as te first or last axis base on array shape.
-        # This will work only for images with less than 16 channels.
+
         prefix_box = tuple()
         if have_raw_channels:
-            # use heuristic to decide whether the data is stored in channel last or channel first order:
-            # if the last axis has a length smaller than 16 we assume that it's the channel axis,
-            # otherwise we assume it's a spatial axis and that the first axis is the channel axis.
-            if shape[-1] < 16:
-                shape = shape[:-1]
-            else:
+            if channel_first:
                 shape = shape[1:]
                 prefix_box = (slice(None), )
+            else:
+                shape = shape[:-1]
 
         # sample random bounding box for this image
         bb = self._sample_bounding_box(shape)
