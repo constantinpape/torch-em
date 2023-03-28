@@ -4,13 +4,15 @@ from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
                     load_image, supports_memmap)
 
 
-# TODO pad images that are too small for the patch shape
 class ImageCollectionDataset(torch.utils.data.Dataset):
     max_sampling_attempts = 500
 
-    def _check_inputs(self, raw_images, label_images):
+    def _check_inputs(self, raw_images, label_images, full_check):
         if len(raw_images) != len(label_images):
             raise ValueError(f"Expect same number of  and label images, got {len(raw_images)} and {len(label_images)}")
+
+        if not full_check:
+            return
 
         is_multichan = None
         for raw_im, label_im in zip(raw_images, label_images):
@@ -55,8 +57,9 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         label_dtype=torch.float32,
         n_samples=None,
         sampler=None,
+        full_check=False,
     ):
-        self._check_inputs(raw_image_paths, label_image_paths)
+        self._check_inputs(raw_image_paths, label_image_paths, full_check=full_check)
         self.raw_images = raw_image_paths
         self.label_images = label_image_paths
         self._ndim = 2
@@ -88,15 +91,23 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         return self._ndim
 
     def _sample_bounding_box(self, shape):
-        if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
-            raise NotImplementedError(
-                "Image padding is not supported yet. Data shape {shape}, patch shape {self.patch_shape}"
-            )
         bb_start = [
             np.random.randint(0, sh - psh) if sh - psh > 0 else 0
             for sh, psh in zip(shape, self.patch_shape)
         ]
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
+
+    def _ensure_patch_shape(self, raw, labels, have_raw_channels, have_label_channels, channel_first):
+        shape = raw.shape
+        if have_raw_channels and channel_first:
+            shape = shape[1:]
+        if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
+            if have_raw_channels or have_label_channels:
+                raise NotImplementedError("Padding is not implemented for data with channels")
+            assert len(shape) == len(self.patch_shape)
+            pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
+            raw, labels = np.pad(raw, pw), np.pad(labels, pw)
+        return raw, labels
 
     def _get_sample(self, index):
         if self.sample_random_index:
@@ -111,19 +122,24 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         if have_label_channels:
             raise NotImplementedError("Multi-channel labels are not supported.")
 
+        # We determine if the image has channels as the first or last axis based on the array shape.
+        # This will work only for images with less than 16 channels!
+        # If the last axis has a length smaller than 16 we assume that it is the channel axis,
+        # otherwise we assume it is a spatial axis and that the first axis is the channel axis.
+        channel_first = None
+        if have_raw_channels:
+            channel_first = raw.shape[-1] > 16
+
+        raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels, channel_first)
         shape = raw.shape
-        # we determine if image has channels as te first or last axis base on array shape.
-        # This will work only for images with less than 16 channels.
+
         prefix_box = tuple()
         if have_raw_channels:
-            # use heuristic to decide whether the data is stored in channel last or channel first order:
-            # if the last axis has a length smaller than 16 we assume that it's the channel axis,
-            # otherwise we assume it's a spatial axis and that the first axis is the channel axis.
-            if shape[-1] < 16:
-                shape = shape[:-1]
-            else:
+            if channel_first:
                 shape = shape[1:]
                 prefix_box = (slice(None), )
+            else:
+                shape = shape[:-1]
 
         # sample random bounding box for this image
         bb = self._sample_bounding_box(shape)
