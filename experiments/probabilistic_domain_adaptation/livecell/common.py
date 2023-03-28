@@ -191,7 +191,7 @@ def _get_image_paths(args, split, cell_type):
 
 
 def get_unsupervised_loader(args, split, cell_type, teacher_augmentation, student_augmentation):
-    patch_shape = (512, 512)
+    patch_shape = (256, 256)
 
     def _parse_aug(aug):
         if aug == "weak":
