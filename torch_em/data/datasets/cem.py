@@ -13,9 +13,20 @@ import torch_em
 from sklearn.model_selection import train_test_split
 
 
-def _get_cem_mitolab_paths(path, split, val_fraction):
+# TODO
+def _download_cem_mitolab(path):
+    # os.makedirs(path, exist_ok=True)
+    raise NotImplementedError("Data download is not implemented yet for CEM data.")
+
+
+def _get_cem_mitolab_paths(path, split, val_fraction, download):
     folders = glob(os.path.join(path, "*"))
     assert all(os.path.isdir(folder) for folder in folders)
+
+    if len(folders) == 0 and download:
+        _download_cem_mitolab(path)
+    elif len(folders) == 0:
+        raise RuntimeError(f"The CEM Mitolab data is not available at {path}, but download was set to False.")
 
     raw_paths, label_paths = [], []
 
@@ -43,14 +54,12 @@ def _get_cem_mitolab_paths(path, split, val_fraction):
     return raw_paths, label_paths
 
 
-# TODO
-# - implement download
 def get_cem_mitolab_loader(
     path, split, batch_size, patch_shape=(224, 224), val_fraction=0.05, download=False, **kwargs
 ):
     assert split in ("train", "val", None)
     assert os.path.exists(path)
-    raw_paths, label_paths = _get_cem_mitolab_paths(path, split, val_fraction)
+    raw_paths, label_paths = _get_cem_mitolab_paths(path, split, val_fraction, download)
     return torch_em.default_segmentation_loader(
         raw_paths=raw_paths, raw_key=None, label_paths=label_paths, label_key=None,
         batch_size=batch_size, patch_shape=patch_shape,
