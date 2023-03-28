@@ -126,7 +126,10 @@ def evaluate_transfered_model(
 
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
 def evaluate_source_model(args, ct_src, method, get_model=get_unet, prediction_function=None):
-    ckpt = f"checkpoints/{method}/{ct_src}"
+    if args.save_root is None:
+        ckpt = f"checkpoints/{method}/{ct_src}"
+    else:
+        ckpt = args.save_root + f"checkpoints/{method}/{ct_src}"
     model = get_model()
     model = torch_em.util.get_trainer(ckpt).model
 
@@ -188,7 +191,7 @@ def _get_image_paths(args, split, cell_type):
 
 
 def get_unsupervised_loader(args, split, cell_type, teacher_augmentation, student_augmentation):
-    patch_shape = (512, 512)
+    patch_shape = (256, 256)
 
     def _parse_aug(aug):
         if aug == "weak":
@@ -212,11 +215,11 @@ def get_unsupervised_loader(args, split, cell_type, teacher_augmentation, studen
     return loader
 
 
-def get_supervised_loader(args, split, cell_type):
-    patch_shape = (512, 512)
+def get_supervised_loader(args, split, cell_type, batch_size):
+    patch_shape = (256, 256)
     loader = get_livecell_loader(
         args.input, patch_shape, split,
-        download=True, binary=True, batch_size=args.batch_size,
+        download=True, binary=True, batch_size=batch_size,
         cell_types=[cell_type], num_workers=8, shuffle=True,
     )
     return loader
