@@ -23,10 +23,13 @@ def check_loader(args, n_images=5):
 
 def _train_source_target(args, source_cell_type, target_cell_type):
     model = common.get_unet()
-    src_checkpoint = f"./checkpoints/unet_source/{source_cell_type}"
+    if args.save_root is None:
+        src_checkpoint = f"./checkpoints/unet_source/{source_cell_type}"
+    else:
+        src_checkpoint = args.save_root + f"checkpoints/unet_source/{source_cell_type}"
     model = common.load_model(model, src_checkpoint)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
 
     # self training functionality
@@ -37,11 +40,11 @@ def _train_source_target(args, source_cell_type, target_cell_type):
 
     # data loaders
     unsupervised_train_loader = common.get_unsupervised_loader(
-        args, "train", target_cell_type,
+        args, args.batch_size, "train", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
     unsupervised_val_loader = common.get_unsupervised_loader(
-        args, "val", target_cell_type,
+        args, 1, "val", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
 
@@ -97,7 +100,7 @@ def run_evaluation(args):
 
 def main():
     parser = common.get_parser(default_iterations=25000, default_batch_size=8)
-    parser.add_argument("--confidence_threshold", default=0.9)
+    parser.add_argument("--confidence_threshold", default=None, type=float)
     args = parser.parse_args()
     if args.phase in ("c", "check"):
         check_loader(args)

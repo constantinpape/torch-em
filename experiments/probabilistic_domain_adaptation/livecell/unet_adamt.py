@@ -22,7 +22,7 @@ def check_loader(args, n_images=5):
 
 
 def _train_source_target(args, source_cell_type, target_cell_type):
-    model = common.get_model()
+    model = common.get_unet()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
 
@@ -36,11 +36,11 @@ def _train_source_target(args, source_cell_type, target_cell_type):
     supervised_train_loader = common.get_supervised_loader(args, "train", source_cell_type, args.batch_size)
     supervised_val_loader = common.get_supervised_loader(args, "val", source_cell_type, 1)
     unsupervised_train_loader = common.get_unsupervised_loader(
-        args, "train", target_cell_type,
+        args, args.batch_size, "train", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
     unsupervised_val_loader = common.get_unsupervised_loader(
-        args, "val", target_cell_type,
+        args, 1, "val", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
 
@@ -98,7 +98,7 @@ def run_evaluation(args):
 
 def main():
     parser = common.get_parser(default_iterations=75000, default_batch_size=4)
-    parser.add_argument("--confidence_threshold", default=0.9)
+    parser.add_argument("--confidence_threshold", default=None, type=float)
     args = parser.parse_args()
     if args.phase in ("c", "check"):
         check_loader(args)

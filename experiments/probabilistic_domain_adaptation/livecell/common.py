@@ -55,9 +55,9 @@ def get_unet():
     return UNet2d(in_channels=1, out_channels=1, initial_features=64, final_activation="Sigmoid", depth=4)
 
 
-def load_model(model, ckpt, state="model_state", device=None):
-    state = torch.load(os.path.join(ckpt, "best.pt"))[state]
-    model.load_state_dict(state)
+def load_model(model, ckpt, get_model=get_unet, device=None):
+    model = get_model()
+    model = torch_em.util.get_trainer(ckpt).model
     if device is not None:
         model.to(device)
     return model
@@ -88,9 +88,12 @@ def evaluate_transfered_model(
             if out_folder is not None:
                 os.makedirs(out_folder, exist_ok=True)
 
-            ckpt = f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
+            if args.save_root is None:
+                ckpt = f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
+            else:
+                ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
             model = get_model()
-            model = load_model(model, ckpt, device=device, state=model_state)
+            model = load_model(model, ckpt, device=device)
 
             label_paths = glob(os.path.join(label_root, ct_trg, "*.tif"))
             scores = []
@@ -190,7 +193,7 @@ def _get_image_paths(args, split, cell_type):
     return image_paths
 
 
-def get_unsupervised_loader(args, split, cell_type, teacher_augmentation, student_augmentation):
+def get_unsupervised_loader(args, batch_size, split, cell_type, teacher_augmentation, student_augmentation):
     patch_shape = (256, 256)
 
     def _parse_aug(aug):
@@ -211,7 +214,7 @@ def get_unsupervised_loader(args, split, cell_type, teacher_augmentation, studen
         image_paths, patch_shape, raw_transform, transform,
         augmentations=augmentations
     )
-    loader = torch_em.segmentation.get_data_loader(ds, batch_size=args.batch_size, num_workers=8, shuffle=True)
+    loader = torch_em.segmentation.get_data_loader(ds, batch_size=batch_size, num_workers=8, shuffle=True)
     return loader
 
 
