@@ -1,5 +1,6 @@
 import os
 import warnings
+from collections import OrderedDict
 
 import numpy as np
 import torch
@@ -198,6 +199,39 @@ def get_normalizer(trainer):
         return preprocessor.normalizer
     else:
         return preprocessor
+
+
+def load_model(checkpoint, model=None, name="best", state_key="model_state", device=None):
+    """Convenience function to load a model from a trainer checkpoint.
+
+    This function can either load the model directly from the trainer (model is not passed),
+    or deserialize the model state from the trainer and load the model state (model is passed).
+
+    Parameters:
+        checkpoint [str] - path to the checkpoint folder.
+        model [torch.nn.Module] - the model for which the state should be loaded.
+            If it is not passed the model class and parameters will also be loaded from the trainer. (default: None)
+        name [str] - the name of the checkpoint. (default: "best")
+        state_key [str] - the name of the model state to load. (default: "model_state")
+        device [torch.device] - the device on which to load the model. (default: None)
+    """
+    if model is None:  # load the model and its state from the checkpoint
+        model = get_trainer(checkpoint, name=name, device=device).model
+
+    else:  # load the model state from the checkpoint
+        ckpt = os.path.join(checkpoint, f"{name}.pt")
+        state = torch.load(ckpt, map_location=device)[state_key]
+        # to enable loading compiled models
+        compiled_prefix = "_orig_mod."
+        state = OrderedDict(
+            [(k[len(compiled_prefix):] if k.startswith(compiled_prefix) else k, v) for k, v in state.items()]
+        )
+        model.load_state_dict(state)
+        if device is not None:
+            model.to(device)
+        model.load_state_dict(state)
+
+    return model
 
 
 def model_is_equal(model1, model2):
