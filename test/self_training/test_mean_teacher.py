@@ -79,6 +79,10 @@ class TestMeanTeacher(unittest.TestCase):
         trainer2.fit(10)
         self.assertEqual(trainer2.iteration, 63)
 
+        # and that we can deserialize it with get_trainer
+        trainer3 = torch_em.util.get_trainer(f"./checkpoints/{name}")
+        self.assertEqual(trainer3.iterations, 63)
+
     def get_unsupervised_loader(self, n_samples):
         augmentations = (
             torch_em.transform.raw.GaussianBlur(),
