@@ -126,7 +126,6 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         self.supervised_loss = supervised_loss
 
         self.pseudo_labeler = pseudo_labeler
-
         self.momentum = momentum
 
         # determine how we initialize the teacher weights (copy or reinitialization)
@@ -160,14 +159,16 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         for param, param_teacher in zip(self.model.parameters(), self.teacher.parameters()):
             param_teacher.data = param_teacher.data * current_momentum + param.data * (1. - current_momentum)
 
-    # TODO I think we need to serialize more things here for all the loaders etc.
     #
     # functionality for saving checkpoints and initialization
     #
 
+    # TODO serialize the train_loader_kwargs
     def save_checkpoint(self, name, best_metric):
-        teacher_state = {"teacher_state": self.teacher.state_dict()}
-        super().save_checkpoint(name, best_metric, **teacher_state)
+        extra_state = {
+            "teacher_state": self.teacher.state_dict(),
+        }
+        super().save_checkpoint(name, best_metric, **extra_state)
 
     def load_checkpoint(self, checkpoint="best"):
         save_dict = super().load_checkpoint(checkpoint)
