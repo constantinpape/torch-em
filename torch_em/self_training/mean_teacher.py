@@ -55,6 +55,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         model [nn.Module] -
         unsupervised_train_loader [torch.DataLoader] -
         unsupervised_loss [callable] -
+        pseudo_labeler [callable] -
         supervised_train_loader [torch.DataLoader] - (default: None)
         supervised_loss [callable] - (default: None)
         unsupervised_loss_and_metric [callable] - (default: None)
@@ -196,11 +197,13 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
 
             teacher_input, model_input = xu1, xu2
 
+            with torch.no_grad():
+                # Compute the pseudo labels.
+                pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
+
             self.optimizer.zero_grad()
             # Perform unsupervised training
             with forward_context():
-                # Compute the pseudo labels.
-                pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
                 loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
             backprop(loss)
 
@@ -244,9 +247,13 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 supervised_loss = self.supervised_loss(self.model, xs, ys)
 
             teacher_input, model_input = xu1, xu2
+
+            with torch.no_grad():
+                # Compute the pseudo labels.
+                pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
+
             # Perform unsupervised training
             with forward_context():
-                pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
                 unsupervised_loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
 
             loss = (supervised_loss + unsupervised_loss) / 2
