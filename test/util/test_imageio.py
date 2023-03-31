@@ -25,3 +25,5 @@ class TestImageRead(unittest.TestCase):
             self.assertEqual(data.shape, (10, 10, 2))
 
 
+if __name__ == "__main__":
+    unittest.main()
