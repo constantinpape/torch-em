@@ -49,12 +49,14 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         model [nn.Module] -
         unsupervised_train_loader [torch.DataLoader] -
         unsupervised_loss [callable] -
+        pseudo_labeler [callable] -
         supervised_train_loader [torch.DataLoader] - (default: None)
         supervised_loss [callable] - (default: None)
         unsupervised_loss_and_metric [callable] - (default: None)
         supervised_loss_and_metric [callable] - (default: None)
         logger [TorchEmLogger] - (default: SelfTrainingTensorboardLogger)
         momentum [float] - (default: 0.999)
+        source_distribution [list] - (default: None)
         **kwargs - keyword arguments for torch_em.DataLoader
     """
 
@@ -127,6 +129,9 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
 
         self._kwargs = kwargs
 
+    # distribution alignment - encourages the distribution of the model's generated pseudo labels to match the marginal
+    #                          distribution of pseudo labels from the source transfer
+    #                          (key idea: to maximize the mutual information)
     def get_distribution_alignment(self, pseudo_labels, label_threshold=0.5):
         if self.source_distribution is not None:
             pseudo_labels_binary = torch.where(pseudo_labels >= label_threshold, 1, 0)
@@ -157,14 +162,20 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
 
             teacher_input, model_input = xu1, xu2
 
+            with torch.no_grad():
+                # Compute the pseudo labels.
+                pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
+
+            pseudo_labels, label_filter = pseudo_labels.detach(), label_filter.detach()
+
+            # Perform distribution alignment for pseudo labels
+            pseudo_labels = self.get_distribution_alignment(pseudo_labels)
+
             self.optimizer.zero_grad()
             # Perform unsupervised training
             with forward_context():
-                # Compute the pseudo labels.
-                pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
-                # Perform distribution alignment for pseudo labels
-                pseudo_labels = self.get_distribution_alignment(pseudo_labels)
                 loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
+
             backprop(loss)
 
             if self.logger is not None:
@@ -204,12 +215,18 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 supervised_loss = self.supervised_loss(self.model, xs, ys)
 
             teacher_input, model_input = xu1, xu2
-            # Perform unsupervised training
-            with forward_context():
+
+            with torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
-                # Perform distribution alignment for pseudo labels
-                pseudo_labels = self.get_distribution_alignment(pseudo_labels)
+
+            pseudo_labels, label_filter = pseudo_labels.detach(), label_filter.detach()
+
+            # Perform distribution alignment for pseudo labels
+            pseudo_labels = self.get_distribution_alignment(pseudo_labels)
+
+            # Perform unsupervised training
+            with forward_context():
                 unsupervised_loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
 
             loss = (supervised_loss + unsupervised_loss) / 2
