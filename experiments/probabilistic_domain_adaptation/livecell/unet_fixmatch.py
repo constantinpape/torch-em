@@ -45,11 +45,11 @@ def _train_source_target(args, source_cell_type, target_cell_type):
     # data loaders
     unsupervised_train_loader = common.get_unsupervised_loader(
         args, args.batch_size, "train", target_cell_type,
-        teacher_augmentation="weak", student_augmentation="strong",
+        teacher_augmentation="weak", student_augmentation="strong-separate",
     )
     unsupervised_val_loader = common.get_unsupervised_loader(
         args, 1, "val", target_cell_type,
-        teacher_augmentation="weak", student_augmentation="strong",
+        teacher_augmentation="weak", student_augmentation="strong-separate",
     )
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")

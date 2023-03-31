@@ -30,7 +30,7 @@ CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"
 # blurring and additive gaussian noise
 #
 # - strong augmentations:
-# blurring, additive gaussian noise and randon contrast adjustment (FixMatch expects stronger parameters for each)
+# blurring, additive gaussian noise and randon contrast adjustment
 #
 
 
@@ -46,18 +46,32 @@ def weak_augmentations(p=0.25):
     return torch_em.transform.raw.get_raw_transform(normalizer=norm, augmentation1=aug)
 
 
-def strong_augmentations(p=0.5):
+def strong_augmentations(p=0.5, mode=None):
+    assert mode is not None
     norm = torch_em.transform.raw.standardize
-    aug1 = transforms.Compose([
-        norm,
-        transforms.RandomApply([torch_em.transform.raw.GaussianBlur(sigma=(0.6, 3.0))], p=p),
-        transforms.RandomApply([torch_em.transform.raw.AdditiveGaussianNoise(
-            scale=(0.05, 0.25), clip_kwargs=False)], p=p/2
-        ),
-        transforms.RandomApply([torch_em.transform.raw.RandomContrast(
-            mean=0.0, alpha=(0.33, 3.0), clip_kwargs=False)], p=p
-        )
-    ])
+
+    if mode == "separate":
+        aug1 = transforms.Compose([
+            norm,
+            transforms.RandomApply([torch_em.transform.raw.GaussianBlur(sigma=(1.0, 4.0))], p=p),
+            transforms.RandomApply([torch_em.transform.raw.AdditiveGaussianNoise(
+                scale=(0.1, 0.35), clip_kwargs=False)], p=p),
+            transforms.RandomApply([torch_em.transform.raw.RandomContrast(
+                mean=0.0, alpha=(0.33, 3), clip_kwargs=False)], p=p),
+        ])
+
+    elif mode == "joint":
+        aug1 = transforms.Compose([
+            norm,
+            transforms.RandomApply([torch_em.transform.raw.GaussianBlur(sigma=(0.6, 3.0))], p=p),
+            transforms.RandomApply([torch_em.transform.raw.AdditiveGaussianNoise(
+                scale=(0.05, 0.25), clip_kwargs=False)], p=p/2
+            ),
+            transforms.RandomApply([torch_em.transform.raw.RandomContrast(
+                mean=0.0, alpha=(0.33, 3.0), clip_kwargs=False)], p=p
+            )
+        ])
+
     return torch_em.transform.raw.get_raw_transform(normalizer=norm, augmentation1=aug1)
 
 
@@ -229,8 +243,10 @@ def get_unsupervised_loader(args, batch_size, split, cell_type, teacher_augmenta
     def _parse_aug(aug):
         if aug == "weak":
             return weak_augmentations()
-        elif aug == "strong":
-            return strong_augmentations()
+        elif aug == "strong-separate":
+            return strong_augmentations(mode="separate")
+        elif aug == "strong-joint":
+            return strong_augmentations(mode="joint")
         assert callable(aug)
         return aug
 

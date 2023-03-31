@@ -37,11 +37,11 @@ def _train_source_target(args, source_cell_type, target_cell_type):
     supervised_val_loader = common.get_supervised_loader(args, "val", source_cell_type, 1)
     unsupervised_train_loader = common.get_unsupervised_loader(
         args, args.batch_size, "train", target_cell_type,
-        teacher_augmentation="weak", student_augmentation="strong",
+        teacher_augmentation="weak", student_augmentation="strong-joint",
     )
     unsupervised_val_loader = common.get_unsupervised_loader(
         args, 1, "val", target_cell_type,
-        teacher_augmentation="weak", student_augmentation="strong",
+        teacher_augmentation="weak", student_augmentation="strong-joint",
     )
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
