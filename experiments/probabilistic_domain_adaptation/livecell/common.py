@@ -19,14 +19,18 @@ from torch_em.model import UNet2d
 from torch_em.util.prediction import predict_with_padding
 from torchvision import transforms
 from tqdm import tqdm
+from torch_em.util import load_model
 
 CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
 
 
 #
 # The augmentations we use for the LiveCELL experiments:
-# - weak augmenations: blurring and additive gaussian noise
-# - strong augmentations: TODO
+# - weak augmenations:
+# blurring and additive gaussian noise
+#
+# - strong augmentations:
+# blurring, additive gaussian noise and randon contrast adjustment (FixMatch expects stronger parameters for each)
 #
 
 
@@ -42,9 +46,19 @@ def weak_augmentations(p=0.25):
     return torch_em.transform.raw.get_raw_transform(normalizer=norm, augmentation1=aug)
 
 
-# TODO
-def strong_augmentations():
-    pass
+def strong_augmentations(p=0.5):
+    norm = torch_em.transform.raw.standardize
+    aug1 = transforms.Compose([
+        norm,
+        transforms.RandomApply([torch_em.transform.raw.GaussianBlur(sigma=(0.6, 3.0))], p=p),
+        transforms.RandomApply([torch_em.transform.raw.AdditiveGaussianNoise(
+            scale=(0.05, 0.25), clip_kwargs=False)], p=p/2
+        ),
+        transforms.RandomApply([torch_em.transform.raw.RandomContrast(
+            mean=0.0, alpha=(0.33, 3.0), clip_kwargs=False)], p=p
+        )
+    ])
+    return torch_em.transform.raw.get_raw_transform(normalizer=norm, augmentation1=aug1)
 
 
 #
@@ -55,12 +69,28 @@ def get_unet():
     return UNet2d(in_channels=1, out_channels=1, initial_features=64, final_activation="Sigmoid", depth=4)
 
 
-def load_model(model, ckpt, get_model=get_unet, device=None):
-    model = get_model()
-    model = torch_em.util.get_trainer(ckpt).model
-    if device is not None:
-        model.to(device)
-    return model
+# Computing the Source Distribution for Distribution Alignment
+def compute_class_distribution(root_folder, label_threshold=0.5):
+
+    bg_list, fg_list = [], []
+    total = 0
+
+    files = glob(os.path.join(root_folder, "*"))
+    assert len(files) > 0, f"Did not find predictions @ {root_folder}"
+
+    for pl_path in files:
+        img = imageio.imread(pl_path)
+        img = np.where(img >= label_threshold, 1, 0)
+        _, counts = np.unique(img, return_counts=True)
+        assert len(counts) == 2
+        bg_list.append(counts[0])
+        fg_list.append(counts[1])
+        total += img.size
+
+    bg_frequency = sum(bg_list) / float(total)
+    fg_frequency = sum(fg_list) / float(total)
+    assert np.isclose(bg_frequency + fg_frequency, 1.0)
+    return [bg_frequency, fg_frequency]
 
 
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
@@ -93,7 +123,7 @@ def evaluate_transfered_model(
             else:
                 ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
             model = get_model()
-            model = load_model(model, ckpt, device=device)
+            model = load_model(checkpoint=ckpt, model=model, state_key=model_state, device=device)
 
             label_paths = glob(os.path.join(label_root, ct_trg, "*.tif"))
             scores = []
