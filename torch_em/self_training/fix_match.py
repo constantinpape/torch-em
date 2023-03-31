@@ -162,7 +162,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
 
             teacher_input, model_input = xu1, xu2
 
-            with torch.no_grad():
+            with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
 
@@ -216,7 +216,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
 
             teacher_input, model_input = xu1, xu2
 
-            with torch.no_grad():
+            with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
 
