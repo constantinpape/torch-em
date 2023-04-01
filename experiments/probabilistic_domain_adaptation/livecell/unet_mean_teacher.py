@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import torch
 import torch_em.self_training as self_training
+from torch_em.util import load_model
 
 import common
 
@@ -22,14 +23,17 @@ def check_loader(args, n_images=5):
 
 
 def _train_source_target(args, source_cell_type, target_cell_type):
+
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
     model = common.get_unet()
     if args.save_root is None:
         src_checkpoint = f"./checkpoints/unet_source/{source_cell_type}"
     else:
         src_checkpoint = args.save_root + f"checkpoints/unet_source/{source_cell_type}"
-    model = common.load_model(model, src_checkpoint)
+    model = load_model(checkpoint=src_checkpoint, model=model, device=device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
 
     # self training functionality
@@ -47,8 +51,6 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         args, 1, "val", target_cell_type,
         teacher_augmentation="weak", student_augmentation="weak",
     )
-
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     name = f"unet_mean_teacher/thresh-{thresh}/{source_cell_type}/{target_cell_type}"
     trainer = self_training.MeanTeacherTrainer(
