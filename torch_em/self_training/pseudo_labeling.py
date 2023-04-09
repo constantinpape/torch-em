@@ -16,6 +16,11 @@ class DefaultPseudoLabeler:
         self.activation = activation
         self.confidence_threshold = confidence_threshold
         self.threshold_from_both_sides = threshold_from_both_sides
+        # TODO serialize the class names and kwargs for activation instead
+        self.init_kwargs = {
+            "activation": None, "confidence_threshold": confidence_threshold,
+            "threshold_from_both_sides": threshold_from_both_sides
+        }
 
     def _compute_label_mask_both_sides(self, pseudo_labels):
         upper_threshold = self.confidence_threshold

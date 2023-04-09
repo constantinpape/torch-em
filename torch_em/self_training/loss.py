@@ -14,6 +14,8 @@ class DefaultSelfTrainingLoss(nn.Module):
         super().__init__()
         self.activation = activation
         self.loss = loss
+        # TODO serialize the class names and kwargs instead
+        self.init_kwargs = {}
 
     def __call__(self, model, input_, labels, label_filter=None):
         prediction = model(input_)
@@ -40,6 +42,8 @@ class DefaultSelfTrainingLossAndMetric(nn.Module):
         self.activation = activation
         self.loss = loss
         self.metric = metric
+        # TODO serialize the class names and dicts instead
+        self.init_kwargs = {}
 
     def __call__(self, model, input_, labels, label_filter=None):
         prediction = model(input_)

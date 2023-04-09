@@ -91,6 +91,10 @@ class TestSpocoTrainer(unittest.TestCase):
         trainer.fit(8, load_from_checkpoint="latest")
         self.assertEqual(trainer.iteration, 20)
 
+        # check that we can deserialize with get_trainer
+        trainer_ = torch_em.util.get_trainer(f"./checkpoints/{self.name}")
+        self.assertEqual(trainer_.iteration, 20)
+
     def test_from_checkpoint(self):
         from torch_em.trainer.spoco_trainer import SPOCOTrainer
         init_kwargs = self._get_kwargs(with_roi=True)
