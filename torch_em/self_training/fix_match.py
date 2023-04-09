@@ -2,12 +2,10 @@ import time
 
 import torch
 import torch_em
+from torch_em.util import get_constructor_arguments
 
 from .logger import SelfTrainingTensorboardLogger
-
-
-class Dummy(torch.nn.Module):
-    pass
+from .mean_teacher import Dummy
 
 
 class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
@@ -112,6 +110,11 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         self.supervised_loss_and_metric = supervised_loss_and_metric
         self.unsupervised_loss_and_metric = unsupervised_loss_and_metric
 
+        # train_loader, val_loader, loss and metric may be unnecessarily deserialized
+        kwargs.pop("train_loader", None)
+        kwargs.pop("val_loader", None)
+        kwargs.pop("metric", None)
+        kwargs.pop("loss", None)
         super().__init__(
             model=model, train_loader=train_loader, val_loader=val_loader,
             loss=Dummy(), metric=Dummy(), logger=logger, **kwargs
@@ -128,6 +131,27 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
             self.source_distribution = torch.FloatTensor(source_distribution).to(self.device)
 
         self._kwargs = kwargs
+
+    #
+    # functionality for saving checkpoints and initialization
+    #
+
+    def save_checkpoint(self, name, best_metric):
+        train_loader_kwargs = get_constructor_arguments(self.train_loader)
+        val_loader_kwargs = get_constructor_arguments(self.val_loader)
+        extra_state = {
+            "init": {
+                "train_loader_kwargs": train_loader_kwargs,
+                "train_dataset": self.train_loader.dataset,
+                "val_loader_kwargs": val_loader_kwargs,
+                "val_dataset": self.val_loader.dataset,
+                "loss_class": "torch_em.self_training.mean_teacher.Dummy",
+                "loss_kwargs": {},
+                "metric_class": "torch_em.self_training.mean_teacher.Dummy",
+                "metric_kwargs": {},
+            },
+        }
+        super().save_checkpoint(name, best_metric, **extra_state)
 
     # distribution alignment - encourages the distribution of the model's generated pseudo labels to match the marginal
     #                          distribution of pseudo labels from the source transfer
@@ -166,7 +190,9 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
 
-            pseudo_labels, label_filter = pseudo_labels.detach(), label_filter.detach()
+            pseudo_labels = pseudo_labels.detach()
+            if label_filter is not None:
+                label_filter = label_filter.detach()
 
             # Perform distribution alignment for pseudo labels
             pseudo_labels = self.get_distribution_alignment(pseudo_labels)
@@ -220,7 +246,9 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
 
-            pseudo_labels, label_filter = pseudo_labels.detach(), label_filter.detach()
+            pseudo_labels = pseudo_labels.detach()
+            if label_filter is not None:
+                label_filter = label_filter.detach()
 
             # Perform distribution alignment for pseudo labels
             pseudo_labels = self.get_distribution_alignment(pseudo_labels)
