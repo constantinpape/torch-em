@@ -3,12 +3,13 @@ from copy import deepcopy
 
 import torch
 import torch_em
+from torch_em.util import get_constructor_arguments
 
 from .logger import SelfTrainingTensorboardLogger
 
 
 class Dummy(torch.nn.Module):
-    pass
+    init_kwargs = {}
 
 
 class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
@@ -93,6 +94,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             train_loader = supervised_train_loader if len(supervised_train_loader) < len(unsupervised_train_loader)\
                 else unsupervised_train_loader
             self._train_epoch_impl = self._train_epoch_semisupervised
+
         self.unsupervised_train_loader = unsupervised_train_loader
         self.supervised_train_loader = supervised_train_loader
 
@@ -117,6 +119,11 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         self.supervised_loss_and_metric = supervised_loss_and_metric
         self.unsupervised_loss_and_metric = unsupervised_loss_and_metric
 
+        # train_loader, val_loader, loss and metric may be unnecessarily deserialized
+        kwargs.pop("train_loader", None)
+        kwargs.pop("val_loader", None)
+        kwargs.pop("metric", None)
+        kwargs.pop("loss", None)
         super().__init__(
             model=model, train_loader=train_loader, val_loader=val_loader,
             loss=Dummy(), metric=Dummy(), logger=logger, **kwargs
@@ -163,10 +170,21 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
     # functionality for saving checkpoints and initialization
     #
 
-    # TODO serialize the train_loader_kwargs
     def save_checkpoint(self, name, best_metric):
+        train_loader_kwargs = get_constructor_arguments(self.train_loader)
+        val_loader_kwargs = get_constructor_arguments(self.val_loader)
         extra_state = {
             "teacher_state": self.teacher.state_dict(),
+            "init": {
+                "train_loader_kwargs": train_loader_kwargs,
+                "train_dataset": self.train_loader.dataset,
+                "val_loader_kwargs": val_loader_kwargs,
+                "val_dataset": self.val_loader.dataset,
+                "loss_class": "torch_em.self_training.mean_teacher.Dummy",
+                "loss_kwargs": {},
+                "metric_class": "torch_em.self_training.mean_teacher.Dummy",
+                "metric_kwargs": {},
+            },
         }
         super().save_checkpoint(name, best_metric, **extra_state)
 
