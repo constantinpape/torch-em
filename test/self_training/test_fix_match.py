@@ -9,7 +9,7 @@ from torch_em.model import UNet2d
 from torch_em.util.test import create_segmentation_test_data
 
 
-class TestMeanTeacher(unittest.TestCase):
+class TestFixMatch(unittest.TestCase):
     tmp_folder = "./tmp"
     data_path = "./tmp/data.h5"
     raw_key = "raw"
@@ -31,7 +31,7 @@ class TestMeanTeacher(unittest.TestCase):
         _remove("./logs")
         _remove("./checkpoints")
 
-    def _test_mean_teacher(
+    def _test_fix_match(
         self,
         unsupervised_train_loader,
         supervised_train_loader=None,
@@ -44,8 +44,8 @@ class TestMeanTeacher(unittest.TestCase):
         model = UNet2d(in_channels=1, out_channels=1, initial_features=8, depth=3)
         optimizer = torch.optim.Adam(model.parameters())
 
-        name = "mt-test"
-        trainer = self_training.MeanTeacherTrainer(
+        name = "fm-test"
+        trainer = self_training.FixMatchTrainer(
             name=name,
             model=model,
             optimizer=optimizer,
@@ -67,10 +67,9 @@ class TestMeanTeacher(unittest.TestCase):
         self.assertTrue(os.path.exists(f"./checkpoints/{name}/latest.pt"))
 
         # make sure that the trainer can be deserialized from the checkpoint
-        trainer2 = self_training.MeanTeacherTrainer.from_checkpoint(os.path.join("./checkpoints", name), name="latest")
+        trainer2 = self_training.FixMatchTrainer.from_checkpoint(os.path.join("./checkpoints", name), name="latest")
         self.assertEqual(trainer.iteration, trainer2.iteration)
         self.assertTrue(torch_em.util.model_is_equal(trainer.model, trainer2.model))
-        self.assertTrue(torch_em.util.model_is_equal(trainer.teacher, trainer2.teacher))
         self.assertEqual(len(trainer.unsupervised_train_loader), len(trainer2.unsupervised_train_loader))
         if supervised_train_loader is not None:
             self.assertEqual(len(trainer.supervised_train_loader), len(trainer2.supervised_train_loader))
@@ -109,20 +108,20 @@ class TestMeanTeacher(unittest.TestCase):
         loader = torch_em.segmentation.get_data_loader(ds, batch_size=1, shuffle=True)
         return loader
 
-    def test_mean_teacher_unsupervised(self):
+    def test_fix_match_unsupervised(self):
         unsupervised_train_loader = self.get_unsupervised_loader(n_samples=50)
         unsupervised_val_loader = self.get_unsupervised_loader(n_samples=4)
-        self._test_mean_teacher(
+        self._test_fix_match(
             unsupervised_train_loader=unsupervised_train_loader,
             unsupervised_val_loader=unsupervised_val_loader,
             unsupervised_loss_and_metric=self_training.DefaultSelfTrainingLossAndMetric(),
         )
 
-    def test_mean_teacher_semisupervised(self):
+    def test_fix_match_semisupervised(self):
         unsupervised_train_loader = self.get_unsupervised_loader(n_samples=50)
         supervised_train_loader = self.get_supervised_loader(n_samples=51)
         supervised_val_loader = self.get_supervised_loader(n_samples=4)
-        self._test_mean_teacher(
+        self._test_fix_match(
             unsupervised_train_loader=unsupervised_train_loader,
             supervised_train_loader=supervised_train_loader,
             supervised_val_loader=supervised_val_loader,
