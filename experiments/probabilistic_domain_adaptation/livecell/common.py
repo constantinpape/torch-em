@@ -19,14 +19,18 @@ from torch_em.model import UNet2d
 from torch_em.util.prediction import predict_with_padding
 from torchvision import transforms
 from tqdm import tqdm
+from torch_em.util import load_model
 
 CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
 
 
 #
 # The augmentations we use for the LiveCELL experiments:
-# - weak augmenations: blurring and additive gaussian noise
-# - strong augmentations: TODO
+# - weak augmenations:
+# blurring and additive gaussian noise
+#
+# - strong augmentations:
+# blurring, additive gaussian noise and randon contrast adjustment
 #
 
 
@@ -42,9 +46,33 @@ def weak_augmentations(p=0.25):
     return torch_em.transform.raw.get_raw_transform(normalizer=norm, augmentation1=aug)
 
 
-# TODO
-def strong_augmentations():
-    pass
+def strong_augmentations(p=0.5, mode=None):
+    assert mode is not None
+    norm = torch_em.transform.raw.standardize
+
+    if mode == "separate":
+        aug1 = transforms.Compose([
+            norm,
+            transforms.RandomApply([torch_em.transform.raw.GaussianBlur(sigma=(1.0, 4.0))], p=p),
+            transforms.RandomApply([torch_em.transform.raw.AdditiveGaussianNoise(
+                scale=(0.1, 0.35), clip_kwargs=False)], p=p),
+            transforms.RandomApply([torch_em.transform.raw.RandomContrast(
+                mean=0.0, alpha=(0.33, 3), clip_kwargs=False)], p=p),
+        ])
+
+    elif mode == "joint":
+        aug1 = transforms.Compose([
+            norm,
+            transforms.RandomApply([torch_em.transform.raw.GaussianBlur(sigma=(0.6, 3.0))], p=p),
+            transforms.RandomApply([torch_em.transform.raw.AdditiveGaussianNoise(
+                scale=(0.05, 0.25), clip_kwargs=False)], p=p/2
+            ),
+            transforms.RandomApply([torch_em.transform.raw.RandomContrast(
+                mean=0.0, alpha=(0.33, 3.0), clip_kwargs=False)], p=p
+            )
+        ])
+
+    return torch_em.transform.raw.get_raw_transform(normalizer=norm, augmentation1=aug1)
 
 
 #
@@ -55,12 +83,28 @@ def get_unet():
     return UNet2d(in_channels=1, out_channels=1, initial_features=64, final_activation="Sigmoid", depth=4)
 
 
-def load_model(model, ckpt, state="model_state", device=None):
-    state = torch.load(os.path.join(ckpt, "best.pt"))[state]
-    model.load_state_dict(state)
-    if device is not None:
-        model.to(device)
-    return model
+# Computing the Source Distribution for Distribution Alignment
+def compute_class_distribution(root_folder, label_threshold=0.5):
+
+    bg_list, fg_list = [], []
+    total = 0
+
+    files = glob(os.path.join(root_folder, "*"))
+    assert len(files) > 0, f"Did not find predictions @ {root_folder}"
+
+    for pl_path in files:
+        img = imageio.imread(pl_path)
+        img = np.where(img >= label_threshold, 1, 0)
+        _, counts = np.unique(img, return_counts=True)
+        assert len(counts) == 2
+        bg_list.append(counts[0])
+        fg_list.append(counts[1])
+        total += img.size
+
+    bg_frequency = sum(bg_list) / float(total)
+    fg_frequency = sum(fg_list) / float(total)
+    assert np.isclose(bg_frequency + fg_frequency, 1.0)
+    return [bg_frequency, fg_frequency]
 
 
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
@@ -88,9 +132,12 @@ def evaluate_transfered_model(
             if out_folder is not None:
                 os.makedirs(out_folder, exist_ok=True)
 
-            ckpt = f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
+            if args.save_root is None:
+                ckpt = f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
+            else:
+                ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
             model = get_model()
-            model = load_model(model, ckpt, device=device, state=model_state)
+            model = load_model(checkpoint=ckpt, model=model, state_key=model_state, device=device)
 
             label_paths = glob(os.path.join(label_root, ct_trg, "*.tif"))
             scores = []
@@ -190,14 +237,16 @@ def _get_image_paths(args, split, cell_type):
     return image_paths
 
 
-def get_unsupervised_loader(args, split, cell_type, teacher_augmentation, student_augmentation):
+def get_unsupervised_loader(args, batch_size, split, cell_type, teacher_augmentation, student_augmentation):
     patch_shape = (256, 256)
 
     def _parse_aug(aug):
         if aug == "weak":
             return weak_augmentations()
-        elif aug == "strong":
-            return strong_augmentations()
+        elif aug == "strong-separate":
+            return strong_augmentations(mode="separate")
+        elif aug == "strong-joint":
+            return strong_augmentations(mode="joint")
         assert callable(aug)
         return aug
 
@@ -211,7 +260,7 @@ def get_unsupervised_loader(args, split, cell_type, teacher_augmentation, studen
         image_paths, patch_shape, raw_transform, transform,
         augmentations=augmentations
     )
-    loader = torch_em.segmentation.get_data_loader(ds, batch_size=args.batch_size, num_workers=8, shuffle=True)
+    loader = torch_em.segmentation.get_data_loader(ds, batch_size=batch_size, num_workers=8, shuffle=True)
     return loader
 
 

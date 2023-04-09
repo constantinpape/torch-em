@@ -17,7 +17,7 @@ def check_loader(args, n_images=5):
 
     loader = common.get_unsupervised_loader(
         args, "train", cell_types[0],
-        teacher_augmentation="weak", student_augmentation="weak",
+        teacher_augmentation="weak", student_augmentation="strong",
     )
     check_loader(loader, n_images)
 
@@ -33,7 +33,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         src_checkpoint = args.save_root + f"checkpoints/unet_source/{source_cell_type}"
     model = load_model(checkpoint=src_checkpoint, model=model, device=device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
 
     # self training functionality
@@ -45,15 +45,29 @@ def _train_source_target(args, source_cell_type, target_cell_type):
     # data loaders
     unsupervised_train_loader = common.get_unsupervised_loader(
         args, args.batch_size, "train", target_cell_type,
-        teacher_augmentation="weak", student_augmentation="weak",
+        teacher_augmentation="weak", student_augmentation="strong-separate",
     )
     unsupervised_val_loader = common.get_unsupervised_loader(
         args, 1, "val", target_cell_type,
-        teacher_augmentation="weak", student_augmentation="weak",
+        teacher_augmentation="weak", student_augmentation="strong-separate",
     )
 
-    name = f"unet_mean_teacher/thresh-{thresh}/{source_cell_type}/{target_cell_type}"
-    trainer = self_training.MeanTeacherTrainer(
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+    name = f"unet_fixmatch/thresh-{thresh}"
+
+    if args.distribution_alignment:
+        assert args.output is not None
+        print(f"Getting scores for Source {source_cell_type} at Targets {target_cell_type}")
+        pred_folder = args.output + f"unet_source/{source_cell_type}/{target_cell_type}/"
+        src_dist = common.compute_class_distribution(pred_folder)
+        name = f"{name}-distro-align"
+    else:
+        src_dist = None
+
+    name = name + f"/{source_cell_type}/{target_cell_type}"
+
+    trainer = self_training.FixMatchTrainer(
         name=name,
         model=model,
         optimizer=optimizer,
@@ -70,6 +84,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         device=device,
         log_image_interval=100,
         save_root=args.save_root,
+        source_distribution=src_dist
     )
     trainer.fit(args.n_iterations)
 
@@ -90,19 +105,20 @@ def run_training(args):
 def run_evaluation(args):
     results = []
     for ct in args.cell_types:
-        res = common.evaluate_transfered_model(args, ct, "unet_mean_teacher", model_state="teacher_state")
+        res = common.evaluate_transfered_model(args, ct, "unet_fixmatch")
         results.append(res)
     results = pd.concat(results)
     print("Evaluation results:")
     print(results)
     result_folder = "./results"
     os.makedirs(result_folder, exist_ok=True)
-    results.to_csv(os.path.join(result_folder, "unet_mean_teacher.csv"), index=False)
+    results.to_csv(os.path.join(result_folder, "unet_fixmatch.csv"), index=False)
 
 
 def main():
     parser = common.get_parser(default_iterations=25000, default_batch_size=8)
     parser.add_argument("--confidence_threshold", default=None, type=float)
+    parser.add_argument("--distribution_alignment", action='store_true', help="Activates Distribution Alignment")
     args = parser.parse_args()
     if args.phase in ("c", "check"):
         check_loader(args)
