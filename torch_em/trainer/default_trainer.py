@@ -196,7 +196,6 @@ class DefaultTrainer:
     def _get_save_dict(save_path, device):
         if not os.path.exists(save_path):
             raise ValueError(f"Cannot find checkpoint {save_path}")
-
         return torch.load(save_path, map_location=device)
 
     @classmethod
@@ -442,6 +441,7 @@ class DefaultTrainer:
 
     def save_checkpoint(self, name, best_metric, **extra_save_dict):
         save_path = os.path.join(self.checkpoint_folder, f"{name}.pt")
+        extra_init_dict = extra_save_dict.pop("init", {})
         save_dict = {
             "iteration": self._iteration,
             "epoch": self._epoch,
@@ -449,7 +449,7 @@ class DefaultTrainer:
             "best_metric": best_metric,
             "model_state": self.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
-            "init": self.init_data,
+            "init": self.init_data | extra_init_dict,
         }
         save_dict.update(**extra_save_dict)
         if self.scaler is not None:
