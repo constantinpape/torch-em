@@ -10,8 +10,6 @@ from torch.distributions import Normal, Independent, kl
 from torch_em.model import UNet2d
 from torch_em.loss.dice import DiceLossWithLogits
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 def truncated_normal_(tensor, mean=0, std=1):
     size = tensor.shape
@@ -45,17 +43,17 @@ class Encoder(nn.Module):
     """
 
     def __init__(
-                self,
-                input_channels,
-                num_filters,
-                no_convs_per_block,
-                initializers,
-                padding=True,
-                posterior=False,
-                num_classes=None
-            ):
+        self,
+        input_channels,
+        num_filters,
+        no_convs_per_block,
+        initializers,
+        padding=True,
+        posterior=False,
+        num_classes=None
+    ):
 
-        super(Encoder, self).__init__()
+        super().__init__()
 
         self.contracting_path = nn.ModuleList()
         self.input_channels = input_channels
@@ -103,17 +101,17 @@ class AxisAlignedConvGaussian(nn.Module):
     """
 
     def __init__(
-                self,
-                input_channels,
-                num_filters,
-                no_convs_per_block,
-                latent_dim,
-                initializers,
-                posterior=False,
-                num_classes=None
-            ):
+        self,
+        input_channels,
+        num_filters,
+        no_convs_per_block,
+        latent_dim,
+        initializers,
+        posterior=False,
+        num_classes=None
+    ):
 
-        super(AxisAlignedConvGaussian, self).__init__()
+        super().__init__()
 
         self.input_channels = input_channels
         self.channel_axis = 1
@@ -196,17 +194,18 @@ class Fcomb(nn.Module):
     and output of the UNet (the feature map) by concatenating them along their channel axis.
     """
     def __init__(
-                self,
-                num_filters,
-                latent_dim,
-                num_output_channels,
-                num_classes,
-                no_convs_fcomb,
-                initializers,
-                use_tile=True
-            ):
+        self,
+        num_filters,
+        latent_dim,
+        num_output_channels,
+        num_classes,
+        no_convs_fcomb,
+        initializers,
+        use_tile=True,
+        device='cpu'
+    ):
 
-        super(Fcomb, self).__init__()
+        super().__init__()
 
         self.num_channels = num_output_channels
         self.num_classes = num_classes
@@ -217,6 +216,7 @@ class Fcomb(nn.Module):
         self.use_tile = use_tile
         self.no_convs_fcomb = no_convs_fcomb
         self.name = 'Fcomb'
+        self.device = device
 
         if self.use_tile:
             layers = []
@@ -251,7 +251,7 @@ class Fcomb(nn.Module):
         a = a.repeat(*(repeat_idx))
         order_index = torch.LongTensor(
                                     np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)])
-                                ).to(device)
+                                ).to(self.device)
         return torch.index_select(a, dim, order_index)
 
     def forward(self, feature_map, z):
@@ -271,7 +271,7 @@ class Fcomb(nn.Module):
             return self.last_layer(output)
 
 
-class ProbabilisticUnet(nn.Module):
+class ProbabilisticUNet(nn.Module):
     """ This network implementation for the Probabilistic UNet of Kohl et al. (https://arxiv.org/abs/1806.05034).
     This generative segmentation heuristic uses UNet combined with a conditional variational
     autoencoder enabling to efficiently produce an unlimited number of plausible hypotheses.
@@ -295,21 +295,23 @@ class ProbabilisticUnet(nn.Module):
         beta [float] - (default: 10.0)
         consensus_masking [bool] - (default: False)
         rl_swap [bool] - (default: False)
+        device [callable] - (default: 'cpu')
     """
 
     def __init__(
-                self,
-                input_channels=1,
-                num_classes=1,
-                num_filters=[32, 64, 128, 192],
-                latent_dim=6,
-                no_convs_fcomb=4,
-                beta=10.0,
-                consensus_masking=False,
-                rl_swap=False
-            ):
+        self,
+        input_channels=1,
+        num_classes=1,
+        num_filters=[32, 64, 128, 192],
+        latent_dim=6,
+        no_convs_fcomb=4,
+        beta=10.0,
+        consensus_masking=False,
+        rl_swap=False,
+        device='cpu'
+    ):
 
-        super(ProbabilisticUnet, self).__init__()
+        super().__init__()
 
         self.input_channels = input_channels
         self.num_classes = num_classes
@@ -322,13 +324,14 @@ class ProbabilisticUnet(nn.Module):
         self.z_prior_sample = 0
         self.consensus_masking = consensus_masking
         self.rl_swap = rl_swap
+        self.device = device
 
         self.unet = UNet2d(
                             in_channels=self.input_channels,
                             out_channels=None,
                             depth=len(self.num_filters),
                             initial_features=num_filters[0]
-                        ).to(device)
+                        ).to(self.device)
 
         self.prior = AxisAlignedConvGaussian(
                             self.input_channels,
@@ -336,7 +339,7 @@ class ProbabilisticUnet(nn.Module):
                             self.no_convs_per_block,
                             self.latent_dim,
                             self.initializers
-                        ).to(device)
+                        ).to(self.device)
 
         self.posterior = AxisAlignedConvGaussian(
                             self.input_channels,
@@ -346,7 +349,7 @@ class ProbabilisticUnet(nn.Module):
                             self.initializers,
                             posterior=True,
                             num_classes=num_classes
-                        ).to(device)
+                        ).to(self.device)
 
         self.fcomb = Fcomb(
                             self.num_filters,
@@ -355,8 +358,9 @@ class ProbabilisticUnet(nn.Module):
                             self.num_classes,
                             self.no_convs_fcomb,
                             {'w': 'orthogonal', 'b': 'normal'},
-                            use_tile=True
-                        ).to(device)
+                            use_tile=True,
+                            device=self.device
+                        ).to(self.device)
 
     def forward(self, patch, segm, training=True):  # def forward(self, patch, segm=None)
         """
