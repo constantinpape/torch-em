@@ -202,7 +202,7 @@ class Fcomb(nn.Module):
         no_convs_fcomb,
         initializers,
         use_tile=True,
-        device='cpu'
+        device=None
     ):
 
         super().__init__()
@@ -216,7 +216,11 @@ class Fcomb(nn.Module):
         self.use_tile = use_tile
         self.no_convs_fcomb = no_convs_fcomb
         self.name = 'Fcomb'
-        self.device = device
+
+        if device is None:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = device
 
         if self.use_tile:
             layers = []
@@ -295,7 +299,7 @@ class ProbabilisticUNet(nn.Module):
         beta [float] - (default: 10.0)
         consensus_masking [bool] - (default: False)
         rl_swap [bool] - (default: False)
-        device [callable] - (default: 'cpu')
+        device [torch.device] - (default: None)
     """
 
     def __init__(
@@ -308,7 +312,7 @@ class ProbabilisticUNet(nn.Module):
         beta=10.0,
         consensus_masking=False,
         rl_swap=False,
-        device='cpu'
+        device=None
     ):
 
         super().__init__()
@@ -324,7 +328,11 @@ class ProbabilisticUNet(nn.Module):
         self.z_prior_sample = 0
         self.consensus_masking = consensus_masking
         self.rl_swap = rl_swap
-        self.device = device
+
+        if device is None:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = device
 
         self.unet = UNet2d(
                             in_channels=self.input_channels,
