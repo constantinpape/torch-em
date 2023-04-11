@@ -370,12 +370,22 @@ class ProbabilisticUNet(nn.Module):
                             device=self.device
                         ).to(self.device)
 
-    def forward(self, patch, segm, training=True):  # def forward(self, patch, segm=None)
+    def _check_shape(self, patch):
+        spatial_shape = tuple(patch.shape)[2:]
+        depth = len(self.num_filters)
+        factor = [2**depth] * len(spatial_shape)
+        if any(sh % fac != 0 for sh, fac in zip(spatial_shape, factor)):
+            msg = f"Invalid shape for Probabilistic U-Net: {spatial_shape} is not divisible by {factor}"
+            raise ValueError(msg)
+
+    def forward(self, patch, segm=None):
         """
         Construct prior latent space for patch and run patch through UNet,
         in case training is True also construct posterior latent space
         """
-        if training:  # if segm is not None:
+        self._check_shape(patch)
+
+        if segm is not None:
             self.posterior_latent_space = self.posterior.forward(patch, segm)
         self.prior_latent_space = self.prior.forward(patch)
         self.unet_features = self.unet.forward(patch)
