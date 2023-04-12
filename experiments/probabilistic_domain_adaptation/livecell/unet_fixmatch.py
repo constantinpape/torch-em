@@ -90,7 +90,13 @@ def _train_source_target(args, source_cell_type, target_cell_type):
 
 
 def _train_source(args, cell_type):
-    for target_cell_type in common.CELL_TYPES:
+    if args.target_ct is None:
+        target_cell_list = common.CELL_TYPES
+    else:
+        target_cell_list = args.target_ct
+
+    for target_cell_type in target_cell_list:
+        print("Training on target cell type:", target_cell_type)
         if target_cell_type == cell_type:
             continue
         _train_source_target(args, cell_type, target_cell_type)
@@ -98,7 +104,7 @@ def _train_source(args, cell_type):
 
 def run_training(args):
     for cell_type in args.cell_types:
-        print("Start training for cell type:", cell_type)
+        print("Start training for source cell type:", cell_type)
         _train_source(args, cell_type)
 
 
