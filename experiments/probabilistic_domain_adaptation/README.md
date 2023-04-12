@@ -23,6 +23,7 @@ python unet_mean_teacher.py -p [check / train / evaluate]
                             -i <PATH-TO-DATA>
                             -s <PATH-TO-SAVE-MODEL-WEIGHTS>
                             -o <PATH-FOR-SAVING-PREDICTIONS>
+                            [(optional) --target_ct <TARGET-DOMAIN-CELL-TYPE>]
                             [(optional) --confidence_threshold <THRESHOLD-FOR-COMPUTING-FILTER-MASK>]
 ```
 
@@ -33,6 +34,7 @@ python unet_adamt.py -p [check / train / evaluate]
                      -i <PATH-TO-DATA>
                      -s <PATH-TO-SAVE-MODEL-WEIGHTS>
                      -o <PATH-FOR-SAVING-PREDICTIONS>
+                     [(optional) --target_ct <TARGET-DOMAIN-CELL-TYPE>]
                      [(optional) --confidence_threshold <THRESHOLD-FOR-COMPUTING-FILTER-MASK>]
 ```
 
@@ -43,6 +45,7 @@ python unet_fixmatch.py -p [check / train / evaluate]
                         -i <PATH-TO-DATA>
                         -s <PATH-TO-SAVE-MODEL-WEIGHTS>
                         -o <PATH-FOR-SAVING-PREDICTIONS>
+                        [(optional) --target_ct <TARGET-DOMAIN-CELL-TYPE>]
                         [(optional) --confidence_threshold <THRESHOLD-FOR-COMPUTING-FILTER-MASK>]
                         [(optional) --distribution_alignment <ACTIVATES-DISTRIBUTION-ALIGNMENT>]
 ```
@@ -54,6 +57,7 @@ python unet_adamatch.py -p [check / train / evaluate]
                         -i <PATH-TO-DATA>
                         -s <PATH-TO-SAVE-MODEL-WEIGHTS>
                         -o <PATH-FOR-SAVING-PREDICTIONS>
+                        [(optional) --target_ct <TARGET-DOMAIN-CELL-TYPE>]
                         [(optional) --confidence_threshold <THRESHOLD-FOR-COMPUTING-FILTER-MASK>]
                         [(optional) --distribution_alignment <ACTIVATES-DISTRIBUTION-ALIGNMENT>]
 ```

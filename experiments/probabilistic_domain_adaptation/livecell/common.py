@@ -282,5 +282,6 @@ def get_parser(default_batch_size=8, default_iterations=int(1e5)):
     parser.add_argument("-n", "--n_iterations", default=default_iterations, type=int)
     parser.add_argument("-s", "--save_root")
     parser.add_argument("-c", "--cell_types", nargs="+", default=CELL_TYPES)
+    parser.add_argument("--target_ct", nargs="+", default=None)
     parser.add_argument("-o", "--output")
     return parser
