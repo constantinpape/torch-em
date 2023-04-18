@@ -126,16 +126,24 @@ def evaluate_transfered_model(
                 results[ct_trg] = None
                 continue
 
-            out_folder = None if args.output is None else os.path.join(
-                args.output, f"thresh-{thresh}", ct_src, ct_trg
-            )
+            if args.output is None:
+                out_folder = None
+            else:
+                if args.distribution_alignment:
+                    out_folder = os.path.join(args.output, f"thresh-{thresh}-distro-align/", ct_src, ct_trg)
+                else:
+                    out_folder = os.path.join(args.output, f"thresh-{thresh}", ct_src, ct_trg)
+
             if out_folder is not None:
                 os.makedirs(out_folder, exist_ok=True)
 
             if args.save_root is None:
                 ckpt = f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
             else:
-                ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
+                if args.distribution_alignment:
+                    ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}-distro-align/{ct_src}/{ct_trg}"
+                else:
+                    ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
             model = get_model()
             model = load_model(checkpoint=ckpt, model=model, state_key=model_state, device=device)
 
