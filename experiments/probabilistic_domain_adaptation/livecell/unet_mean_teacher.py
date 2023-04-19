@@ -109,6 +109,7 @@ def run_evaluation(args):
 def main():
     parser = common.get_parser(default_iterations=25000, default_batch_size=8)
     parser.add_argument("--confidence_threshold", default=None, type=float)
+    parser.add_argument("--distribution_alignment", action='store_true')  # to avoid AttributeError(s)
     args = parser.parse_args()
     if args.phase in ("c", "check"):
         check_loader(args)
