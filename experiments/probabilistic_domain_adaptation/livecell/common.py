@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_em
+from torch_em.model import ProbabilisticUNet
 
 from elf.evaluation import dice_score
 from torch_em.data.datasets.livecell import (get_livecell_loader,
@@ -81,6 +82,11 @@ def strong_augmentations(p=0.5, mode=None):
 
 def get_unet():
     return UNet2d(in_channels=1, out_channels=1, initial_features=64, final_activation="Sigmoid", depth=4)
+
+
+def get_punet():
+    return ProbabilisticUNet(input_channels=1, num_classes=1, num_filters=[64, 128, 256, 512],
+                             latent_dim=6, no_convs_fcomb=3, beta=1.0)
 
 
 # Computing the Source Distribution for Distribution Alignment
