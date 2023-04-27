@@ -1,6 +1,7 @@
-import torch.nn as nn
-import torch_em
 import torch
+import torch_em
+import torch.nn as nn
+from torch_em.loss import DiceLoss
 
 
 class DefaultSelfTrainingLoss(nn.Module):
@@ -104,7 +105,7 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
         activation [nn.Module, callable] - the activation function to be applied to the prediction
             before evaluating the average predictions. (default: None)
     """
-    def __init__(self, loss=None, metric=torch_em.loss.DiceLoss(), activation=torch.nn.Sigmoid(), prior_samples=16):
+    def __init__(self, loss=None, metric=DiceLoss(), activation=torch.nn.Sigmoid(), prior_samples=16):
         super().__init__()
         self.activation = activation
         self.metric = metric
