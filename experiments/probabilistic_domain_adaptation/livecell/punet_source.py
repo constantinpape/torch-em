@@ -64,7 +64,7 @@ def run_evaluation(args):
 
 
 def main():
-    parser = common.get_parser(default_iterations=50000)
+    parser = common.get_parser(default_iterations=100000)
     args = parser.parse_args()
     if args.phase in ("c", "check"):
         check_loader(args)

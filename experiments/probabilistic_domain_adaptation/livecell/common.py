@@ -86,7 +86,7 @@ def get_unet():
 
 def get_punet():
     return ProbabilisticUNet(input_channels=1, num_classes=1, num_filters=[64, 128, 256, 512],
-                             latent_dim=6, no_convs_fcomb=3, beta=1.0)
+                             latent_dim=6, no_convs_fcomb=3, beta=1.0, rl_swap=True)
 
 
 # Computing the Source Distribution for Distribution Alignment
