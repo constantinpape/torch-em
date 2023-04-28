@@ -26,7 +26,6 @@ def _train_cell_type(args, cell_type, device=DEVICE):
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        loss=DummyLoss(),
         metric=DummyLoss(),
         logger=None,
         device=device,
@@ -34,8 +33,8 @@ def _train_cell_type(args, cell_type, device=DEVICE):
         optimizer=optimizer,
         mixed_precision=True,
         log_image_interval=100,
-        supervised_loss=supervised_loss,
-        supervised_loss_and_metric=supervised_loss_and_metric
+        loss=supervised_loss,
+        loss_and_metric=supervised_loss_and_metric
     )
 
     trainer.fit(iterations=args.n_iterations)
