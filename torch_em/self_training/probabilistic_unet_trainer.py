@@ -14,28 +14,26 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
     the posterior distribution, estimating the loss and further sampling from the prior for validation.
 
     Parameters:
-        clip_posterior [bool] - (default: False)
+        clipping_value [float] - (default: None)
         prior_samples [int] - (default: 16)
-        supervised_loss [callable] - (default: None)
-        supervised_loss_and_metric [callable] - (default: None)
+        loss [callable] - (default: None)
+        loss_and_metric [callable] - (default: None)
     """
 
     def __init__(
             self,
-            clip_posterior=False,
+            clipping_value=None,
             prior_samples=16,
-            supervised_loss=None,
-            supervised_loss_and_metric=None,
+            loss=None,
+            loss_and_metric=None,
             **kwargs
     ):
-        super().__init__(**kwargs)
-        assert supervised_loss, supervised_loss_and_metric is not None
+        super().__init__(loss=loss, **kwargs)
+        assert loss, loss_and_metric is not None
 
-        self.supervised_loss = supervised_loss
-        self.supervised_loss_and_metric = supervised_loss_and_metric
+        self.loss_and_metric = loss_and_metric
 
-        self.clip_posterior = clip_posterior
-        self.clipping_value = 1
+        self.clipping_value = clipping_value
 
         self.prior_samples = prior_samples
         self.sigmoid = torch.nn.Sigmoid()
@@ -68,12 +66,12 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
             with forward_context():
                 # We pass the model, the input and the labels to the supervised loss function, so
                 # that's how the loss is calculated stays flexible, e.g. here to enable ELBO for PUNet.
-                loss = self.supervised_loss(self.model, x, y)
+                loss = self.loss(self.model, x, y)
 
             backprop(loss)
 
             # To counter the exploding gradients in the posterior net
-            if self.clip_posterior:
+            if self.clipping_value is not None:
                 torch.nn.utils.clip_grad_norm_(self.model.posterior.encoder.layers.parameters(), self.clipping_value)
 
             if self.logger is not None:
@@ -101,7 +99,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
                 x, y = x.to(self.device), y.to(self.device)
 
                 with forward_context():
-                    loss, metric = self.supervised_loss_and_metric(self.model, x, y)
+                    loss, metric = self.loss_and_metric(self.model, x, y)
 
                 loss_val += loss.item()
                 metric_val += metric

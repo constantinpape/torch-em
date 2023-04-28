@@ -128,7 +128,7 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
                 samples = self.activation(samples)
             samples_per_distribution.append(samples)
 
-        avg_samples = torch.stack(self.samples_per_distribution, dim=0).sum(dim=0) / len(self.samples_per_distribution)
+        avg_samples = torch.stack(samples_per_distribution, dim=0).sum(dim=0) / len(samples_per_distribution)
         metric = self.metric(avg_samples, labels)
 
         return loss, metric
