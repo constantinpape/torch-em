@@ -1,5 +1,9 @@
+import os
+import pandas as pd
+
 import torch
-from torch_em.self_training import ProbabilisticUNetTrainer, DummyLoss, \
+
+from torch_em.self_training import ProbabilisticUNetTrainer, \
     ProbabilisticUNetLoss, ProbabilisticUNetLossAndMetric
 
 import common
@@ -57,8 +61,17 @@ def check_loader(args, n_images=5):
 
 
 def run_evaluation(args):
-    # TODO
-    pass
+    results = []
+    for ct in args.cell_types:
+        res = common.evaluate_source_model(args, ct, "punet_source", get_model=common.get_punet,
+                                           prediction_function=common.get_punet_predictions)
+        results.append(res)
+    results = pd.concat(results)
+    print("Evaluation results:")
+    print(results)
+    result_folder = "./results"
+    os.makedirs(result_folder, exist_ok=True)
+    results.to_csv(os.path.join(result_folder, "punet_source.csv"), index=False)
 
 
 def main():
