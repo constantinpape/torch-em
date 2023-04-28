@@ -23,8 +23,6 @@ from tqdm import tqdm
 from torch_em.util import load_model
 
 CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 #
 # The augmentations we use for the LiveCELL experiments:

@@ -8,10 +8,10 @@ from torch_em.self_training import ProbabilisticUNetTrainer, \
 
 import common
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def _train_cell_type(args, cell_type):
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-def _train_cell_type(args, cell_type, device=DEVICE):
     train_loader = common.get_supervised_loader(args, "train", cell_type, args.batch_size)
     val_loader = common.get_supervised_loader(args, "val", cell_type, 1)
     name = f"punet_source/{cell_type}"
