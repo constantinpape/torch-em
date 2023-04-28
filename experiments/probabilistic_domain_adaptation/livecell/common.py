@@ -23,6 +23,7 @@ from tqdm import tqdm
 from torch_em.util import load_model
 
 CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 #
@@ -185,20 +186,33 @@ def evaluate_transfered_model(
     return pd.DataFrame(results)
 
 
+def get_punet_predictions(model, inputs):
+    activation = torch.nn.Sigmoid()
+    prior_samples = 16
+
+    with torch.no_grad():
+        model.forward(inputs)
+        samples_per_input = [activation(model.sample(testing=True))for _ in range(prior_samples)]
+        avg_pred = torch.stack(samples_per_input, dim=0).sum(dim=0) / prior_samples
+
+    return avg_pred
+
+
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
 def evaluate_source_model(args, ct_src, method, get_model=get_unet, prediction_function=None):
+    device = torch.device("cuda")
+
     if args.save_root is None:
         ckpt = f"checkpoints/{method}/{ct_src}"
     else:
         ckpt = args.save_root + f"checkpoints/{method}/{ct_src}"
     model = get_model()
-    model = torch_em.util.get_trainer(ckpt).model
+    model = load_model(checkpoint=ckpt, model=model, device=device)
 
     image_folder = os.path.join(args.input, "images", "livecell_test_images")
     label_root = os.path.join(args.input, "annotations", "livecell_test_images")
 
     results = {"src": [ct_src]}
-    device = torch.device("cuda")
 
     with torch.no_grad():
         for ct_trg in CELL_TYPES:
