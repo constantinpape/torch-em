@@ -112,8 +112,6 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
         self.loss = loss
         self.prior_samples = prior_samples
 
-        self.samples_per_distribution = []
-
     def __call__(self, model, input_, labels):
         model.forward(input_, labels)
 
@@ -123,12 +121,12 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
                 l2_regularisation(model.fcomb.layers)
             loss = -elbo + 1e-5 * reg_loss
 
+        samples_per_distribution = []
         for _ in range(self.prior_samples):
             samples = model.sample(testing=False)
             if self.activation is not None:
                 samples = self.activation(samples)
-
-            self.samples_per_distribution.append(samples)
+            samples_per_distribution.append(samples)
 
         avg_samples = torch.stack(self.samples_per_distribution, dim=0).sum(dim=0) / len(self.samples_per_distribution)
         metric = self.metric(avg_samples, labels)
