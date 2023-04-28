@@ -26,7 +26,6 @@ def _train_cell_type(args, cell_type, device=DEVICE):
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        metric=DummyLoss(),
         logger=None,
         device=device,
         lr_scheduler=scheduler,

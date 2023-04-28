@@ -28,7 +28,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
             loss_and_metric=None,
             **kwargs
     ):
-        super().__init__(loss=loss, **kwargs)
+        super().__init__(loss=loss, metric=DummyLoss(), **kwargs)
         assert loss, loss_and_metric is not None
 
         self.loss_and_metric = loss_and_metric
