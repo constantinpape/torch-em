@@ -13,9 +13,9 @@ class Dummy(torch.nn.Module):
 
 
 class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
-    """This trainer implements self-traning for semi-supervised learning and domain following the 'MeanTeacher' approach
-    of Tarvainen & Vapola (https://arxiv.org/abs/1703.01780). This approach uses a teacher model derived from the
-    student model via EMA of weights to predict pseudo-labels on unlabeled data.
+    """This trainer implements self-training for semi-supervised learning and domain following the 'MeanTeacher'
+    approach of Tarvainen & Vapola (https://arxiv.org/abs/1703.01780). This approach uses a teacher model derived from
+    the student model via EMA of weights to predict pseudo-labels on unlabeled data.
     We support two training strategies: joint training on labeled and unlabeled data
     (with a supervised and unsupervised loss function). And training only on the unsupervised data.
 
