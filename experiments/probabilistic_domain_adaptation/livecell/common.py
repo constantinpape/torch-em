@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_em
+from torch_em.model import ProbabilisticUNet
 
 from elf.evaluation import dice_score
 from torch_em.data.datasets.livecell import (get_livecell_loader,
@@ -22,7 +23,6 @@ from tqdm import tqdm
 from torch_em.util import load_model
 
 CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
-
 
 #
 # The augmentations we use for the LiveCELL experiments:
@@ -81,6 +81,11 @@ def strong_augmentations(p=0.5, mode=None):
 
 def get_unet():
     return UNet2d(in_channels=1, out_channels=1, initial_features=64, final_activation="Sigmoid", depth=4)
+
+
+def get_punet():
+    return ProbabilisticUNet(input_channels=1, num_classes=1, num_filters=[64, 128, 256, 512],
+                             latent_dim=6, no_convs_fcomb=3, beta=1.0, rl_swap=True)
 
 
 # Computing the Source Distribution for Distribution Alignment
@@ -179,20 +184,33 @@ def evaluate_transfered_model(
     return pd.DataFrame(results)
 
 
+def get_punet_predictions(model, inputs):
+    activation = torch.nn.Sigmoid()
+    prior_samples = 16
+
+    with torch.no_grad():
+        model.forward(inputs)
+        samples_per_input = [activation(model.sample(testing=True))for _ in range(prior_samples)]
+        avg_pred = torch.stack(samples_per_input, dim=0).sum(dim=0) / prior_samples
+
+    return avg_pred
+
+
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
 def evaluate_source_model(args, ct_src, method, get_model=get_unet, prediction_function=None):
+    device = torch.device("cuda")
+
     if args.save_root is None:
         ckpt = f"checkpoints/{method}/{ct_src}"
     else:
         ckpt = args.save_root + f"checkpoints/{method}/{ct_src}"
     model = get_model()
-    model = torch_em.util.get_trainer(ckpt).model
+    model = load_model(checkpoint=ckpt, model=model, device=device)
 
     image_folder = os.path.join(args.input, "images", "livecell_test_images")
     label_root = os.path.join(args.input, "annotations", "livecell_test_images")
 
     results = {"src": [ct_src]}
-    device = torch.device("cuda")
 
     with torch.no_grad():
         for ct_trg in CELL_TYPES:
