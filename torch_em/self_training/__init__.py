@@ -3,5 +3,5 @@ from .loss import DefaultSelfTrainingLoss, DefaultSelfTrainingLossAndMetric, Pro
     ProbabilisticUNetLossAndMetric
 from .mean_teacher import MeanTeacherTrainer
 from .fix_match import FixMatchTrainer
-from .pseudo_labeling import DefaultPseudoLabeler
+from .pseudo_labeling import DefaultPseudoLabeler, ProbabilisticPseudoLabeler
 from .probabilistic_unet_trainer import ProbabilisticUNetTrainer, DummyLoss
