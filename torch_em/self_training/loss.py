@@ -82,11 +82,11 @@ class ProbabilisticUNetLoss(nn.Module):
         super().__init__()
         self.loss = loss
 
-    def __call__(self, model, input_, labels):
+    def __call__(self, model, input_, labels, label_filter=None):
         model.forward(input_, labels)
 
         if self.loss is None:
-            elbo = model.elbo(labels)
+            elbo = model.elbo(labels, label_filter)
             reg_loss = l2_regularisation(model.posterior) + l2_regularisation(model.prior) + \
                 l2_regularisation(model.fcomb.layers)
             loss = -elbo + 1e-5 * reg_loss
@@ -112,11 +112,11 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
         self.loss = loss
         self.prior_samples = prior_samples
 
-    def __call__(self, model, input_, labels):
+    def __call__(self, model, input_, labels, label_filter=None):
         model.forward(input_, labels)
 
         if self.loss is None:
-            elbo = model.elbo(labels)
+            elbo = model.elbo(labels, label_filter)
             reg_loss = l2_regularisation(model.posterior) + l2_regularisation(model.prior) + \
                 l2_regularisation(model.fcomb.layers)
             loss = -elbo + 1e-5 * reg_loss
