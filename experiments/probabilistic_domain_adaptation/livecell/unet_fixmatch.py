@@ -52,8 +52,6 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         teacher_augmentation="weak", student_augmentation="strong-separate",
     )
 
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
     name = f"unet_fixmatch/thresh-{thresh}"
 
     if args.distribution_alignment:
