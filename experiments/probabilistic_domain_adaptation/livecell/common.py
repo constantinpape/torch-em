@@ -112,6 +112,18 @@ def compute_class_distribution(root_folder, label_threshold=0.5):
     return [bg_frequency, fg_frequency]
 
 
+def get_punet_predictions(model, inputs):
+    activation = torch.nn.Sigmoid()
+    prior_samples = 16
+
+    with torch.no_grad():
+        model.forward(inputs)
+        samples_per_input = [activation(model.sample(testing=True))for _ in range(prior_samples)]
+        avg_pred = torch.stack(samples_per_input, dim=0).sum(dim=0) / prior_samples
+
+    return avg_pred
+
+
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
 # set model_state to "teacher_state" when using this with a mean-teacher method
 def evaluate_transfered_model(
@@ -121,9 +133,12 @@ def evaluate_transfered_model(
     label_root = os.path.join(args.input, "annotations", "livecell_test_images")
 
     results = {"src": [ct_src]}
-    device = torch.device("cuda")
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     thresh = args.confidence_threshold
+    if thresh is None:
+        assert args.consensus_masking is False, "Provide a confidence threshold to use consensus masking"
+
     with torch.no_grad():
         for ct_trg in CELL_TYPES:
 
@@ -134,10 +149,15 @@ def evaluate_transfered_model(
             if args.output is None:
                 out_folder = None
             else:
+                out_folder = args.output + f"thresh-{thresh}"
+
+                if args.consensus_masking:
+                    out_folder = out_folder + "-masking"
+
                 if args.distribution_alignment:
-                    out_folder = os.path.join(args.output, f"thresh-{thresh}-distro-align/", ct_src, ct_trg)
-                else:
-                    out_folder = os.path.join(args.output, f"thresh-{thresh}", ct_src, ct_trg)
+                    out_folder = out_folder + "-distro-align"
+
+                out_folder = os.path.join(out_folder, ct_src, ct_trg)
 
             if out_folder is not None:
                 os.makedirs(out_folder, exist_ok=True)
@@ -145,10 +165,16 @@ def evaluate_transfered_model(
             if args.save_root is None:
                 ckpt = f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
             else:
+                ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}"
+
+                if args.consensus_masking:
+                    ckpt = ckpt + "-masking"
+
                 if args.distribution_alignment:
-                    ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}-distro-align/{ct_src}/{ct_trg}"
-                else:
-                    ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
+                    ckpt = ckpt + "-distro-align"
+
+                ckpt = os.path.join(ckpt, ct_src, ct_trg)
+
             model = get_model()
             model = load_model(checkpoint=ckpt, model=model, state_key=model_state, device=device)
 
@@ -184,21 +210,9 @@ def evaluate_transfered_model(
     return pd.DataFrame(results)
 
 
-def get_punet_predictions(model, inputs):
-    activation = torch.nn.Sigmoid()
-    prior_samples = 16
-
-    with torch.no_grad():
-        model.forward(inputs)
-        samples_per_input = [activation(model.sample(testing=True))for _ in range(prior_samples)]
-        avg_pred = torch.stack(samples_per_input, dim=0).sum(dim=0) / prior_samples
-
-    return avg_pred
-
-
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
 def evaluate_source_model(args, ct_src, method, get_model=get_unet, prediction_function=None):
-    device = torch.device("cuda")
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     if args.save_root is None:
         ckpt = f"checkpoints/{method}/{ct_src}"
@@ -310,4 +324,5 @@ def get_parser(default_batch_size=8, default_iterations=int(1e5)):
     parser.add_argument("-c", "--cell_types", nargs="+", default=CELL_TYPES)
     parser.add_argument("--target_ct", nargs="+", default=None)
     parser.add_argument("-o", "--output")
+    parser.add_argument("--distribution_alignment", action='store_true')
     return parser

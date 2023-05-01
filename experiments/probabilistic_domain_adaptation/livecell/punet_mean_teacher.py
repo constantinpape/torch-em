@@ -82,6 +82,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         device=device,
         log_image_interval=100,
         save_root=args.save_root,
+        compile_model=False
     )
     trainer.fit(args.n_iterations)
 
@@ -108,7 +109,10 @@ def run_training(args):
 def run_evaluation(args):
     results = []
     for ct in args.cell_types:
-        res = common.evaluate_transfered_model(args, ct, "punet_mean_teacher", model_state="teacher_state")
+        res = common.evaluate_transfered_model(args, ct, "punet_mean_teacher",
+                                               get_model=common.get_punet,
+                                               model_state="teacher_state",
+                                               prediction_function=common.get_punet_predictions)
         results.append(res)
     results = pd.concat(results)
     print("Evaluation results:")
