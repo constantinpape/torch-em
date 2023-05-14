@@ -1,4 +1,5 @@
 import argparse
+import json
 import multiprocessing
 import uuid
 
@@ -34,12 +35,23 @@ def _get_training_parser(description):
 
 
 # TODO provide an option to over-ride the offsets, e.g. via filepath to a json?
-def _get_offsets(ndim):
+def _get_offsets(ndim, scale_factors):
     if ndim == 2:
         offsets = [[-1, 0], [0, -1], [-3, 0], [0, -3], [-9, 0], [0, -9], [-27, 0], [0, -27]]
-    # TODO how do we differentiate isotropic vs. anisotropic for 3d
-    elif ndim == 3:
-        pass
+    elif ndim == 3 and scale_factors is None:
+        offsets = [
+            [-1, 0, 0], [0, -1, 0], [0, 0, -1],
+            [-3, 0, 0], [0, -3, 0], [0, 0, -3],
+            [-9, 0, 0], [0, -9, 0], [0, 0, -9],
+            [-27, 0, 0], [0, -27, 0], [0, 0, -27],
+        ]
+    else:
+        offsets = [
+            [-1, 0, 0], [0, -1, 0], [0, 0, -1],
+            [-2, 0, 0], [0, -3, 0], [0, 0, -3],
+            [-3, 0, 0], [0, -9, 0], [0, 0, -9],
+            [-4, 0, 0], [0, -27, 0], [0, 0, -27],
+        ]
     return offsets
 
 
@@ -55,12 +67,13 @@ def _get_loader(input_paths, input_key, label_paths, label_key, args, ndim, perf
     if args.label_mode is None:
         pass
     elif args.label_mode == "affinities":
+        offsets = _get_offsets(ndim, args.scale_factors)
         label_transform = torch_em.transform.label.AffinityTransform(
-            offsets=_get_offsets(ndim), add_binary_target=False, add_mask=True,
+            offsets=offsets, add_binary_target=False, add_mask=True,
         )
     elif args.label_mode == "affinities_and_foreground":
         label_transform = torch_em.transform.label.AffinityTransform(
-            offsets=_get_offsets(ndim), add_binary_target=True, add_mask=True,
+            offsets=_get_offsets(ndim, args.scale_factors), add_binary_target=True, add_mask=True,
         )
     elif args.label_mode == "boundaries":
         label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=False)
@@ -76,12 +89,13 @@ def _get_loader(input_paths, input_key, label_paths, label_key, args, ndim, perf
     if ndim == 2:
         if len(patch_shape) != 2 and patch_shape[0] != 1:
             raise ValueError(f"Invalid patch_shape {patch_shape} for 2d data.")
-    elif ndim == 3 and len(patch_shape) != 3:
-        raise ValueError(f"Invalid patch_shape {patch_shape} for 3d data.")
+    if ndim == 3:
+        if len(patch_shape) != 3:
+            raise ValueError(f"Invalid patch_shape {patch_shape} for 3d data.")
     else:
         raise RuntimeError(f"Invalid ndim: {ndim}")
 
-    # TODO figure out with channels
+    # TODO figure out if with channels
     ds = torch_em.default_segmentation_dataset(
         input_paths, input_key, label_paths, label_key,
         patch_shape=patch_shape, ndim=ndim,
@@ -107,6 +121,27 @@ def _get_loader(input_paths, input_key, label_paths, label_key, args, ndim, perf
     return loader
 
 
+def _get_loaders(args, ndim):
+    # if validation data is not passed we split the loader
+    if args.validation_inputs is None:
+        print("You haven't provided validation data so the validation set will be split off the input data.")
+        print(f"A fraction of {args.train_fraction} will be used for training and {1 - args.train_fraction} for val.")
+        train_loader, val_loader = _get_loader(
+            args.training_inputs, args.training_input_key, args.training_labels, args.training_label_key,
+            args=args, ndim=ndim, perform_split=True,
+        )
+    else:
+        train_loader = _get_loader(
+            args.training_inputs, args.training_input_key, args.training_labels, args.training_label_key,
+            args=args, ndim=ndim,
+        )
+        val_loader = _get_loader(
+            args.validation_inputs, args.validation_key, args.validation_labels, args.validation_label_key,
+            args=args, ndim=ndim,
+        )
+    return train_loader, val_loader
+
+
 def _determine_channels(train_loader, args):
     x, y = next(iter(train_loader))
     in_channels = x.shape[1]
@@ -118,24 +153,7 @@ def train_2d_unet():
     parser = _get_training_parser("Train a 2D UNet.")
     args = parser.parse_args()
 
-    # if validation data is not passed we split the loader
-    if args.validation_inputs is None:
-        print("You haven't provided validation data so the validation set will be split off the input data.")
-        print(f"A fraction of {args.train_fraction} will be used for training and {1 - args.train_fraction} for val.")
-        train_loader, val_loader = _get_loader(
-            args.training_inputs, args.training_input_key, args.training_labels, args.training_label_key,
-            args=args, ndim=2, perform_split=True,
-        )
-    else:
-        train_loader = _get_loader(
-            args.training_inputs, args.training_input_key, args.training_labels, args.training_label_key,
-            args=args, ndim=2,
-        )
-        val_loader = _get_loader(
-            args.validation_inputs, args.validation_key, args.validation_labels, args.validation_label_key,
-            args=args, ndim=2,
-        )
-
+    train_loader, val_loader = _get_loaders(args, ndim=2)
     # TODO more unet settings
     # create the 2d unet
     in_channels, out_channels = _determine_channels(train_loader, args)
@@ -160,7 +178,37 @@ def train_2d_unet():
 
 
 def train_3d_unet():
-    pass
+    parser = _get_training_parser("Train a 3D UNet.")
+    parser.add_argument("-s", "--scale_factors", type=str, help="json encoded")
+    args = parser.parse_args()
+
+    scale_factors = None if args.scale_factors is None else json.loads(args.scale_factors)
+    train_loader, val_loader = _get_loaders(args, ndim=3)
+
+    # TODO more unet settings
+    # create the 3d unet
+    in_channels, out_channels = _determine_channels(train_loader, args)
+    if scale_factors is None:
+        model = UNet3d(in_channels, out_channels)
+    else:
+        model = AnisotropicUNet(in_channels, out_channels, scale_factors)
+
+    if "affinities" in args.label_mode:
+        loss = torch_em.loss.LossWrapper(
+            torch_em.loss.DiceLoss(),
+            transform=torch_em.loss.ApplyAndRemoveMask(masking_method="multiply")
+        )
+    else:
+        loss = torch_em.loss.DiceLoss()
+
+    # generate a random id for the training
+    name = f"3d-unet-training-{uuid.uuid1()}" if args.name is None else args.name
+    print("Start 3d unet training for", name)
+    trainer = torch_em.default_segmentation_trainer(
+        name=name, model=model, train_loader=train_loader, val_loader=val_loader,
+        loss=loss, metric=loss, compile_model=False,
+    )
+    trainer.fit(args.n_iterations)
 
 
 def predict():
