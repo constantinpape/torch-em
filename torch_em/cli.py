@@ -3,9 +3,12 @@ import json
 import multiprocessing
 import uuid
 
+import imageio
 import torch_em
+from elf.io import open_file
 from torch.utils.data import random_split
 from torch_em.model.unet import AnisotropicUNet, UNet2d, UNet3d
+from torch_em.util.prediction import predict_with_halo, predict_with_padding
 
 
 def _get_training_parser(description):
@@ -212,4 +215,20 @@ def train_3d_unet():
 
 
 def predict():
-    pass
+    parser = argparse.ArgumentParser(description="Run prediction with tiling or padding.")
+    parser.add_argument("-i", "--input_path", help="")
+    parser.add_argument("-k", "--input_key", help="")
+    parser.add_argument("-o", "--output_path", help="")
+    parser.add_argument("--output_key", help="")
+    args = parser.parse_args()
+
+    def _predict(input_):
+        pass
+
+    if args.input_key is None:
+        input_ = imageio.volread(args.input_path)
+        _predict(input_)
+    else:
+        with open_file(args.input_path, "r") as f:
+            input_ = f[args.input_key]
+            _predict(input_)
