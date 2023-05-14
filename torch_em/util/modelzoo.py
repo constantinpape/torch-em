@@ -553,6 +553,7 @@ def export_bioimageio_model(checkpoint, export_folder, input_data=None,
     # change the working directory to the export_folder to avoid issues with relative paths
     cwd = os.getcwd()
     os.chdir(export_folder)
+
     try:
         build_spec.build_model(
             weight_uri=weight_path,

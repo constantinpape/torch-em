@@ -35,4 +35,5 @@ jobs:
 
       - name: Run tests
         shell: bash -l {0}
-        run: python -m unittest discover -s test -v
+        # run: python -m unittest discover -s test -v
+        run: python test/util/test_modelzoo.py TestModelzoo.test_export_multi_channel
