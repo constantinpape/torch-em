@@ -3,12 +3,18 @@ import json
 import multiprocessing
 import uuid
 
-import imageio
+import imageio.v3 as imageio
+import torch
 import torch_em
 from elf.io import open_file
 from torch.utils.data import random_split
 from torch_em.model.unet import AnisotropicUNet, UNet2d, UNet3d
 from torch_em.util.prediction import predict_with_halo, predict_with_padding
+
+
+#
+# CLI for training
+#
 
 
 def _get_training_parser(description):
@@ -92,7 +98,7 @@ def _get_loader(input_paths, input_key, label_paths, label_key, args, ndim, perf
     if ndim == 2:
         if len(patch_shape) != 2 and patch_shape[0] != 1:
             raise ValueError(f"Invalid patch_shape {patch_shape} for 2d data.")
-    if ndim == 3:
+    elif ndim == 3:
         if len(patch_shape) != 3:
             raise ValueError(f"Invalid patch_shape {patch_shape} for 3d data.")
     else:
@@ -214,21 +220,113 @@ def train_3d_unet():
     trainer.fit(args.n_iterations)
 
 
-def predict():
-    parser = argparse.ArgumentParser(description="Run prediction with tiling or padding.")
-    parser.add_argument("-i", "--input_path", help="")
-    parser.add_argument("-k", "--input_key", help="")
-    parser.add_argument("-o", "--output_path", help="")
-    parser.add_argument("--output_key", help="")
-    args = parser.parse_args()
+#
+# CLI for prediction
+#
 
-    def _predict(input_):
-        pass
+
+def _get_prediction_parser(description):
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("-c", "--checkpoint", required=True, help="")
+    parser.add_argument("-i", "--input_path", required=True, help="")
+    parser.add_argument("-k", "--input_key", help="")
+    parser.add_argument("-o", "--output_path", required=True, help="")
+    parser.add_argument("--output_key", help="")
+    parser.add_argument("--chunks", nargs="+", type=int, help="")
+    parser.add_argument("--compression", help="")
+    return parser
+
+
+def _prediction(args, predict, device):
+    model = torch_em.util.get_trainer(args.checkpoint, device=device).model
 
     if args.input_key is None:
-        input_ = imageio.volread(args.input_path)
-        _predict(input_)
+        input_ = imageio.imread(args.input_path)
+        pred = predict(model, input_)
     else:
         with open_file(args.input_path, "r") as f:
             input_ = f[args.input_key]
-            _predict(input_)
+            pred = predict(model, input_)
+
+    output_key = args.output_key
+    if output_key is None:
+        imageio.imwrite(args.output_path, pred)
+    else:
+        kwargs = {}
+        if args.chunks is not None:
+            assert len(args.chunks) == pred.ndim
+            kwargs["chunks"] = args.chunks
+        if args.compression is not None:
+            kwargs["compression"] = args.compression
+        with open_file(args.output_path, "a") as f:
+            ds = f.require_dataset(
+                output_key, shape=pred.shape, dtype=pred.dtype, **kwargs
+            )
+            ds.n_threads = multiprocessing.cpu_count()
+            ds[:] = pred
+
+
+def predict():
+    parser = _get_prediction_parser("Run prediction (with padding if necessary).")
+    parser.add_argument("--min_divisible", nargs="+", type=int, help="")
+    parser.add_argument("-d", "--device", help="")
+    args = parser.parse_args()
+
+    if args.device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        device = args.device
+
+    # TODO enable prediction with channels
+    def predict(model, input_):
+        if args.min_divisible is None:
+            with torch.no_grad():
+                input_ = torch.from_numpy(input_[:][None, None]).to(device)
+                pred = model(input_)
+            pred = pred.cpu().numpy().squeeze()
+        else:
+            pred = predict_with_padding(input_[:], model, args.min_divisible, device)
+        return pred
+
+    _prediction(args, predict, device)
+
+
+def _pred_2d(model, input_):
+    assert input_.shape[2] == 1
+    pred = model(input_[:, :, 0])
+    return pred[:, :, None]
+
+
+def predict_with_tiling():
+    parser = _get_prediction_parser("Run prediction over tiled input.")
+    parser.add_argument("-b", "--block_shape", nargs="+", required=True, type=int, help="")
+    parser.add_argument("--halo", nargs="+", type=int, help="")
+    parser.add_argument("-d", "--devices", nargs="+", help="")
+    args = parser.parse_args()
+
+    block_shape = args.block_shape
+    if args.halo is None:
+        halo = [0] * len(block_shape)
+    else:
+        halo = args.halo
+    assert len(halo) == len(block_shape)
+
+    if args.devices is None:
+        devices = ["cuda"] if torch.cuda.is_available() else ["cpu"]
+    else:
+        devices = args.devices
+
+    # if the block shape is singleton in the first axis we assume that this is a 2d model
+    if block_shape[0] == 1:
+        pred_function = _pred_2d
+    else:
+        pred_function = None
+
+    # TODO enable prediction with channels
+    def predict(model, input_):
+        pred = predict_with_halo(
+            input_, model, gpu_ids=devices, block_shape=block_shape, halo=halo, prediction_function=pred_function
+        )
+        return pred
+
+    _prediction(args, predict, devices[0])
