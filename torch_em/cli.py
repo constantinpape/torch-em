@@ -232,6 +232,7 @@ def _get_prediction_parser(description):
     parser.add_argument("-k", "--input_key", help="")
     parser.add_argument("-o", "--output_path", required=True, help="")
     parser.add_argument("--output_key", help="")
+    parser.add_argument("-p", "--preprocess", default="standardize")
     parser.add_argument("--chunks", nargs="+", type=int, help="")
     parser.add_argument("--compression", help="")
     return parser
@@ -272,6 +273,7 @@ def predict():
     parser.add_argument("-d", "--device", help="")
     args = parser.parse_args()
 
+    preprocess = getattr(torch_em.transform.raw, args.preprocess)
     if args.device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     else:
@@ -281,11 +283,13 @@ def predict():
     def predict(model, input_):
         if args.min_divisible is None:
             with torch.no_grad():
+                input_ = preprocess(input_)
                 input_ = torch.from_numpy(input_[:][None, None]).to(device)
                 pred = model(input_)
             pred = pred.cpu().numpy().squeeze()
         else:
-            pred = predict_with_padding(input_[:], model, args.min_divisible, device)
+            input_ = preprocess(input_[:])
+            pred = predict_with_padding(input_, model, args.min_divisible, device)
         return pred
 
     _prediction(args, predict, device)
@@ -305,6 +309,7 @@ def predict_with_tiling():
     args = parser.parse_args()
 
     block_shape = args.block_shape
+    preprocess = getattr(torch_em.transform.raw, args.preprocess)
     if args.halo is None:
         halo = [0] * len(block_shape)
     else:
@@ -325,7 +330,8 @@ def predict_with_tiling():
     # TODO enable prediction with channels
     def predict(model, input_):
         pred = predict_with_halo(
-            input_, model, gpu_ids=devices, block_shape=block_shape, halo=halo, prediction_function=pred_function
+            input_, model, gpu_ids=devices, block_shape=block_shape, halo=halo,
+            prediction_function=pred_function, preprocess=preprocess
         )
         return pred
 
