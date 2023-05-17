@@ -22,23 +22,48 @@ def _get_training_parser(description):
 
     # paths and keys for the data
     # training inputs and labels are required
-    parser.add_argument("-i", "--training_inputs", help="", required=True, type=str, nargs="+")
-    parser.add_argument("-l",  "--training_labels", help="", required=True, type=str, nargs="+")
-    parser.add_argument("-k", "--training_input_key", help="")
-    parser.add_argument("--training_label_key", help="")
+    parser.add_argument("-i", "--training_inputs",
+                        help="The input file path(s). Supports common image formats (tif, png, etc)"
+                        "as well as container formats like hdf5 and zarr. For the latter 'training_input_key'"
+                        "also has to be provided. In case you have a folder with many images you should provide the"
+                        "path to the folder instead of individual image paths; for this you then need to provide the"
+                        "file pattern (e.g. '*.tif') to 'training_input_key'.",
+                        required=True, type=str, nargs="+")
+    parser.add_argument("-l",  "--training_labels",
+                        help="The label file path(s). See 'training_inputs' for details on the supported formats etc.",
+                        required=True, type=str, nargs="+")
+    parser.add_argument("-k", "--training_input_key",
+                        help="The key (internal path) for the input data. Required for data formats like hdf5 or zarr.")
+    parser.add_argument("--training_label_key", help="The key for the labels. See also 'training_input_key'")
+
     # val inputs and labels are optional; if not given we split off parts of the training data
-    parser.add_argument("--validation_inputs", help="", type=str, nargs="+")
-    parser.add_argument("--validation_labels", help="", type=str, nargs="+")
-    parser.add_argument("--validation_input_key", help="")
-    parser.add_argument("--validation_label_key", help="")
+    parser.add_argument("--validation_inputs", type=str, nargs="+",
+                        help="The input file path(s) for validation data. If this is not given"
+                        "a fraction of the training inputs will be used for validation.")
+    parser.add_argument("--validation_labels", type=str, nargs="+",
+                        help="The label file path(s) for validation. Must be given if 'validation_inputs' are given.")
+    parser.add_argument("--validation_input_key", help="The key for the validation inputs.")
+    parser.add_argument("--validation_label_key", help="The key for the validation labels.")
 
     # other options
-    parser.add_argument("-b", "--batch_size", type=int, help="", required=True)
-    parser.add_argument("-p", "--patch_shape", type=int, nargs="+", help="", required=True)
-    parser.add_argument("-n", "--n_iterations", type=int, default=25000, help="")
-    parser.add_argument("-m", "--label_mode", help="")
-    parser.add_argument("--name", help="")
-    parser.add_argument("--train_fraction", type=float, default=0.8, help="")
+    parser.add_argument("-b", "--batch_size", type=int, required=True, help="The batch size.")
+    parser.add_argument("-p", "--patch_shape", type=int, nargs="+", required=True,
+                        help="The training patch shape")
+    parser.add_argument("-n", "--n_iterations", type=int, default=25000,
+                        help="The number of iterations to train for.")
+    parser.add_argument("-m", "--label_mode",
+                        help="The label mode determines the transformation applied to the"
+                        "labels in order to obtain the targets for training."
+                        "This can be used to obtain suitable representations for training given"
+                        "instance segmentation ground-truth. Currently supported:"
+                        "'affinities', 'affinities_with_foreground',"
+                        "'boundaries', 'boundaries_with_foreground', 'foreground'.")
+    parser.add_argument("--name", help="The name of the trained model (checkpoint).")
+    parser.add_argument("--train_fraction", type=float, default=0.8,
+                        help="The fraction of the data that will be used for training."
+                        "The rest of the data will be used for validation."
+                        "This is only used if validation data is not provided,"
+                        "otherwise all data will be used for training.")
 
     return parser
 
@@ -188,7 +213,12 @@ def train_2d_unet():
 
 def train_3d_unet():
     parser = _get_training_parser("Train a 3D UNet.")
-    parser.add_argument("-s", "--scale_factors", type=str, help="json encoded")
+    parser.add_argument("-s", "--scale_factors", type=str,
+                        help="The scale factors for the downsampling factures of the 3D U-Net."
+                        "Can be used to set anisotropic scaling of the U-Net."
+                        "Needs to be json encoded, e.g '[[1,2,2],[2,2,2],[2,2,2]]' to set"
+                        "anisotropic in the first layer and isotropic scaling in the other two."
+                        "If not passed an isotropic 3D U-Net will be saved.")
     args = parser.parse_args()
 
     scale_factors = None if args.scale_factors is None else json.loads(args.scale_factors)
@@ -227,14 +257,18 @@ def train_3d_unet():
 
 def _get_prediction_parser(description):
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("-c", "--checkpoint", required=True, help="")
-    parser.add_argument("-i", "--input_path", required=True, help="")
-    parser.add_argument("-k", "--input_key", help="")
-    parser.add_argument("-o", "--output_path", required=True, help="")
-    parser.add_argument("--output_key", help="")
+    parser.add_argument("-c", "--checkpoint", required=True, help="The model checkpoint to use for prediction.")
+    parser.add_argument("-i", "--input_path", required=True,
+                        help="The input path. Supports common image formats (tif, png, etc)"
+                        "as well as container formats like hdf5 and zarr. For the latter 'input_key' is also required.")
+    parser.add_argument("-k", "--input_key", help="The key (path in file) of the input data."
+                        "Required if the input data is a container file format (e.g. hdf5).")
+    parser.add_argument("-o", "--output_path", required=True, help="The path where to save the prediction.")
+    parser.add_argument("--output_key", help="The key for saving the output path. Required for container file formats.")
     parser.add_argument("-p", "--preprocess", default="standardize")
-    parser.add_argument("--chunks", nargs="+", type=int, help="")
-    parser.add_argument("--compression", help="")
+    parser.add_argument("--chunks", nargs="+", type=int,
+                        help="The chunks for the serialized prediction. Only relevant for container file formats.")
+    parser.add_argument("--compression", help="The compression to use when saving the prediction.")
     return parser
 
 
@@ -269,8 +303,12 @@ def _prediction(args, predict, device):
 
 def predict():
     parser = _get_prediction_parser("Run prediction (with padding if necessary).")
-    parser.add_argument("--min_divisible", nargs="+", type=int, help="")
-    parser.add_argument("-d", "--device", help="")
+    parser.add_argument("--min_divisible", nargs="+", type=int,
+                        help="The minimal divisible factors for the input shape of the models."
+                        "If given the input will be padded to be divisible by these factors.")
+    parser.add_argument("-d", "--device",
+                        help="The device (gpu, cpu) to use for prediction."
+                        "By default a gpu will be used if available, otherwise the cpu will be used.")
     args = parser.parse_args()
 
     preprocess = getattr(torch_em.transform.raw, args.preprocess)
@@ -303,9 +341,14 @@ def _pred_2d(model, input_):
 
 def predict_with_tiling():
     parser = _get_prediction_parser("Run prediction over tiled input.")
-    parser.add_argument("-b", "--block_shape", nargs="+", required=True, type=int, help="")
-    parser.add_argument("--halo", nargs="+", type=int, help="")
-    parser.add_argument("-d", "--devices", nargs="+", help="")
+    parser.add_argument("-b", "--block_shape", nargs="+", required=True, type=int,
+                        help="The shape of the blocks that will be used to tile the input."
+                        "The model will be applied to each block individually and the results will be stitched.")
+    parser.add_argument("--halo", nargs="+", type=int,
+                        help="The overlap of the tiles / blocks used during prediction. By default no overlap is used.")
+    parser.add_argument("-d", "--devices", nargs="+",
+                        help="The devices used for prediction. Can either be the cpu, a gpu, or multiple gpus."
+                        "By default a gpu will be used if available, otherwise the cpu will be used.")
     args = parser.parse_args()
 
     block_shape = args.block_shape
