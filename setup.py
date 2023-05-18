@@ -22,6 +22,10 @@ setup(
     license="MIT",
     entry_points={
         "console_scripts": [
+            "torch_em.train_2d_unet = torch_em.cli:train_2d_unet",
+            "torch_em.train_3d_unet = torch_em.cli:train_3d_unet",
+            "torch_em.predict = torch_em.cli:predict",
+            "torch_em.predict_with_tiling = torch_em.cli:predict_with_tiling",
             "torch_em.export_bioimageio_model = torch_em.util.modelzoo:main",
             "torch_em.validate_checkpoint = torch_em.util.validation:main",
             "torch_em.submit_slurm = torch_em.util.submit_slurm:main",
