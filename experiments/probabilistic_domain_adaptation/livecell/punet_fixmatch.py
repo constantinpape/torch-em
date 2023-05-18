@@ -17,7 +17,7 @@ def check_loader(args, n_images=5):
 
     loader = common.get_unsupervised_loader(
         args, "train", cell_types[0],
-        teacher_augmentation="weak", student_augmentation="weak",
+        teacher_augmentation="weak", student_augmentation="strong",
     )
     check_loader(loader, n_images)
 
@@ -26,34 +26,57 @@ def _train_source_target(args, source_cell_type, target_cell_type):
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    model = common.get_unet()
+    model = common.get_punet()
     if args.save_root is None:
-        src_checkpoint = f"./checkpoints/unet_source/{source_cell_type}"
+        src_checkpoint = f"./checkpoints/punet_source/{source_cell_type}"
     else:
-        src_checkpoint = args.save_root + f"checkpoints/unet_source/{source_cell_type}"
+        src_checkpoint = args.save_root + f"checkpoints/punet_source/{source_cell_type}"
     model = load_model(checkpoint=src_checkpoint, model=model, device=device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.9, patience=10)
 
     # self training functionality
+    # - when thresh is None, we don't mask the reconstruction loss (RL) with label filters
+    # - when thresh is passed (float), we mask the RL with weighted consensus label filters
+    # - when thresh is passed (float) with args.consensus_masking, we mask the RL with masked consensus label filters
     thresh = args.confidence_threshold
-    pseudo_labeler = self_training.DefaultPseudoLabeler(confidence_threshold=thresh)
-    loss = self_training.DefaultSelfTrainingLoss()
-    loss_and_metric = self_training.DefaultSelfTrainingLossAndMetric()
+    if thresh is None:
+        assert args.consensus_masking is False, "Provide a confidence threshold to use consensus masking"
+
+    pseudo_labeler = self_training.ProbabilisticPseudoLabeler(activation=torch.nn.Sigmoid(),
+                                                              confidence_threshold=thresh, prior_samples=16,
+                                                              consensus_masking=args.consensus_masking)
+    loss = self_training.ProbabilisticUNetLoss()
+    loss_and_metric = self_training.ProbabilisticUNetLossAndMetric()
 
     # data loaders
     unsupervised_train_loader = common.get_unsupervised_loader(
         args, args.batch_size, "train", target_cell_type,
-        teacher_augmentation="weak", student_augmentation="weak",
+        teacher_augmentation="weak", student_augmentation="strong-separate",
     )
     unsupervised_val_loader = common.get_unsupervised_loader(
         args, 1, "val", target_cell_type,
-        teacher_augmentation="weak", student_augmentation="weak",
+        teacher_augmentation="weak", student_augmentation="strong-separate",
     )
 
-    name = f"unet_mean_teacher/thresh-{thresh}/{source_cell_type}/{target_cell_type}"
-    trainer = self_training.MeanTeacherTrainer(
+    if args.consensus_masking:
+        name = f"punet_fixmatch/thresh-{thresh}-masking"
+    else:
+        name = f"punet_fixmatch/thresh-{thresh}"
+
+    if args.distribution_alignment:
+        assert args.output is not None
+        print(f"Getting scores for Source {source_cell_type} at Targets {target_cell_type}")
+        pred_folder = args.output + f"punet_source/{source_cell_type}/{target_cell_type}/"
+        src_dist = common.compute_class_distribution(pred_folder)
+        name = f"{name}-distro-align"
+    else:
+        src_dist = None
+
+    name = name + f"/{source_cell_type}/{target_cell_type}"
+
+    trainer = self_training.FixMatchTrainer(
         name=name,
         model=model,
         optimizer=optimizer,
@@ -65,11 +88,13 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         unsupervised_val_loader=unsupervised_val_loader,
         supervised_loss=loss,
         supervised_loss_and_metric=loss_and_metric,
-        logger=self_training.SelfTrainingTensorboardLogger,
+        logger=None,
         mixed_precision=True,
         device=device,
         log_image_interval=100,
         save_root=args.save_root,
+        source_distribution=src_dist,
+        compile_model=False
     )
     trainer.fit(args.n_iterations)
 
@@ -96,20 +121,21 @@ def run_training(args):
 def run_evaluation(args):
     results = []
     for ct in args.cell_types:
-        res = common.evaluate_transfered_model(args, ct, "unet_mean_teacher", model_state="teacher_state")
+        res = common.evaluate_transfered_model(args, ct, "punet_fixmatch")
         results.append(res)
     results = pd.concat(results)
     print("Evaluation results:")
     print(results)
     result_folder = "./results"
     os.makedirs(result_folder, exist_ok=True)
-    results.to_csv(os.path.join(result_folder, "unet_mean_teacher.csv"), index=False)
+    results.to_csv(os.path.join(result_folder, "punet_fixmatch.csv"), index=False)
 
 
 def main():
-    parser = common.get_parser(default_iterations=25000, default_batch_size=8)
+    parser = common.get_parser(default_iterations=10000, default_batch_size=4)
     parser.add_argument("--confidence_threshold", default=None, type=float)
-    parser.add_argument("--distribution_alignment", action='store_true')  # to avoid AttributeError(s)
+    parser.add_argument("--consensus_masking", action='store_true')
+    parser.add_argument("--distribution_alignment", action='store_true', help="Activates Distribution Alignment")
     args = parser.parse_args()
     if args.phase in ("c", "check"):
         check_loader(args)
