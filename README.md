@@ -125,6 +125,6 @@ A command line interface for training, prediction and conversion to the [bioimag
 - `torch_em.export_bioimageio_model`: export a model to the modelzoo format.
 
 For more details run `<COMMAND> -h` for any of these commands.
-The folder `scripts/cli` contains some examples for how to use the CLI.
+The folder [scripts/cli](https://github.com/constantinpape/torch-em/tree/main/scripts/cli) contains some examples for how to use the CLI.
 
 Note: this functionality was recently added and is not fully tested.

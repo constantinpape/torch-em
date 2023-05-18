@@ -603,21 +603,23 @@ def _load_data(path, key):
 def main():
     import argparse
     parser = argparse.ArgumentParser(
-        "Export model trained with torch_em to biomage.io model format"
+        "Export model trained with torch_em to the BioImage.IO model format."
+        "The exported model can be run in any tool supporting BioImage.IO."
+        "For details check out https://bioimage.io/#/."
     )
     parser.add_argument("-p", "--path", required=True,
-                        help="Path to the checkpoint")
+                        help="Path to the model checkpoint to export to the BioImage.IO model format.")
     parser.add_argument("-d", "--data", required=True,
-                        help="")
+                        help="Path to the test data to use for creating the exported model.")
     parser.add_argument("-f", "--export_folder", required=True,
-                        help="")
-    parser.add_argument("-k", "--key", default=None,
-                        help="")
+                        help="Where to save the exported model. The exported model is stored as a zip in the folder.")
+    parser.add_argument("-k", "--key",
+                        help="The key for the test data. Required for container data formats like hdf5 or zarr.")
+    parser.add_argument("-n", "--name", help="The name of the exported model.")
 
     args = parser.parse_args()
-    export_bioimageio_model(
-        args.path, _load_data(args.data, args.key), args.export_folder
-    )
+    name = os.path.basename(args.path) if args.name is None else args.name
+    export_bioimageio_model(args.path, args.export_folder, _load_data(args.data, args.key), name=name)
 
 
 #
