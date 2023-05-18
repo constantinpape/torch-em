@@ -89,6 +89,28 @@ def _get_offsets(ndim, scale_factors):
     return offsets
 
 
+# TODO this should be extended to all relevant things, generalized to more datasets and and refactored to torch_em.util
+def _random_split(ds, fractions):
+
+    def _get_attribute(dataset, attr_name):
+        while isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset):
+            dataset = dataset.datasets[0]
+        attr = getattr(dataset, attr_name)
+        return attr
+
+    ds_train, ds_val = random_split(ds, fractions)
+
+    raw_transform = _get_attribute(ds, "raw_transform")
+    ds_train.raw_transform = raw_transform
+    ds_val.raw_transform = raw_transform
+
+    ndim = _get_attribute(ds, "ndim")
+    ds_train.ndim = ndim
+    ds_val.ndim = ndim
+
+    return ds_train, ds_val
+
+
 def _get_loader(input_paths, input_key, label_paths, label_key, args, ndim, perform_split=False):
     label_transform, label_transform2 = None, None
 
@@ -140,7 +162,7 @@ def _get_loader(input_paths, input_key, label_paths, label_key, args, ndim, perf
     n_cpus = multiprocessing.cpu_count()
     if perform_split:
         fractions = [args.train_fraction, 1.0 - args.train_fraction]
-        ds_train, ds_val = random_split(ds, fractions)
+        ds_train, ds_val = _random_split(ds, fractions)
         train_loader = torch_em.segmentation.get_data_loader(
             ds_train, batch_size=args.batch_size, shuffle=True, num_workers=n_cpus
         )
