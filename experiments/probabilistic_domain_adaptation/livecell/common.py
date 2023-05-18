@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_em
+from torch_em.model import ProbabilisticUNet
 
 from elf.evaluation import dice_score
 from torch_em.data.datasets.livecell import (get_livecell_loader,
@@ -22,7 +23,6 @@ from tqdm import tqdm
 from torch_em.util import load_model
 
 CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
-
 
 #
 # The augmentations we use for the LiveCELL experiments:
@@ -83,6 +83,11 @@ def get_unet():
     return UNet2d(in_channels=1, out_channels=1, initial_features=64, final_activation="Sigmoid", depth=4)
 
 
+def get_punet():
+    return ProbabilisticUNet(input_channels=1, num_classes=1, num_filters=[64, 128, 256, 512],
+                             latent_dim=6, no_convs_fcomb=3, beta=1.0, rl_swap=True)
+
+
 # Computing the Source Distribution for Distribution Alignment
 def compute_class_distribution(root_folder, label_threshold=0.5):
 
@@ -107,6 +112,18 @@ def compute_class_distribution(root_folder, label_threshold=0.5):
     return [bg_frequency, fg_frequency]
 
 
+def get_punet_predictions(model, inputs):
+    activation = torch.nn.Sigmoid()
+    prior_samples = 16
+
+    with torch.no_grad():
+        model.forward(inputs)
+        samples_per_input = [activation(model.sample(testing=True))for _ in range(prior_samples)]
+        avg_pred = torch.stack(samples_per_input, dim=0).sum(dim=0) / prior_samples
+
+    return avg_pred
+
+
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
 # set model_state to "teacher_state" when using this with a mean-teacher method
 def evaluate_transfered_model(
@@ -116,9 +133,12 @@ def evaluate_transfered_model(
     label_root = os.path.join(args.input, "annotations", "livecell_test_images")
 
     results = {"src": [ct_src]}
-    device = torch.device("cuda")
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     thresh = args.confidence_threshold
+    if thresh is None:
+        assert args.consensus_masking is False, "Provide a confidence threshold to use consensus masking"
+
     with torch.no_grad():
         for ct_trg in CELL_TYPES:
 
@@ -126,16 +146,35 @@ def evaluate_transfered_model(
                 results[ct_trg] = None
                 continue
 
-            out_folder = None if args.output is None else os.path.join(
-                args.output, f"thresh-{thresh}", ct_src, ct_trg
-            )
+            if args.output is None:
+                out_folder = None
+            else:
+                out_folder = args.output + f"thresh-{thresh}"
+
+                if args.consensus_masking:
+                    out_folder = out_folder + "-masking"
+
+                if args.distribution_alignment:
+                    out_folder = out_folder + "-distro-align"
+
+                out_folder = os.path.join(out_folder, ct_src, ct_trg)
+
             if out_folder is not None:
                 os.makedirs(out_folder, exist_ok=True)
 
             if args.save_root is None:
                 ckpt = f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
             else:
-                ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}/{ct_src}/{ct_trg}"
+                ckpt = args.save_root + f"checkpoints/{method}/thresh-{thresh}"
+
+                if args.consensus_masking:
+                    ckpt = ckpt + "-masking"
+
+                if args.distribution_alignment:
+                    ckpt = ckpt + "-distro-align"
+
+                ckpt = os.path.join(ckpt, ct_src, ct_trg)
+
             model = get_model()
             model = load_model(checkpoint=ckpt, model=model, state_key=model_state, device=device)
 
@@ -173,18 +212,19 @@ def evaluate_transfered_model(
 
 # use get_model and prediction_function to customize this, e.g. for using it with the PUNet
 def evaluate_source_model(args, ct_src, method, get_model=get_unet, prediction_function=None):
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
     if args.save_root is None:
         ckpt = f"checkpoints/{method}/{ct_src}"
     else:
         ckpt = args.save_root + f"checkpoints/{method}/{ct_src}"
     model = get_model()
-    model = torch_em.util.get_trainer(ckpt).model
+    model = load_model(checkpoint=ckpt, model=model, device=device)
 
     image_folder = os.path.join(args.input, "images", "livecell_test_images")
     label_root = os.path.join(args.input, "annotations", "livecell_test_images")
 
     results = {"src": [ct_src]}
-    device = torch.device("cuda")
 
     with torch.no_grad():
         for ct_trg in CELL_TYPES:
@@ -282,5 +322,7 @@ def get_parser(default_batch_size=8, default_iterations=int(1e5)):
     parser.add_argument("-n", "--n_iterations", default=default_iterations, type=int)
     parser.add_argument("-s", "--save_root")
     parser.add_argument("-c", "--cell_types", nargs="+", default=CELL_TYPES)
+    parser.add_argument("--target_ct", nargs="+", default=None)
     parser.add_argument("-o", "--output")
+    parser.add_argument("--distribution_alignment", action='store_true')
     return parser

@@ -117,4 +117,14 @@ where <ENV>.yaml is either `environment_cpu.yaml` or `environment_gpu.yaml`.
 
 ## Command Line Scripts
 
-TODO
+A command line interface for training, prediction and conversion to the [bioimage.io modelzoo](https://bioimage.io/) format wll be installed with `torch_em`:
+- `torch_em.train_unet_2d`: train a 2D U-Net. 
+- `torch_em.train_unet_3d`: train a 3D U-Net. 
+- `torch_em.predict`: run prediction with a trained model.
+- `torch_em.predict_with_tiling`: run prediction with tiling.
+- `torch_em.export_bioimageio_model`: export a model to the modelzoo format.
+
+For more details run `<COMMAND> -h` for any of these commands.
+The folder [scripts/cli](https://github.com/constantinpape/torch-em/tree/main/scripts/cli) contains some examples for how to use the CLI.
+
+Note: this functionality was recently added and is not fully tested.
