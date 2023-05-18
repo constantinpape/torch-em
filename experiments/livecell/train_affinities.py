@@ -28,7 +28,7 @@ def train_affinities(args):
 
     loss = torch_em.loss.LossWrapper(
         torch_em.loss.DiceLoss(),
-        transform=torch_em.loss.ApplyAndRemoveMask()
+        transform=torch_em.loss.ApplyAndRemoveMask(masking_method="multiply")
     )
 
     # the trainer object that handles the training details
