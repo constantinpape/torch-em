@@ -105,7 +105,10 @@ def run_training(args):
 def run_evaluation(args):
     results = []
     for ct in args.cell_types:
-        res = common.evaluate_transfered_model(args, ct, "punet_adamt", model_state="teacher_state")
+        res = common.evaluate_transfered_model(args, ct, "punet_adamt",
+                                               get_model=common.get_punet,
+                                               model_state="teacher_state",
+                                               prediction_function=common.get_punet_predictions)
         results.append(res)
     results = pd.concat(results)
     print("Evaluation results:")
