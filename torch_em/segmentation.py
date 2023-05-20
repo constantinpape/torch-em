@@ -4,13 +4,13 @@ from typing import Any, Dict, Optional
 
 import torch
 import torch.utils.data
-from elf.io import open_file
 
 from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
 from .loss import DiceLoss
 from .trainer import DefaultTrainer
 from .trainer.tensorboard_logger import TensorboardLogger
 from .transform import get_augmentations, get_raw_transform
+from .util import load_data
 
 
 # TODO add a heuristic to estimate this from the number of epochs
@@ -61,7 +61,7 @@ def is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key):
 
     def _can_open(path, key):
         try:
-            open_file(path, mode="r")[key]
+            load_data(path, key)
             return True
         except Exception:
             return False
@@ -165,14 +165,13 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
 
 def _get_default_transform(path, key, is_seg_dataset, ndim):
     if is_seg_dataset and ndim is None:
-        with open_file(path, mode="r") as f:
-            shape = f[key].shape
-            if len(shape) == 2:
-                ndim = 2
-            else:
-                # heuristics to figure out whether to use default 3d
-                # or default anisotropic augmentations
-                ndim = "anisotropic" if shape[0] < shape[1] // 2 else 3
+        shape = load_data(path, key).shape
+        if len(shape) == 2:
+            ndim = 2
+        else:
+            # heuristics to figure out whether to use default 3d
+            # or default anisotropic augmentations
+            ndim = "anisotropic" if shape[0] < shape[1] // 2 else 3
     elif is_seg_dataset and ndim is not None:
         pass
     else:
