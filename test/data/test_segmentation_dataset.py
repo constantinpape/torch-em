@@ -1,5 +1,6 @@
 import os
 import unittest
+from shutil import rmtree
 
 import h5py
 import numpy as np
@@ -7,10 +8,14 @@ from torch_em.util.test import create_segmentation_test_data
 
 
 class TestSegmentationDataset(unittest.TestCase):
-    path = "./data.h5"
+    tmp_folder = "./tmp"
+    path = "./tmp/data.h5"
+
+    def setUp(self):
+        os.makedirs(self.tmp_folder, exist_ok=True)
 
     def tearDown(self):
-        os.remove(self.path)
+        rmtree(self.tmp_folder)
 
     def create_default_data(self, raw_key, label_key):
         shape = (128,) * 3
@@ -177,6 +182,28 @@ class TestSegmentationDataset(unittest.TestCase):
             x, y = ds[i]
             self.assertEqual(x.shape, expected_raw_shape)
             self.assertEqual(y.shape, expected_label_shape)
+
+    def test_tif(self):
+        import imageio.v3 as imageio
+        from torch_em.data import SegmentationDataset
+
+        raw_path = os.path.join(self.tmp_folder, "raw.tif")
+        label_path = os.path.join(self.tmp_folder, "labels.tif")
+        shape = (128, 128, 128)
+        imageio.imwrite(raw_path, np.random.rand(*shape).astype("float32"))
+        imageio.imwrite(label_path, np.random.rand(*shape).astype("float32"))
+
+        patch_shape = (32, 32, 32)
+        raw_key, label_key = None, None
+        ds = SegmentationDataset(
+            raw_path, raw_key, label_path, label_key, patch_shape=patch_shape
+        )
+
+        expected_patch_shape = (1,) + patch_shape
+        for i in range(10):
+            x, y = ds[i]
+            self.assertEqual(x.shape, expected_patch_shape)
+            self.assertEqual(y.shape, expected_patch_shape)
 
 
 if __name__ == "__main__":
