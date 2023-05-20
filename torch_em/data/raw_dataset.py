@@ -2,10 +2,9 @@ import warnings
 
 import torch
 import numpy as np
-from elf.io import open_file
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_tensor_with_channels
+from ..util import ensure_tensor_with_channels, load_data
 
 
 class RawDataset(torch.utils.data.Dataset):
@@ -35,7 +34,7 @@ class RawDataset(torch.utils.data.Dataset):
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
-        self.raw = open_file(raw_path, mode="r")[raw_key]
+        self.raw = load_data(raw_path, raw_key)
 
         self._with_channels = with_channels
 
@@ -153,7 +152,7 @@ class RawDataset(torch.utils.data.Dataset):
         raw_path, raw_key = state["raw_path"], state["raw_key"]
         roi = state["roi"]
         try:
-            raw = open_file(state["raw_path"], mode="r")[state["raw_key"]]
+            raw = load_data(raw_path, raw_key)
             if roi is not None:
                 raw = RoiWrapper(raw, (slice(None),) + roi) if state["_with_channels"] else RoiWrapper(raw, roi)
             state["raw"] = raw
