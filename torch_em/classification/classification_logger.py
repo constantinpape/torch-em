@@ -36,8 +36,14 @@ def confusion_matrix(y_true, y_pred, class_labels=None, title=None, save_path=No
 # TODO normalization and stuff
 # TODO get the class names
 def make_grid(images, target=None, prediction=None, images_per_row=8, **kwargs):
-    assert images.ndim == 4
-    assert images.shape[1] in (1, 3)
+    assert images.ndim in (4, 5)
+    assert images.shape[1] in (1, 3), f"{images.shape}"
+
+    if images.ndim == 5:
+        is_3d = True
+        z = images.shape[2] // 2
+    else:
+        is_3d = False
 
     n_images = images.shape[0]
     n_rows = n_images // images_per_row
@@ -55,9 +61,11 @@ def make_grid(images, target=None, prediction=None, images_per_row=8, **kwargs):
     for r in range(n_rows):
         for c in range(images_per_row):
             i = r * images_per_row + c
-            ax = axes[r, c]
+            if i == len(images):
+                break
+            ax = axes[r, c] if n_rows > 1 else axes[r]
             ax.set_axis_off()
-            im = images[i]
+            im = images[i, :, z] if is_3d else images[i]
             im = im.transpose((1, 2, 0))
             if im.shape[-1] == 3:  # rgb
                 ax.imshow(im)
@@ -95,12 +103,8 @@ class ClassificationLogger(TorchEmLogger):
 
     def add_image(self, x, y, pred, name, step):
         scale_each = False
-        marker = make_grid(x[:, 0:1], y, pred, padding=4, normalize=True, scale_each=scale_each)
-        self.tb.add_image(tag=f"{name}/marker", img_tensor=marker, global_step=step)
-        nucleus = make_grid(x[:, 1:2], padding=4, normalize=True, scale_each=scale_each)
-        self.tb.add_image(tag=f"{name}/nucleus", img_tensor=nucleus, global_step=step)
-        mask = make_grid(x[:, 2:], padding=4)
-        self.tb.add_image(tag=f"{name}/mask", img_tensor=mask, global_step=step)
+        grid = make_grid(x, y, pred, padding=4, normalize=True, scale_each=scale_each)
+        self.tb.add_image(tag=f"{name}/images_and_predictions", img_tensor=grid, global_step=step)
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
         self.tb.add_scalar(tag="train/loss", scalar_value=loss, global_step=step)
