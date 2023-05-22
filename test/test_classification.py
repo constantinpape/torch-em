@@ -46,12 +46,13 @@ class TestClassification(unittest.TestCase):
         model = resnet18(num_classes=n_classes)
         trainer = default_classification_trainer(
             name="test-model-2d", model=model, train_loader=loader, val_loader=loader,
+            compile_model=False,
         )
         n_iterations = 18
         trainer.fit(n_iterations)
 
         self._check_checkpoint(
-            "./checkpoints/test-model-2d/latest.pt", 18, trainer.model, resnet18, num_classes=n_classes
+            "./checkpoints/test-model-2d/latest.pt", 18, trainer.model, resnet18, num_classes=n_classes,
         )
 
     def test_classification_3d(self):
@@ -72,6 +73,7 @@ class TestClassification(unittest.TestCase):
         model = resnet3d_18(in_channels=1, out_channels=n_classes)
         trainer = default_classification_trainer(
             name="test-model-3d", model=model, train_loader=loader, val_loader=loader,
+            compile_model=False,
         )
         trainer.fit(12)
 
