@@ -7,6 +7,7 @@ import torch
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from sklearn.metrics import ConfusionMatrixDisplay
 from torch_em.trainer.logger_base import TorchEmLogger
+from torch_em.transform.raw import normalize
 
 
 def confusion_matrix(y_true, y_pred, class_labels=None, title=None, save_path=None, **plot_kwargs):
@@ -33,7 +34,6 @@ def confusion_matrix(y_true, y_pred, class_labels=None, title=None, save_path=No
     return image
 
 
-# TODO normalization and stuff
 # TODO get the class names
 def make_grid(images, target=None, prediction=None, images_per_row=8, **kwargs):
     assert images.ndim in (4, 5)
@@ -67,6 +67,7 @@ def make_grid(images, target=None, prediction=None, images_per_row=8, **kwargs):
             ax.set_axis_off()
             im = images[i, :, z] if is_3d else images[i]
             im = im.transpose((1, 2, 0))
+            im = normalize(im, axis=(0, 1))
             if im.shape[-1] == 3:  # rgb
                 ax.imshow(im)
             else:
