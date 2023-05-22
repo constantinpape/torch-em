@@ -121,7 +121,9 @@ def run_training(args):
 def run_evaluation(args):
     results = []
     for ct in args.cell_types:
-        res = common.evaluate_transfered_model(args, ct, "punet_fixmatch")
+        res = common.evaluate_transfered_model(args, ct, "punet_fixmatch",
+                                               get_model=common.get_punet,
+                                               prediction_function=common.get_punet_predictions)
         results.append(res)
     results = pd.concat(results)
     print("Evaluation results:")
@@ -135,7 +137,6 @@ def main():
     parser = common.get_parser(default_iterations=10000, default_batch_size=4)
     parser.add_argument("--confidence_threshold", default=None, type=float)
     parser.add_argument("--consensus_masking", action='store_true')
-    parser.add_argument("--distribution_alignment", action='store_true', help="Activates Distribution Alignment")
     args = parser.parse_args()
     if args.phase in ("c", "check"):
         check_loader(args)
