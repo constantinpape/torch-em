@@ -4,8 +4,12 @@ from shutil import rmtree
 
 import h5py
 import numpy as np
+import torch
 import torch_em
 from torch_em.model import UNet2d
+
+# suppress errors on CI without support for compiled models
+torch._dynamo.config.suppress_errors = True
 
 
 class TestUtil(unittest.TestCase):
