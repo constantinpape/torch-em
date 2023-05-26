@@ -82,6 +82,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         device=device,
         log_image_interval=100,
         save_root=args.save_root,
+        reinit_teacher=False,
         compile_model=False
     )
     trainer.fit(args.n_iterations)
