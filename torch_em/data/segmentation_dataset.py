@@ -2,10 +2,9 @@ import warnings
 
 import torch
 import numpy as np
-from elf.io import open_file
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_spatial_array, ensure_tensor_with_channels
+from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
@@ -40,11 +39,11 @@ class SegmentationDataset(torch.utils.data.Dataset):
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
-        self.raw = open_file(raw_path, mode="r")[raw_key]
+        self.raw = load_data(raw_path, raw_key)
 
         self.label_path = label_path
         self.label_key = label_key
-        self.labels = open_file(label_path, mode="r")[label_key]
+        self.labels = load_data(label_path, label_key)
 
         self._with_channels = with_channels
         self._with_label_channels = with_label_channels
@@ -175,7 +174,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         label_path, label_key = state["label_path"], state["label_key"]
         roi = state["roi"]
         try:
-            raw = open_file(raw_path, mode="r")[raw_key]
+            raw = load_data(raw_path, raw_key)
             if roi is not None:
                 raw = RoiWrapper(raw, (slice(None),) + roi) if state["_with_channels"] else RoiWrapper(raw, roi)
             state["raw"] = raw
@@ -187,7 +186,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
             state["raw"] = None
 
         try:
-            labels = open_file(label_path, mode="r")[label_key]
+            labels = load_data(label_path, label_key)
             if roi is not None:
                 labels = RoiWrapper(labels, (slice(None),) + roi) if state["_with_label_channels"] else\
                     RoiWrapper(labels, roi)

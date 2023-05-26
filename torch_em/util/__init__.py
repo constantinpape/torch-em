@@ -1,4 +1,4 @@
-from .image import load_image, supports_memmap
+from .image import load_data, load_image, supports_memmap
 from .reporting import get_training_summary
 from .training import parser_helper
 from .util import (auto_compile, ensure_array, ensure_spatial_array,
