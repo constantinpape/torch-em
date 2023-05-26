@@ -78,6 +78,7 @@ def _train_source_target(args, source_cell_type, target_cell_type):
         device=device,
         log_image_interval=100,
         save_root=args.save_root,
+        reinit_teacher=True,
         compile_model=False
     )
     trainer.fit(args.n_iterations)
@@ -119,7 +120,7 @@ def run_evaluation(args):
 
 
 def main():
-    parser = common.get_parser(default_iterations=100000, default_batch_size=4)
+    parser = common.get_parser(default_iterations=10000, default_batch_size=2)
     parser.add_argument("--confidence_threshold", default=None, type=float)
     parser.add_argument("--consensus_masking", action='store_true')
     args = parser.parse_args()
