@@ -106,7 +106,7 @@ def get_cremi_dataset(
         data_paths.append(data_path)
         data_rois.append(rois.get(name, np.s_[:, :, :]))
 
-    if "artifact_source" not in defect_augmentation_kwargs:
+    if defect_augmentation_kwargs is not None and "artifact_source" not in defect_augmentation_kwargs:
         # download the defect volume
         url = CREMI_URLS["defects"]
         checksum = CHECKSUMS["defects"]
@@ -127,10 +127,11 @@ def get_cremi_dataset(
     label_key = "volumes/labels/neuron_ids"
 
     # defect augmentations
-    raw_transform = torch_em.transform.get_raw_transform(
-        augmentation1=torch_em.transform.EMDefectAugmentation(**defect_augmentation_kwargs)
-    )
-    update_kwargs(kwargs, "raw_transform", raw_transform)
+    if defect_augmentation_kwargs is not None:
+        raw_transform = torch_em.transform.get_raw_transform(
+            augmentation1=torch_em.transform.EMDefectAugmentation(**defect_augmentation_kwargs)
+        )
+        update_kwargs(kwargs, "raw_transform", raw_transform)
 
     assert not ((offsets is not None) and boundaries)
     if offsets is not None:
