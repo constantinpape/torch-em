@@ -70,3 +70,31 @@ class Rescale:
         if len(outputs) == 1:
             return outputs[0]
         return outputs
+
+
+class PadIfNecessary:
+    def __init__(self, shape):
+        self.shape = tuple(shape)
+
+    def _pad_if_necessary(self, data):
+        if data.ndim == len(self.shape):
+            pad_shape = self.shape
+        else:
+            dim_diff = data.ndim - len(self.shape)
+            pad_shape = data.shape[:dim_diff] + self.shape
+            assert len(pad_shape) == data.ndim
+
+        data_shape = data.shape
+        if all(dsh == sh for dsh, sh in zip(data_shape, pad_shape)):
+            return data
+
+        pad_width = [sh - dsh for dsh, sh in zip(data_shape, pad_shape)]
+        assert all(pw >= 0 for pw in pad_width)
+        pad_width = [(0, pw) for pw in pad_width]
+        return np.pad(data, pad_width, mode="reflect")
+
+    def __call__(self, *inputs):
+        outputs = tuple(self._pad_if_necessary(input_) for input_ in inputs)
+        if len(outputs) == 1:
+            return outputs[0]
+        return outputs
