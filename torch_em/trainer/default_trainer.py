@@ -502,6 +502,7 @@ class DefaultTrainer:
             self.max_epoch - self._epoch,
             "epochs",
         )
+        print("with", len(self.train_loader), "iterations per epoch")
 
         if self.mixed_precision:
             train_epoch = self._train_epoch_mixed
@@ -512,7 +513,6 @@ class DefaultTrainer:
             validate = self._validate
             print("Training with single precision")
 
-        # TODO pass the progress to training and update after each iteration
         progress = tqdm(total=iterations, desc=f"Epoch {self._epoch}", leave=True)
         msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
 
