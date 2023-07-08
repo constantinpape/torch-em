@@ -7,7 +7,14 @@ class MinForegroundSampler:
         self.background_id = background_id
         self.p_reject = p_reject
 
-    def __call__(self, x, y):
+    def __call__(self, x, y=None):
+
+        # we do this so it's also possible to use the MinForegroundSampler
+        # for raw data, in order to filter out not imaged areas, for example in
+        # large EM volumes.
+        if y is None:
+            y = x
+
         size = float(y.size)
         if isinstance(self.background_id, int):
             foreground_fraction = np.sum(y != self.background_id) / size
