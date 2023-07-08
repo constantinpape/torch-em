@@ -49,9 +49,6 @@ class RawDataset(torch.utils.data.Dataset):
         self._ndim = len(self.shape) if ndim is None else ndim
         assert self._ndim in (2, 3, 4), f"Invalid data dimensions: {self._ndim}. Only 2d, 3d or 4d data is supported"
 
-        self.roi = roi
-        self.shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
-
         assert len(patch_shape) in (self._ndim, self._ndim + 1), f"{patch_shape}, {self._ndim}"
         self.patch_shape = patch_shape
 
