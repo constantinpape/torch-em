@@ -15,6 +15,8 @@ from segment_anything.modeling.common import LayerNorm2d, MLPBlock
 
 from micro_sam.util import get_sam_model
 
+from torch_em.model.unet import Decoder, ConvBlock2d, Upsampler2d
+
 
 # This class and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa
 class ImageEncoderViT(nn.Module):
@@ -57,6 +59,8 @@ class ImageEncoderViT(nn.Module):
         """
         super().__init__()
         self.img_size = img_size
+        self.embed_dim = embed_dim
+        self.in_chans = in_chans
 
         self.patch_embed = PatchEmbed(
             kernel_size=(patch_size, patch_size),
@@ -88,42 +92,42 @@ class ImageEncoderViT(nn.Module):
             )
             self.blocks.append(block)
 
-        # TODO: USEFUL FOR UNETR LATER WHILE DOING SKIP CONNECTIONS
-        chunks_for_projection = int(depth / 4)
-        self.projection1 = self.blocks[:chunks_for_projection]
-        self.projection2 = self.blocks[:2*chunks_for_projection]
-        self.projection3 = self.blocks[:3*chunks_for_projection]
-        self.projection4 = self.blocks[:4*chunks_for_projection]
+        # self.neck = nn.Sequential(
+        #     nn.Conv2d(
+        #         embed_dim,
+        #         out_chans,
+        #         kernel_size=1,
+        #         bias=False,
+        #     ),
+        #     LayerNorm2d(out_chans),
+        #     nn.Conv2d(
+        #         out_chans,
+        #         out_chans,
+        #         kernel_size=3,
+        #         padding=1,
+        #         bias=False,
+        #     ),
+        #     LayerNorm2d(out_chans),
+        # )
 
-        self.neck = nn.Sequential(
-            nn.Conv2d(
-                embed_dim,
-                out_chans,
-                kernel_size=1,
-                bias=False,
-            ),
-            LayerNorm2d(out_chans),
-            nn.Conv2d(
-                out_chans,
-                out_chans,
-                kernel_size=3,
-                padding=1,
-                bias=False,
-            ),
-            LayerNorm2d(out_chans),
-        )
+        self.chunks_for_projection = global_attn_indexes
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.patch_embed(x)
         if self.pos_embed is not None:
             x = x + self.pos_embed
 
-        for blk in self.blocks:
+        list_from_encoder = []
+        for i, blk in enumerate(self.blocks):
             x = blk(x)
+            if i in self.chunks_for_projection:
+                list_from_encoder.append(x)
 
-        x = self.neck(x.permute(0, 3, 1, 2))
+        # x = self.neck(x.permute(0, 3, 1, 2))
 
-        return x
+        x = x.permute(0, 3, 1, 2)
+        list_from_encoder = [e.permute(0, 3, 1, 2) for e in list_from_encoder]
+        return x, list_from_encoder[:3]  # type: ignore
 
 
 class Block(nn.Module):
@@ -405,6 +409,148 @@ class PatchEmbed(nn.Module):
         return x
 
 
+class UNETR(nn.Module):
+    def __init__(
+        self,
+        encoder
+    ) -> None:
+        depth = 3
+        initial_features = 64
+        gain = 2
+        out_channels = 1
+        features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
+        scale_factors = depth * [2]
+
+        super().__init__()
+
+        self.encoder = encoder
+        self.decoder = Decoder(
+            features=features_decoder,
+            scale_factors=scale_factors[::-1],
+            conv_block_impl=ConvBlock2d,
+            sampler_impl=Upsampler2d
+        )
+        self.z_inputs = ConvBlock2d(self.encoder.in_chans, features_decoder[-1])
+
+        self.base = ConvBlock2d(self.encoder.embed_dim, features_decoder[0])
+        self.out_conv = nn.Conv2d(features_decoder[-1], out_channels, 1)
+        self.final_activation = nn.Sigmoid()
+
+        self.deconv1 = Deconv2DBlock(self.encoder.embed_dim, features_decoder[0])
+        self.deconv2 = Deconv2DBlock(features_decoder[0], features_decoder[1])
+        self.deconv3 = Deconv2DBlock(features_decoder[1], features_decoder[2])
+
+        self.deconv4 = SingleDeconv2DBlock(features_decoder[-1], features_decoder[-1])
+
+        self.decoder_head = ConvBlock2d(2*features_decoder[-1], features_decoder[-1])
+
+    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
+        pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1).to("cuda")
+        pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1).to("cuda")
+
+        x = (x - pixel_mean) / pixel_std
+        h, w = x.shape[-2:]
+        padh = self.encoder.img_size - h
+        padw = self.encoder.img_size - w
+        x = F.pad(x, (0, padw, 0, padh))
+        return x
+
+    def postprocess_masks(
+        self,
+        masks: torch.Tensor,
+        input_size: Tuple[int, ...],
+        original_size: Tuple[int, ...],
+    ) -> torch.Tensor:
+        masks = F.interpolate(
+            masks,
+            (self.encoder.img_size, self.encoder.img_size),
+            mode="bilinear",
+            align_corners=False,
+        )
+        masks = masks[..., : input_size[0], : input_size[1]]
+        masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
+        return masks
+
+    def forward(self, x):
+        org_shape = x.shape[-2:]
+
+        x = torch.stack([self.preprocess(e) for e in x], dim=0)
+
+        z0 = self.z_inputs(x)
+
+        z12, from_encoder = self.encoder(x)
+        x = self.base(z12)
+
+        from_encoder = from_encoder[::-1]
+        z9 = self.deconv1(from_encoder[0])
+
+        z6 = self.deconv1(from_encoder[1])
+        z6 = self.deconv2(z6)
+
+        z3 = self.deconv1(from_encoder[1])
+        z3 = self.deconv2(z3)
+        z3 = self.deconv3(z3)
+
+        updated_from_encoder = [z9, z6, z3]
+        x = self.decoder(x, encoder_inputs=updated_from_encoder)
+        x = self.deconv4(x)
+        x = torch.cat([x, z0], dim=1)
+
+        x = self.decoder_head(x)
+
+        x = self.out_conv(x)
+        x = self.final_activation(x)
+
+        x = self.postprocess_masks(x, org_shape, org_shape)
+        return x
+
+
+class SingleDeconv2DBlock(nn.Module):
+    def __init__(self, in_planes, out_planes):
+        super().__init__()
+        self.block = nn.ConvTranspose2d(in_planes, out_planes, kernel_size=2, stride=2, padding=0, output_padding=0)
+
+    def forward(self, x):
+        return self.block(x)
+
+
+class SingleConv2DBlock(nn.Module):
+    def __init__(self, in_planes, out_planes, kernel_size):
+        super().__init__()
+        self.block = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=1,
+                               padding=((kernel_size - 1) // 2))
+
+    def forward(self, x):
+        return self.block(x)
+
+
+class Conv2DBlock(nn.Module):
+    def __init__(self, in_planes, out_planes, kernel_size=3):
+        super().__init__()
+        self.block = nn.Sequential(
+            SingleConv2DBlock(in_planes, out_planes, kernel_size),
+            nn.BatchNorm2d(out_planes),
+            nn.ReLU(True)
+        )
+
+    def forward(self, x):
+        return self.block(x)
+
+
+class Deconv2DBlock(nn.Module):
+    def __init__(self, in_planes, out_planes, kernel_size=3):
+        super().__init__()
+        self.block = nn.Sequential(
+            SingleDeconv2DBlock(in_planes, out_planes),
+            SingleConv2DBlock(out_planes, out_planes, kernel_size),
+            nn.BatchNorm2d(out_planes),
+            nn.ReLU(True)
+        )
+
+    def forward(self, x):
+        return self.block(x)
+
+
 def initialize_weights_from_sam(image_encoder):
     _, model = get_sam_model(
         model_type="vit_b",
@@ -417,6 +563,8 @@ def initialize_weights_from_sam(image_encoder):
 
 
 def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     image_encoder = ImageEncoderViT(
         depth=12,
         embed_dim=768,
@@ -431,15 +579,12 @@ def main():
         window_size=14,
         out_chans=256,
     )
-
     initialize_weights_from_sam(image_encoder)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    x = torch.rand((1, 3, 1024, 1024)).to(device)
     image_encoder.to(device)
-    embeddings = image_encoder(x)
 
-    breakpoint()
+    x = torch.rand((1, 3, 520, 704)).to(device)
+    unetr = UNETR(encoder=image_encoder).to(device)
+    outputs = unetr(x)
 
 
 if __name__ == "__main__":
