@@ -412,7 +412,9 @@ class PatchEmbed(nn.Module):
 class UNETR(nn.Module):
     def __init__(
         self,
-        encoder
+        encoder=None,
+        decoder=None,
+        initialize_from_sam=False
     ) -> None:
         depth = 3
         initial_features = 64
@@ -423,13 +425,37 @@ class UNETR(nn.Module):
 
         super().__init__()
 
-        self.encoder = encoder
-        self.decoder = Decoder(
-            features=features_decoder,
-            scale_factors=scale_factors[::-1],
-            conv_block_impl=ConvBlock2d,
-            sampler_impl=Upsampler2d
-        )
+        if encoder is None:
+            self.encoder = ImageEncoderViT(
+                depth=12,
+                embed_dim=768,
+                img_size=1024,
+                mlp_ratio=4,
+                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),  # type: ignore
+                num_heads=12,
+                patch_size=16,
+                qkv_bias=True,
+                use_rel_pos=True,
+                global_attn_indexes=[2, 5, 8, 11],  # type: ignore
+                window_size=14,
+                out_chans=256,
+            )
+        else:
+            self.encoder = encoder
+
+        if initialize_from_sam:
+            initialize_weights_from_sam(self.encoder)
+
+        if decoder is None:
+            self.decoder = Decoder(
+                features=features_decoder,
+                scale_factors=scale_factors[::-1],
+                conv_block_impl=ConvBlock2d,
+                sampler_impl=Upsampler2d
+            )
+        else:
+            self.decoder = decoder
+
         self.z_inputs = ConvBlock2d(self.encoder.in_chans, features_decoder[-1])
 
         self.base = ConvBlock2d(self.encoder.embed_dim, features_decoder[0])
@@ -565,26 +591,12 @@ def initialize_weights_from_sam(image_encoder):
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    image_encoder = ImageEncoderViT(
-        depth=12,
-        embed_dim=768,
-        img_size=1024,
-        mlp_ratio=4,
-        norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),  # type: ignore
-        num_heads=12,
-        patch_size=16,
-        qkv_bias=True,
-        use_rel_pos=True,
-        global_attn_indexes=[2, 5, 8, 11],  # type: ignore
-        window_size=14,
-        out_chans=256,
-    )
-    initialize_weights_from_sam(image_encoder)
-    image_encoder.to(device)
-
-    x = torch.rand((1, 3, 520, 704)).to(device)
-    unetr = UNETR(encoder=image_encoder).to(device)
+    x = torch.rand((2, 3, 520, 704)).to(device)
+    unetr = UNETR(initialize_from_sam=True)
+    unetr.to(device)
     outputs = unetr(x)
+
+    breakpoint()
 
 
 if __name__ == "__main__":
