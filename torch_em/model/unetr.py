@@ -414,12 +414,12 @@ class UNETR(nn.Module):
         self,
         encoder=None,
         decoder=None,
-        initialize_from_sam=False
+        initialize_from_sam=False,
+        out_channels=1
     ) -> None:
         depth = 3
         initial_features = 64
         gain = 2
-        out_channels = 1
         features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
         scale_factors = depth * [2]
 
