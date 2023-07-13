@@ -1,50 +1,67 @@
 import os
-import h5py
-import zipfile
-import numpy as np
 from glob import glob
 
+import z5py
+import numpy as np
 import torch_em
+from tqdm import tqdm
+
+from .util import unzip
 
 
+# Automated download is currently not possible, because of authentication
 URL = None  # TODO: here - https://datasets.deepcell.org/data
 
 
-def _unzip_data(zip_file_path):
-    data_dir_name = os.path.dirname(zip_file_path)
-    data_path = os.path.join(data_dir_name, "TissueNet")
-    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-        zip_ref.extractall(data_path)
+def _create_split(path, split):
+    split_file = os.path.join(path, f"tissuenet_v1.1_{split}.npz")
+    split_folder = os.path.join(path, split)
+    os.makedirs(split_folder, exist_ok=True)
+    data = np.load(split_file)
+    x, y = data["X"], data["y"]
+    for i, (im, label) in tqdm(enumerate(zip(x, y)), total=len(x), desc=f"Creating files for {split}-split"):
+        out_path = os.path.join(split_folder, f"image_{i:04}.n5")
+        with z5py.File(out_path, "a") as f:
+            f.create_dataset("raw/nucleus", data=im[..., 0], compression="gzip", chunks=im[..., 0].shape)
+            f.create_dataset("raw/cell", data=im[..., 1], compression="gzip", chunks=im[..., 1].shape)
+            # the swithh 0<->1 is intentional, the data format is chaotic...
+            f.create_dataset("labels/nucleus", data=label[..., 1], compression="gzip", chunks=label[..., 1].shape)
+            f.create_dataset("labels/cell", data=label[..., 0], compression="gzip", chunks=label[..., 0].shape)
+    os.remove(split_file)
 
-    return data_path
 
-
-def _load_images(data_path):
-    list_of_split_paths = glob(os.path.join(data_path, "tissuenet*"))
-    for split_path in list_of_split_paths:
-        split_name = split_path.split("_")[-1].split(".")[0]
-
-        z = np.load(split_path)
-        x, y = z["X"], z["y"]
-        for i, (im, label) in enumerate(zip(x, y)):
-            _path = os.path.join(data_path, split_name, f"image_{i:04}.h5")
-            with h5py.File(_path, "a") as f:
-                f.create_dataset("raw/nucleus", data=im[0], compression="gzip")
-                f.create_dataset("raw/cell", data=im[1], compression="gzip")
-                f.create_dataset("labels/nucleus", data=label[0], compression="gzip")
-                f.create_dataset("labels/cell", data=label[1], compression="gzip")
+def _create_dataset(path, zip_path):
+    unzip(zip_path, path, remove=False)
+    splits = ["train", "val", "test"]
+    assert all([os.path.exists(os.path.join(path, f"tissuenet_v1.1_{split}.npz")) for split in splits])
+    for split in splits:
+        _create_split(path, split)
 
 
 def get_tissuenet_loader(path, split, mode, download=False, **kwargs):
-    assert split in ["train", "val", "test"]
-    # TODO: integrate the conditions for getting the data, and doing the necessary parts (unzip, create data, etc)
+    splits = ["train", "val", "test"]
+    assert split in splits
 
-    data_path = glob(os.path.join(path, split, "*.h5"))
-    for _p in data_path:
-        assert os.path.exists(_p)
+    # check if the dataset exists already
+    zip_path = os.path.join(path, "tissuenet_v1.1.zip")
+    if all([os.path.exists(os.path.join(path, split)) for split in splits]):  # yes it does
+        pass
+    elif os.path.exists(zip_path):  # no it does not, but we have the zip there and can unpack it
+        _create_dataset(path, zip_path)
+    else:
+        raise RuntimeError(
+            "We do not support automatic download for the tissuenet datasets yet."
+            f"Please download the dataset from https://datasets.deepcell.org/data and put it here: {zip_path}"
+        )
 
-    assert mode in ["nucleus", "cell"]
+    split_folder = os.path.join(path, split)
+    assert os.path.exists(split_folder)
+    data_path = glob(os.path.join(split_folder, "*.n5"))
+    assert len(data_path) > 0
+    print(len(data_path))
+
+    assert mode in ["nucleus", "cell"], f"Got {mode}"
     raw_key, label_key = f"raw/{mode}", f"labels/{mode}"
     return torch_em.default_segmentation_loader(
-        data_path, raw_key, data_path, label_key, **kwargs
+        data_path, raw_key, data_path, label_key, is_seg_dataset=True, ndim=2, **kwargs
     )
