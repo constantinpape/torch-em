@@ -53,6 +53,8 @@ def get_deebacs_dataset(
 
     image_folder, label_folder = _get_paths(path, bac_type, split)
 
+    kwargs = util.ensure_transforms(ndim=2, **kwargs)
+
     dataset = torch_em.default_segmentation_dataset(
         image_folder, "*.tif", label_folder, "*.tif", patch_shape=patch_shape, **kwargs
     )

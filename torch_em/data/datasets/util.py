@@ -5,7 +5,10 @@ import zipfile
 from shutil import copyfileobj
 from warnings import warn
 
+import torch
+import torch_em
 import requests
+
 from tqdm import tqdm
 
 BIOIMAGEIO_IDS = {
@@ -93,3 +96,37 @@ def split_kwargs(function, **kwargs):
     other_kwargs = {k: v for k, v in kwargs.items() if k not in parameter_names}
     kwargs = {k: v for k, v in kwargs.items() if k in parameter_names}
     return kwargs, other_kwargs
+
+
+# this adds the default transforms for 'raw_transform' and 'transform'
+# in case these were not specified in the kwargs
+def ensure_transforms(ndim, **kwargs):
+    if "raw_transform" not in kwargs:
+        kwargs = update_kwargs(kwargs, "raw_transform", torch_em.transform.get_raw_transform())
+    if "transform" not in kwargs:
+        kwargs = update_kwargs(kwargs, "transform", torch_em.transform.get_augmentations(ndim=ndim))
+    return kwargs
+
+
+def add_instance_label_transform(
+    kwargs, add_binary_target, label_dtype=None, binary=False, boundaries=False, offsets=None
+):
+    assert sum((offsets is not None, boundaries, binary)) <= 1
+    if offsets is not None:
+        label_transform2 = torch_em.transform.label.AffinityTransform(offsets=offsets,
+                                                                      add_binary_target=add_binary_target,
+                                                                      add_mask=True)
+        msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
+        kwargs = update_kwargs(kwargs, "label_transform2", label_transform2, msg=msg)
+        label_dtype = torch.float32
+    elif boundaries:
+        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=add_binary_target)
+        msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
+        label_dtype = torch.float32
+    elif binary:
+        label_transform = torch_em.transform.label.labels_to_binary
+        msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
+        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
+        label_dtype = torch.float32
+    return kwargs, label_dtype
