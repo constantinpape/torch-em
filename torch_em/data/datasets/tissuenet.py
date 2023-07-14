@@ -7,7 +7,7 @@ import torch_em
 import z5py
 
 from tqdm import tqdm
-from .util import unzip
+from . import util
 
 
 # Automated download is currently not possible, because of authentication
@@ -43,15 +43,16 @@ def _create_split(path, split):
 
 
 def _create_dataset(path, zip_path):
-    unzip(zip_path, path, remove=False)
+    util.unzip(zip_path, path, remove=False)
     splits = ["train", "val", "test"]
     assert all([os.path.exists(os.path.join(path, f"tissuenet_v1.1_{split}.npz")) for split in splits])
     for split in splits:
         _create_split(path, split)
 
 
-# TODO enable loading specific tissue types etc. (from the 'meta' attributes)
-def get_tissuenet_loader(path, split, raw_channel, label_channel, download=False, **kwargs):
+def get_tissuenet_dataset(
+    path, split, patch_shape, raw_channel, label_channel, download=False, **kwargs
+):
     assert raw_channel in ("nucleus", "cell", "rgb")
     assert label_channel in ("nucleus", "cell")
 
@@ -76,7 +77,23 @@ def get_tissuenet_loader(path, split, raw_channel, label_channel, download=False
     assert len(data_path) > 0
 
     raw_key, label_key = f"raw/{raw_channel}", f"labels/{label_channel}"
+
+    kwargs = util.ensure_transforms(ndim=2, **kwargs)
     with_channels = True if raw_channel == "rgb" else False
-    return torch_em.default_segmentation_loader(
-        data_path, raw_key, data_path, label_key, is_seg_dataset=True, ndim=2, with_channels=with_channels, **kwargs
+    kwargs = util.update_kwargs(kwargs, "with_channels", with_channels)
+    kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
+    kwargs = util.update_kwargs(kwargs, "ndim", 2)
+
+    return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+
+
+# TODO enable loading specific tissue types etc. (from the 'meta' attributes)
+def get_tissuenet_loader(
+    path, split, patch_shape, batch_size, raw_channel, label_channel, download=False, **kwargs
+):
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_tissuenet_dataset(
+        path, split, patch_shape, raw_channel, label_channel, download, **ds_kwargs
     )
+    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
+    return loader
