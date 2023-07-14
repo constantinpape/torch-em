@@ -2,7 +2,7 @@ import os
 from shutil import move
 
 import torch_em
-from .util import download_source, unzip, update_kwargs
+from . import util
 
 DSB_URLS = {
     "full": "",  # TODO
@@ -26,44 +26,46 @@ def _download_dsb(path, source, download):
         return
 
     zip_path = os.path.join(path, "dsb.zip")
-    download_source(zip_path, url, download, checksum)
-    unzip(zip_path, path, True)
+    util.download_source(zip_path, url, download, checksum)
+    util.unzip(zip_path, path, True)
 
     move(os.path.join(path, "dsb2018", "train"), train_out_path)
     move(os.path.join(path, "dsb2018", "test"), test_out_path)
 
 
-def get_dsb_loader(path, patch_shape, split, download=False,
-                   offsets=None, boundaries=False, binary=False,
-                   source="reduced", **kwargs):
+def get_dsb_dataset(
+    path, split, patch_shape, download=False,
+    offsets=None, boundaries=False, binary=False,
+    source="reduced", **kwargs
+):
     assert split in ("test", "train"), split
     _download_dsb(path, source, download)
 
     image_path = os.path.join(path, split, "images")
     label_path = os.path.join(path, split, "masks")
 
-    assert sum((offsets is not None, boundaries, binary)) <= 1
-    if offsets is not None:
-        # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     add_binary_target=True,
-                                                                     add_mask=True)
-        msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
-    elif boundaries:
-        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
-        msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
-    elif binary:
-        label_transform = torch_em.transform.label.labels_to_binary
-        msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
-
-    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
-    kwargs = update_kwargs(kwargs, "ndim", 2)
-
-    return torch_em.default_segmentation_loader(
-        image_path, "*.tif",
-        label_path, "*.tif",
-        **kwargs
+    kwargs = util.ensure_transforms(ndim=2, **kwargs)
+    kwargs, _ = util.add_instance_label_transform(
+        kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )
+    kwargs = util.update_kwargs(kwargs, "ndim", 2)
+    return torch_em.default_segmentation_dataset(
+        image_path, "*.tif", label_path, "*.tif", patch_shape, **kwargs
+    )
+
+
+def get_dsb_loader(
+    path, split, patch_shape, batch_size, download=False,
+    offsets=None, boundaries=False, binary=False,
+    source="reduced", **kwargs
+):
+    ds_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
+    )
+    dataset = get_dsb_dataset(
+        path, split, patch_shape, download=download,
+        offsets=offsets, boundaries=boundaries, binary=binary,
+        source=source, **ds_kwargs,
+    )
+    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
+    return loader
