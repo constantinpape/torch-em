@@ -62,9 +62,8 @@ def _get_image_and_label_paths(root, split, val_fraction):
     return image_paths, label_paths
 
 
-def get_neurips_cellseg_supervised_loader(
-    root, split,
-    patch_shape, batch_size,
+def get_neurips_cellseg_supervised_dataset(
+    root, split, patch_shape,
     make_rgb=True,
     label_transform=None,
     label_transform2=None,
@@ -75,7 +74,6 @@ def get_neurips_cellseg_supervised_loader(
     n_samples=None,
     sampler=None,
     val_fraction=0.1,
-    **loader_kwargs
 ):
     assert split in ("train", "val", None), split
     image_paths, label_paths = _get_image_and_label_paths(root, split, val_fraction)
@@ -95,6 +93,29 @@ def get_neurips_cellseg_supervised_loader(
                                               transform=transform,
                                               n_samples=n_samples,
                                               sampler=sampler)
+    return ds
+
+
+def get_neurips_cellseg_supervised_loader(
+    root, split,
+    patch_shape, batch_size,
+    make_rgb=True,
+    label_transform=None,
+    label_transform2=None,
+    raw_transform=None,
+    transform=None,
+    label_dtype=torch.float32,
+    dtype=torch.float32,
+    n_samples=None,
+    sampler=None,
+    val_fraction=0.1,
+    **loader_kwargs
+):
+    ds = get_neurips_cellseg_supervised_dataset(
+        root, split, patch_shape, make_rgb=make_rgb, label_transform=label_transform,
+        label_transform2=label_transform2, raw_transform=raw_transform, transform=transform,
+        label_dtype=label_dtype, dtype=dtype, n_samples=n_samples, sampler=sampler, val_fraction=val_fraction,
+    )
     return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)
 
 
