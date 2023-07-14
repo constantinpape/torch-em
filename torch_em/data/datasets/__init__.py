@@ -1,7 +1,7 @@
 from .axondeepseg import get_axondeepseg_loader, get_axondeepseg_dataset
 from .cem import get_cem_mitolab_loader
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
-from .cremi import get_cremi_loader
+from .cremi import get_cremi_loader, get_cremi_dataset
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
 from .dsb import get_dsb_loader
 from .hpa import get_hpa_segmentation_loader
