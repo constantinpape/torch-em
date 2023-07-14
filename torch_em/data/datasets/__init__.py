@@ -2,6 +2,7 @@ from .axondeepseg import get_axondeepseg_loader
 from .cem import get_cem_mitolab_loader
 from .covid_if import get_covid_if_loader
 from .cremi import get_cremi_loader
+from .deepbacs import get_deepbacs_loader
 from .dsb import get_dsb_loader
 from .hpa import get_hpa_segmentation_loader
 from .isbi2012 import get_isbi_loader

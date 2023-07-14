@@ -114,8 +114,8 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
             index = np.random.randint(0, len(self.raw_images))
         # these are just the file paths
         raw, label = self.raw_images[index], self.label_images[index]
-        raw = load_image(raw)
-        label = load_image(label)
+        raw = load_image(raw, memmap=False)
+        label = load_image(label, memmap=False)
 
         have_raw_channels = raw.ndim == 3
         have_label_channels = label.ndim == 3
