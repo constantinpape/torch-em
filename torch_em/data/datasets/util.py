@@ -1,3 +1,4 @@
+import inspect
 import os
 import hashlib
 import zipfile
@@ -84,3 +85,11 @@ def unzip(zip_path, dst, remove=True):
         f.extractall(dst)
     if remove:
         os.remove(zip_path)
+
+
+def split_kwargs(function, **kwargs):
+    function_parameters = inspect.signature(function).parameters
+    parameter_names = list(function_parameters.keys())
+    other_kwargs = {k: v for k, v in kwargs.items() if k not in parameter_names}
+    kwargs = {k: v for k, v in kwargs.items() if k in parameter_names}
+    return kwargs, other_kwargs

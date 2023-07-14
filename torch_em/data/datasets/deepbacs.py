@@ -1,6 +1,6 @@
 import os
 
-from ...segmentation import default_segmentation_loader
+import torch_em
 from . import util
 
 URLS = {
@@ -40,7 +40,9 @@ def _get_paths(path, bac_type, split):
     return image_folder, label_folder
 
 
-def get_deepbacs_loader(path, split, bac_type="mixed", download=False, **kwargs):
+def get_deebacs_dataset(
+    path, split, patch_shape, bac_type="mixed", download=False, **kwargs
+):
     assert split in ("train", "test")
     bac_types = list(URLS.keys())
     assert bac_type in bac_types, f"{bac_type} is not in expected bacteria types: {bac_types}"
@@ -51,4 +53,14 @@ def get_deepbacs_loader(path, split, bac_type="mixed", download=False, **kwargs)
 
     image_folder, label_folder = _get_paths(path, bac_type, split)
 
-    return default_segmentation_loader(image_folder, "*.tif", label_folder, "*.tif", **kwargs)
+    dataset = torch_em.default_segmentation_dataset(
+        image_folder, "*.tif", label_folder, "*.tif", patch_shape=patch_shape, **kwargs
+    )
+    return dataset
+
+
+def get_deepbacs_loader(path, split, patch_shape, batch_size, bac_type="mixed", download=False, **kwargs):
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_deebacs_dataset(path, split, patch_shape, bac_type=bac_type, download=download, **ds_kwargs)
+    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
+    return loader
