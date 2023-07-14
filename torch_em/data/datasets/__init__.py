@@ -1,4 +1,4 @@
-from .axondeepseg import get_axondeepseg_loader
+from .axondeepseg import get_axondeepseg_loader, get_axondeepseg_dataset
 from .cem import get_cem_mitolab_loader
 from .covid_if import get_covid_if_loader
 from .cremi import get_cremi_loader
