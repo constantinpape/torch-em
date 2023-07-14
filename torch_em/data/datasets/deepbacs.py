@@ -40,7 +40,7 @@ def _get_paths(path, bac_type, split):
     return image_folder, label_folder
 
 
-def get_deebacs_dataset(
+def get_deepbacs_dataset(
     path, split, patch_shape, bac_type="mixed", download=False, **kwargs
 ):
     assert split in ("train", "test")
@@ -63,6 +63,6 @@ def get_deebacs_dataset(
 
 def get_deepbacs_loader(path, split, patch_shape, batch_size, bac_type="mixed", download=False, **kwargs):
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_deebacs_dataset(path, split, patch_shape, bac_type=bac_type, download=download, **ds_kwargs)
+    dataset = get_deepbacs_dataset(path, split, patch_shape, bac_type=bac_type, download=download, **ds_kwargs)
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
     return loader
