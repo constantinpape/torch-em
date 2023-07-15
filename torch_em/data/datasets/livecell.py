@@ -169,7 +169,7 @@ def get_livecell_dataset(
     )
 
     dataset = torch_em.data.ImageCollectionDataset(
-        image_paths, seg_paths, patch_shape=patch_shape, label_dtype=label_dtype
+        image_paths, seg_paths, patch_shape=patch_shape, label_dtype=label_dtype, **kwargs
     )
     return dataset
 
