@@ -5,6 +5,7 @@ import zipfile
 from shutil import copyfileobj
 from warnings import warn
 
+import gdown
 import torch
 import torch_em
 import requests
@@ -44,6 +45,19 @@ def get_checksum(filename):
     return checksum
 
 
+def _check_checksum(path, checksum):
+    if checksum is not None:
+        this_checksum = get_checksum(path)
+        if this_checksum != checksum:
+            raise RuntimeError(
+                "The checksum of the download does not match the expected checksum."
+                f"Expected: {checksum}, got: {this_checksum}"
+            )
+        print("Download successful and checksums agree.")
+    else:
+        warn("The file was downloaded, but no checksum was provided, so the file may be corrupted.")
+
+
 # this needs to be extended to support download from s3 via boto,
 # if we get a resource that is available via s3 without support for http
 def download_source(path, url, download, checksum=None, verify=True):
@@ -63,16 +77,17 @@ def download_source(path, url, download, checksum=None, verify=True):
         with tqdm.wrapattr(r.raw, "read", total=file_size, desc=desc) as r_raw, open(path, "wb") as f:
             copyfileobj(r_raw, f)
 
-    if checksum is not None:
-        this_checksum = get_checksum(path)
-        if this_checksum != checksum:
-            raise RuntimeError(
-                "The checksum of the download does not match the expected checksum."
-                f"Expected: {checksum}, got: {this_checksum}"
-            )
-        print("Download successful and checksums agree.")
-    else:
-        warn("The file was downloaded, but no checksum was provided, so the file may be corrupted.")
+    _check_checksum(path, checksum)
+
+
+def download_source_gdrive(path, url, download, checksum=None):
+    if os.path.exists(path):
+        return
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    gdown.download(url, path, quiet=False)
+    _check_checksum(path, checksum)
 
 
 def update_kwargs(kwargs, key, value, msg=None):
