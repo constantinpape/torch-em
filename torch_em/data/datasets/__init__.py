@@ -4,9 +4,9 @@ from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .cremi import get_cremi_loader, get_cremi_dataset
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
 from .dsb import get_dsb_loader, get_dsb_dataset
-from .hpa import get_hpa_segmentation_loader
-from .isbi2012 import get_isbi_loader
-from .kasthuri import get_kasthuri_loader
+from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
+from .isbi2012 import get_isbi_loader, get_isbi_dataset
+from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .livecell import get_livecell_loader, get_livecell_dataset
 from .lucchi import get_lucchi_loader
 from .mitoem import get_mitoem_loader
@@ -20,7 +20,7 @@ from .plantseg import get_plantseg_loader
 from .platynereis import (get_platynereis_cell_loader,
                           get_platynereis_nuclei_loader)
 from .snemi import get_snemi_loader
-from .tissuenet import (get_tissuenet_loader, get_tissuenet_dataset)
+from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .util import get_bioimageio_dataset_id
 from .vnc import get_vnc_mito_loader
 from .uro_cell import get_uro_cell_loader
