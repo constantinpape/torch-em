@@ -8,8 +8,8 @@ from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .livecell import get_livecell_loader, get_livecell_dataset
-from .lucchi import get_lucchi_loader
-from .mitoem import get_mitoem_loader
+from .lucchi import get_lucchi_loader, get_lucchi_dataset
+from .mitoem import get_mitoem_loader, get_mitoem_dataset
 from .monuseg import get_monuseg_loader
 from .mouse_embryo import get_mouse_embryo_loader
 from .neurips_cell_seg import (
