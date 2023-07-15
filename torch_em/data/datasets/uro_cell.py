@@ -136,6 +136,6 @@ def get_uro_cell_loader(
         torch_em.default_segmentation_dataset, **kwargs
     )
     ds = get_uro_cell_dataset(
-        path, target, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **kwargs
+        path, target, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **ds_kwargs
     )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
