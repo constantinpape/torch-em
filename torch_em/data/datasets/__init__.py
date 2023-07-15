@@ -20,8 +20,8 @@ from .neurips_cell_seg import (
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .platynereis import (get_platynereis_cell_loader,
                           get_platynereis_nuclei_loader)
-from .snemi import get_snemi_loader
+from .snemi import get_snemi_loader, get_snemi_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
+from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
 from .util import get_bioimageio_dataset_id
-from .vnc import get_vnc_mito_loader
-from .uro_cell import get_uro_cell_loader
+from .vnc import get_vnc_mito_loader, get_vnc_mito_dataset
