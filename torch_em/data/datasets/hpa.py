@@ -317,7 +317,6 @@ def get_hpa_segmentation_dataset(
         _download_hpa_data(path, "segmentation", download)
         _process_hpa_data(path, channels, n_workers_preproc, remove=True)
 
-    kwargs = util.ensure_transforms(ndim=2, **kwargs)
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )

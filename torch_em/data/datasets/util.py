@@ -100,6 +100,8 @@ def split_kwargs(function, **kwargs):
 
 # this adds the default transforms for 'raw_transform' and 'transform'
 # in case these were not specified in the kwargs
+# this is NOT necessary if 'default_segmentation_dataset' is used, only if a dataset class
+# is used directly, e.g. in the LiveCell Loader
 def ensure_transforms(ndim, **kwargs):
     if "raw_transform" not in kwargs:
         kwargs = update_kwargs(kwargs, "raw_transform", torch_em.transform.get_raw_transform())

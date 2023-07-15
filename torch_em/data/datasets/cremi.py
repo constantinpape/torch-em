@@ -127,7 +127,6 @@ def get_cremi_dataset(
         )
         kwargs = util.update_kwargs(kwargs, "raw_transform", raw_transform)
 
-    kwargs = util.ensure_transforms(ndim=kwargs.get("ndim", 3), **kwargs)
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=False, boundaries=boundaries, offsets=offsets
     )

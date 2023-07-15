@@ -158,8 +158,6 @@ def get_axondeepseg_dataset(
         msg = "'one_hot' is set to True, but 'label_transform' is in the kwargs. It will be over-ridden."
         kwargs = util.update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
-    kwargs = util.ensure_transforms(ndim=2, **kwargs)
-
     raw_key, label_key = "raw", "labels"
     return torch_em.default_segmentation_dataset(all_paths, raw_key, all_paths, label_key, patch_shape, **kwargs)
 
