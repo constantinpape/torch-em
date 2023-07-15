@@ -70,10 +70,8 @@ def download_source(path, url, download, checksum=None, verify=True):
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
 
-    with requests.get(url, stream=True, verify=verify) as r:
-        if r.status_code != 200:
-            r.raise_for_status()
-            raise RuntimeError(f"Request to {url} returned status code {r.status_code}")
+    with requests.get(url, stream=True, allow_redirects=True, verify=verify) as r:
+        r.raise_for_status()  # check for error
         file_size = int(r.headers.get("Content-Length", 0))
         desc = f"Download {url} to {path}"
         if file_size == 0:
