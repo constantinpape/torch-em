@@ -149,6 +149,11 @@ def get_livecell_dataset(
     offsets=None, boundaries=False, binary=False,
     cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs
 ):
+    """Dataset for the segmentation of cells in phase-contrast microscopy.
+
+    This dataset is from the publication https://doi.org/10.1038/s41592-021-01249-6.
+    Please cite it if you use this dataset for a publication.
+    """
     assert split in ("train", "val", "test")
     if cell_types is not None:
         assert isinstance(cell_types, (list, tuple)),\
@@ -169,9 +174,12 @@ def get_livecell_dataset(
     return dataset
 
 
-def get_livecell_loader(path, split, patch_shape, batch_size, download=False,
-                        offsets=None, boundaries=False, binary=False,
-                        cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs):
+def get_livecell_loader(
+    path, split, patch_shape, batch_size, download=False,
+    offsets=None, boundaries=False, binary=False,
+    cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs
+):
+    """Dataloader for the segmentation of cells in phase-contrast microscopy. See 'get_livecell_dataset' for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_livecell_dataset(
         path, split, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary,

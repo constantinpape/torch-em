@@ -25,44 +25,6 @@ CHECKSUMS = {
 
 
 # TODO add support for realigned volumes
-def get_cremi_loader(
-    path,
-    patch_shape,
-    batch_size,
-    samples=("A", "B", "C"),
-    use_realigned=False,
-    download=False,
-    offsets=None,
-    boundaries=False,
-    rois={},
-    defect_augmentation_kwargs={
-        "p_drop_slice": 0.025,
-        "p_low_contrast": 0.025,
-        "p_deform_slice": 0.0,
-        "deformation_mode": "compress",
-    },
-    **kwargs,
-):
-    """
-    """
-    dataset_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
-    ds = get_cremi_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        samples=samples,
-        use_realigned=use_realigned,
-        download=download,
-        offsets=offsets,
-        boundaries=boundaries,
-        rois=rois,
-        defect_augmentation_kwargs=defect_augmentation_kwargs,
-        **dataset_kwargs,
-    )
-    return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
-
-
 def get_cremi_dataset(
     path,
     patch_shape,
@@ -80,6 +42,10 @@ def get_cremi_dataset(
     },
     **kwargs,
 ):
+    """Dataset for the segmentation of neurons in EM.
+
+    This dataset is from the CREMI challenge: https://cremi.org/.
+    """
     assert len(patch_shape) == 3
     if rois is not None:
         assert isinstance(rois, dict)
@@ -132,3 +98,41 @@ def get_cremi_dataset(
     )
 
     return torch_em.default_segmentation_dataset(data_paths, raw_key, data_paths, label_key, patch_shape, **kwargs)
+
+
+def get_cremi_loader(
+    path,
+    patch_shape,
+    batch_size,
+    samples=("A", "B", "C"),
+    use_realigned=False,
+    download=False,
+    offsets=None,
+    boundaries=False,
+    rois={},
+    defect_augmentation_kwargs={
+        "p_drop_slice": 0.025,
+        "p_low_contrast": 0.025,
+        "p_deform_slice": 0.0,
+        "deformation_mode": "compress",
+    },
+    **kwargs,
+):
+    """Dataset for the segmentation of neurons in EM. See 'get_cremi_dataset' for details.
+    """
+    dataset_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
+    )
+    ds = get_cremi_dataset(
+        path=path,
+        patch_shape=patch_shape,
+        samples=samples,
+        use_realigned=use_realigned,
+        download=download,
+        offsets=offsets,
+        boundaries=boundaries,
+        rois=rois,
+        defect_augmentation_kwargs=defect_augmentation_kwargs,
+        **dataset_kwargs,
+    )
+    return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)

@@ -78,6 +78,11 @@ def _require_lucchi_data(path, download):
 
 
 def get_lucchi_dataset(path, split, patch_shape, download=False, **kwargs):
+    """Dataset for the segmentation of mitochondria in EM.
+
+    This dataset is from the publication https://doi.org/10.48550/arXiv.1812.06024.
+    Please cite it if you use this dataset for a publication.
+    """
     assert split in ("train", "test")
     _require_lucchi_data(path, download)
     data_path = os.path.join(path, f"lucchi_{split}.h5")
@@ -87,6 +92,7 @@ def get_lucchi_dataset(path, split, patch_shape, download=False, **kwargs):
 
 
 def get_lucchi_loader(path, split, patch_shape, batch_size, download=False, **kwargs):
+    """Dataloader for the segmentation of mitochondria in EM. See 'get_lucchi_dataset' for details"""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
