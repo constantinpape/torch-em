@@ -10,13 +10,14 @@ from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .livecell import get_livecell_loader, get_livecell_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
 from .mitoem import get_mitoem_loader, get_mitoem_dataset
+# monuseg is only partially implemented
 # from .monuseg import get_monuseg_loader, get_monuseg_dataset
-from .mouse_embryo import get_mouse_embryo_loader
+from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
 from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,
-    get_neurips_cellseg_unsupervised_loader
+    get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
 )
-from .plantseg import get_plantseg_loader
+from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .platynereis import (get_platynereis_cell_loader,
                           get_platynereis_nuclei_loader)
 from .snemi import get_snemi_loader

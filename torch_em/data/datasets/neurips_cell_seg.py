@@ -147,8 +147,8 @@ def _get_wholeslide_paths(root, patch_shape):
     return image_paths, n_samples
 
 
-def get_neurips_cellseg_unsupervised_loader(
-    root, patch_shape, batch_size,
+def get_neurips_cellseg_unsupervised_dataset(
+    root, patch_shape,
     make_rgb=True,
     raw_transform=None,
     transform=None,
@@ -156,7 +156,6 @@ def get_neurips_cellseg_unsupervised_loader(
     sampler=None,
     use_images=True,
     use_wholeslide=True,
-    **loader_kwargs,
 ):
     if raw_transform is None:
         trafo = to_rgb if make_rgb else None
@@ -183,5 +182,22 @@ def get_neurips_cellseg_unsupervised_loader(
                                                                 n_samples=n_samples,
                                                                 sampler=sampler))
     assert len(datasets) > 0
-    ds = torch.utils.data.ConcatDataset(datasets)
+    return torch.utils.data.ConcatDataset(datasets)
+
+
+def get_neurips_cellseg_unsupervised_loader(
+    root, patch_shape, batch_size,
+    make_rgb=True,
+    raw_transform=None,
+    transform=None,
+    dtype=torch.float32,
+    sampler=None,
+    use_images=True,
+    use_wholeslide=True,
+    **loader_kwargs,
+):
+    ds = get_neurips_cellseg_unsupervised_dataset(
+        root, patch_shape, make_rgb=make_rgb, raw_transform=raw_transform, transform=transform,
+        dtype=dtype, sampler=sampler, use_images=use_images, use_wholeslide=use_wholeslide
+    )
     return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)

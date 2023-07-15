@@ -126,9 +126,12 @@ def ensure_transforms(ndim, **kwargs):
 
 
 def add_instance_label_transform(
-    kwargs, add_binary_target, label_dtype=None, binary=False, boundaries=False, offsets=None
+    kwargs, add_binary_target, label_dtype=None, binary=False, boundaries=False, offsets=None, binary_is_exclusive=True,
 ):
-    assert sum((offsets is not None, boundaries, binary)) <= 1
+    if binary_is_exclusive:
+        assert sum((offsets is not None, boundaries, binary)) <= 1
+    else:
+        assert sum((offsets is not None, boundaries)) <= 1
     if offsets is not None:
         label_transform2 = torch_em.transform.label.AffinityTransform(offsets=offsets,
                                                                       add_binary_target=add_binary_target,
