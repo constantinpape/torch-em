@@ -86,7 +86,6 @@ def get_kasthuri_dataset(path, split, patch_shape, download=False, **kwargs):
     data_path = os.path.join(path, f"kasthuri_{split}.h5")
     assert os.path.exists(data_path), data_path
     raw_key, label_key = "raw", "labels"
-    kwargs = util.ensure_transforms(ndim=kwargs.get("ndim", 3), **kwargs)
     return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
 
 

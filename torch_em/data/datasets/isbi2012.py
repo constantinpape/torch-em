@@ -16,7 +16,6 @@ def get_isbi_dataset(
     ndim = 2 if patch_shape[0] == 1 else 3
     kwargs = util.update_kwargs(kwargs, "ndim", ndim)
 
-    kwargs = util.ensure_transforms(**kwargs)
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=False, boundaries=boundaries, offsets=offsets
     )

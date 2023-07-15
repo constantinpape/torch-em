@@ -52,7 +52,6 @@ def get_covid_if_dataset(
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )
-    kwargs = util.ensure_transforms(ndim=2, **kwargs)
     kwargs = util.update_kwargs(kwargs, "ndim", 2)
 
     return torch_em.default_segmentation_dataset(

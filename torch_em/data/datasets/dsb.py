@@ -44,7 +44,6 @@ def get_dsb_dataset(
     image_path = os.path.join(path, split, "images")
     label_path = os.path.join(path, split, "masks")
 
-    kwargs = util.ensure_transforms(ndim=2, **kwargs)
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )
