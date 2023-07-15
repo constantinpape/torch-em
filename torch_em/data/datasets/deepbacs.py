@@ -43,6 +43,11 @@ def _get_paths(path, bac_type, split):
 def get_deepbacs_dataset(
     path, split, patch_shape, bac_type="mixed", download=False, **kwargs
 ):
+    """Dataset for the segmentation of bacteria in light microscopy.
+
+    This dataset is from the publication https://doi.org/10.1038/s42003-022-03634-z.
+    Please cite it if you use this dataset for a publication.
+    """
     assert split in ("train", "test")
     bac_types = list(URLS.keys())
     assert bac_type in bac_types, f"{bac_type} is not in expected bacteria types: {bac_types}"
@@ -60,6 +65,8 @@ def get_deepbacs_dataset(
 
 
 def get_deepbacs_loader(path, split, patch_shape, batch_size, bac_type="mixed", download=False, **kwargs):
+    """Dataloader for the segmentation of bacteria in light microscopy. See 'get_deepbacs_dataset' for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_deepbacs_dataset(path, split, patch_shape, bac_type=bac_type, download=download, **ds_kwargs)
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

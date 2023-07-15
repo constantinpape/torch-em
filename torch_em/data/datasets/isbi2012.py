@@ -9,6 +9,11 @@ def get_isbi_dataset(
     path, patch_shape, download=False, offsets=None, boundaries=False,
     use_original_labels=False, **kwargs
 ):
+    """Dataset for the segmentation of neurons in EM.
+
+    This dataset is from the publication https://doi.org/10.3389/fnana.2015.00142.
+    Please cite it if you use this dataset for a publication.
+    """
     if not path.endswith(".h5"):
         raise ValueError("Isbi path must be a hdf5 file.")
     assert len(patch_shape) == 3
@@ -32,8 +37,7 @@ def get_isbi_loader(
     use_original_labels=False,
     **kwargs
 ):
-    """
-    """
+    """Dataloader for the segmentation of neurons in EM. See 'get_isbi_dataset' for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

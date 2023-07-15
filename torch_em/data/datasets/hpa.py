@@ -312,6 +312,11 @@ def get_hpa_segmentation_dataset(
     channels=["microtubules", "protein", "nuclei", "er"],
     download=False, n_workers_preproc=8, **kwargs
 ):
+    """Dataset for the segmentation of cells in light microscopy.
+
+    This dataset is from the publication https://doi.org/10.1038/s41592-019-0658-6.
+    Please cite it if you use this dataset for a publication.
+    """
     data_is_complete = _check_data(path)
     if not data_is_complete:
         _download_hpa_data(path, "segmentation", download)
@@ -336,6 +341,8 @@ def get_hpa_segmentation_loader(
     channels=["microtubules", "protein", "nuclei", "er"],
     download=False, n_workers_preproc=8, **kwargs
 ):
+    """Dataloader for the segmentation of cells in light microscopy. See 'get_hpa_segmentation_dataset' for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

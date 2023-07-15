@@ -135,6 +135,11 @@ def get_mitoem_dataset(
     binary=False,
     **kwargs,
 ):
+    """Dataset for the segmentation of mitochondria in EM.
+
+    This dataset is from the publication https://doi.org/10.1007/978-3-030-59722-1_7.
+    Please cite it if you use this dataset for a publication.
+    """
     assert len(patch_shape) == 3
     if isinstance(splits, str):
         splits = [splits]
@@ -175,6 +180,7 @@ def get_mitoem_loader(
     binary=False,
     **kwargs,
 ):
+    """Dataloader for the segmentation of mitochondria in EM. See 'get_mitoem_dataset' for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

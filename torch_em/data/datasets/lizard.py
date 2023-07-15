@@ -80,6 +80,11 @@ def _require_lizard_data(path, download):
 
 
 def get_lizard_dataset(path, patch_shape, download=False, **kwargs):
+    """Dataset for the segmentation of nuclei in histopathology.
+
+    This dataset is from the publication https://doi.org/10.48550/arXiv.2108.11195.
+    Please cite it if you use this dataset for a publication.
+    """
     _require_lizard_data(path, download)
 
     data_paths = glob(os.path.join(path, "*.h5"))
@@ -96,6 +101,7 @@ def get_lizard_dataset(path, patch_shape, download=False, **kwargs):
 # TODO implement selecting different tissue types
 # TODO implement train / val / test split (is pre-defined in a csv)
 def get_lizard_loader(path, patch_shape, batch_size, download=False, **kwargs):
+    """Dataloader for the segmentation of nuclei in histopathology. See 'get_lizard_dataset' for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
