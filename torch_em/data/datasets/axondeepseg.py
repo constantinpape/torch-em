@@ -6,7 +6,8 @@ import imageio
 import h5py
 import numpy as np
 import torch_em
-from .util import download_source, unzip, update_kwargs
+
+from . import util
 
 URLS = {
     "sem": "https://github.com/axondeepseg/data_axondeepseg_sem/archive/refs/heads/master.zip",
@@ -112,8 +113,8 @@ def _require_axondeepseg_data(path, name, download):
         return out_path
 
     tmp_path = os.path.join(path, f"{name}.zip")
-    download_source(tmp_path, url, download, checksum=checksum)
-    unzip(tmp_path, out_path, remove=True)
+    util.download_source(tmp_path, url, download, checksum=checksum)
+    util.unzip(tmp_path, out_path, remove=True)
 
     if name == "sem":
         _preprocess_sem_data(out_path)
@@ -123,10 +124,9 @@ def _require_axondeepseg_data(path, name, download):
     return out_path
 
 
-# add instance segmentation representations?
-def get_axondeepseg_loader(path, name,
-                           download=False, one_hot_encoding=False,
-                           data_fraction=None, split=None, **kwargs):
+def get_axondeepseg_dataset(
+    path, name, patch_shape, download=False, one_hot_encoding=False, data_fraction=None, split=None, **kwargs
+):
     if isinstance(name, str):
         name = [name]
     assert isinstance(name, (tuple, list))
@@ -156,9 +156,21 @@ def get_axondeepseg_loader(path, name,
             )
         label_transform = torch_em.transform.label.OneHotTransform(class_ids=class_ids)
         msg = "'one_hot' is set to True, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
+        kwargs = util.update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
     raw_key, label_key = "raw", "labels"
-    return torch_em.default_segmentation_loader(
-        all_paths, raw_key, all_paths, label_key, **kwargs
+    return torch_em.default_segmentation_dataset(all_paths, raw_key, all_paths, label_key, patch_shape, **kwargs)
+
+
+# add instance segmentation representations?
+def get_axondeepseg_loader(
+    path, name, patch_shape, batch_size,
+    download=False, one_hot_encoding=False,
+    data_fraction=None, split=None, **kwargs
+):
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_axondeepseg_dataset(
+        path, name, patch_shape, download=download, one_hot_encoding=one_hot_encoding,
+        data_fraction=data_fraction, split=split, **ds_kwargs
     )
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
