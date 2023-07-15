@@ -18,6 +18,7 @@ from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
 )
+from .nuc_mm import get_nuc_mm_loader, get_nuc_mm_dataset
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .platynereis import (
     get_platynereis_cell_loader, get_platynereis_cell_dataset,
