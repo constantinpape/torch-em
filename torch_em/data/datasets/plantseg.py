@@ -71,6 +71,11 @@ def get_plantseg_dataset(
     binary=False,
     **kwargs,
 ):
+    """Dataset for the segmentation of plant cells in confocal and light-sheet microscopy.
+
+    This dataset is from the publication https://doi.org/10.7554/eLife.57613.
+    Please cite it if you use this dataset for a publication.
+    """
     assert len(patch_shape) == 3
     data_path = _require_plantseg_data(path, download, name, split)
 
@@ -99,6 +104,7 @@ def get_plantseg_loader(
     binary=False,
     **kwargs,
 ):
+    """Dataloader for the segmentation of cells in confocal and light-sheet microscopy. See 'get_plantseg_dataset'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

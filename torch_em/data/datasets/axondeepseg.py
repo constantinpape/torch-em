@@ -127,6 +127,11 @@ def _require_axondeepseg_data(path, name, download):
 def get_axondeepseg_dataset(
     path, name, patch_shape, download=False, one_hot_encoding=False, data_fraction=None, split=None, **kwargs
 ):
+    """Dataset for the segmentation of myelinated axons in EM.
+
+    This dataset is from the publication https://doi.org/10.1038/s41598-018-22181-4.
+    Please cite it if you use this dataset for a publication.
+    """
     if isinstance(name, str):
         name = [name]
     assert isinstance(name, (tuple, list))
@@ -168,6 +173,8 @@ def get_axondeepseg_loader(
     download=False, one_hot_encoding=False,
     data_fraction=None, split=None, **kwargs
 ):
+    """Dataloader for the segmentation of myelinated axons. See 'get_axondeepseg_dataset' for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_axondeepseg_dataset(
         path, name, patch_shape, download=download, one_hot_encoding=one_hot_encoding,

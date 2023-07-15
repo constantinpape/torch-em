@@ -25,6 +25,11 @@ def get_covid_if_dataset(
     path, patch_shape, sample_range=None, target="cells", download=False,
     offsets=None, boundaries=False, binary=False, **kwargs
 ):
+    """Dataset for the cells and nuclei in immunofluorescence.
+
+    This dataset is from the publication https://doi.org/10.1002/bies.202000257.
+    Please cite it if you use this dataset for a publication.
+    """
     available_targets = ("cells", "nuclei")
     # TODO also support infected_cells
     # available_targets = ("cells", "nuclei", "infected_cells")
@@ -63,6 +68,8 @@ def get_covid_if_loader(
     path, patch_shape, batch_size, sample_range=None, target="cells", download=False,
     offsets=None, boundaries=False, binary=False, **kwargs
 ):
+    """Dataloader for the segmentation of myelinated axons. See 'get_covid_if_loader' for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_covid_if_dataset(
         path, patch_shape, sample_range=sample_range, target=target, download=download,

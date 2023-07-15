@@ -59,6 +59,11 @@ def get_vnc_mito_dataset(
     download=False,
     **kwargs
 ):
+    """Dataset for the segmentation of mitochondria in EM.
+
+    This dataset is from https://doi.org/10.6084/m9.figshare.856713.v1.
+    Please cite it if you use this dataset for a publication.
+    """
     _get_vnc_data(path, download)
     data_path = os.path.join(path, "vnc_train.h5")
 
@@ -81,6 +86,7 @@ def get_vnc_mito_loader(
     download=False,
     **kwargs
 ):
+    """Dataloader for the segmentation of mitochondria in EM. See 'get_vnc_mito_loader'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

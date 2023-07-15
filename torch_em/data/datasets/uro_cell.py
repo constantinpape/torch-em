@@ -85,6 +85,11 @@ def get_uro_cell_dataset(
     binary=False,
     **kwargs
 ):
+    """Dataset for the segmentation of mitochondria and other organelles in EM.
+
+    This dataset is from the publication https://doi.org/10.1016/j.compbiomed.2020.103693.
+    Please cite it if you use this dataset for a publication.
+    """
     assert target in ("fv", "golgi", "lyso", "mito")
     _require_urocell_data(path, download)
     paths, label_key = _get_paths(path, target)
@@ -132,6 +137,7 @@ def get_uro_cell_loader(
     binary=False,
     **kwargs
 ):
+    """Dataloader for the segmentation of mitochondria and other organelles in EM. See 'get_uro_cell_dataset'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
