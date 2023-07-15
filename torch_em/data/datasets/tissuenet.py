@@ -53,6 +53,11 @@ def _create_dataset(path, zip_path):
 def get_tissuenet_dataset(
     path, split, patch_shape, raw_channel, label_channel, download=False, **kwargs
 ):
+    """Dataset for the segmentation of cells in tissue imaged with light microscopy.
+
+    This dataset is from the publication https://doi.org/10.1038/s41587-021-01094-0.
+    Please cite it if you use this dataset for a publication.
+    """
     assert raw_channel in ("nucleus", "cell", "rgb")
     assert label_channel in ("nucleus", "cell")
 
@@ -90,6 +95,9 @@ def get_tissuenet_dataset(
 def get_tissuenet_loader(
     path, split, patch_shape, batch_size, raw_channel, label_channel, download=False, **kwargs
 ):
+    """Dataloader for the segmentation of cells in tissue imaged with light microscopy.
+    See 'get_tissuenet_dataset' for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_tissuenet_dataset(
         path, split, patch_shape, raw_channel, label_channel, download, **ds_kwargs

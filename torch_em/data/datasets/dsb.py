@@ -38,6 +38,11 @@ def get_dsb_dataset(
     offsets=None, boundaries=False, binary=False,
     source="reduced", **kwargs
 ):
+    """Dataset for the segmentation of nuclei in light microscopy.
+
+    This dataset is from the publication https://doi.org/10.1038/s41592-019-0612-7.
+    Please cite it if you use this dataset for a publication.
+    """
     assert split in ("test", "train"), split
     _download_dsb(path, source, download)
 
@@ -58,6 +63,8 @@ def get_dsb_loader(
     offsets=None, boundaries=False, binary=False,
     source="reduced", **kwargs
 ):
+    """Dataloader for the segmentation of nuclei in light microscopy. See 'get_dsb_dataset' for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

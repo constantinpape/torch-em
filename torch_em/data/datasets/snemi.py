@@ -13,31 +13,6 @@ CHECKSUMS = {
 }
 
 
-def get_snemi_loader(
-    path,
-    patch_shape,
-    batch_size,
-    sample="train",
-    download=False,
-    offsets=None,
-    boundaries=False,
-    **kwargs,
-):
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
-    ds = get_snemi_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        sample=sample,
-        download=download,
-        offsets=offsets,
-        boundaries=boundaries,
-        **ds_kwargs,
-    )
-    return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
-
-
 def get_snemi_dataset(
     path,
     patch_shape,
@@ -47,6 +22,11 @@ def get_snemi_dataset(
     boundaries=False,
     **kwargs,
 ):
+    """Dataset for the segmentation of neurons in EM.
+
+    This dataset is from the publication https://doi.org/10.1016/j.cell.2015.06.054.
+    Please cite it if you use this dataset for a publication.
+    """
     assert len(patch_shape) == 3
     os.makedirs(path, exist_ok=True)
 
@@ -62,3 +42,29 @@ def get_snemi_dataset(
     raw_key = "volumes/raw"
     label_key = "volumes/labels/neuron_ids"
     return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+
+
+def get_snemi_loader(
+    path,
+    patch_shape,
+    batch_size,
+    sample="train",
+    download=False,
+    offsets=None,
+    boundaries=False,
+    **kwargs,
+):
+    """Dataloader for the segmentation of neurons in EM. See 'get_snemi_dataset'."""
+    ds_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
+    )
+    ds = get_snemi_dataset(
+        path=path,
+        patch_shape=patch_shape,
+        sample=sample,
+        download=download,
+        offsets=offsets,
+        boundaries=boundaries,
+        **ds_kwargs,
+    )
+    return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)

@@ -44,6 +44,11 @@ def _check_data(path, prefix, extension, n_files):
 
 
 def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download=False, **kwargs):
+    """Dataset for the segmentation of cuticle in EM.
+
+    This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
+    Please cite it if you use this dataset for a publication.
+    """
     cuticle_root = os.path.join(path, "cuticle")
 
     ext = ".n5"
@@ -64,6 +69,7 @@ def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download
 def get_platynereis_cuticle_loader(
     path, patch_shape, batch_size, sample_ids=None, download=False, **kwargs
 ):
+    """Dataloader for the segmentation of cuticle in EM. See 'get_platynereis_cuticle_loader'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
@@ -78,6 +84,11 @@ def get_platynereis_cilia_dataset(
     offsets=None, boundaries=False, binary=False,
     download=False, **kwargs
 ):
+    """Dataset for the segmentation of cilia in EM.
+
+    This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
+    Please cite it if you use this dataset for a publication.
+    """
     assert split in ("train", "val")
     cilia_root = os.path.join(path, "cilia")
 
@@ -102,6 +113,7 @@ def get_platynereis_cilia_loader(
     offsets=None, boundaries=False, binary=False,
     download=False, **kwargs
 ):
+    """Dataloader for the segmentation of cilia in EM. See 'get_platynereis_cilia_dataset'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
@@ -119,6 +131,11 @@ def get_platynereis_cell_dataset(
     offsets=None, boundaries=False,
     download=False, **kwargs
 ):
+    """Dataset for the segmentation of cells in EM.
+
+    This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
+    Please cite it if you use this dataset for a publication.
+    """
     cell_root = os.path.join(path, "membrane")
 
     prefix = "train_data_membrane_"
@@ -157,6 +174,7 @@ def get_platynereis_cell_loader(
     offsets=None, boundaries=False,
     download=False, **kwargs
 ):
+    """Dataloader for the segmentation of cells in EM. See 'get_platynereis_cell_dataset'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
@@ -173,6 +191,11 @@ def get_platynereis_nuclei_dataset(
     offsets=None, boundaries=False, binary=False,
     download=False, **kwargs,
 ):
+    """Dataset for the segmentation of nuclei in EM.
+
+    This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
+    Please cite it if you use this dataset for a publication.
+    """
     nuc_root = os.path.join(path, "nuclei")
     prefix = "train_data_nuclei_"
     ext = ".h5"
@@ -211,6 +234,7 @@ def get_platynereis_nuclei_loader(
     offsets=None, boundaries=False, binary=False,
     download=False, **kwargs
 ):
+    """Dataloader for the segmentation of nuclei in EM. See 'get_platynereis_nuclei_dataset'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

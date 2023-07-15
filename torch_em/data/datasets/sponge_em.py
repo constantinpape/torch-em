@@ -16,6 +16,11 @@ def _require_sponge_em_data(path, download):
 
 
 def get_sponge_em_dataset(path, mode, patch_shape, sample_ids=None, download=False, **kwargs):
+    """Dataset for the segmentation of sponge cells and organelles in EM.
+
+    This dataset is from the publication https://doi.org/10.1126/science.abj2949.
+    Please cite it if you use this dataset for a publication.
+    """
     assert mode in ("semantic", "instances")
 
     n_files = len(glob(os.path.join(path, "*.h5")))
@@ -34,6 +39,7 @@ def get_sponge_em_dataset(path, mode, patch_shape, sample_ids=None, download=Fal
 
 
 def get_sponge_em_loader(path, mode, patch_shape, batch_size, sample_ids=None, download=False, **kwargs):
+    """Dataloader for the segmentation of sponge cells and organelles in EM. See 'get_sponge_em_dataset'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

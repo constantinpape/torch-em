@@ -30,6 +30,10 @@ def get_mouse_embryo_dataset(
     binary=False,
     **kwargs,
 ):
+    """Dataset for the segmentation of nuclei in confocal microscopy.
+
+    This dataset is stored on zenodo: https://zenodo.org/record/6546550.
+    """
     assert name in ("membrane", "nuclei")
     assert split in ("train", "val")
     assert len(patch_shape) == 3
@@ -62,6 +66,7 @@ def get_mouse_embryo_loader(
     binary=False,
     **kwargs,
 ):
+    """Dataloader for the segmentation of nuclei in confocal microscopy. See 'get_mouse_embryo_dataset' for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

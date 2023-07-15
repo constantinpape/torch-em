@@ -44,6 +44,11 @@ def _require_dataset(path, sample):
 
 
 def get_nuc_mm_dataset(path, sample, split, patch_shape, download=False, **kwargs):
+    """Dataset for the segmentation of nuclei in EM and X-Ray.
+
+    This dataset is from the publication https://doi.org/10.1007/978-3-030-87193-2_16.
+    Please cite it if you use this dataset for a publication.
+    """
     assert sample in ("mouse", "zebrafish")
     assert split in ("train", "val")
 
@@ -61,6 +66,7 @@ def get_nuc_mm_dataset(path, sample, split, patch_shape, download=False, **kwarg
 
 
 def get_nuc_mm_loader(path, sample, split, patch_shape, batch_size, download=False, **kwargs):
+    """Dataset for the segmentation of nuclei in EM and X-Ray. See 'get_nuc_mm_dataset' for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
