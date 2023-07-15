@@ -18,8 +18,12 @@ from .neurips_cell_seg import (
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
 )
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
-from .platynereis import (get_platynereis_cell_loader,
-                          get_platynereis_nuclei_loader)
+from .platynereis import (
+    get_platynereis_cell_loader, get_platynereis_cell_dataset,
+    get_platynereis_cilia_loader, get_platynereis_cilia_dataset,
+    get_platynereis_cuticle_loader, get_platynereis_cuticle_dataset,
+    get_platynereis_nuclei_loader, get_platynereis_nuclei_dataset
+)
 from .snemi import get_snemi_loader, get_snemi_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
