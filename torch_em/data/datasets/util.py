@@ -9,6 +9,11 @@ import torch
 import torch_em
 import requests
 
+try:
+    import gdown
+except ImportError:
+    gdown = None
+
 from tqdm import tqdm
 
 BIOIMAGEIO_IDS = {
@@ -44,25 +49,7 @@ def get_checksum(filename):
     return checksum
 
 
-# this needs to be extended to support download from s3 via boto,
-# if we get a resource that is available via s3 without support for http
-def download_source(path, url, download, checksum=None, verify=True):
-    if os.path.exists(path):
-        return
-    if not download:
-        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
-
-    with requests.get(url, stream=True, verify=verify) as r:
-        if r.status_code != 200:
-            r.raise_for_status()
-            raise RuntimeError(f"Request to {url} returned status code {r.status_code}")
-        file_size = int(r.headers.get("Content-Length", 0))
-        desc = f"Download {url} to {path}"
-        if file_size == 0:
-            desc += " (unknown file size)"
-        with tqdm.wrapattr(r.raw, "read", total=file_size, desc=desc) as r_raw, open(path, "wb") as f:
-            copyfileobj(r_raw, f)
-
+def _check_checksum(path, checksum):
     if checksum is not None:
         this_checksum = get_checksum(path)
         if this_checksum != checksum:
@@ -73,6 +60,42 @@ def download_source(path, url, download, checksum=None, verify=True):
         print("Download successful and checksums agree.")
     else:
         warn("The file was downloaded, but no checksum was provided, so the file may be corrupted.")
+
+
+# this needs to be extended to support download from s3 via boto,
+# if we get a resource that is available via s3 without support for http
+def download_source(path, url, download, checksum=None, verify=True):
+    if os.path.exists(path):
+        return
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    with requests.get(url, stream=True, allow_redirects=True, verify=verify) as r:
+        r.raise_for_status()  # check for error
+        file_size = int(r.headers.get("Content-Length", 0))
+        desc = f"Download {url} to {path}"
+        if file_size == 0:
+            desc += " (unknown file size)"
+        with tqdm.wrapattr(r.raw, "read", total=file_size, desc=desc) as r_raw, open(path, "wb") as f:
+            copyfileobj(r_raw, f)
+
+    _check_checksum(path, checksum)
+
+
+def download_source_gdrive(path, url, download, checksum=None):
+    if gdown is None:
+        raise RuntimeError(
+            "Need gdown library to download data from google drive."
+            "Please isntall gdown and then rerun."
+        )
+
+    if os.path.exists(path):
+        return
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    gdown.download(url, path, quiet=False)
+    _check_checksum(path, checksum)
 
 
 def update_kwargs(kwargs, key, value, msg=None):
@@ -100,6 +123,8 @@ def split_kwargs(function, **kwargs):
 
 # this adds the default transforms for 'raw_transform' and 'transform'
 # in case these were not specified in the kwargs
+# this is NOT necessary if 'default_segmentation_dataset' is used, only if a dataset class
+# is used directly, e.g. in the LiveCell Loader
 def ensure_transforms(ndim, **kwargs):
     if "raw_transform" not in kwargs:
         kwargs = update_kwargs(kwargs, "raw_transform", torch_em.transform.get_raw_transform())
@@ -109,9 +134,12 @@ def ensure_transforms(ndim, **kwargs):
 
 
 def add_instance_label_transform(
-    kwargs, add_binary_target, label_dtype=None, binary=False, boundaries=False, offsets=None
+    kwargs, add_binary_target, label_dtype=None, binary=False, boundaries=False, offsets=None, binary_is_exclusive=True,
 ):
-    assert sum((offsets is not None, boundaries, binary)) <= 1
+    if binary_is_exclusive:
+        assert sum((offsets is not None, boundaries, binary)) <= 1
+    else:
+        assert sum((offsets is not None, boundaries)) <= 1
     if offsets is not None:
         label_transform2 = torch_em.transform.label.AffinityTransform(offsets=offsets,
                                                                       add_binary_target=add_binary_target,

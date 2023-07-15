@@ -7,8 +7,9 @@ import imageio
 import numpy as np
 import torch_em
 import z5py
+
 from tqdm import tqdm
-from .util import download_source, update_kwargs, unzip
+from . import util
 
 URLS = {
     "raw": {
@@ -99,8 +100,8 @@ def _require_mitoem_sample(path, sample, download):
         url = URLS[name][sample]
         checksum = CHECKSUMS[name][sample]
         zip_path = os.path.join(path, f"{sample}.zip")
-        download_source(zip_path, url, download, checksum)
-        unzip(zip_path, path, remove=True)
+        util.download_source(zip_path, url, download, checksum)
+        util.unzip(zip_path, path, remove=True)
 
     im_folder = os.path.join(path, "im")
     train_folder = os.path.join(path, "mito-train-v2")
@@ -123,20 +124,17 @@ def _require_mitoem_sample(path, sample, download):
     rmtree(val_folder)
 
 
-def get_mitoem_loader(
+def get_mitoem_dataset(
     path,
-    patch_shape,
     splits,
+    patch_shape,
     samples=("human", "rat"),
     download=False,
     offsets=None,
     boundaries=False,
     binary=False,
-    ndim=3,
     **kwargs,
 ):
-    """
-    """
     assert len(patch_shape) == 3
     if isinstance(splits, str):
         splits = [splits]
@@ -157,26 +155,34 @@ def get_mitoem_loader(
             assert os.path.exists(split_path), split_path
             data_paths.append(split_path)
 
-    assert sum((offsets is not None, boundaries, binary)) <= 1, f"{offsets}, {boundaries}, {binary}"
-    if offsets is not None:
-        # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     ignore_label=None,
-                                                                     add_binary_target=True,
-                                                                     add_mask=True)
-        msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
-    elif boundaries:
-        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
-        msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
-    elif binary:
-        label_transform = torch_em.transform.label.labels_to_binary
-        msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
-
+    kwargs, _ = util.add_instance_label_transform(
+        kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
+    )
     raw_key = "raw"
     label_key = "labels"
-    kwargs["ndim"] = ndim
-    return torch_em.default_segmentation_loader(data_paths, raw_key, data_paths, label_key,
-                                                patch_shape=patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(data_paths, raw_key, data_paths, label_key, patch_shape, **kwargs)
+
+
+def get_mitoem_loader(
+    path,
+    splits,
+    patch_shape,
+    batch_size,
+    samples=("human", "rat"),
+    download=False,
+    offsets=None,
+    boundaries=False,
+    binary=False,
+    **kwargs,
+):
+    ds_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
+    )
+    dataset = get_mitoem_dataset(
+        path, splits, patch_shape,
+        samples=samples, download=download,
+        offsets=offsets, boundaries=boundaries, binary=binary,
+        **ds_kwargs
+    )
+    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
+    return loader

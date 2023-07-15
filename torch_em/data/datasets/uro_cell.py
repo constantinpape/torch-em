@@ -5,11 +5,11 @@ from shutil import rmtree
 
 import h5py
 import torch_em
-from .util import download_source, unzip, update_kwargs
+from . import util
 
 
 URL = "https://github.com/MancaZerovnikMekuc/UroCell/archive/refs/heads/master.zip"
-CHECKSUM = "c1f83ebe60bd2c69d70fa8c9f3a809323f7d449ce6ec3c01fdbfe38f0afef856"
+CHECKSUM = "a48cf31b06114d7def642742b4fcbe76103483c069122abe10f377d71a1acabc"
 
 
 def _require_urocell_data(path, download):
@@ -22,8 +22,8 @@ def _require_urocell_data(path, download):
     # download and unzip the data
     os.makedirs(path)
     tmp_path = os.path.join(path, "uro_cell.zip")
-    download_source(tmp_path, URL, download, checksum=CHECKSUM)
-    unzip(tmp_path, path, remove=True)
+    util.download_source(tmp_path, URL, download, checksum=CHECKSUM)
+    util.unzip(tmp_path, path, remove=True)
 
     root = os.path.join(path, "UroCell-master")
 
@@ -75,14 +75,14 @@ def _get_paths(path, target):
     return paths, label_key
 
 
-def get_uro_cell_loader(
+def get_uro_cell_dataset(
     path,
     target,
+    patch_shape,
     download=False,
     offsets=None,
     boundaries=False,
     binary=False,
-    ndim=3,
     **kwargs
 ):
     assert target in ("fv", "golgi", "lyso", "mito")
@@ -101,7 +101,7 @@ def get_uro_cell_loader(
                                                                      add_binary_target=True,
                                                                      add_mask=True)
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
+        kwargs = util.update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
     elif boundaries:
         if target in ("lyso", "golgi"):
             warnings.warn(
@@ -109,13 +109,33 @@ def get_uro_cell_loader(
             )
         label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
         msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = util.update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
     elif binary:
         label_transform = torch_em.transform.label.labels_to_binary
         msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+        kwargs = util.update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
 
     raw_key = "raw"
-    return torch_em.default_segmentation_loader(
-        paths, raw_key, paths, label_key, ndim=ndim, is_seg_dataset=True, **kwargs
+    return torch_em.default_segmentation_dataset(
+        paths, raw_key, paths, label_key, patch_shape, is_seg_dataset=True, **kwargs
     )
+
+
+def get_uro_cell_loader(
+    path,
+    target,
+    patch_shape,
+    batch_size,
+    download=False,
+    offsets=None,
+    boundaries=False,
+    binary=False,
+    **kwargs
+):
+    ds_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
+    )
+    ds = get_uro_cell_dataset(
+        path, target, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **kwargs
+    )
+    return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)

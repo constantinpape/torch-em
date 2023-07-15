@@ -78,7 +78,6 @@ def get_tissuenet_dataset(
 
     raw_key, label_key = f"raw/{raw_channel}", f"labels/{label_channel}"
 
-    kwargs = util.ensure_transforms(ndim=2, **kwargs)
     with_channels = True if raw_channel == "rgb" else False
     kwargs = util.update_kwargs(kwargs, "with_channels", with_channels)
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
