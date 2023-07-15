@@ -27,6 +27,7 @@ from .platynereis import (
     get_platynereis_nuclei_loader, get_platynereis_nuclei_dataset
 )
 from .snemi import get_snemi_loader, get_snemi_dataset
+from .sponge_em import get_sponge_em_loader, get_sponge_em_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
 from .util import get_bioimageio_dataset_id
