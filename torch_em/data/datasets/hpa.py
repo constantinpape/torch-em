@@ -14,7 +14,7 @@ from skimage import morphology
 from tqdm import tqdm
 
 import torch_em
-from .util import download_source, unzip, update_kwargs
+from . import util
 
 
 URLS = {
@@ -30,8 +30,8 @@ def _download_hpa_data(path, name, download):
     url = URLS[name]
     checksum = CHECKSUMS[name]
     zip_path = os.path.join(path, "data.zip")
-    download_source(zip_path, url, download=download, checksum=checksum)
-    unzip(zip_path, path, remove=True)
+    util.download_source(zip_path, url, download=download, checksum=checksum)
+    util.unzip(zip_path, path, remove=True)
 
 
 def _load_features(features):
@@ -306,39 +306,45 @@ def _check_data(path):
     return have_train and have_test and have_val
 
 
-def get_hpa_segmentation_loader(path, patch_shape, split,
-                                offsets=None, boundaries=False, binary=False,
-                                channels=["microtubules", "protein", "nuclei", "er"],
-                                download=False, n_workers_preproc=8, **kwargs):
+def get_hpa_segmentation_dataset(
+    path, split, patch_shape,
+    offsets=None, boundaries=False, binary=False,
+    channels=["microtubules", "protein", "nuclei", "er"],
+    download=False, n_workers_preproc=8, **kwargs
+):
     data_is_complete = _check_data(path)
     if not data_is_complete:
         _download_hpa_data(path, "segmentation", download)
         _process_hpa_data(path, channels, n_workers_preproc, remove=True)
 
-    assert sum((offsets is not None, boundaries, binary)) <= 1
-    if offsets is not None:
-        # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     add_binary_target=True,
-                                                                     add_mask=True)
-        msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
-    elif boundaries:
-        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
-        msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
-    elif binary:
-        label_transform = torch_em.transform.label.labels_to_binary
-        msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
-
-    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
-    kwargs = update_kwargs(kwargs, "ndim", 2)
-    kwargs = update_kwargs(kwargs, "with_channels", True)
+    kwargs = util.ensure_transforms(ndim=2, **kwargs)
+    kwargs, _ = util.add_instance_label_transform(
+        kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
+    )
+    kwargs = util.update_kwargs(kwargs, "ndim", 2)
+    kwargs = util.update_kwargs(kwargs, "with_channels", True)
 
     paths = glob(os.path.join(path, split, "*.h5"))
     raw_key = "raw"
     label_key = "labels"
-    return torch_em.default_segmentation_loader(
-        paths, raw_key, paths, label_key, **kwargs
+
+    return torch_em.default_segmentation_dataset(paths, raw_key, paths, label_key, patch_shape, **kwargs)
+
+
+def get_hpa_segmentation_loader(
+    path, split, patch_shape, batch_size,
+    offsets=None, boundaries=False, binary=False,
+    channels=["microtubules", "protein", "nuclei", "er"],
+    download=False, n_workers_preproc=8, **kwargs
+):
+    ds_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
     )
+    dataset = get_hpa_segmentation_dataset(
+        path, split, patch_shape,
+        offsets=offsets, boundaries=boundaries, binary=binary,
+        channels=channels, download=download, n_workers_preproc=n_workers_preproc,
+        **ds_kwargs
+    )
+    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
+    return loader
