@@ -5,10 +5,14 @@ import zipfile
 from shutil import copyfileobj
 from warnings import warn
 
-import gdown
 import torch
 import torch_em
 import requests
+
+try:
+    import gdown
+except ImportError:
+    gdown = None
 
 from tqdm import tqdm
 
@@ -81,6 +85,12 @@ def download_source(path, url, download, checksum=None, verify=True):
 
 
 def download_source_gdrive(path, url, download, checksum=None):
+    if gdown is None:
+        raise RuntimeError(
+            "Need gdown library to download data from google drive."
+            "Please isntall gdown and then rerun."
+        )
+
     if os.path.exists(path):
         return
     if not download:
