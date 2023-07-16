@@ -195,8 +195,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         self.teacher.to(self.device)
         return save_dict
 
-    def _initialize(self, iterations, load_from_checkpoint):
-        best_metric = super()._initialize(iterations, load_from_checkpoint)
+    def _initialize(self, iterations, load_from_checkpoint, epochs=None):
+        best_metric = super()._initialize(iterations, load_from_checkpoint, epochs)
         self.teacher.to(self.device)
         return best_metric
 
