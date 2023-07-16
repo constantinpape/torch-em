@@ -14,18 +14,9 @@ class TestShallow2DeepTraining(unittest.TestCase):
     tmp_folder = "./tmp"
 
     def tearDown(self):
-        try:
-            rmtree(self.tmp_folder)
-        except OSError:
-            pass
-        try:
-            rmtree("./checkpoints")
-        except OSError:
-            pass
-        try:
-            rmtree("./logs")
-        except OSError:
-            pass
+        rmtree(self.tmp_folder, ignore_errors=True)
+        rmtree("./checkpoints", ignore_errors=True)
+        rmtree("./logs", ignore_errors=True)
 
     def _create_seg_dataset(self):
         os.makedirs(self.tmp_folder, exist_ok=True)

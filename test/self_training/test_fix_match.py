@@ -20,16 +20,9 @@ class TestFixMatch(unittest.TestCase):
         create_segmentation_test_data(self.data_path, self.raw_key, self.label_key, shape=(128,) * 3, chunks=(32,) * 3)
 
     def tearDown(self):
-
-        def _remove(folder):
-            try:
-                rmtree(folder)
-            except OSError:
-                pass
-
-        _remove(self.tmp_folder)
-        _remove("./logs")
-        _remove("./checkpoints")
+        rmtree(self.tmp_folder, ignore_errors=True)
+        rmtree("./logs", ignore_errors=True)
+        rmtree("./checkpoints", ignore_errors=True)
 
     def _test_fix_match(
         self,

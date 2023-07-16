@@ -15,7 +15,7 @@ class TestSegmentationDataset(unittest.TestCase):
         os.makedirs(self.tmp_folder, exist_ok=True)
 
     def tearDown(self):
-        rmtree(self.tmp_folder)
+        rmtree(self.tmp_folder, ignore_errors=True)
 
     def create_default_data(self, raw_key, label_key):
         shape = (128,) * 3
