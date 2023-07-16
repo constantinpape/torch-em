@@ -37,16 +37,9 @@ class TestSegmentation(unittest.TestCase):
             )
 
     def tearDown(self):
-
-        def _remove(folder):
-            try:
-                rmtree(folder)
-            except OSError:
-                pass
-
-        _remove(self.tmp_folder)
-        _remove("./logs")
-        _remove("./checkpoints")
+        rmtree(self.tmp_folder, ignore_errors=True)
+        rmtree("./logs", ignore_errors=True)
+        rmtree("./checkpoints", ignore_errors=True)
 
     def _test_training(self, model_class, model_kwargs,
                        train_loader, val_loader, n_iterations):

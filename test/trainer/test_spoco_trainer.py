@@ -38,10 +38,8 @@ class TestSpocoTrainer(unittest.TestCase):
     def tearDown(self):
         if os.path.exists(self.data_path):
             os.remove(self.data_path)
-        if os.path.exists(self.checkpoint_folder):
-            rmtree(self.checkpoint_folder)
-        if os.path.exists(self.log_folder):
-            rmtree(self.log_folder)
+        rmtree(self.checkpoint_folder, ignore_errors=True)
+        rmtree(self.log_folder, ignore_errors=True)
 
     def _get_kwargs(self, with_roi=False):
         roi = np.s_[:6, :, :] if with_roi else None
