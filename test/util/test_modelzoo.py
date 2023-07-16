@@ -42,12 +42,10 @@ class TestModelzoo(unittest.TestCase):
                              chunks=chunks)
 
     def tearDown(self):
-        if os.path.exists(self.checkpoint_folder):
-            rmtree(self.checkpoint_folder)
-        if os.path.exists(self.save_folder):
-            rmtree(self.save_folder)
         if os.path.exists(self.data_path):
             os.remove(self.data_path)
+        rmtree(self.checkpoint_folder, ignore_errors=True)
+        rmtree(self.save_folder, ignore_errors=True)
 
     def _create_checkpoint(self, n_channels):
         if n_channels > 1:
