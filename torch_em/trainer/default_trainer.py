@@ -390,7 +390,7 @@ class DefaultTrainer:
 
         return serializer.init_data
 
-    def _initialize(self, iterations, load_from_checkpoint):
+    def _initialize(self, iterations, load_from_checkpoint, epochs=None):
         assert self.train_loader is not None
         assert self.val_loader is not None
         assert self.model is not None
@@ -402,8 +402,18 @@ class DefaultTrainer:
         if load_from_checkpoint is not None:
             self.load_checkpoint(load_from_checkpoint)
 
+        if sum((iterations is not None, epochs is not None)) != 1:
+            raise ValueError(
+                "Exactly one of 'iterations' or 'epochs' has to be specified to initialize the trainer."
+                f"You have passed 'iterations'={iterations} and 'epochs'={epochs}"
+            )
+
+        if epochs is None:
+            epochs = int(np.ceil(float(iterations) / len(self.train_loader)))
+        else:
+            iterations = epochs * len(self.train_loader)
+
         self.max_iteration = self._iteration + iterations
-        epochs = int(np.ceil(float(iterations) / len(self.train_loader)))
         self.max_epoch = self._epoch + epochs
 
         if not getattr(self, "_is_initialized", False):
@@ -493,8 +503,19 @@ class DefaultTrainer:
 
         return save_dict
 
-    def fit(self, iterations, load_from_checkpoint=None):
-        best_metric = self._initialize(iterations, load_from_checkpoint)
+    def fit(self, iterations=None, load_from_checkpoint=None, epochs=None, save_every_kth_epoch=None):
+        """Run neural network training.
+
+        Exactly one of 'iterations' or 'epochs' has to be passed.
+
+        Parameters:
+            iterations [int] - how long to train, specified in iterations (default: None)
+            load_from_checkpoint [str] - path to a checkpoint from where training should be continued (default: None)
+            epochs [int] - how long to train, specified in epochs (default: None)
+            save_every_kth_epoch [int] - save checkpoints after every kth epoch separately.
+                The corresponding checkpoints will be saved with the naming scheme 'epoch-{epoch}.pt'. (default: None)
+        """
+        best_metric = self._initialize(iterations, load_from_checkpoint, epochs)
         print(
             "Start fitting for",
             self.max_iteration - self._iteration,
@@ -518,19 +539,32 @@ class DefaultTrainer:
 
         train_epochs = self.max_epoch - self._epoch
         for _ in range(train_epochs):
+
+            # run training and validation for this epoch
             t_per_iter = train_epoch(progress)
             current_metric = validate()
 
+            # perform all the post-epoch steps:
+
+            # apply the learning rate scheduler
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step(current_metric)
 
+            # save this checkpoint as the new best checkpoint if
+            # it has the best overall validation metric
             if current_metric < best_metric:
                 best_metric = current_metric
                 self._best_epoch = self._epoch
                 self.save_checkpoint("best", best_metric)
 
-            # TODO for tiny epochs we don"t want to save every time
+            # save this checkpoint as the latest checkpoint
             self.save_checkpoint("latest", best_metric)
+
+            # if we save after every k-th epoch then check if we need to save now
+            if save_every_kth_epoch is not None and (self._epoch + 1) % save_every_kth_epoch == 0:
+                self.save_checkpoint(f"epoch-{self._epoch + 1}", best_metric)
+
+            # if early stopping has been specified then check if the stopping condition is met
             if self.early_stopping is not None:
                 epochs_since_best = self._epoch - self._best_epoch
                 if epochs_since_best > self.early_stopping:
