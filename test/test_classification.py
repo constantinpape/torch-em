@@ -10,10 +10,8 @@ from torch_em.util import model_is_equal
 
 class TestClassification(unittest.TestCase):
     def tearDown(self):
-        if os.path.exists("./checkpoints"):
-            rmtree("./checkpoints")
-        if os.path.exists("./logs"):
-            rmtree("./logs")
+        rmtree("./checkpoints", ignore_errors=True)
+        rmtree("./logs", ignore_errors=True)
 
     def _check_checkpoint(self, path, expected_iterations, expected_model, model_class, **model_kwargs):
         self.assertTrue(os.path.exists(path))
