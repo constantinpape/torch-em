@@ -43,6 +43,19 @@ def _check_data(path, prefix, extension, n_files):
     return len(files) == n_files
 
 
+def _get_paths_and_rois(sample_ids, n_files, template, rois=None):
+    if sample_ids is None:
+        sample_ids = list(range(1, n_files + 1))
+    else:
+        assert min(sample_ids) >= 1 and max(sample_ids) <= n_files
+        sample_ids.sort()
+    paths = [template % sample for sample in sample_ids]
+    if rois is not None:
+        data_rois = [rois.get(sample, np.s_[:, :, :]) for sample in sample_ids]
+        return paths, data_rois
+    return paths
+
+
 def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download=False, **kwargs):
     """Dataset for the segmentation of cuticle in EM.
 
@@ -57,12 +70,8 @@ def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download
     if not data_is_complete:
         _require_platy_data(path, "cuticle", download)
 
-    if sample_ids is None:
-        sample_ids = list(range(1, n_files + 1))
-    paths = [os.path.join(cuticle_root, f"train_data_0{i}.n5") for i in sample_ids]
-
-    raw_key = "volumes/raw"
-    label_key = "volumes/labels/segmentation"
+    paths = _get_paths_and_rois(sample_ids, n_files, os.path.join(cuticle_root, "train_data_%02i.n5"))
+    raw_key, label_key = "volumes/raw", "volumes/labels/segmentation"
     return torch_em.default_segmentation_dataset(paths, raw_key, paths, label_key, patch_shape, **kwargs)
 
 
@@ -80,7 +89,7 @@ def get_platynereis_cuticle_loader(
 
 
 def get_platynereis_cilia_dataset(
-    path, split, patch_shape,
+    path, patch_shape, sample_ids=None,
     offsets=None, boundaries=False, binary=False,
     download=False, **kwargs
 ):
@@ -89,7 +98,6 @@ def get_platynereis_cilia_dataset(
     This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
     Please cite it if you use this dataset for a publication.
     """
-    assert split in ("train", "val")
     cilia_root = os.path.join(path, "cilia")
 
     ext = ".h5"
@@ -98,18 +106,18 @@ def get_platynereis_cilia_dataset(
     if not data_is_complete:
         _require_platy_data(path, "cilia", download)
 
-    paths = glob(os.path.join(cilia_root, f"{split}*.h5"))
+    paths = _get_paths_and_rois(sample_ids, n_files, os.path.join(cilia_root, "train_data_cilia_%02i.h5"))
+    raw_key = "volumes/raw"
+    label_key = "volumes/labels/segmentation"
+
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, boundaries=boundaries, offsets=offsets, binary=binary,
     )
-
-    raw_key = "volumes/raw"
-    label_key = "volumes/labels/segmentation"
     return torch_em.default_segmentation_dataset(paths, raw_key, paths, label_key, patch_shape, **kwargs)
 
 
 def get_platynereis_cilia_loader(
-    path, split, patch_shape, batch_size,
+    path, patch_shape, batch_size, sample_ids=None,
     offsets=None, boundaries=False, binary=False,
     download=False, **kwargs
 ):
@@ -118,7 +126,7 @@ def get_platynereis_cilia_loader(
         torch_em.default_segmentation_dataset, **kwargs
     )
     ds = get_platynereis_cilia_dataset(
-        path, split, patch_shape,
+        path, patch_shape, sample_ids=sample_ids,
         offsets=offsets, boundaries=boundaries, binary=binary,
         download=download, **ds_kwargs,
     )
@@ -145,18 +153,8 @@ def get_platynereis_cell_dataset(
     if not data_is_complete:
         _require_platy_data(path, "cells", download)
 
-    if sample_ids is None:
-        sample_ids = list(range(1, n_files + 1))
-    assert min(sample_ids) >= 1 and max(sample_ids) <= n_files
-    sample_ids.sort()
-
-    data_paths = []
-    data_rois = []
-    for sample in sample_ids:
-        data_paths.append(
-            os.path.join(cell_root, f"{prefix}{sample:02}{ext}")
-        )
-        data_rois.append(rois.get(sample, np.s_[:, :, :]))
+    template = os.path.join(cell_root, "train_data_membrane_%02i.n5")
+    data_paths, data_rois = _get_paths_and_rois(sample_ids, n_files, template, rois)
 
     kwargs = util.update_kwargs(kwargs, "rois", data_rois)
     kwargs, _ = util.add_instance_label_transform(
@@ -197,10 +195,9 @@ def get_platynereis_nuclei_dataset(
     Please cite it if you use this dataset for a publication.
     """
     nuc_root = os.path.join(path, "nuclei")
-    prefix = "train_data_nuclei_"
-    ext = ".h5"
+    prefix, ext = "train_data_nuclei_", ".h5"
     n_files = 12
-    data_is_complete = _check_data(nuc_root, "train_data_nuclei", ".h5", 12)
+    data_is_complete = _check_data(nuc_root, prefix, ext, n_files)
     if not data_is_complete:
         _require_platy_data(path, "nuclei", download)
 
@@ -209,13 +206,8 @@ def get_platynereis_nuclei_dataset(
     assert min(sample_ids) >= 1 and max(sample_ids) <= n_files
     sample_ids.sort()
 
-    data_paths = []
-    data_rois = []
-    for sample in sample_ids:
-        data_paths.append(
-            os.path.join(nuc_root, f"{prefix}{sample:02}{ext}")
-        )
-        data_rois.append(rois.get(sample, np.s_[:, :, :]))
+    template = os.path.join(nuc_root, "train_data_nuclei_%02i.h5")
+    data_paths, data_rois = _get_paths_and_rois(sample_ids, n_files, template, rois)
 
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
     kwargs = util.update_kwargs(kwargs, "rois", data_rois)
