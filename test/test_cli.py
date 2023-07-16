@@ -16,13 +16,9 @@ class TestCLI(unittest.TestCase):
     label_key = "labels"
 
     def tearDown(self):
-        def _clean_up(folder):
-            if os.path.exists(folder):
-                rmtree(folder)
-
-        _clean_up(self.tmp_folder)
-        _clean_up("./checkpoints")
-        _clean_up("./logs")
+        rmtree(self.tmp_folder, ignore_errors=True)
+        rmtree("./checkpoints", ignore_errors=True)
+        rmtree("./logs", ignore_errors=True)
 
     def _create_data(self):
         os.makedirs(self.tmp_folder, exist_ok=True)

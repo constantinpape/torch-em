@@ -20,7 +20,7 @@ class TestImageCollectionDataset(unittest.TestCase):
                                           max_shape=(512, 512))
 
     def tearDown(self):
-        rmtree(self.folder)
+        rmtree(self.folder, ignore_errors=True)
 
     def test_dataset(self):
         from torch_em.data import ImageCollectionDataset
