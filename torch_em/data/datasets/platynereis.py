@@ -43,20 +43,18 @@ def _check_data(path, prefix, extension, n_files):
     return len(files) == n_files
 
 
-def _get_paths_and_rois(sample_ids, n_files, template, rois=None):
+def _get_paths_and_rois(sample_ids, n_files, template, rois):
     if sample_ids is None:
         sample_ids = list(range(1, n_files + 1))
     else:
         assert min(sample_ids) >= 1 and max(sample_ids) <= n_files
         sample_ids.sort()
     paths = [template % sample for sample in sample_ids]
-    if rois is not None:
-        data_rois = [rois.get(sample, np.s_[:, :, :]) for sample in sample_ids]
-        return paths, data_rois
-    return paths
+    data_rois = [rois.get(sample, np.s_[:, :, :]) for sample in sample_ids]
+    return paths, data_rois
 
 
-def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download=False, **kwargs):
+def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download=False, rois={}, **kwargs):
     """Dataset for the segmentation of cuticle in EM.
 
     This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
@@ -70,20 +68,22 @@ def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download
     if not data_is_complete:
         _require_platy_data(path, "cuticle", download)
 
-    paths = _get_paths_and_rois(sample_ids, n_files, os.path.join(cuticle_root, "train_data_%02i.n5"))
+    paths, data_rois = _get_paths_and_rois(sample_ids, n_files, os.path.join(cuticle_root, "train_data_%02i.n5"), rois)
     raw_key, label_key = "volumes/raw", "volumes/labels/segmentation"
-    return torch_em.default_segmentation_dataset(paths, raw_key, paths, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(
+        paths, raw_key, paths, label_key, patch_shape, rois=data_rois, **kwargs
+    )
 
 
 def get_platynereis_cuticle_loader(
-    path, patch_shape, batch_size, sample_ids=None, download=False, **kwargs
+    path, patch_shape, batch_size, sample_ids=None, download=False, rois={}, **kwargs
 ):
     """Dataloader for the segmentation of cuticle in EM. See 'get_platynereis_cuticle_loader'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
     ds = get_platynereis_cuticle_dataset(
-        path, patch_shape, sample_ids=sample_ids, download=download, **ds_kwargs,
+        path, patch_shape, sample_ids=sample_ids, download=download, rois=rois, **ds_kwargs,
     )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -91,7 +91,7 @@ def get_platynereis_cuticle_loader(
 def get_platynereis_cilia_dataset(
     path, patch_shape, sample_ids=None,
     offsets=None, boundaries=False, binary=False,
-    download=False, **kwargs
+    rois={}, download=False, **kwargs
 ):
     """Dataset for the segmentation of cilia in EM.
 
@@ -106,7 +106,7 @@ def get_platynereis_cilia_dataset(
     if not data_is_complete:
         _require_platy_data(path, "cilia", download)
 
-    paths = _get_paths_and_rois(sample_ids, n_files, os.path.join(cilia_root, "train_data_cilia_%02i.h5"))
+    paths, rois = _get_paths_and_rois(sample_ids, n_files, os.path.join(cilia_root, "train_data_cilia_%02i.h5"), rois)
     raw_key = "volumes/raw"
     label_key = "volumes/labels/segmentation"
 
@@ -119,7 +119,7 @@ def get_platynereis_cilia_dataset(
 def get_platynereis_cilia_loader(
     path, patch_shape, batch_size, sample_ids=None,
     offsets=None, boundaries=False, binary=False,
-    download=False, **kwargs
+    rois={}, download=False, **kwargs
 ):
     """Dataloader for the segmentation of cilia in EM. See 'get_platynereis_cilia_dataset'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
@@ -128,7 +128,7 @@ def get_platynereis_cilia_loader(
     ds = get_platynereis_cilia_dataset(
         path, patch_shape, sample_ids=sample_ids,
         offsets=offsets, boundaries=boundaries, binary=binary,
-        download=download, **ds_kwargs,
+        rois=rois, download=download, **ds_kwargs,
     )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
