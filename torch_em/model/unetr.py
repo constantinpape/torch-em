@@ -11,31 +11,16 @@ from segment_anything.modeling import ImageEncoderViT
 from micro_sam.util import get_sam_model
 
 
-# This class (inherits from Segment Antything) and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa
+# Inheriting Segment Anything (https://arxiv.org/abs/2304.02643)'s ViT-b backbone
 class ViTb_Sam(ImageEncoderViT):
     def __init__(
             self,
-            img_size: int = 1024,
-            patch_size: int = 16,
             in_chans: int = 3,
             embed_dim: int = 768,
-            depth: int = 12,
-            num_heads: int = 12,
-            mlp_ratio: float = 4,
-            out_chans: int = 256,
-            qkv_bias: bool = True,
-            norm_layer: type[nn.Module] = nn.LayerNorm,
-            act_layer: type[nn.Module] = nn.GELU,
-            use_abs_pos: bool = True,
-            use_rel_pos: bool = False,
-            rel_pos_zero_init: bool = True,
-            window_size: int = 0,
-            global_attn_indexes: Tuple[int, ...] = ...
+            global_attn_indexes: Tuple[int, ...] = ...,
+            **kwargs
     ) -> None:
-        super().__init__(
-            img_size, patch_size, in_chans, embed_dim, depth, num_heads, mlp_ratio, out_chans, qkv_bias, norm_layer,
-            act_layer, use_abs_pos, use_rel_pos, rel_pos_zero_init, window_size, global_attn_indexes
-        )
+        super().__init__(**kwargs)
         self.chunks_for_projection = global_attn_indexes
         self.in_chans = in_chans
         self.embed_dim = embed_dim
@@ -167,8 +152,9 @@ class UNETR(nn.Module):
         self.decoder_head = ConvBlock2d(2*features_decoder[-1], features_decoder[-1])
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1).to("cuda")
-        pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1).to("cuda")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1).to(device)
+        pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1).to(device)
 
         x = (x - pixel_mean) / pixel_std
         h, w = x.shape[-2:]
