@@ -1,7 +1,6 @@
 import numpy as np
 
-from scipy.ndimage.interpolation import map_coordinates
-from scipy.ndimage.morphology import binary_dilation
+from scipy.ndimage import binary_dilation, map_coordinates
 from skimage.draw import line
 from skimage.filters import gaussian
 from skimage.measure import label
