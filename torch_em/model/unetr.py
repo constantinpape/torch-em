@@ -6,20 +6,39 @@ from typing import Tuple
 from functools import partial
 from torch_em.model.unet import Decoder, ConvBlock2d, Upsampler2d
 
-from segment_anything.modeling import ImageEncoderViT
+# we catch ImportErrors here because segment_anything and micro_sam should
+# only be optional dependencies for torch_em
+try:
+    from segment_anything.modeling import ImageEncoderViT
+    _sam_import_success = True
+except ImportError:
+    ImageEncoderViT = object
+    _sam_import_success = False
 
-from micro_sam.util import get_sam_model
+try:
+    from micro_sam.util import get_sam_model
+except ImportError:
+    get_sam_model = None
 
 
-# Inheriting Segment Anything (https://arxiv.org/abs/2304.02643)'s ViT-b backbone
 class ViTb_Sam(ImageEncoderViT):
+    """Vision Transformer derived from the Segment Anything Codebase (https://arxiv.org/abs/2304.02643):
+    https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/image_encoder.py
+    """
     def __init__(
-            self,
-            in_chans: int = 3,
-            embed_dim: int = 768,
-            global_attn_indexes: Tuple[int, ...] = ...,
-            **kwargs
+        self,
+        in_chans: int = 3,
+        embed_dim: int = 768,
+        global_attn_indexes: Tuple[int, ...] = ...,
+        **kwargs
     ) -> None:
+        if not _sam_import_success:
+            raise RuntimeError(
+                "The vision transformer backend can only be initialized if segment anything is installed."
+                "Please install segment anything from https://github.com/facebookresearch/segment-anything."
+                "and then rerun your code."
+            )
+
         super().__init__(**kwargs)
         self.chunks_for_projection = global_attn_indexes
         self.in_chans = in_chans
@@ -95,7 +114,6 @@ class UNETR(nn.Module):
         self,
         encoder=None,
         decoder=None,
-        initialize_from_sam=False,
         out_channels=1
     ) -> None:
         depth = 3
@@ -103,6 +121,7 @@ class UNETR(nn.Module):
         gain = 2
         features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
         scale_factors = depth * [2]
+        self.out_channels = out_channels
 
         super().__init__()
 
@@ -123,9 +142,6 @@ class UNETR(nn.Module):
             )
         else:
             self.encoder = encoder
-
-        if initialize_from_sam:
-            initialize_weights_from_sam(self.encoder)
 
         if decoder is None:
             self.decoder = Decoder(
@@ -153,6 +169,7 @@ class UNETR(nn.Module):
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        # TODO Why do we have hard-code image normalization here???
         pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1).to(device)
         pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1).to(device)
 
@@ -259,27 +276,21 @@ class Deconv2DBlock(nn.Module):
         return self.block(x)
 
 
-def initialize_weights_from_sam(image_encoder):
-    _, model = get_sam_model(
-        model_type="vit_b",
-        checkpoint_path="/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_b_01ec64.pth",
-        return_sam=True
-    )  # type: ignore
+def build_unetr_with_sam_intialization(out_channels=1, model_type="vit_b", checkpoint_path=None):
+    if get_sam_model is None:
+        raise RuntimeError(
+            "micro_sam is required to initialize the UNETR image encoder from segment anything weights."
+            "Please install it from"
+            "and then rerun your code."
+        )
+    predictor = get_sam_model(model_type=model_type, checkpoint_path=checkpoint_path)
+    _image_encoder = predictor.model.image_encoder
 
-    for param1, param2 in zip(model.parameters(), image_encoder.parameters()):
-        param2.data = param1
+    image_encoder = ViTb_Sam()
+    # FIXME this doesn't work yet because the parameters don't match
+    with torch.no_grad():
+        for param1, param2 in zip(_image_encoder.parameters(), image_encoder.parameters()):
+            param2.data = param1.data
 
-
-def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    x = torch.rand((2, 3, 520, 704)).to(device)
-    unetr = UNETR(initialize_from_sam=True)
-    unetr.to(device)
-    s = unetr(x)
-    print(s.shape)
-    breakpoint()
-
-
-if __name__ == "__main__":
-    main()
+    unetr = UNETR(encoder=image_encoder, out_channels=out_channels)
+    return unetr
