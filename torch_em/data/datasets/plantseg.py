@@ -2,7 +2,7 @@ import os
 from glob import glob
 
 import torch_em
-from .util import download_source, update_kwargs, unzip
+from . import util
 
 URLS = {
     "root": {
@@ -55,13 +55,12 @@ def _require_plantseg_data(path, download, name, split):
     if os.path.exists(out_path):
         return out_path
     tmp_path = os.path.join(path, f"{name}_{split}.zip")
-    download_source(tmp_path, url, download, checksum)
-    unzip(tmp_path, out_path, remove=True)
+    util.download_source(tmp_path, url, download, checksum)
+    util.unzip(tmp_path, out_path, remove=True)
     return out_path
 
 
-# TODO add support for ignore label, key: "/label_with_ignore"
-def get_plantseg_loader(
+def get_plantseg_dataset(
     path,
     name,
     split,
@@ -70,38 +69,49 @@ def get_plantseg_loader(
     offsets=None,
     boundaries=False,
     binary=False,
-    ndim=3,
     **kwargs,
 ):
+    """Dataset for the segmentation of plant cells in confocal and light-sheet microscopy.
+
+    This dataset is from the publication https://doi.org/10.7554/eLife.57613.
+    Please cite it if you use this dataset for a publication.
+    """
     assert len(patch_shape) == 3
     data_path = _require_plantseg_data(path, download, name, split)
 
     file_paths = glob(os.path.join(data_path, "*.h5"))
     file_paths.sort()
 
-    assert not (offsets is not None and boundaries)
-    if offsets is not None:
-        # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     add_binary_target=binary,
-                                                                     add_mask=True)
-        msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
-    elif boundaries:
-        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=binary)
-        msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
-    elif binary:
-        label_transform = torch_em.transform.label.labels_to_binary
-        msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
-
-    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
-    kwargs = update_kwargs(kwargs, "ndim", ndim)
+    kwargs, _ = util.add_instance_label_transform(
+        kwargs, add_binary_target=binary, binary=binary, boundaries=boundaries,
+        offsets=offsets, binary_is_exclusive=False
+    )
 
     raw_key, label_key = "raw", "label"
-    return torch_em.default_segmentation_loader(
-        file_paths, raw_key,
-        file_paths, label_key,
-        **kwargs
+    return torch_em.default_segmentation_dataset(file_paths, raw_key, file_paths, label_key, patch_shape, **kwargs)
+
+
+# TODO add support for ignore label, key: "/label_with_ignore"
+def get_plantseg_loader(
+    path,
+    name,
+    split,
+    patch_shape,
+    batch_size,
+    download=False,
+    offsets=None,
+    boundaries=False,
+    binary=False,
+    **kwargs,
+):
+    """Dataloader for the segmentation of cells in confocal and light-sheet microscopy. See 'get_plantseg_dataset'."""
+    ds_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
     )
+    dataset = get_plantseg_dataset(
+        path, name, split, patch_shape,
+        download=download, offsets=offsets, boundaries=boundaries, binary=binary,
+        **ds_kwargs
+    )
+    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
+    return loader

@@ -7,8 +7,9 @@ import imageio
 import h5py
 import numpy as np
 import torch_em
+
 from tqdm import tqdm
-from .util import download_source, unzip
+from . import util
 
 URL = "http://www.casser.io/files/kasthuri_pp.zip "
 CHECKSUM = "bbb78fd205ec9b57feb8f93ebbdf1666261cbc3e0305e7f11583ab5157a3d792"
@@ -64,8 +65,8 @@ def _require_kasthuri_data(path, download):
 
     os.makedirs(path)
     tmp_path = os.path.join(path, "kasthuri.zip")
-    download_source(tmp_path, URL, download, checksum=CHECKSUM)
-    unzip(tmp_path, path, remove=True)
+    util.download_source(tmp_path, URL, download, checksum=CHECKSUM)
+    util.unzip(tmp_path, path, remove=True)
 
     root = os.path.join(path, "Kasthuri++")
     assert os.path.exists(root), root
@@ -79,12 +80,25 @@ def _require_kasthuri_data(path, download):
     rmtree(root)
 
 
-def get_kasthuri_loader(path, split, download=False, ndim=3, **kwargs):
+def get_kasthuri_dataset(path, split, patch_shape, download=False, **kwargs):
+    """Dataset for the segmentation of mitochondria in EM.
+
+    This dataset is from the publication https://doi.org/10.48550/arXiv.1812.06024.
+    Please cite it if you use this dataset for a publication.
+    """
     assert split in ("train", "test")
     _require_kasthuri_data(path, download)
     data_path = os.path.join(path, f"kasthuri_{split}.h5")
     assert os.path.exists(data_path), data_path
     raw_key, label_key = "raw", "labels"
-    return torch_em.default_segmentation_loader(
-        data_path, raw_key, data_path, label_key, ndim=ndim, **kwargs
+    return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+
+
+def get_kasthuri_loader(path, split, patch_shape, batch_size, download=False, **kwargs):
+    """Dataloader for the segmentation of mitochondria in EM. See 'get_kasthuri_dataset' for details."""
+    ds_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
     )
+    dataset = get_kasthuri_dataset(path, split, patch_shape, download=download, **ds_kwargs)
+    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
+    return loader

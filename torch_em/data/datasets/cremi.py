@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 import torch_em
-from .util import download_source, update_kwargs
+from . import util
 
 CREMI_URLS = {
     "original": {
@@ -25,46 +25,6 @@ CHECKSUMS = {
 
 
 # TODO add support for realigned volumes
-def get_cremi_loader(
-    path,
-    patch_shape,
-    samples=("A", "B", "C"),
-    use_realigned=False,
-    download=False,
-    offsets=None,
-    boundaries=False,
-    rois={},
-    defect_augmentation_kwargs={
-        "p_drop_slice": 0.025,
-        "p_low_contrast": 0.025,
-        "p_deform_slice": 0.0,
-        "deformation_mode": "compress",
-    },
-    batch_size=1,
-    num_workers: int = 0,
-    shuffle: bool = False,
-    loader_kwargs=None,
-    **dataset_kwargs,
-):
-    """
-    """
-    ds = get_cremi_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        samples=samples,
-        use_realigned=use_realigned,
-        download=download,
-        offsets=offsets,
-        boundaries=boundaries,
-        rois=rois,
-        defect_augmentation_kwargs=defect_augmentation_kwargs,
-        **dataset_kwargs,
-    )
-    return torch_em.get_data_loader(
-        ds, batch_size=batch_size, num_workers=num_workers, shuffle=shuffle, **(loader_kwargs or {})
-    )
-
-
 def get_cremi_dataset(
     path,
     patch_shape,
@@ -82,6 +42,10 @@ def get_cremi_dataset(
     },
     **kwargs,
 ):
+    """Dataset for the segmentation of neurons in EM.
+
+    This dataset is from the CREMI challenge: https://cremi.org/.
+    """
     assert len(patch_shape) == 3
     if rois is not None:
         assert isinstance(rois, dict)
@@ -102,16 +66,16 @@ def get_cremi_dataset(
         checksum = checksums[name]
         data_path = os.path.join(path, f"sample{name}.h5")
         # CREMI SSL certificates expired, so we need to disable verification
-        download_source(data_path, url, download, checksum, verify=False)
+        util.download_source(data_path, url, download, checksum, verify=False)
         data_paths.append(data_path)
         data_rois.append(rois.get(name, np.s_[:, :, :]))
 
-    if "artifact_source" not in defect_augmentation_kwargs:
+    if defect_augmentation_kwargs is not None and "artifact_source" not in defect_augmentation_kwargs:
         # download the defect volume
         url = CREMI_URLS["defects"]
         checksum = CHECKSUMS["defects"]
         defect_path = os.path.join(path, "cremi_defects.h5")
-        download_source(defect_path, url, download, checksum)
+        util.download_source(defect_path, url, download, checksum)
         defect_patch_shape = (1,) + tuple(patch_shape[1:])
         artifact_source = torch_em.transform.get_artifact_source(defect_path, defect_patch_shape,
                                                                  min_mask_fraction=0.75,
@@ -119,30 +83,58 @@ def get_cremi_dataset(
                                                                  mask_key="defect_sections/mask")
         defect_augmentation_kwargs.update({"artifact_source": artifact_source})
 
-    kwargs = update_kwargs(kwargs, "patch_shape", patch_shape)
-    kwargs = update_kwargs(kwargs, "ndim", 3)
-    kwargs = update_kwargs(kwargs, "rois", data_rois)
-
     raw_key = "volumes/raw"
     label_key = "volumes/labels/neuron_ids"
 
     # defect augmentations
-    raw_transform = torch_em.transform.get_raw_transform(
-        augmentation1=torch_em.transform.EMDefectAugmentation(**defect_augmentation_kwargs)
-    )
-    update_kwargs(kwargs, "raw_transform", raw_transform)
-
-    assert not ((offsets is not None) and boundaries)
-    if offsets is not None:
-        # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(
-            offsets=offsets, ignore_label=None, add_binary_target=False, add_mask=True
+    if defect_augmentation_kwargs is not None:
+        raw_transform = torch_em.transform.get_raw_transform(
+            augmentation1=torch_em.transform.EMDefectAugmentation(**defect_augmentation_kwargs)
         )
-        msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform2", label_transform, msg=msg)
-    elif boundaries:
-        label_transform = torch_em.transform.label.BoundaryTransform()
-        msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
+        kwargs = util.update_kwargs(kwargs, "raw_transform", raw_transform)
 
-    return torch_em.default_segmentation_dataset(data_paths, raw_key, data_paths, label_key, **kwargs)
+    kwargs, _ = util.add_instance_label_transform(
+        kwargs, add_binary_target=False, boundaries=boundaries, offsets=offsets
+    )
+
+    return torch_em.default_segmentation_dataset(
+        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois, **kwargs
+    )
+
+
+def get_cremi_loader(
+    path,
+    patch_shape,
+    batch_size,
+    samples=("A", "B", "C"),
+    use_realigned=False,
+    download=False,
+    offsets=None,
+    boundaries=False,
+    rois={},
+    defect_augmentation_kwargs={
+        "p_drop_slice": 0.025,
+        "p_low_contrast": 0.025,
+        "p_deform_slice": 0.0,
+        "deformation_mode": "compress",
+    },
+    **kwargs,
+):
+    """Dataset for the segmentation of neurons in EM. See 'get_cremi_dataset' for details.
+    """
+    dataset_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
+    )
+    ds = get_cremi_dataset(
+        path=path,
+        patch_shape=patch_shape,
+        samples=samples,
+        use_realigned=use_realigned,
+        download=download,
+        offsets=offsets,
+        boundaries=boundaries,
+        rois=rois,
+        defect_augmentation_kwargs=defect_augmentation_kwargs,
+        **dataset_kwargs,
+    )
+    return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)

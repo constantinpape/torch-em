@@ -7,7 +7,8 @@ import h5py
 import numpy as np
 import torch_em
 from skimage.measure import label
-from .util import download_source, unzip, update_kwargs
+
+from . import util
 
 URL = "https://github.com/unidesigner/groundtruth-drosophila-vnc/archive/refs/heads/master.zip"
 CHECKSUM = "f7bd0db03c86b64440a16b60360ad60c0a4411f89e2c021c7ee2c8d6af3d7e86"
@@ -30,8 +31,8 @@ def _get_vnc_data(path, download):
 
     os.makedirs(path, exist_ok=True)
     zip_path = os.path.join(path, "vnc.zip")
-    download_source(zip_path, URL, download, CHECKSUM)
-    unzip(zip_path, path, remove=True)
+    util.download_source(zip_path, URL, download, CHECKSUM)
+    util.unzip(zip_path, path, remove=True)
 
     root = os.path.join(path, "groundtruth-drosophila-vnc-master")
     assert os.path.exists(root)
@@ -49,7 +50,7 @@ def _get_vnc_data(path, download):
     rmtree(root)
 
 
-def get_vnc_mito_loader(
+def get_vnc_mito_dataset(
     path,
     patch_shape,
     offsets=None,
@@ -58,32 +59,41 @@ def get_vnc_mito_loader(
     download=False,
     **kwargs
 ):
+    """Dataset for the segmentation of mitochondria in EM.
+
+    This dataset is from https://doi.org/10.6084/m9.figshare.856713.v1.
+    Please cite it if you use this dataset for a publication.
+    """
     _get_vnc_data(path, download)
     data_path = os.path.join(path, "vnc_train.h5")
 
-    assert sum((offsets is not None, boundaries, binary)) <= 1, f"{offsets}, {boundaries}, {binary}"
-    if offsets is not None:
-        # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     ignore_label=None,
-                                                                     add_binary_target=True,
-                                                                     add_mask=True)
-        msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
-    elif boundaries:
-        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
-        msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
-    elif binary:
-        label_transform = torch_em.transform.label.labels_to_binary
-        msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
+    kwargs, _ = util.add_instance_label_transform(
+        kwargs, add_binary_target=True, boundaries=boundaries, offsets=offsets, binary=binary,
+    )
 
     raw_key = "raw"
     label_key = "labels/mitochondria"
-    return torch_em.default_segmentation_loader(
-        data_path, raw_key, data_path, label_key, patch_shape=patch_shape, **kwargs
+    return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+
+
+def get_vnc_mito_loader(
+    path,
+    patch_shape,
+    batch_size,
+    offsets=None,
+    boundaries=False,
+    binary=False,
+    download=False,
+    **kwargs
+):
+    """Dataloader for the segmentation of mitochondria in EM. See 'get_vnc_mito_loader'."""
+    ds_kwargs, loader_kwargs = util.split_kwargs(
+        torch_em.default_segmentation_dataset, **kwargs
     )
+    ds = get_vnc_mito_dataset(
+        path, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **kwargs
+    )
+    return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
 
 # TODO implement
