@@ -97,7 +97,9 @@ def get_cremi_dataset(
         kwargs, add_binary_target=False, boundaries=boundaries, offsets=offsets
     )
 
-    return torch_em.default_segmentation_dataset(data_paths, raw_key, data_paths, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(
+        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois, **kwargs
+    )
 
 
 def get_cremi_loader(
