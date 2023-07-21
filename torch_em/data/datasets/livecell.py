@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 import torch_em
 import torch.utils.data
-from .util import download_source, unzip, update_kwargs
+from . import util
 
 try:
     from pycocotools.coco import COCO
@@ -39,8 +39,8 @@ def _download_livecell_images(path, download):
     url = URLS["images"]
     checksum = CHECKSUM
     zip_path = os.path.join(path, "livecell.zip")
-    download_source(zip_path, url, download, checksum)
-    unzip(zip_path, path, True)
+    util.download_source(zip_path, url, download, checksum)
+    util.unzip(zip_path, path, True)
 
 
 # TODO use download flag
@@ -144,42 +144,16 @@ def _download_livecell_annotations(path, split, download, cell_types, label_path
     return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types)
 
 
-def _livecell_segmentation_loader(
-    image_paths, label_paths,
-    batch_size, patch_shape,
-    label_transform=None,
-    label_transform2=None,
-    raw_transform=None,
-    transform=None,
-    label_dtype=torch.float32,
-    dtype=torch.float32,
-    n_samples=None,
-    **loader_kwargs
+def get_livecell_dataset(
+    path, split, patch_shape, download=False,
+    offsets=None, boundaries=False, binary=False,
+    cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs
 ):
+    """Dataset for the segmentation of cells in phase-contrast microscopy.
 
-    # we always use a raw transform in the convenience function
-    if raw_transform is None:
-        raw_transform = torch_em.transform.get_raw_transform()
-
-    # we always use augmentations in the convenience function
-    if transform is None:
-        transform = torch_em.transform.get_augmentations(ndim=2)
-
-    ds = torch_em.data.ImageCollectionDataset(image_paths, label_paths,
-                                              patch_shape=patch_shape,
-                                              raw_transform=raw_transform,
-                                              label_transform=label_transform,
-                                              label_transform2=label_transform2,
-                                              label_dtype=label_dtype,
-                                              transform=transform,
-                                              n_samples=n_samples)
-
-    return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)
-
-
-def get_livecell_loader(path, patch_shape, split, download=False,
-                        offsets=None, boundaries=False, binary=False,
-                        cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs):
+    This dataset is from the publication https://doi.org/10.1038/s41592-021-01249-6.
+    Please cite it if you use this dataset for a publication.
+    """
     assert split in ("train", "val", "test")
     if cell_types is not None:
         assert isinstance(cell_types, (list, tuple)),\
@@ -188,25 +162,28 @@ def get_livecell_loader(path, patch_shape, split, download=False,
     _download_livecell_images(path, download)
     image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
 
-    assert sum((offsets is not None, boundaries, binary)) <= 1
-    if offsets is not None:
-        # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     add_binary_target=True,
-                                                                     add_mask=True)
-        msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
-        label_dtype = torch.float32
-    elif boundaries:
-        label_transform = torch_em.transform.label.BoundaryTransform(add_binary_target=True)
-        msg = "Boundaries is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
-        label_dtype = torch.float32
-    elif binary:
-        label_transform = torch_em.transform.label.labels_to_binary
-        msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
-        kwargs = update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
-        label_dtype = torch.float32
+    kwargs = util.ensure_transforms(ndim=2, **kwargs)
+    kwargs, label_dtype = util.add_instance_label_transform(
+        kwargs, add_binary_target=True, label_dtype=label_dtype,
+        offsets=offsets, boundaries=boundaries, binary=binary
+    )
 
-    kwargs.update({"patch_shape": patch_shape})
-    return _livecell_segmentation_loader(image_paths, seg_paths, label_dtype=label_dtype, **kwargs)
+    dataset = torch_em.data.ImageCollectionDataset(
+        image_paths, seg_paths, patch_shape=patch_shape, label_dtype=label_dtype, **kwargs
+    )
+    return dataset
+
+
+def get_livecell_loader(
+    path, split, patch_shape, batch_size, download=False,
+    offsets=None, boundaries=False, binary=False,
+    cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs
+):
+    """Dataloader for the segmentation of cells in phase-contrast microscopy. See 'get_livecell_dataset' for details."""
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_livecell_dataset(
+        path, split, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary,
+        cell_types=cell_types, label_path=label_path, label_dtype=label_dtype, **ds_kwargs
+    )
+    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
+    return loader

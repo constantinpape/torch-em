@@ -62,9 +62,8 @@ def _get_image_and_label_paths(root, split, val_fraction):
     return image_paths, label_paths
 
 
-def get_neurips_cellseg_supervised_loader(
-    root, split,
-    patch_shape, batch_size,
+def get_neurips_cellseg_supervised_dataset(
+    root, split, patch_shape,
     make_rgb=True,
     label_transform=None,
     label_transform2=None,
@@ -75,8 +74,11 @@ def get_neurips_cellseg_supervised_loader(
     n_samples=None,
     sampler=None,
     val_fraction=0.1,
-    **loader_kwargs
 ):
+    """Dataset for the segmentation of cells in light microscopy.
+
+    This dataset is part of the NeuRIPS Cell Segmentation challenge: https://neurips22-cellseg.grand-challenge.org/.
+    """
     assert split in ("train", "val", None), split
     image_paths, label_paths = _get_image_and_label_paths(root, split, val_fraction)
 
@@ -95,6 +97,30 @@ def get_neurips_cellseg_supervised_loader(
                                               transform=transform,
                                               n_samples=n_samples,
                                               sampler=sampler)
+    return ds
+
+
+def get_neurips_cellseg_supervised_loader(
+    root, split,
+    patch_shape, batch_size,
+    make_rgb=True,
+    label_transform=None,
+    label_transform2=None,
+    raw_transform=None,
+    transform=None,
+    label_dtype=torch.float32,
+    dtype=torch.float32,
+    n_samples=None,
+    sampler=None,
+    val_fraction=0.1,
+    **loader_kwargs
+):
+    """Dataloader for the segmentation of cells in light microscopy. See 'get_neurips_cellseg_supervised_dataset'."""
+    ds = get_neurips_cellseg_supervised_dataset(
+        root, split, patch_shape, make_rgb=make_rgb, label_transform=label_transform,
+        label_transform2=label_transform2, raw_transform=raw_transform, transform=transform,
+        label_dtype=label_dtype, dtype=dtype, n_samples=n_samples, sampler=sampler, val_fraction=val_fraction,
+    )
     return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)
 
 
@@ -126,8 +152,8 @@ def _get_wholeslide_paths(root, patch_shape):
     return image_paths, n_samples
 
 
-def get_neurips_cellseg_unsupervised_loader(
-    root, patch_shape, batch_size,
+def get_neurips_cellseg_unsupervised_dataset(
+    root, patch_shape,
     make_rgb=True,
     raw_transform=None,
     transform=None,
@@ -135,8 +161,11 @@ def get_neurips_cellseg_unsupervised_loader(
     sampler=None,
     use_images=True,
     use_wholeslide=True,
-    **loader_kwargs,
 ):
+    """Dataset for the segmentation of cells in light microscopy.
+
+    This dataset is part of the NeuRIPS Cell Segmentation challenge: https://neurips22-cellseg.grand-challenge.org/.
+    """
     if raw_transform is None:
         trafo = to_rgb if make_rgb else None
         raw_transform = torch_em.transform.get_raw_transform(augmentation2=trafo)
@@ -162,5 +191,23 @@ def get_neurips_cellseg_unsupervised_loader(
                                                                 n_samples=n_samples,
                                                                 sampler=sampler))
     assert len(datasets) > 0
-    ds = torch.utils.data.ConcatDataset(datasets)
+    return torch.utils.data.ConcatDataset(datasets)
+
+
+def get_neurips_cellseg_unsupervised_loader(
+    root, patch_shape, batch_size,
+    make_rgb=True,
+    raw_transform=None,
+    transform=None,
+    dtype=torch.float32,
+    sampler=None,
+    use_images=True,
+    use_wholeslide=True,
+    **loader_kwargs,
+):
+    """Dataloader for the segmentation of cells in light microscopy. See 'get_neurips_cellseg_unsupervised_dataset'."""
+    ds = get_neurips_cellseg_unsupervised_dataset(
+        root, patch_shape, make_rgb=make_rgb, raw_transform=raw_transform, transform=transform,
+        dtype=dtype, sampler=sampler, use_images=use_images, use_wholeslide=use_wholeslide
+    )
     return torch_em.segmentation.get_data_loader(ds, batch_size, **loader_kwargs)

@@ -16,10 +16,7 @@ class TestPrepareShallow2Deep(unittest.TestCase):
         os.makedirs(self.tmp_folder, exist_ok=True)
 
     def tearDown(self):
-        try:
-            rmtree(self.tmp_folder)
-        except OSError:
-            pass
+        rmtree(self.tmp_folder, ignore_errors=True)
 
     def _create_seg_dataset(self):
         path = os.path.join(self.tmp_folder, "data.h5")
