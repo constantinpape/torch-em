@@ -280,7 +280,7 @@ def build_unetr_with_sam_intialization(out_channels=1, model_type="vit_b", check
     if get_sam_model is None:
         raise RuntimeError(
             "micro_sam is required to initialize the UNETR image encoder from segment anything weights."
-            "Please install it from"
+            "Please install it from https://github.com/computational-cell-analytics/micro-sam"
             "and then rerun your code."
         )
     predictor = get_sam_model(model_type=model_type, checkpoint_path=checkpoint_path)
