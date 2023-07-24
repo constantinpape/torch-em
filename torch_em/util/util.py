@@ -191,7 +191,10 @@ def get_trainer(checkpoint, name="best", device=None):
 
 def get_normalizer(trainer):
     dataset = trainer.train_loader.dataset
-    while isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset):
+    while (
+        isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset) or
+        isinstance(dataset, torch.utils.data.dataset.ConcatDataset)
+    ):
         dataset = dataset.datasets[0]
     preprocessor = dataset.raw_transform
 
