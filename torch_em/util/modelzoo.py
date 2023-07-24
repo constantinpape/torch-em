@@ -106,7 +106,10 @@ def _get_model(trainer, postprocessing):
 
 
 def _pad(input_data, trainer):
-    ndim = trainer.train_loader.dataset.ndim
+    try:
+        ndim = trainer.train_loader.dataset.ndim
+    except AttributeError:
+        ndim = trainer.train_loader.dataset.datasets[0].ndim
     target_dims = ndim + 2
     for _ in range(target_dims - input_data.ndim):
         input_data = np.expand_dims(input_data, axis=0)
@@ -301,7 +304,10 @@ def _write_weights(model, export_folder):
 
 
 def _get_preprocessing(trainer):
-    ndim = trainer.train_loader.dataset.ndim
+    try:
+        ndim = trainer.train_loader.dataset.ndim
+    except AttributeError:
+        ndim = trainer.train_loader.dataset.datasets[0].ndim
     normalizer = get_normalizer(trainer)
 
     if isinstance(normalizer, functools.partial):
