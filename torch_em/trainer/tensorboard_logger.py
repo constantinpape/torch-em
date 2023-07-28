@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import numpy as np
 import torch
@@ -89,7 +90,16 @@ class TensorboardLogger(TorchEmLogger):
         super().__init__(trainer, save_root)
         self.log_dir = f"./logs/{trainer.name}" if save_root is None else\
             os.path.join(save_root, "logs", trainer.name)
-        os.makedirs(self.log_dir, exist_ok=True)
+
+        try:
+            os.makedirs(self.log_dir, exist_ok=True)
+        except PermissionError:
+            warnings.warn(
+                f"The log dir at {self.log_dir} could not be created."
+                "The most likely reason for this is that you copied the checkpoint somewhere else,"
+                "so we skip this error to enable loading the model from this checkpoint."
+            )
+            return
 
         if SummaryWriter is None:
             msg = "Need tensorboard package to use logger. Install it via 'conda install -c conda-forge tensorboard'"
