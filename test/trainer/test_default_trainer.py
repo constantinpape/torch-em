@@ -1,4 +1,5 @@
 import os
+import sys
 import unittest
 from shutil import rmtree
 
@@ -96,6 +97,7 @@ class TestDefaultTrainer(unittest.TestCase):
         trainer2.fit(10)
         self.assertEqual(trainer2.iteration, 20)
 
+    @unittest.skipIf(sys.version_info.minor > 10, "Not supported for python > 3.10")
     def test_compiled_model(self):
         from torch_em.trainer import DefaultTrainer
         trainer = DefaultTrainer(**self._get_kwargs(compile_model=True))

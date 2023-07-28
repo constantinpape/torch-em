@@ -42,6 +42,7 @@ class TestUtil(unittest.TestCase):
             train_loader=loader,
             val_loader=loader,
             logger=None,
+            compile_model=False,
         )
         trainer.fit(5)
         return trainer
