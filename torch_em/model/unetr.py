@@ -114,7 +114,8 @@ class UNETR(nn.Module):
         self,
         encoder=None,
         decoder=None,
-        out_channels=1
+        out_channels=1,
+        use_sam_preprocessing=False,
     ) -> None:
         depth = 3
         initial_features = 64
@@ -122,6 +123,7 @@ class UNETR(nn.Module):
         features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
         scale_factors = depth * [2]
         self.out_channels = out_channels
+        self.use_sam_preprocessing = use_sam_preprocessing
 
         super().__init__()
 
@@ -199,7 +201,8 @@ class UNETR(nn.Module):
     def forward(self, x):
         org_shape = x.shape[-2:]
 
-        x = torch.stack([self.preprocess(e) for e in x], dim=0)
+        if self.use_sam_preprocessing:
+            x = torch.stack([self.preprocess(e) for e in x], dim=0)
 
         z0 = self.z_inputs(x)
 
