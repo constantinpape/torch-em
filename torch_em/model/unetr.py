@@ -171,7 +171,7 @@ class UNETR(nn.Module):
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        # TODO Why do we have hard-code image normalization here???
+
         pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1).to(device)
         pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1).to(device)
 
