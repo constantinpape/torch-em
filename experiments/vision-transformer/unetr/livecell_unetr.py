@@ -11,7 +11,7 @@ def do_unetr_training(data_path: str, save_root: str, cell_type: list, iteration
     os.makedirs(data_path, exist_ok=True)
     train_loader = get_livecell_loader(
         path=data_path,
-        split='train',
+        split="train",
         patch_shape=patch_shape,
         batch_size=2,
         cell_types=cell_type,
@@ -21,7 +21,7 @@ def do_unetr_training(data_path: str, save_root: str, cell_type: list, iteration
 
     val_loader = get_livecell_loader(
         path=data_path,
-        split='val',
+        split="val",
         patch_shape=patch_shape,
         batch_size=1,
         cell_types=cell_type,
