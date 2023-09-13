@@ -4,7 +4,7 @@ import numpy as np
 
 import torch
 import torch_em
-from torch_em.model.unetr import build_unetr_with_sam_initialization
+from torch_em.model import UNETR
 from torch_em.data.datasets import get_cremi_loader
 
 
@@ -34,9 +34,9 @@ def do_unetr_training(data_path: str, save_root: str, iterations: int, device, p
         batch_size=1
     )
 
-    model = build_unetr_with_sam_initialization(
-        checkpoint_path="/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_b_01ec64.pth"
-    )
+    model = UNETR(
+        encoder="vit_b", out_channels=1,
+        encoder_checkpoint_path="/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_b_01ec64.pth")
     model.to(device)
 
     trainer = torch_em.default_segmentation_trainer(

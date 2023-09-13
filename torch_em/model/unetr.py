@@ -21,7 +21,7 @@ except ImportError:
     get_sam_model = None
 
 
-class ViT_Sam(ImageEncoderViT):
+class ViT_Sam(ImageEncoderViT):  # type: ignore
     """Vision Transformer derived from the Segment Anything Codebase (https://arxiv.org/abs/2304.02643):
     https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/image_encoder.py
     """
@@ -116,8 +116,7 @@ class UNETR(nn.Module):
         decoder=None,
         out_channels=1,
         use_sam_preprocessing=True,
-        initialize_from_sam=False,
-        checkpoint_path=None
+        encoder_checkpoint_path=None
     ) -> None:
         depth = 3
         initial_features = 64
@@ -178,13 +177,12 @@ class UNETR(nn.Module):
             )
 
         else:
-            raise NotImplementedError
+            raise ValueError(f"{encoder} is not supported. Currently only vit_b, vit_l, vit_h are supported.")
 
-        if initialize_from_sam:
-            assert checkpoint_path is not None
+        if encoder_checkpoint_path is not None:
             _, model = get_sam_model(
                 model_type=encoder,
-                checkpoint_path=checkpoint_path,
+                checkpoint_path=encoder_checkpoint_path,
                 return_sam=True
             )  # type: ignore
             for param1, param2 in zip(model.parameters(), self.encoder.parameters()):
@@ -322,14 +320,3 @@ class Deconv2DBlock(nn.Module):
 
     def forward(self, x):
         return self.block(x)
-
-
-def build_unetr_with_sam_initialization(out_channels=1, model_type="vit_b", checkpoint_path=None):
-    unetr = UNETR(encoder=model_type, out_channels=out_channels,
-                  initialize_from_sam=True, checkpoint_path=checkpoint_path)
-    return unetr
-
-
-def build_unetr_without_sam_initialization(out_channels=1, model_type="vit_b"):
-    unetr = UNETR(encoder=model_type, out_channels=out_channels)
-    return unetr
