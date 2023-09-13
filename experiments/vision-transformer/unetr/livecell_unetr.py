@@ -3,7 +3,7 @@ import argparse
 
 import torch
 import torch_em
-from torch_em.model import UNETR
+from torch_em.model.unetr import build_unetr_with_sam_initialization
 from torch_em.data.datasets import get_livecell_loader
 
 
@@ -16,7 +16,7 @@ def do_unetr_training(data_path: str, save_root: str, cell_type: list, iteration
         batch_size=2,
         cell_types=cell_type,
         download=True,
-        binary=True
+        boundaries=True
     )
 
     val_loader = get_livecell_loader(
@@ -26,11 +26,15 @@ def do_unetr_training(data_path: str, save_root: str, cell_type: list, iteration
         batch_size=1,
         cell_types=cell_type,
         download=True,
-        binary=True
+        boundaries=True
     )
 
-    model = UNETR(out_channels=1,
-                  initialize_from_sam=True)
+    n_channels = 2
+
+    model = build_unetr_with_sam_initialization(
+        out_channels=n_channels,
+        checkpoint_path="/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_b_01ec64.pth"
+    )
     model.to(device)
 
     trainer = torch_em.default_segmentation_trainer(
@@ -39,7 +43,7 @@ def do_unetr_training(data_path: str, save_root: str, cell_type: list, iteration
         train_loader=train_loader,
         val_loader=val_loader,
         device=device,
-        learning_rate=1.0e-4,
+        learning_rate=1e-5,
         log_image_interval=10,
         save_root=save_root,
         compile_model=False
@@ -53,12 +57,14 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.train:
-        print("Training a 2D UNETR on LiveCELL dataset")
-        do_unetr_training(data_path=args.inputs,
-                          save_root=args.save_root,
-                          cell_type=args.cell_type,
-                          iterations=args.iterations,
-                          device=device)
+        print("Training a 2D UNETR on LiveCell dataset")
+        do_unetr_training(
+            data_path=args.inputs,
+            save_root=args.save_root,
+            cell_type=args.cell_type,
+            iterations=args.iterations,
+            device=device
+        )
 
 
 if __name__ == "__main__":
