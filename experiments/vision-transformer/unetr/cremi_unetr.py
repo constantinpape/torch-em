@@ -1,43 +1,46 @@
 import os
 import argparse
+import numpy as np
 
 import torch
 import torch_em
 from torch_em.model import UNETR
-from torch_em.data.datasets import get_livecell_loader
+from torch_em.data.datasets import get_cremi_loader
 
 
-def do_unetr_training(data_path: str, save_root: str, cell_type: list, iterations: int, device, patch_shape=(256, 256)):
+def do_unetr_training(data_path: str, save_root: str, iterations: int, device, patch_shape=(1, 512, 512)):
     os.makedirs(data_path, exist_ok=True)
-    train_loader = get_livecell_loader(
+
+    cremi_train_rois = {"A": np.s_[0:75, :, :], "B": np.s_[0:75, :, :], "C": np.s_[0:75, :, :]}
+    cremi_val_rois = {"A": np.s_[75:100, :, :], "B": np.s_[75:100, :, :], "C": np.s_[75:100, :, :]}
+
+    train_loader = get_cremi_loader(
         path=data_path,
-        split="train",
-        patch_shape=patch_shape,
-        batch_size=2,
-        cell_types=cell_type,
-        download=True,
-        boundaries=True
+        patch_shape=patch_shape, download=True,
+        rois=cremi_train_rois,
+        ndim=2,
+        defect_augmentation_kwargs=None,
+        boundaries=True,
+        batch_size=2
     )
 
-    val_loader = get_livecell_loader(
+    val_loader = get_cremi_loader(
         path=data_path,
-        split="val",
-        patch_shape=patch_shape,
-        batch_size=1,
-        cell_types=cell_type,
-        download=True,
-        boundaries=True
+        patch_shape=patch_shape, download=True,
+        rois=cremi_val_rois,
+        ndim=2,
+        defect_augmentation_kwargs=None,
+        boundaries=True,
+        batch_size=1
     )
-
-    n_channels = 2
 
     model = UNETR(
-        encoder="vit_b", out_channels=n_channels,
+        encoder="vit_b", out_channels=1,
         encoder_checkpoint_path="/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_b_01ec64.pth")
     model.to(device)
 
     trainer = torch_em.default_segmentation_trainer(
-        name=f"unetr-source-livecell-{cell_type[0]}",
+        name="unetr-cremi",
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -56,11 +59,10 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.train:
-        print("Training a 2D UNETR on LiveCell dataset")
+        print("Training a 2D UNETR on Cremi dataset")
         do_unetr_training(
             data_path=args.inputs,
             save_root=args.save_root,
-            cell_type=args.cell_type,
             iterations=args.iterations,
             device=device
         )
@@ -68,10 +70,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--train", action='store_true', help="Enables UNETR training on LiveCELL dataset")
-    parser.add_argument("-c", "--cell_type", nargs='+', default=["A172"],
-                        help="Choice of cell-type for doing the training")
-    parser.add_argument("-i", "--inputs", type=str, default="./livecell/",
+    parser.add_argument("--train", action='store_true', help="Enables UNETR training on Cremi dataset")
+    parser.add_argument("-i", "--inputs", type=str, default="./cremi/",
                         help="Path where the dataset already exists/will be downloaded by the dataloader")
     parser.add_argument("-s", "--save_root", type=str, default=None,
                         help="Path where checkpoints and logs will be saved")

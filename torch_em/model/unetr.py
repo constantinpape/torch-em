@@ -21,7 +21,7 @@ except ImportError:
     get_sam_model = None
 
 
-class ViTb_Sam(ImageEncoderViT):
+class ViT_Sam(ImageEncoderViT):  # type: ignore
     """Vision Transformer derived from the Segment Anything Codebase (https://arxiv.org/abs/2304.02643):
     https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/image_encoder.py
     """
@@ -39,7 +39,7 @@ class ViTb_Sam(ImageEncoderViT):
                 "and then rerun your code."
             )
 
-        super().__init__(**kwargs)
+        super().__init__(embed_dim=embed_dim, **kwargs)
         self.chunks_for_projection = global_attn_indexes
         self.in_chans = in_chans
         self.embed_dim = embed_dim
@@ -112,10 +112,11 @@ def window_unpartition(
 class UNETR(nn.Module):
     def __init__(
         self,
-        encoder=None,
+        encoder="vit_b",
         decoder=None,
         out_channels=1,
-        use_sam_preprocessing=False,
+        use_sam_preprocessing=True,
+        encoder_checkpoint_path=None
     ) -> None:
         depth = 3
         initial_features = 64
@@ -127,8 +128,8 @@ class UNETR(nn.Module):
 
         super().__init__()
 
-        if encoder is None:
-            self.encoder = ViTb_Sam(
+        if encoder == "vit_b":
+            self.encoder = ViT_Sam(
                 depth=12,
                 embed_dim=768,
                 img_size=1024,
@@ -142,8 +143,50 @@ class UNETR(nn.Module):
                 window_size=14,
                 out_chans=256,
             )
+
+        elif encoder == "vit_l":
+            self.encoder = ViT_Sam(
+                depth=24,
+                embed_dim=1024,
+                img_size=1024,
+                mlp_ratio=4,
+                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),  # type: ignore
+                num_heads=16,
+                patch_size=16,
+                qkv_bias=True,
+                use_rel_pos=True,
+                global_attn_indexes=[5, 11, 17, 23],  # type: ignore
+                window_size=14,
+                out_chans=256
+            )
+
+        elif encoder == "vit_h":
+            self.encoder = ViT_Sam(
+                depth=32,
+                embed_dim=1280,
+                img_size=1024,
+                mlp_ratio=4,
+                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),  # type: ignore
+                num_heads=16,
+                patch_size=16,
+                qkv_bias=True,
+                use_rel_pos=True,
+                global_attn_indexes=[7, 15, 23, 31],  # type: ignore
+                window_size=14,
+                out_chans=256
+            )
+
         else:
-            self.encoder = encoder
+            raise ValueError(f"{encoder} is not supported. Currently only vit_b, vit_l, vit_h are supported.")
+
+        if encoder_checkpoint_path is not None:
+            _, model = get_sam_model(
+                model_type=encoder,
+                checkpoint_path=encoder_checkpoint_path,
+                return_sam=True
+            )  # type: ignore
+            for param1, param2 in zip(model.parameters(), self.encoder.parameters()):
+                param2.data = param1
 
         if decoder is None:
             self.decoder = Decoder(
@@ -206,7 +249,7 @@ class UNETR(nn.Module):
 
         z0 = self.z_inputs(x)
 
-        z12, from_encoder = self.encoder(x)
+        z12, from_encoder = self.encoder(x)  # type: ignore
         x = self.base(z12)
 
         from_encoder = from_encoder[::-1]
@@ -277,23 +320,3 @@ class Deconv2DBlock(nn.Module):
 
     def forward(self, x):
         return self.block(x)
-
-
-def build_unetr_with_sam_intialization(out_channels=1, model_type="vit_b", checkpoint_path=None):
-    if get_sam_model is None:
-        raise RuntimeError(
-            "micro_sam is required to initialize the UNETR image encoder from segment anything weights."
-            "Please install it from https://github.com/computational-cell-analytics/micro-sam"
-            "and then rerun your code."
-        )
-    predictor = get_sam_model(model_type=model_type, checkpoint_path=checkpoint_path)
-    _image_encoder = predictor.model.image_encoder
-
-    image_encoder = ViTb_Sam()
-    # FIXME this doesn't work yet because the parameters don't match
-    with torch.no_grad():
-        for param1, param2 in zip(_image_encoder.parameters(), image_encoder.parameters()):
-            param2.data = param1.data
-
-    unetr = UNETR(encoder=image_encoder, out_channels=out_channels)
-    return unetr
