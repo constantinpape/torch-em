@@ -1,9 +1,13 @@
 import torch
-from torch_em.model.unetr import build_unetr_with_sam_intialization
+from torch_em.model import UNETR
 
-# FIXME this doesn't work yet
-model = build_unetr_with_sam_intialization()
-x = torch.randn(1, 3, 1024, 1024)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+model = UNETR(encoder="vit_h", out_channels=1,
+              encoder_checkpoint_path="/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_h_4b8939.pth")
+model.to(device)
+
+x = torch.randn(1, 3, 1024, 1024).to(device=device)
 
 y = model(x)
 print(y.shape)
