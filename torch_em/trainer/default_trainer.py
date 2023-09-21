@@ -542,7 +542,10 @@ class DefaultTrainer:
             validate = self._validate
             print("Training with single precision")
 
-        progress = tqdm(total=iterations, desc=f"Epoch {self._epoch}", leave=True)
+        progress = tqdm(
+            total=epochs * len(self.train_loader) if iterations is None else iterations,
+            desc=f"Epoch {self._epoch}", leave=True
+        )
         msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
 
         train_epochs = self.max_epoch - self._epoch

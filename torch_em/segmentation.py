@@ -98,7 +98,7 @@ def _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key, **kwa
         assert len(raw_paths) > 0
         if rois is not None:
             assert len(rois) == len(label_paths)
-            assert all(isinstance(roi, tuple) for roi in rois)
+            assert all(isinstance(roi, tuple) for roi in rois), f"{rois}"
         n_samples = kwargs.pop("n_samples", None)
 
         samples_per_ds = (
