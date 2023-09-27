@@ -258,7 +258,7 @@ class UNETR(nn.Module):
         z6 = self.deconv1(from_encoder[1])
         z6 = self.deconv2(z6)
 
-        z3 = self.deconv1(from_encoder[1])
+        z3 = self.deconv1(from_encoder[2])
         z3 = self.deconv2(z3)
         z3 = self.deconv3(z3)
 
