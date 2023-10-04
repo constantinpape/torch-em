@@ -46,22 +46,6 @@ def _assort_pannuke_dataset(path, download):
                 shutil.move(src_sub_dir, f_dst)
             shutil.rmtree(_p)
 
-        # sorting the respective fold's:
-        #   - "path/fold_<ID>/images" and "path/fold_<ID>/masks" -> "path/images" and "path/annotations"
-        #   - (inspired from LiveCell data structure)
-        img_dir = os.path.join(path, "images")
-        gt_dir = os.path.join(path, "annotations")
-        os.makedirs(img_dir, exist_ok=True)
-        os.makedirs(gt_dir, exist_ok=True)
-
-        for _p in glob(os.path.join(path, "*")):
-            fold_name = os.path.split(_p)[-1]
-            for sub_dir in glob(os.path.join(_p, "*")):
-                new_dir = os.path.join(gt_dir if os.path.split(sub_dir)[-1] == "masks" else img_dir,
-                                       fold_name, os.path.split(sub_dir)[-1])
-                shutil.move(sub_dir, new_dir)
-            shutil.rmtree(_p)
-
 
 def main():
     path = "/scratch/usr/nimanwai/tmp_test/"
