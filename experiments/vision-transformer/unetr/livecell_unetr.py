@@ -143,8 +143,8 @@ def do_unetr_evaluation(args, cell_types):
     os.makedirs(csv_save_dir, exist_ok=True)
 
     tmp_csv_name = f"sam-{args.model_name}" if args.do_sam_ini else "scratch"
-    f_df_fg.to_csv(os.path.join(csv_save_dir, f"foreground-monai-unetr-{tmp_csv_name}-results.csv"))
-    f_df_bd.to_csv(os.path.join(csv_save_dir, f"boundary-monai-unetr-{tmp_csv_name}-results.csv"))
+    f_df_fg.to_csv(os.path.join(csv_save_dir, f"foreground-torch-em-unetr-{tmp_csv_name}-results.csv"))
+    f_df_bd.to_csv(os.path.join(csv_save_dir, f"boundary-torch-em-unetr-{tmp_csv_name}-results.csv"))
 
 
 def main(args):
