@@ -6,6 +6,7 @@ import numpy as np
 from glob import glob
 
 import torch_em
+from torch_em.util.debug import check_loader
 from torch_em.data.datasets import util
 
 
@@ -97,7 +98,6 @@ def _convert_to_hdf5(path):
 def get_pannuke_dataset(
         path,
         patch_shape,
-        label_transform,
         folds=("fold_1", "fold_2", "fold_3"),
         rois={},
         download=False,
@@ -118,8 +118,8 @@ def get_pannuke_dataset(
     label_key = "masks"
 
     return torch_em.default_segmentation_dataset(
-        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois, with_channels=with_channels,
-        with_label_channels=with_label_channels, label_transform=label_transform,  **kwargs
+        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois,
+        with_channels=with_channels, with_label_channels=with_label_channels, **kwargs
     )
 
 
@@ -127,7 +127,6 @@ def get_pannuke_loader(
         path,
         patch_shape,
         batch_size,
-        label_transform,
         folds=("fold_1", "fold_2", "fold_3"),
         download=False,
         rois={},
@@ -143,7 +142,6 @@ def get_pannuke_loader(
         folds=folds,
         rois=rois,
         download=download,
-        label_transform=label_transform,
         **dataset_kwargs)
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -171,7 +169,7 @@ def label_trafo(labels):
         #   - Z: what to do outside the condition (mentioned in X)
         f_labels = np.where(new_label > 0, 0 if i == 5 else new_label, f_labels)
 
-    return labels
+    return f_labels
 
 
 def main():
@@ -183,15 +181,7 @@ def main():
         download=True,
         label_transform=label_trafo
     )
-
-    for x, y in next(iter(train_loader)):
-        import napari
-        v = napari.Viewer()
-        v.add_image(x.numpy())
-        v.add_labels(y.numpy().astype("int32"))
-        napari.run()
-
-    breakpoint()
+    check_loader(train_loader, 8, instance_labels=True, plt=False, rgb=True)
 
 
 if __name__ == "__main__":
