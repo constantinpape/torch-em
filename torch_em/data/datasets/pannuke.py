@@ -1,5 +1,6 @@
 import os
 import h5py
+import vigra
 import shutil
 import numpy as np
 from glob import glob
@@ -96,6 +97,7 @@ def _convert_to_hdf5(path):
 def get_pannuke_dataset(
         path,
         patch_shape,
+        label_transform,
         folds=("fold_1", "fold_2", "fold_3"),
         rois={},
         download=False,
@@ -116,8 +118,8 @@ def get_pannuke_dataset(
     label_key = "masks"
 
     return torch_em.default_segmentation_dataset(
-        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois,
-        with_channels=with_channels, with_label_channels=with_label_channels, **kwargs
+        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois, with_channels=with_channels,
+        with_label_channels=with_label_channels, label_transform=label_transform,  **kwargs
     )
 
 
@@ -125,6 +127,7 @@ def get_pannuke_loader(
         path,
         patch_shape,
         batch_size,
+        label_transform,
         folds=("fold_1", "fold_2", "fold_3"),
         download=False,
         rois={},
@@ -140,12 +143,34 @@ def get_pannuke_loader(
         folds=folds,
         rois=rois,
         download=download,
+        label_transform=label_transform,
         **dataset_kwargs)
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
 
 def label_trafo(labels):
-    breakpoint()
+    """Converting the ground-truth of 6 (instance) channels into 1 label with instances from all channels
+    channel info -
+    (0: Neoplastic cells, 1: Inflammatory, 2: Connective/Soft tissue cells, 3: Dead Cells, 4: Epithelial, 6: Background)
+    """
+    max_labels_list = []
+    f_labels = np.zeros_like(labels[1, :])
+    for i, label in enumerate(labels):
+        new_label, max_label, _ = vigra.analysis.relabelConsecutive(
+            label.astype("uint64"),
+            start_label=max_labels_list[-1] + 1 if len(max_labels_list) > 0 else 1)
+
+        # some trailing channels might not have labels, hence appending only for elements with RoIs
+        if max_label > 0:
+            max_labels_list.append(max_label)
+
+        # for the below written condition:
+        # np.where(X, Y, Z), where,
+        #   - X: condition "where" to look for
+        #   - Y: we place 0 for the 6th channel (which has the "true bg" annotated as positive element), else we update it with the relabeled instances
+        #   - Z: what to do outside the condition (mentioned in X)
+        f_labels = np.where(new_label > 0, 0 if i == 5 else new_label, f_labels)
+
     return labels
 
 
@@ -160,7 +185,11 @@ def main():
     )
 
     for x, y in next(iter(train_loader)):
-        breakpoint()
+        import napari
+        v = napari.Viewer()
+        v.add_image(x.numpy())
+        v.add_labels(y.numpy().astype("int32"))
+        napari.run()
 
     breakpoint()
 
