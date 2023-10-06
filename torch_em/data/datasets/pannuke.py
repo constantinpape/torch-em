@@ -19,7 +19,11 @@ URLS = {
 
 
 # TODO
-CHECKSUM = None
+CHECKSUM = {
+    "fold_1": "6e19ad380300e8ce9480f9ab6a14cc91fa4b6a511609b40e3d70bdf9c881ed0b",
+    "fold_2": "5bc540cc509f64b5f5a274d6e5a245527dbd3e6d3155d43555115c5d54709b07",
+    "fold_3": "c14d372981c42f611ebc80afad01702b89cad8c1b3089daa31931cf5a4b1a39d"
+}
 
 
 def _download_pannuke_dataset(path, download, folds):
@@ -31,7 +35,7 @@ def _download_pannuke_dataset(path, download, folds):
         if os.path.exists(os.path.join(path, f"pannuke_{tmp_fold}.h5")):
             return
 
-        util.download_source(os.path.join(path, f"{tmp_fold}.zip"), URLS[f"{tmp_fold}"], download, checksum)
+        util.download_source(os.path.join(path, f"{tmp_fold}.zip"), URLS[tmp_fold], download, checksum[tmp_fold])
 
         print(f"Unzipping the PanNuke dataset in {tmp_fold} directories...")
         util.unzip(os.path.join(path, f"{tmp_fold}.zip"), os.path.join(path, f"{tmp_fold}"), True)
