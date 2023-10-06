@@ -40,18 +40,19 @@ def _download_pannuke_dataset(path, download, folds):
         print(f"Unzipping the PanNuke dataset in {tmp_fold} directories...")
         util.unzip(os.path.join(path, f"{tmp_fold}.zip"), os.path.join(path, f"{tmp_fold}"), True)
 
+        _convert_to_hdf5(path, tmp_fold)
 
-def _convert_to_hdf5(path, folds):
-    for tmp_fold in folds:
-        if os.path.exists(os.path.join(path, f"pannuke_{tmp_fold}.h5")):
-            return
 
-        print(f"Converting the {tmp_fold} into h5 file format...")
-        tmp_name = tmp_fold.split("_")[0] + tmp_fold.split("_")[1]  # name of a particular sub-directory (per fold)
-        img_path = glob(os.path.join(path, tmp_fold, "*", "images", tmp_name, "images.npy"))[0]
-        gt_path = glob(os.path.join(path, tmp_fold, "*", "masks", tmp_name, "masks.npy"))[0]
+def _convert_to_hdf5(path, fold):
+    if os.path.exists(os.path.join(path, f"pannuke_{fold}.h5")) is True:
+        return
 
-        with h5py.File(os.path.join(path, f"pannuke_{tmp_fold}.h5"), "w") as f:
+    print(f"Converting {fold} into h5 file format...")
+    img_paths = glob(os.path.join(path, "**", "images.npy"), recursive=True)
+    gt_paths = glob(os.path.join(path, "**", "masks.npy"), recursive=True)
+
+    for img_path, gt_path in zip(img_paths, gt_paths):
+        with h5py.File(os.path.join(path, f"pannuke_{fold}.h5"), "w") as f:
             f.create_dataset("images", data=np.load(img_path).transpose(3, 0, 1, 2))
             f.create_dataset("masks", data=np.load(gt_path).transpose(3, 0, 1, 2))
 
@@ -74,7 +75,6 @@ def get_pannuke_dataset(
         assert isinstance(rois, dict)
 
     _download_pannuke_dataset(path, download, folds)
-    _convert_to_hdf5(path, folds)
 
     data_paths = [os.path.join(path, f"pannuke_{f_idx}.h5") for f_idx in folds]
     data_rois = [rois.get(f_idx, np.s_[:, :, :]) for f_idx in folds]
