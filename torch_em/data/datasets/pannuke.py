@@ -116,25 +116,21 @@ def label_trafo(labels):
     channel info -
     (0: Neoplastic cells, 1: Inflammatory, 2: Connective/Soft tissue cells, 3: Dead Cells, 4: Epithelial, 6: Background)
     """
-    max_labels_list = []
-    f_labels = np.zeros_like(labels[1, :])
-    for i, label in enumerate(labels):
-        new_label, max_label, _ = vigra.analysis.relabelConsecutive(
-            label.astype("uint64"),
-            start_label=max_labels_list[-1] + 1 if len(max_labels_list) > 0 else 1)
+    segmentation = np.zeros(labels.shape[1:])
+    max_ids = []
+    for label_channel in labels[:-1]:
+        # the 'start_label' takes care of where to start allocating the instance ids from
+        this_labels, max_id, _ = vigra.analysis.relabelConsecutive(
+            label_channel.astype("uint64"),
+            start_label=max_ids[-1] + 1 if len(max_ids) > 0 else 1)
 
         # some trailing channels might not have labels, hence appending only for elements with RoIs
-        if max_label > 0:
-            max_labels_list.append(max_label)
+        if max_id > 0:
+            max_ids.append(max_id)
 
-        # for the below written condition:
-        # np.where(X, Y, Z), where,
-        #   - X: condition "where" to look for
-        #   - Y: we place 0 for the 6th channel (which has the "true bg" annotated as positive element), else we update it with the relabeled instances
-        #   - Z: what to do outside the condition (mentioned in X)
-        f_labels = np.where(new_label > 0, 0 if i == 5 else new_label, f_labels)
+        segmentation[this_labels > 0] = this_labels[this_labels > 0]
 
-    return f_labels
+    return segmentation
 
 
 def main():
