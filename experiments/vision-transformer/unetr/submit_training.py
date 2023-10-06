@@ -11,7 +11,7 @@ def write_batch_script(out_path, ini_sam=True):
     cell_types = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
     for i, ctype in enumerate(cell_types):
         batch_script = """#!/bin/bash
-#SBATCH -t 1-00:00:00
+#SBATCH -t 2-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH -p grete:shared
