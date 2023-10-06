@@ -48,10 +48,10 @@ def _convert_to_hdf5(path, folds):
 
         print(f"Converting the {tmp_fold} into h5 file format...")
         tmp_name = tmp_fold.split("_")[0] + tmp_fold.split("_")[1]  # name of a particular sub-directory (per fold)
-        with h5py.File(os.path.join(path, f"pannuke_{tmp_fold}.h5"), "w") as f:
-            img_path = glob(os.path.join(path, tmp_fold, "*", "images", tmp_name, "images.npy"))[0]
-            gt_path = glob(os.path.join(path, tmp_fold, "*", "masks", tmp_name, "masks.npy"))[0]
+        img_path = glob(os.path.join(path, tmp_fold, "*", "images", tmp_name, "images.npy"))[0]
+        gt_path = glob(os.path.join(path, tmp_fold, "*", "masks", tmp_name, "masks.npy"))[0]
 
+        with h5py.File(os.path.join(path, f"pannuke_{tmp_fold}.h5"), "w") as f:
             f.create_dataset("images", data=np.load(img_path).transpose(3, 0, 1, 2))
             f.create_dataset("masks", data=np.load(gt_path).transpose(3, 0, 1, 2))
 
