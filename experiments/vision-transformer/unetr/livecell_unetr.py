@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from glob import glob
+from tqdm import tqdm
 
 import imageio.v2 as imageio
 from elf.evaluation import dice_score
@@ -50,6 +51,7 @@ def do_unetr_training(args, device, model, patch_shape=(512, 512)):
     ) if args.save_root is not None else args.save_root
     _save_root = os.path.join(_save_root, args.cell_type) if args.save_root is not None else _save_root
 
+    breakpoint()
     trainer = torch_em.default_segmentation_trainer(
         name=_name,
         model=model,
@@ -67,15 +69,19 @@ def do_unetr_training(args, device, model, patch_shape=(512, 512)):
 
 
 def do_unetr_inference(args, device, model, cell_types):
-    save_dir = os.path.join(args.save_dir,
-                            f"unetr-torch-em-{args.model_name}" if args.do_sam_ini else "unetr-torch-em-scratch")
+    save_dir = os.path.join(
+        args.save_dir,
+        f"unetr-torch-em-sam-{args.model_name}" if args.do_sam_ini else f"unetr-torch-em-scratch-{args.model_name}"
+    )
 
     for ctype in cell_types:
         test_img_dir = os.path.join(args.input, "images", "livecell_test_images", "*")
 
         model_ckpt = os.path.join(args.save_root,
                                   f"sam-{args.model_name}" if args.do_sam_ini else "scratch",
-                                  ctype, "checkpoints", "best.pt")
+                                  ctype, "checkpoints", f"livecell-{ctype}-unetr", "best.pt")
+        print(model_ckpt)
+        continue
         assert os.path.exists(model_ckpt)
 
         model.load_state_dict(torch.load(model_ckpt, map_location=torch.device('cpu'))["model_state"])
@@ -103,19 +109,21 @@ def do_unetr_inference(args, device, model, cell_types):
 
 
 def do_unetr_evaluation(args, cell_types):
-    root_save_dir = os.path.join(args.save_dir,
-                                 f"unetr-torch-em-{args.model_name}" if args.do_sam_ini else "unetr-torch-em-scratch")
+    root_save_dir = os.path.join(
+        args.save_dir,
+        f"unetr-torch-em-sam-{args.model_name}" if args.do_sam_ini else f"unetr-torch-em-scratch-{args.model_name}"
+    )
     fg_list, bd_list = [], []
 
     for c1 in cell_types:
         save_dir = os.path.join(root_save_dir, f"src-{c1}")
 
         fg_set, bd_set = {"CELL TYPE": c1}, {"CELL TYPE": c1}
-        for c2 in cell_types:
+        for c2 in tqdm(cell_types, desc=f"Evaluation on {c1} source models"):
             fg_dir = os.path.join(save_dir, "foreground")
             bd_dir = os.path.join(save_dir, "boundary")
 
-            gt_dir = os.path.join(args.input, "annotations", "livecell_test_images", "c2", "*")
+            gt_dir = os.path.join(args.input, "annotations", "livecell_test_images", c2, "*")
             cwise_fg, cwise_bd = [], []
             for gt_path in glob(gt_dir):
                 fname = os.path.split(gt_path)[-1]
@@ -165,8 +173,8 @@ def main(args):
         print("2d UNETR inference on LiveCell dataset")
         do_unetr_inference(args, device, model, all_cell_types)
     if args.evaluate:
-        do_unetr_evaluation(args, all_cell_types)
         print("2d UNETR evaluation on LiveCell dataset")
+        do_unetr_evaluation(args, all_cell_types)
 
 
 if __name__ == "__main__":
@@ -179,11 +187,11 @@ if __name__ == "__main__":
                         help="Enables initializing UNETR with SAM's ViT weights")
     parser.add_argument("-c", "--cell_type", type=str, default=None,
                         help="Choice of cell-type for doing the training")
-    parser.add_argument("-i", "--input", type=str, default="./livecell/",
+    parser.add_argument("-i", "--input", type=str, default="/scratch/usr/nimanwai/data/livecell",
                         help="Path where the dataset already exists/will be downloaded by the dataloader")
-    parser.add_argument("-s", "--save_root", type=str, default=None,
+    parser.add_argument("-s", "--save_root", type=str, default="/scratch/usr/nimanwai/models/unetr/torch-em/",
                         help="Path where checkpoints and logs will be saved")
-    parser.add_argument("--save_dir", type=str)
+    parser.add_argument("--save_dir", type=str, default="/scratch/usr/nimanwai/predictions/unetr")
     parser.add_argument("--iterations", type=int, default=100000)
     args = parser.parse_args()
     main(args)
