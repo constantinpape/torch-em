@@ -43,6 +43,15 @@ def _download_pannuke_dataset(path, download, folds):
 
 
 def _convert_to_hdf5(path, fold):
+    """Here, we create the h5 files from the input data into 4 essentials (keys):
+        - "images" - the raw input images (transposed into the expected format) (S x 3 x H x W)
+        - "labels/masks" - the raw input masks (transposed as above) (S x 6 x H x W)
+        - "labels/instances" - the converted all-instance labels (S x H x W)
+        - "labels/semantic" - the converted semantic labels (S x H x W)
+            - where, the semantic instance representation is as follows:
+                (0: Background, 1: Neoplastic cells, 2: Inflammatory,
+                 3: Connective/Soft tissue cells, 4: Dead Cells, 5: Epithelial)
+    """
     if os.path.exists(os.path.join(path, f"pannuke_{fold}.h5")) is True:
         return
 
@@ -143,8 +152,13 @@ def get_pannuke_dataset(
         download=False,
         with_channels=True,
         with_label_channels=True,
+        custom_label_choice="instances",
         **kwargs
 ):
+    assert custom_label_choice in [
+        "masks", "instances", "semantic"
+    ], "Select the type of labels you want from [masks/instances/semantic] (See `_convert_to_hdf5` for details)"
+
     if rois is not None:
         assert isinstance(rois, dict)
 
@@ -154,7 +168,7 @@ def get_pannuke_dataset(
     data_rois = [rois.get(f_idx, np.s_[:, :, :]) for f_idx in folds]
 
     raw_key = "images"
-    label_key = "masks"
+    label_key = f"labels/{custom_label_choice}"
 
     return torch_em.default_segmentation_dataset(
         data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois,
@@ -169,6 +183,7 @@ def get_pannuke_loader(
         folds=("fold_1", "fold_2", "fold_3"),
         download=False,
         rois={},
+        custom_label_choice="instances",
         **kwargs
 ):
     """TODO
@@ -181,6 +196,7 @@ def get_pannuke_loader(
         folds=folds,
         rois=rois,
         download=download,
+        custom_label_choice=custom_label_choice,
         **dataset_kwargs)
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
