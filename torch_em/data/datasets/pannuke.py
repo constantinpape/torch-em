@@ -52,7 +52,7 @@ def _convert_to_hdf5(path, fold):
                 (0: Background, 1: Neoplastic cells, 2: Inflammatory,
                  3: Connective/Soft tissue cells, 4: Dead Cells, 5: Epithelial)
     """
-    if os.path.exists(os.path.join(path, f"pannuke_{fold}.h5")) is True:
+    if os.path.exists(os.path.join(path, f"pannuke_{fold}.h5")):
         return
 
     print(f"Converting {fold} into h5 file format...")
@@ -74,9 +74,7 @@ def _convert_to_hdf5(path, fold):
         # (same logic as above for labels)
         img_chunks = (img.shape[0], 1) + img.shape[2:]
         label_chunks = (labels.shape[0], 1) + labels.shape[2:]
-        other_label_chunks = (1) + labels.shape[2:]  # for instance and semantic labels
-
-        breakpoint()
+        other_label_chunks = (1,) + labels.shape[2:]  # for instance and semantic labels
 
         with h5py.File(os.path.join(path, f"pannuke_{fold}.h5"), "w") as f:
             f.create_dataset("images", data=img, compression="gzip", chunks=img_chunks)
@@ -151,7 +149,7 @@ def get_pannuke_dataset(
         rois={},
         download=False,
         with_channels=True,
-        with_label_channels=True,
+        with_label_channels=False,
         custom_label_choice="instances",
         **kwargs
 ):
@@ -164,8 +162,8 @@ def get_pannuke_dataset(
 
     _download_pannuke_dataset(path, download, folds)
 
-    data_paths = [os.path.join(path, f"pannuke_{f_idx}.h5") for f_idx in folds]
-    data_rois = [rois.get(f_idx, np.s_[:, :, :]) for f_idx in folds]
+    data_paths = [os.path.join(path, f"pannuke_{fold}.h5") for fold in folds]
+    data_rois = [rois.get(fold, np.s_[:, :, :]) for fold in folds]
 
     raw_key = "images"
     label_key = f"labels/{custom_label_choice}"
