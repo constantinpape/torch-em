@@ -51,7 +51,6 @@ def do_unetr_training(args, device, model, patch_shape=(512, 512)):
     ) if args.save_root is not None else args.save_root
     _save_root = os.path.join(_save_root, args.cell_type) if args.save_root is not None else _save_root
 
-    breakpoint()
     trainer = torch_em.default_segmentation_trainer(
         name=_name,
         model=model,
@@ -80,8 +79,7 @@ def do_unetr_inference(args, device, model, cell_types):
         model_ckpt = os.path.join(args.save_root,
                                   f"sam-{args.model_name}" if args.do_sam_ini else "scratch",
                                   ctype, "checkpoints", f"livecell-{ctype}-unetr", "best.pt")
-        print(model_ckpt)
-        continue
+
         assert os.path.exists(model_ckpt)
 
         model.load_state_dict(torch.load(model_ckpt, map_location=torch.device('cpu'))["model_state"])
