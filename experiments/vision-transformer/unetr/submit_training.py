@@ -7,7 +7,7 @@ from glob import glob
 from datetime import datetime
 
 
-def write_batch_script(out_path, ini_sam=True):
+def write_batch_script(out_path, ini_sam=False):
     cell_types = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
     for i, ctype in enumerate(cell_types):
         batch_script = """#!/bin/bash
