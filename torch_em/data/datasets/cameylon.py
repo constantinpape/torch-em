@@ -1,6 +1,9 @@
 import os
 import warnings
+import numpy as np
 from glob import glob
+
+import openslide
 
 
 def _download_cameylon(path):
@@ -20,53 +23,21 @@ def _download_cameylon(path):
 
 
 def get_cameylon_dataset(path):
-    """Description of concents in the dataset folders
-    - CAMELYON16:
-        - checksums.md5
-        - annotations/ : 160 (xml) files
-        - license.txt
-        - README.md
-        - pathology-tissue-background-segmentation.json
-        - evaluation/ : scripts
-        - masks/ : 399 (tif) files
-        - background_tissue/ : 400 (tif) files
-        - images/ : 399 (tif) files
-
-    - CAMELYON17:
-        - checksums.md5
-        - annotations/ : 50 (xml) files
-        - license.txt
-        - README.md
-        - stages.csv
-        - evaluation/ : scripts
-        - masks/ : 100 (tif) files
-        - images/ : 998 (tif) files
+    """Take a look at two things for histopathology WSI reading:
+        - tiatoolbox - https://tia-toolbox.readthedocs.io/
+        - openslide - (example: https://github.com/computationalpathologygroup/Camelyon16/blob/master/Python/Evaluation_FROC.py)
     """
     all_paths = sorted(glob(os.path.join(path, "CAMELYON16", "images", "*")))
     print(all_paths[-1])
 
     level = 5  # Image level at which the evaluation is done
 
-    import openslide
-    import numpy as np
-
     slide = openslide.open_slide(all_paths[-1])
     dims = slide.level_dimensions[level]
     pixelarray = np.array(slide.read_region((0, 0), level, dims))
-    breakpoint()
 
 
 def get_cameylon_loader(path):
+    # TODO: get a dataset for creating the dataloader
     _download_cameylon(path)
     get_cameylon_dataset(path)
-
-
-def main():
-    path = "/scratch/usr/nimanwai/data/test/"
-    get_cameylon_loader(
-        path=path
-    )
-
-
-if __name__ == "__main__":
-    main()
