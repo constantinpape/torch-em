@@ -60,9 +60,7 @@ def do_unetr_training(
         sam_initialization: bool,
         source_choice: str
 ):
-    print("!!! Run training for cell types:")
-    print(cell_types)
-    print("!!!!!!!!!!!!!!!!!!!!!!!!!1")
+    print("Run training for cell types:", cell_types)
     train_loader = get_livecell_loader(
         path=input_path,
         split="train",
@@ -208,7 +206,6 @@ def do_unetr_evaluation(
     tmp_csv_name = f"{source_choice}-sam" if sam_initialization else f"{source_choice}-scratch"
     f_df_fg.to_csv(os.path.join(csv_save_dir, f"foreground-unetr-{tmp_csv_name}-results.csv"))
     f_df_bd.to_csv(os.path.join(csv_save_dir, f"boundary-unetr-{tmp_csv_name}-results.csv"))
-    print(f_df_fg)
 
 
 def main(args):
