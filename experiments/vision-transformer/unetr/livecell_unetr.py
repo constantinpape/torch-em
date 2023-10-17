@@ -130,7 +130,7 @@ def do_unetr_inference(
         model.eval()
 
         with torch.no_grad():
-            for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for {ctype} with model {model_ckpt}"):
+            for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for all livecell with model {model_ckpt}"):
                 fname = os.path.split(img_path)[-1]
 
                 input_img = imageio.imread(img_path)
@@ -236,10 +236,9 @@ def main(args):
             source_choice=args.source_choice
         )
 
-    # FIXME this is wrong for the MONAI models
     root_save_dir = os.path.join(
         args.save_dir,
-        f"unetr-torch-em-sam-{args.model_name}" if args.do_sam_ini else f"unetr-torch-em-scratch-{args.model_name}"
+        f"unetr-{args.source_choice}-sam" if args.do_sam_ini else f"unetr-{args.source_choice}-scratch"
     )
 
     if args.predict:
