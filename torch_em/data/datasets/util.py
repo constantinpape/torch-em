@@ -99,11 +99,7 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
     elif download_type == "folder":
         # gdown has a limit of only 50 files download, limits the usage of folder-based downloads
         # here below, we need to manually increase the max number of files we want to download
-        import gdown.download_folder as fn1
-        fn1.MAX_NUMBER_FILES = 500
-        print(fn1)
-        print(fn1.download_folder)
-        fn1.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
+        gdown.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
     else:
         raise ValueError("`download_path` argument expects either `zip`/`folder`")
 
