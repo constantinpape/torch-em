@@ -23,6 +23,15 @@ def get_bcss_dataset(
         label_dtype: torch.dtype = torch.int64,
         **kwargs
 ):
+    """Dataset for breast cancer tissue segmentation in histopathology.
+
+    This dataset is from https://bcsegmentation.grand-challenge.org/BCSS/.
+    Please cite this paper (https://doi.org/10.1093/bioinformatics/btz083) if you use this dataset for a publication.
+    """
+
+    # FIXME: current limitation for the installation below:
+    #   - only downloads first 50 files - due to `gdown`'s download folder function
+    #   - (optional) clone their git repo to download their data
     util.download_source_gdrive(path=path, url=URL, download=download, checksum=CHECKSUM, download_type="folder")
 
     image_paths = sorted(glob(os.path.join(path, "*", "rgbs_colorNormalized", "*")))
@@ -63,7 +72,6 @@ def main():
 
     for x, y in loader:
         print(x.shape, y.shape)
-        breakpoint()
 
 
 main()
