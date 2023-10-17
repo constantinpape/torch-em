@@ -13,7 +13,6 @@ from skimage.segmentation import find_boundaries
 import torch
 import torch_em
 from torch_em.transform.raw import standardize
-from torch_em.transform.label import labels_to_binary
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.util.prediction import predict_with_halo
 
@@ -167,7 +166,7 @@ def do_unetr_evaluation(
             continue
 
         fg_set, bd_set = {"CELL TYPE": c1}, {"CELL TYPE": c1}
-        for c2 in tqdm(cell_types, desc=f"Evaluation on {c1} source models"):
+        for c2 in tqdm(cell_types, desc=f"Evaluation on {c1} source models from {_save_dir}"):
             fg_dir = os.path.join(_save_dir, "foreground")
             bd_dir = os.path.join(_save_dir, "boundary")
 
@@ -180,11 +179,19 @@ def do_unetr_evaluation(
                 fg = imageio.imread(os.path.join(fg_dir, fname))
                 bd = imageio.imread(os.path.join(bd_dir, fname))
 
-                true_fg = labels_to_binary(gt)
                 true_bd = find_boundaries(gt)
 
-                cwise_fg.append(dice_score(fg, true_fg, threshold_gt=0))
-                cwise_bd.append(dice_score(bd, true_bd, threshold_gt=0))
+                # Compare the foreground prediction to the ground-truth.
+                # Here, it's important not to threshold the segmentation. Otherwise EVERYTHING will be set to
+                # foreground in the dice function, since we have a comparision > 0 in there, and everything in the
+                # binary prediction evaluates to true.
+                # For the GT we can set the threshold to 0, because this will map to the correct binary mask.
+                cwise_fg.append(dice_score(fg, gt, threshold_gt=0, threshold_seg=None))
+
+                # Compare the background prediction to the ground-truth.
+                # Here, we don't need any thresholds: for the prediction the same holds as before.
+                # For the ground-truth we have already a binary label, so we don't need to threshold it again.
+                cwise_bd.append(dice_score(bd, true_bd, threshold_gt=None, threshold_seg=None))
 
             fg_set[c2] = np.mean(cwise_fg)
             bd_set[c2] = np.mean(cwise_bd)
@@ -201,9 +208,7 @@ def do_unetr_evaluation(
     tmp_csv_name = f"{source_choice}-sam" if sam_initialization else f"{source_choice}-scratch"
     f_df_fg.to_csv(os.path.join(csv_save_dir, f"foreground-unetr-{tmp_csv_name}-results.csv"))
     f_df_bd.to_csv(os.path.join(csv_save_dir, f"boundary-unetr-{tmp_csv_name}-results.csv"))
-    print(csv_save_dir)
     print(f_df_fg)
-    print(f_df_bd)
 
 
 def main(args):
@@ -240,6 +245,7 @@ def main(args):
         args.save_dir,
         f"unetr-{args.source_choice}-sam" if args.do_sam_ini else f"unetr-{args.source_choice}-scratch"
     )
+    print("Predictions are saved in", root_save_dir)
 
     if args.predict:
         print("2d UNETR inference on LiveCell dataset")
@@ -253,6 +259,7 @@ def main(args):
             save_root=args.save_root,
             source_choice=args.source_choice
         )
+
     if args.evaluate:
         print("2d UNETR evaluation on LiveCell dataset")
         do_unetr_evaluation(
