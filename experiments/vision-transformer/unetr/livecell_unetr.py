@@ -61,6 +61,9 @@ def do_unetr_training(
         sam_initialization: bool,
         source_choice: str
 ):
+    print("!!! Run training for cell types:")
+    print(cell_types)
+    print("!!!!!!!!!!!!!!!!!!!!!!!!!1")
     train_loader = get_livecell_loader(
         path=input_path,
         split="train",
@@ -127,12 +130,14 @@ def do_unetr_inference(
         model.eval()
 
         with torch.no_grad():
-            for img_path in glob(test_img_dir):
+            for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for {ctype} with model {model_ckpt}"):
                 fname = os.path.split(img_path)[-1]
 
                 input_img = imageio.imread(img_path)
                 input_img = standardize(input_img)
-                outputs = predict_with_halo(input_img, model, gpu_ids=[device], block_shape=[384, 384], halo=[64, 64])
+                outputs = predict_with_halo(
+                    input_img, model, gpu_ids=[device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True
+                )
 
                 fg, bd = outputs[0, :, :], outputs[1, :, :]
 
@@ -157,6 +162,9 @@ def do_unetr_evaluation(
 
     for c1 in cell_types:
         _save_dir = os.path.join(root_save_dir, f"src-{c1}")
+        if not os.path.exists(_save_dir):
+            print("Skipping", _save_dir)
+            continue
 
         fg_set, bd_set = {"CELL TYPE": c1}, {"CELL TYPE": c1}
         for c2 in tqdm(cell_types, desc=f"Evaluation on {c1} source models"):
@@ -193,6 +201,9 @@ def do_unetr_evaluation(
     tmp_csv_name = f"{source_choice}-sam" if sam_initialization else f"{source_choice}-scratch"
     f_df_fg.to_csv(os.path.join(csv_save_dir, f"foreground-unetr-{tmp_csv_name}-results.csv"))
     f_df_bd.to_csv(os.path.join(csv_save_dir, f"boundary-unetr-{tmp_csv_name}-results.csv"))
+    print(csv_save_dir)
+    print(f_df_fg)
+    print(f_df_bd)
 
 
 def main(args):
@@ -225,6 +236,7 @@ def main(args):
             source_choice=args.source_choice
         )
 
+    # FIXME this is wrong for the MONAI models
     root_save_dir = os.path.join(
         args.save_dir,
         f"unetr-torch-em-sam-{args.model_name}" if args.do_sam_ini else f"unetr-torch-em-scratch-{args.model_name}"
