@@ -164,7 +164,7 @@ def add_instance_label_transform(
     return kwargs, label_dtype
 
 
-def generate_labeled_array(shape, xml_file):
+def generate_labeled_array_from_xml(shape, xml_file):
     """Function taken from: https://github.com/rshwndsz/hover-net/blob/master/lightning_hovernet.ipynb
 
     Given image shape and path to annotations (xml file), generatebit mask with the region inside a contour being white
