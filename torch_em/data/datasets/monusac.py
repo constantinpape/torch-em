@@ -102,20 +102,3 @@ def get_monusac_loader(
     )
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
     return loader
-
-
-def main():
-    path = "/scratch/usr/nimanwai/data/monusac"
-    loader = get_monusac_loader(
-        path=path,
-        download=True,
-        patch_shape=(512, 512),
-        batch_size=2,
-        split="test"
-    )
-
-    print("Length of loader: ", len(loader))
-
-
-if __name__ == "__main__":
-    main()
