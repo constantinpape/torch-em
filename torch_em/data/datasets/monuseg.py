@@ -3,7 +3,7 @@ import shutil
 from tqdm import tqdm
 from glob import glob
 
-import imageio.v2 as imageio
+import imageio.v3 as imageio
 
 import torch_em
 from torch_em.data.datasets import util
@@ -106,24 +106,3 @@ def get_monuseg_loader(
     )
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
     return loader
-
-
-def main():
-    path = "/scratch/usr/nimanwai/data/monuseg/"
-    patch_shape = (512, 512)
-
-    loader = get_monuseg_loader(
-        path=path,
-        patch_shape=patch_shape,
-        split="test",
-        batch_size=2,
-        download=True
-    )
-
-    print("Length of loader: ", len(loader))
-
-    breakpoint()
-
-
-if __name__ == "__main__":
-    main()
