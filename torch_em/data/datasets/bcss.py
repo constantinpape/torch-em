@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from glob import glob
-from typing import Tuple, List, Optional
+from typing import List, Optional
 
 import vigra
 
@@ -39,10 +39,8 @@ class BCSSLabelTrafo():
         """Returns the transformed labels
         """
         if self.label_choices is not None:
-            _segmentation = np.zeros(labels.shape)
-            for uq_label in self.label_choices:
-                _segmentation[labels == uq_label] = labels[labels == uq_label]
-            segmentation, _, _ = vigra.analysis.relabelConsecutive(_segmentation.astype("uint64"))
+            labels[~np.isin(labels, self.label_choices)] = 0
+            segmentation, _, _ = vigra.analysis.relabelConsecutive(labels.astype("uint64"))
         else:
             segmentation, _, _ = vigra.analysis.relabelConsecutive(labels)
 
