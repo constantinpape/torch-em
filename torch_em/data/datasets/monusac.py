@@ -64,7 +64,7 @@ def _process_monusac(path, split):
             dst = os.path.join(root_img_save_dir, img_id)
             shutil.move(src=img_path, dst=dst)
 
-            _label = util.generate_labeled_array(shape=desired_label_shape, xml_file=xml_label_path)
+            _label = util.generate_labeled_array_from_xml(shape=desired_label_shape, xml_file=xml_label_path)
             _fileid = img_id.split(".")[0]
             imageio.imwrite(os.path.join(root_label_save_dir, f"{_fileid}.tif"), _label)
 
