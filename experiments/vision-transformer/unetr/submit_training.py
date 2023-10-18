@@ -7,14 +7,13 @@ from glob import glob
 from datetime import datetime
 
 
-def write_batch_script(out_path, ini_sam=False, source_choice="torch-em"):
+def write_batch_script(out_path, ini_sam=True, source_choice="torch-em"):
     """
     inputs:
         source_choice:str - [torch_em / monai] source of the unetr model coming from
         ini_sam: bool - initialize torch-em's unetr implementation with sam encoder weights
     """
-    # ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
-    cell_types = ["A172", "BT474"]
+    cell_types = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
 
     for i, ctype in enumerate(cell_types):
         batch_script = """#!/bin/bash
@@ -40,11 +39,10 @@ mamba activate {env_name}
 python livecell_unetr.py --train """
 
         add_ctype = f"-c {ctype} "
-        add_sam_ini = "--do_sam_ini "
-        add_source_choice = f"--source_choice {source_choice}"
-
+        add_source_choice = f"--source_choice {source_choice} "
         batch_script += add_ctype + add_source_choice
 
+        add_sam_ini = "--do_sam_ini "
         if ini_sam:
             batch_script += add_sam_ini
 

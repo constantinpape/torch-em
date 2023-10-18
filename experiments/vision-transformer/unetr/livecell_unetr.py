@@ -44,7 +44,7 @@ def get_unetr_model(
         model.out_channels = 2  # type: ignore
 
     else:
-        raise ValueError("The available UNETR models are either from \"torch-em\" or \"monai\", choose from them")
+        raise ValueError(f"The available UNETR models are either from \"torch-em\" or \"monai\", choose from them instead of - {source_choice}")
 
     return model
 
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir", type=str, default="/scratch/usr/nimanwai/predictions/unetr",
                         help="Path to save predictions from UNETR model")
 
-    parser.add_argument("--iterations", type=int, default=10000)
+    parser.add_argument("--iterations", type=int, default=100000)
 
     args = parser.parse_args()
     main(args)
