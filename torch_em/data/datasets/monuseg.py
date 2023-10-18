@@ -1,12 +1,9 @@
 import os
 import shutil
-import numpy as np
 from tqdm import tqdm
 from glob import glob
-from xml.dom import minidom
 
 import imageio.v2 as imageio
-from skimage.draw import polygon
 
 import torch_em
 from torch_em.data.datasets import util
@@ -40,48 +37,6 @@ def _download_monuseg(path, download, split):
     _process_monuseg(path, split)
 
 
-def generate_labeled_array(shape, xml_file):
-    """Function taken from: https://github.com/rshwndsz/hover-net/blob/master/lightning_hovernet.ipynb
-
-    Given image shape and path to annotations (xml file), generatebit mask with the region inside a contour being white
-        shape: The image shape on which bit mask will be made
-        xml_file: path relative to the current working directory where the xml file is present
-
-    Returns:
-        An image of given shape with region inside contour being white..
-    """
-    # DOM object created by the minidom parser
-    xDoc = minidom.parse(xml_file)
-
-    # List of all Region tags
-    regions = xDoc.getElementsByTagName('Region')
-
-    # List which will store the vertices for each region
-    xy = []
-    for region in regions:
-        # Loading all the vertices in the region
-        vertices = region.getElementsByTagName('Vertex')
-
-        # The vertices of a region will be stored in a array
-        vw = np.zeros((len(vertices), 2))
-
-        for index, vertex in enumerate(vertices):
-            # Storing the values of x and y coordinate after conversion
-            vw[index][0] = float(vertex.getAttribute('X'))
-            vw[index][1] = float(vertex.getAttribute('Y'))
-
-        # Append the vertices of a region
-        xy.append(np.int32(vw))
-
-    # Creating a completely black image
-    mask = np.zeros(shape, np.float32)
-
-    for i, contour in enumerate(xy):
-        r, c = polygon(np.array(contour)[:, 1], np.array(contour)[:, 0], shape=shape)
-        mask[r, c] = i
-    return mask
-
-
 def _process_monuseg(path, split):
     util.unzip(os.path.join(path, f"monuseg_{split}.zip"), path)
 
@@ -111,7 +66,7 @@ def _process_monuseg(path, split):
         dst = os.path.join(root_img_save_dir, img_id)
         shutil.move(src=img_path, dst=dst)
 
-        _label = generate_labeled_array(shape=desired_label_shape, xml_file=xml_label_path)
+        _label = util.generate_labeled_array(shape=desired_label_shape, xml_file=xml_label_path)
         _fileid = img_id.split(".")[0]
         imageio.imwrite(os.path.join(root_label_save_dir, f"{_fileid}.tif"), _label)
 
