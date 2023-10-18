@@ -102,25 +102,3 @@ def get_bcss_loader(
     )
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
     return loader
-
-
-def main():
-    path = "/scratch/projects/nim00007/data/bcss/"
-    download = False
-
-    loader = get_bcss_loader(
-        path=path,
-        patch_shape=(512, 512),
-        batch_size=2,
-        label_choices=None,
-        download=download
-    )
-
-    print("Length of loader: ", len(loader))
-
-    from torch_em.util.debug import check_loader
-    check_loader(loader, 8, True, True, True, "./bcss.png")
-
-
-if __name__ == "__main__":
-    main()
