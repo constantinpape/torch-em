@@ -7,8 +7,14 @@ from glob import glob
 from datetime import datetime
 
 
-def write_batch_script(out_path, ini_sam=False):
+def write_batch_script(out_path, ini_sam=True, source_choice="torch-em"):
+    """
+    inputs:
+        source_choice:str - [torch_em / monai] source of the unetr model coming from
+        ini_sam: bool - initialize torch-em's unetr implementation with sam encoder weights
+    """
     cell_types = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"]
+
     for i, ctype in enumerate(cell_types):
         batch_script = """#!/bin/bash
 #SBATCH -t 2-00:00:00
@@ -20,23 +26,23 @@ def write_batch_script(out_path, ini_sam=False):
 #SBATCH -A gzz0001
 """
         if ini_sam:
-            batch_script += f"#SBATCH --job-name=unetr-sam-torch-em-{ctype}"
+            batch_script += f"#SBATCH --job-name=unetr-sam-{source_choice}-{ctype}"
         else:
-            batch_script += f"#SBATCH --job-name=unetr-torch-em-{ctype}"
+            batch_script += f"#SBATCH --job-name=unetr-{source_choice}-{ctype}"
 
-        batch_script += """
+        env_name = "monai2" if source_choice == "monai" else "sam"
+
+        batch_script += f"""
 
 source ~/.bashrc
-mamba activate sam
+mamba activate {env_name}
 python livecell_unetr.py --train """
 
         add_ctype = f"-c {ctype} "
-        add_input_path = "-i /scratch/usr/nimanwai/data/livecell/ "
-        add_save_root = "-s /scratch/usr/nimanwai/models/unetr/torch-em/ "
+        add_source_choice = f"--source_choice {source_choice} "
+        batch_script += add_ctype + add_source_choice
+
         add_sam_ini = "--do_sam_ini "
-
-        batch_script += add_ctype + add_input_path + add_save_root
-
         if ini_sam:
             batch_script += add_sam_ini
 
