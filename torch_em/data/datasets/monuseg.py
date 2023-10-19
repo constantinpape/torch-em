@@ -103,7 +103,7 @@ def get_monuseg_dataset(
 
     if split == "train" and organ_type is not None:
         # get all patients for multiple organ selection
-        all_organ_splits = sum([ORGAN_SPLITS[o][:] for o in organ_type], [])
+        all_organ_splits = sum([ORGAN_SPLITS[o] for o in organ_type], [])
 
         image_paths = [
             _path for _path in image_paths if os.path.split(_path)[-1].split(".")[0] in all_organ_splits

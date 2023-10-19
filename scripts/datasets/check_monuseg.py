@@ -12,7 +12,7 @@ def check_monuseg():
         batch_size=2,
         split="train",
         download=True,
-        organ_type=None
+        organ_type=["colon", "breast"]
     )
     check_loader(train_loader, 8, instance_labels=True, rgb=True, plt=True, save_path="./monuseg_train.png")
 
