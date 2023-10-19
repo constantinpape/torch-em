@@ -82,7 +82,7 @@ def download_source(path, url, download, checksum=None, verify=True):
     _check_checksum(path, checksum)
 
 
-def download_source_gdrive(path, url, download, checksum=None):
+def download_source_gdrive(path, url, download, checksum=None, download_type="zip"):
     if gdown is None:
         raise RuntimeError(
             "Need gdown library to download data from google drive."
@@ -94,7 +94,15 @@ def download_source_gdrive(path, url, download, checksum=None):
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
 
-    gdown.download(url, path, quiet=False)
+    if download_type == "zip":
+        gdown.download(url, path, quiet=False)
+    elif download_type == "folder":
+        # gdown has a limit of only 50 files download, limits the usage of folder-based downloads
+        # here below, we need to manually increase the max number of files we want to download
+        gdown.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
+    else:
+        raise ValueError("`download_path` argument expects either `zip`/`folder`")
+
     _check_checksum(path, checksum)
 
 
