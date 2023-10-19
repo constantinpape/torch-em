@@ -6,7 +6,6 @@ import numpy as np
 from glob import glob
 
 import torch_em
-from torch_em.util.debug import check_loader
 from torch_em.data.datasets import util
 
 
@@ -197,18 +196,3 @@ def get_pannuke_loader(
         custom_label_choice=custom_label_choice,
         **dataset_kwargs)
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
-
-
-def main():
-    train_loader = get_pannuke_loader(
-        path="./pannuke/",
-        batch_size=2,
-        patch_shape=(1, 256, 256),
-        ndim=2,
-        download=True
-    )
-    check_loader(train_loader, 8, instance_labels=True, plt=False, rgb=True)
-
-
-if __name__ == "__main__":
-    main()
