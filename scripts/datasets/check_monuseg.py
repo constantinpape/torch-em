@@ -11,8 +11,11 @@ def check_monuseg():
         patch_shape=(512, 512),
         batch_size=2,
         split="train",
-        download=True
+        download=True,
+        organ_type=None
     )
+    check_loader(train_loader, 8, instance_labels=True, rgb=True, plt=True, save_path="./monuseg_train.png")
+
     test_loader = get_monuseg_loader(
         path=MONUSEG_ROOT,
         patch_shape=(512, 512),
@@ -20,8 +23,7 @@ def check_monuseg():
         split="test",
         download=True
     )
-    check_loader(train_loader, 15, instance_labels=True, rgb=False)
-    check_loader(test_loader, 15, instance_labels=True, rgb=False)
+    check_loader(test_loader, 8, instance_labels=True, rgb=True, plt=True, save_path="./monuseg_test.png")
 
 
 if __name__ == "__main__":
