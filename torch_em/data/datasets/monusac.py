@@ -2,6 +2,7 @@ import os
 import shutil
 from glob import glob
 from tqdm import tqdm
+from typing import Optional, List
 
 import imageio.v2 as imageio
 
@@ -20,14 +21,36 @@ CHECKSUM = {
     "test": "bcbc38f6bf8b149230c90c29f3428cc7b2b76f8acd7766ce9fc908fc896c2674"
 }
 
+# here's the description: https://drive.google.com/file/d/1kdOl3s6uQBRv0nToSIf1dPuceZunzL4N/view
+ORGAN_SPLITS = {
+    "train": {
+        "lung": ["TCGA-55-1594", "TCGA-69-7760", "TCGA-69-A59K", "TCGA-73-4668", "TCGA-78-7220",
+                 "TCGA-86-7713", "TCGA-86-8672", "TCGA-L4-A4E5", "TCGA-MP-A4SY", "TCGA-MP-A4T7"],
+        "kidney": ["TCGA-5P-A9K0", "TCGA-B9-A44B", "TCGA-B9-A8YI", "TCGA-DW-7841", "TCGA-EV-5903", "TCGA-F9-A97G",
+                   "TCGA-G7-A8LD", "TCGA-MH-A560", "TCGA-P4-AAVK", "TCGA-SX-A7SR", "TCGA-UZ-A9PO", "TCGA-UZ-A9PU"],
+        "breast": ["TCGA-A2-A0CV", "TCGA-A2-A0ES", "TCGA-B6-A0WZ", "TCGA-BH-A18T", "TCGA-D8-A1X5",
+                   "TCGA-E2-A154", "TCGA-E9-A22B", "TCGA-E9-A22G", "TCGA-EW-A6SD", "TCGA-S3-AA11"],
+        "prostate": ["TCGA-EJ-5495", "TCGA-EJ-5505", "TCGA-EJ-5517", "TCGA-G9-6342", "TCGA-G9-6499",
+                     "TCGA-J4-A67Q", "TCGA-J4-A67T", "TCGA-KK-A59X", "TCGA-KK-A6E0", "TCGA-KK-A7AW",
+                     "TCGA-V1-A8WL", "TCGA-V1-A9O9", "TCGA-X4-A8KQ", "TCGA-YL-A9WY"]
+    },
+    "test": {
+        "lung": ["TCGA-49-6743", "TCGA-50-6591", "TCGA-55-7570", "TCGA-55-7573",
+                 "TCGA-73-4662", "TCGA-78-7152", "TCGA-MP-A4T7"],
+        "kidney": ["TCGA-2Z-A9JG", "TCGA-2Z-A9JN", "TCGA-DW-7838", "TCGA-DW-7963",
+                   "TCGA-F9-A8NY", "TCGA-IZ-A6M9", "TCGA-MH-A55W"],
+        "breast": ["TCGA-A2-A04X", "TCGA-A2-A0ES", "TCGA-D8-A3Z6", "TCGA-E2-A108", "TCGA-EW-A6SB"],
+        "prostate": ["TCGA-G9-6356", "TCGA-G9-6367", "TCGA-VP-A87E", "TCGA-VP-A87H", "TCGA-X4-A8KS", "TCGA-YL-A9WL"]
+    },
+}
 
-# TODO separate via organ
+
 def _download_monusac(path, download, split):
     assert split in ["train", "test"], "Please choose from train/test"
 
     # check if we have extracted the images and labels already
-    im_path = os.path.join(path, "images")
-    label_path = os.path.join(path, "labels")
+    im_path = os.path.join(path, "images", split)
+    label_path = os.path.join(path, "labels", split)
     if os.path.exists(im_path) and os.path.exists(label_path):
         return
 
@@ -72,32 +95,44 @@ def _process_monusac(path, split):
 
 
 def get_monusac_dataset(
-    path, patch_shape, split, download=False, offsets=None, boundaries=False, binary=False, **kwargs
+    path, patch_shape, split, organ_type: Optional[List[str]] = None, download=False,
+    offsets=None, boundaries=False, binary=False, **kwargs
 ):
     """Dataset from https://monusac-2020.grand-challenge.org/Data/
     """
     _download_monusac(path, download, split)
 
-    image_path = os.path.join(path, "images")
-    label_path = os.path.join(path, "labels")
+    image_paths = sorted(glob(os.path.join(path, "images", split, "*")))
+    label_paths = sorted(glob(os.path.join(path, "labels", split, "*")))
+
+    if organ_type is not None:
+        # get all patients for multiple organ selection
+        all_organ_splits = sum([ORGAN_SPLITS[split][o] for o in organ_type], [])
+
+        image_paths = [
+            _path for _path in image_paths if os.path.split(_path)[-1].split(".")[0] in all_organ_splits
+        ]
+        label_paths = [
+            _path for _path in label_paths if os.path.split(_path)[-1].split(".")[0] in all_organ_splits
+        ]
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )
     return torch_em.default_segmentation_dataset(
-        image_path, "*.tif", label_path, "*.tif", patch_shape, is_seg_dataset=False, **kwargs
+        image_paths, None, label_paths, None, patch_shape, is_seg_dataset=False, **kwargs
     )
 
 
-# TODO implement selecting organ
 def get_monusac_loader(
-    path, patch_shape, split, batch_size, download=False, offsets=None, boundaries=False, binary=False, **kwargs
+    path, patch_shape, split, batch_size, organ_type=None, download=False,
+    offsets=None, boundaries=False, binary=False, **kwargs
 ):
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
     dataset = get_monusac_dataset(
-        path, patch_shape, split, download=download,
+        path, patch_shape, split, organ_type=organ_type, download=download,
         offsets=offsets, boundaries=boundaries, binary=binary, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
