@@ -2,8 +2,13 @@ import inspect
 import os
 import hashlib
 import zipfile
-from shutil import copyfileobj
+import numpy as np
+from tqdm import tqdm
 from warnings import warn
+from xml.dom import minidom
+from shutil import copyfileobj
+
+from skimage.draw import polygon
 
 import torch
 import torch_em
@@ -14,7 +19,6 @@ try:
 except ImportError:
     gdown = None
 
-from tqdm import tqdm
 
 BIOIMAGEIO_IDS = {
     "covid_if": "ilastik/covid_if_training_data",
@@ -82,7 +86,7 @@ def download_source(path, url, download, checksum=None, verify=True):
     _check_checksum(path, checksum)
 
 
-def download_source_gdrive(path, url, download, checksum=None):
+def download_source_gdrive(path, url, download, checksum=None, download_type="zip"):
     if gdown is None:
         raise RuntimeError(
             "Need gdown library to download data from google drive."
@@ -94,7 +98,15 @@ def download_source_gdrive(path, url, download, checksum=None):
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
 
-    gdown.download(url, path, quiet=False)
+    if download_type == "zip":
+        gdown.download(url, path, quiet=False)
+    elif download_type == "folder":
+        # gdown has a limit of only 50 files download, limits the usage of folder-based downloads
+        # here below, we need to manually increase the max number of files we want to download
+        gdown.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
+    else:
+        raise ValueError("`download_path` argument expects either `zip`/`folder`")
+
     _check_checksum(path, checksum)
 
 
@@ -158,3 +170,45 @@ def add_instance_label_transform(
         kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
         label_dtype = torch.float32
     return kwargs, label_dtype
+
+
+def generate_labeled_array_from_xml(shape, xml_file):
+    """Function taken from: https://github.com/rshwndsz/hover-net/blob/master/lightning_hovernet.ipynb
+
+    Given image shape and path to annotations (xml file), generatebit mask with the region inside a contour being white
+        shape: The image shape on which bit mask will be made
+        xml_file: path relative to the current working directory where the xml file is present
+
+    Returns:
+        An image of given shape with region inside contour being white..
+    """
+    # DOM object created by the minidom parser
+    xDoc = minidom.parse(xml_file)
+
+    # List of all Region tags
+    regions = xDoc.getElementsByTagName('Region')
+
+    # List which will store the vertices for each region
+    xy = []
+    for region in regions:
+        # Loading all the vertices in the region
+        vertices = region.getElementsByTagName('Vertex')
+
+        # The vertices of a region will be stored in a array
+        vw = np.zeros((len(vertices), 2))
+
+        for index, vertex in enumerate(vertices):
+            # Storing the values of x and y coordinate after conversion
+            vw[index][0] = float(vertex.getAttribute('X'))
+            vw[index][1] = float(vertex.getAttribute('Y'))
+
+        # Append the vertices of a region
+        xy.append(np.int32(vw))
+
+    # Creating a completely black image
+    mask = np.zeros(shape, np.float32)
+
+    for i, contour in enumerate(xy):
+        r, c = polygon(np.array(contour)[:, 1], np.array(contour)[:, 0], shape=shape)
+        mask[r, c] = i
+    return mask
