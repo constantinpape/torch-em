@@ -2,6 +2,7 @@ import os
 import shutil
 from tqdm import tqdm
 from glob import glob
+from pathlib import Path
 from typing import List, Optional
 
 import imageio.v3 as imageio
@@ -103,14 +104,14 @@ def get_monuseg_dataset(
 
     if split == "train" and organ_type is not None:
         # get all patients for multiple organ selection
-        all_organ_splits = sum([ORGAN_SPLITS[o] for o in organ_type], [])
+        all_organ_splits = sum([ORGAN_SPLITS[_o] for _o in organ_type], [])
 
-        image_paths = [
-            _path for _path in image_paths if os.path.split(_path)[-1].split(".")[0] in all_organ_splits
-        ]
-        label_paths = [
-            _path for _path in label_paths if os.path.split(_path)[-1].split(".")[0] in all_organ_splits
-        ]
+        image_paths = [_path for _path in image_paths if Path(_path).stem in all_organ_splits]
+        label_paths = [_path for _path in label_paths if Path(_path).stem in all_organ_splits]
+
+    elif split == "test" and organ_type is not None:
+        # we don't have organ splits in the test dataset
+        raise ValueError("The test split does not have any organ informations, please pass `organ_type=None`")
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
