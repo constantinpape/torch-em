@@ -15,6 +15,7 @@ import torch_em
 from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.util.prediction import predict_with_halo
+from torch_em.util import segmentation
 
 
 def get_unetr_model(
@@ -126,6 +127,14 @@ def do_unetr_inference(
         model.to(device)
         model.eval()
 
+        fg_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "foreground")
+        bd_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "boundary")
+        ws1_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "watershed1")
+        ws2_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "watershed2")
+
+        os.makedirs(fg_save_dir, exist_ok=True)
+        os.makedirs(bd_save_dir, exist_ok=True)
+
         with torch.no_grad():
             for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for all livecell with model {model_ckpt}"):
                 fname = os.path.split(img_path)[-1]
@@ -138,14 +147,15 @@ def do_unetr_inference(
 
                 fg, bd = outputs[0, :, :], outputs[1, :, :]
 
-                fg_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "foreground")
-                bd_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "boundary")
+                ws1 = segmentation.watershed_from_components(bd, fg, min_size=100)
+                ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=100, min_distance=1)
 
-                os.makedirs(fg_save_dir, exist_ok=True)
-                os.makedirs(bd_save_dir, exist_ok=True)
+                breakpoint()
 
-                imageio.imwrite(os.path.join(fg_save_dir, fname), fg)
-                imageio.imwrite(os.path.join(bd_save_dir, fname), bd)
+                # imageio.imwrite(os.path.join(fg_save_dir, fname), fg)
+                # imageio.imwrite(os.path.join(bd_save_dir, fname), bd)
+                # imageio.imwrite(os.path.join(ws1_save_dir, fname), ws1)
+                # imageio.imwrite(os.path.join(ws2_save_dir, fname), ws2)
 
 
 def do_unetr_evaluation(

@@ -48,13 +48,6 @@ def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
     return seg.astype("uint64")
 
 
-def _size_filter(seg, min_size):
-    ids, sizes = np.unique(seg, return_counts=True)
-    filter_ids = ids[sizes < min_size]
-    seg[np.isin(seg, filter_ids)] = 0
-    return seg
-
-
 def watershed_from_components(
     boundaries,
     foreground,
@@ -63,15 +56,15 @@ def watershed_from_components(
     threshold2=0.5,
 ):
     """The default approach:
-    - Subtract the boundaries from the foreground to separate touching objets.
+    - Subtract the boundaries from the foreground to separate touching objects.
     - Use the connected components of this as seeds.
     - Use the thresholded foreground predictions as mask to grow back the pieces
     lost by subtracting the boundary prediction.
     """
     seeds = label((foreground - boundaries) > threshold1)
-    mask = foreground > 0.5
-    seg = watershed(dist, seeds, mask=mask)
-    seg = _size_filter(seg, min_size)
+    mask = foreground > threshold2
+    seg = watershed(boundaries, seeds, mask=mask)
+    seg = size_filter(seg, min_size)
     return seg
 
 
@@ -91,11 +84,11 @@ def watershed_from_maxima(
     """
     mask = foreground > 0.5
     boundary_distances = distance_transform_edt(boundaries < 0.1)
-    boundary_distances[~mask] = 0
-    boundary_distances = gaussian(boundary_distances, sigma)
+    boundary_distances[~mask] = 0  # type: ignore
+    boundary_distances = gaussian(boundary_distances, sigma)  # type: ignore
     seed_points = peak_local_max(boundary_distances, min_distance=min_distance, exclude_border=False)
     seeds = np.zeros(mask.shape, dtype="uint32")
     seeds[seed_points[:, 0], seed_points[:, 1]] = np.arange(1, len(seed_points) + 1)
     seg = watershed(boundaries, markers=seeds, mask=foreground)
-    seg = _size_filter(seg, min_size)
+    seg = size_filter(seg, min_size)
     return seg
