@@ -1,4 +1,5 @@
 from .axondeepseg import get_axondeepseg_loader, get_axondeepseg_dataset
+from .bcss import get_bcss_loader, get_bcss_dataset
 from .cem import get_cem_mitolab_loader
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .cremi import get_cremi_loader, get_cremi_dataset
@@ -11,8 +12,7 @@ from .livecell import get_livecell_loader, get_livecell_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
 from .mitoem import get_mitoem_loader, get_mitoem_dataset
-# monuseg is only partially implemented
-# from .monuseg import get_monuseg_loader, get_monuseg_dataset
+from .monuseg import get_monuseg_loader, get_monuseg_dataset
 from .monusac import get_monusac_loader, get_monusac_dataset
 from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
 from .neurips_cell_seg import (
