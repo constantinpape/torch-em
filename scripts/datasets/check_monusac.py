@@ -11,8 +11,10 @@ def check_monusac():
         download=True,
         patch_shape=(512, 512),
         batch_size=2,
-        split="train"
+        split="train",
+        organ_type=["breast", "lung"]
     )
+    print("Length of train loader: ", len(train_loader))
     check_loader(train_loader, 8, instance_labels=True, rgb=True, plt=True, save_path="./monusac_train.png")
 
     test_loader = get_monusac_loader(
@@ -20,8 +22,10 @@ def check_monusac():
         download=True,
         patch_shape=(512, 512),
         batch_size=1,
-        split="test"
+        split="test",
+        organ_type=["breast", "prostate"]
     )
+    print("Length of test loader: ", len(test_loader))
     check_loader(test_loader, 8, instance_labels=True, rgb=True, plt=True, save_path="./monusac_test.png")
 
 

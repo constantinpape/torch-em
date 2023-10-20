@@ -2,12 +2,13 @@ import os
 import shutil
 from glob import glob
 from tqdm import tqdm
+from pathlib import Path
 from typing import Optional, List
 
-import imageio.v2 as imageio
+import imageio.v3 as imageio
 
 import torch_em
-from torch_em.data.datasets import util
+from . import util
 
 
 URL = {
@@ -72,11 +73,15 @@ def _process_monusac(path, split):
     os.makedirs(root_img_save_dir, exist_ok=True)
     os.makedirs(root_label_save_dir, exist_ok=True)
 
-    all_patient_dir = sorted(glob(os.path.join(path, "MoNuSAC_images_and_annotations", "*")))
+    all_patient_dir = sorted(glob(os.path.join(path, "MoNuSAC*", "*")))
 
     for patient_dir in tqdm(all_patient_dir, desc=f"Converting {split} inputs for all patients"):
         all_img_dir = sorted(glob(os.path.join(patient_dir, "*.tif")))
         all_xml_label_dir = sorted(glob(os.path.join(patient_dir, "*.xml")))
+
+        if len(all_img_dir) != len(all_xml_label_dir):
+            _convert_missing_tif_from_svs(patient_dir)
+            all_img_dir = sorted(glob(os.path.join(patient_dir, "*.tif")))
 
         assert len(all_img_dir) == len(all_xml_label_dir)
 
@@ -94,6 +99,30 @@ def _process_monusac(path, split):
     shutil.rmtree(glob(os.path.join(path, "MoNuSAC*"))[0])
 
 
+def _convert_missing_tif_from_svs(patient_dir):
+    """This function activates when we see some missing tiff inputs (and converts svs to tiff)
+
+    Cause: Happens only in the test split, maybe while converting the data, some were missed
+    Fix: We have the original svs scans. We convert the svs scans to tiff
+    """
+    all_svs_dir = sorted(glob(os.path.join(patient_dir, "*.svs")))
+    for svs_path in all_svs_dir:
+        save_tif_path = os.path.splitext(svs_path)[0] + ".tif"
+        if not os.path.exists(save_tif_path):
+            img_array = util.convert_svs_to_tiff(svs_path)
+            imageio.imwrite(save_tif_path, img_array)
+
+
+def get_patient_id(path, split_wrt="-01Z-00-"):
+    """Gets us the patient id in the expected format
+    Input Names: "TCGA-<XX>-<XXXX>-01z-00-DX<X>-(<X>, <00X>).tif" (example: TCGA-2Z-A9JG-01Z-00-DX1_1.tif)
+    Expected: "TCGA-<XX>-<XXXX>"                                  (example: TCGA-2Z-A9JG)
+    """
+    patient_image_id = Path(path).stem
+    patient_id = patient_image_id.split(split_wrt)[0]
+    return patient_id
+
+
 def get_monusac_dataset(
     path, patch_shape, split, organ_type: Optional[List[str]] = None, download=False,
     offsets=None, boundaries=False, binary=False, **kwargs
@@ -109,12 +138,8 @@ def get_monusac_dataset(
         # get all patients for multiple organ selection
         all_organ_splits = sum([ORGAN_SPLITS[split][o] for o in organ_type], [])
 
-        image_paths = [
-            _path for _path in image_paths if os.path.split(_path)[-1].split(".")[0] in all_organ_splits
-        ]
-        label_paths = [
-            _path for _path in label_paths if os.path.split(_path)[-1].split(".")[0] in all_organ_splits
-        ]
+        image_paths = [_path for _path in image_paths if get_patient_id(_path) in all_organ_splits]
+        label_paths = [_path for _path in label_paths if get_patient_id(_path) in all_organ_splits]
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
