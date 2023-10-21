@@ -22,7 +22,7 @@ def size_filter(seg, min_size, hmap=None, with_background=False):
         ids, sizes = np.unique(seg, return_counts=True)
         bg_ids = ids[sizes < min_size]
         seg[np.isin(seg, bg_ids)] = 0
-        vigra.analysis.relabelConsecutive(seg, out=seg, start_label=1, keep_zeros=True)
+        seg, _, _ = vigra.analysis.relabelConsecutive(seg.astype(np.uint), start_label=1, keep_zeros=True)
     else:
         assert hmap.ndim in (seg.ndim, seg.ndim + 1)
         hmap_ = np.max(hmap[:seg.ndim], axis=0) if hmap.ndim > seg.ndim else hmap
@@ -48,18 +48,22 @@ def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
     return seg.astype("uint64")
 
 
-def watershed_from_components(
-    boundaries,
-    foreground,
-    min_size,
-    threshold1=0.5,
-    threshold2=0.5,
-):
+def watershed_from_components(boundaries, foreground, min_size, threshold1=0.5, threshold2=0.5):
     """The default approach:
     - Subtract the boundaries from the foreground to separate touching objects.
     - Use the connected components of this as seeds.
     - Use the thresholded foreground predictions as mask to grow back the pieces
-    lost by subtracting the boundary prediction.
+      lost by subtracting the boundary prediction.
+
+    Arguments:
+        - boundaries: [np.ndarray] - The boundaries for objects
+        - foreground: [np.ndarray] - The foregrounds for objects
+        - min_size: [int] - The minimum pixels (below which) to filter objects
+        - threshold1: [float] - To separate touching objects (by subtracting bd and fg) above threshold
+        - threshold2: [float] - To threshold foreground predictions
+
+    Returns:
+        seg: [np.ndarray] - instance segmentation
     """
     seeds = label((foreground - boundaries) > threshold1)
     mask = foreground > threshold2
@@ -68,21 +72,26 @@ def watershed_from_components(
     return seg
 
 
-def watershed_from_maxima(
-    boundaries,
-    foreground,
-    min_size,
-    min_distance,
-    sigma=1.0,
-):
+def watershed_from_maxima(boundaries, foreground, min_size, min_distance, sigma=1.0, threshold1=0.5):
     """Find objects via seeded watershed starting from the maxima of the distance transform instead.
     This has the advantage that objects can be better separated, but it may over-segment
     if the objects have complex shapes.
 
     The min_distance parameter controls the minimal distance between seeds, which
     corresponds to the minimal distance between object centers.
+
+    Arguments:
+        - boundaries: [np.ndarray] - The boundaries for objects
+        - foreground: [np.ndarray] - The foreground for objects
+        - min_size: [int] - min. pixels (below which) to filter objects
+        - min_distance: [int] - min. distance of peaks (see `from skimage.feature import peak_local_max`)
+        - sigma: [float] - standard deviation for gaussian kernel. (see `from skimage.filters import gaussian`)
+        - threshold1: [float] - To threshold foreground predictions
+
+    Returns
+        seg: [np.ndarray] - instance segmentation
     """
-    mask = foreground > 0.5
+    mask = foreground > threshold1
     boundary_distances = distance_transform_edt(boundaries < 0.1)
     boundary_distances[~mask] = 0  # type: ignore
     boundary_distances = gaussian(boundary_distances, sigma)  # type: ignore

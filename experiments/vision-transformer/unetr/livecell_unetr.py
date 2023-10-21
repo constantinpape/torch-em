@@ -12,10 +12,10 @@ from skimage.segmentation import find_boundaries
 
 import torch
 import torch_em
+from torch_em.util import segmentation
 from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.util.prediction import predict_with_halo
-from torch_em.util import segmentation
 
 
 def get_unetr_model(
@@ -134,6 +134,8 @@ def do_unetr_inference(
 
         os.makedirs(fg_save_dir, exist_ok=True)
         os.makedirs(bd_save_dir, exist_ok=True)
+        os.makedirs(ws1_save_dir, exist_ok=True)
+        os.makedirs(ws2_save_dir, exist_ok=True)
 
         with torch.no_grad():
             for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for all livecell with model {model_ckpt}"):
@@ -147,15 +149,13 @@ def do_unetr_inference(
 
                 fg, bd = outputs[0, :, :], outputs[1, :, :]
 
-                ws1 = segmentation.watershed_from_components(bd, fg, min_size=100)
-                ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=100, min_distance=1)
+                ws1 = segmentation.watershed_from_components(bd, fg, min_size=10)
+                ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=10, min_distance=1)
 
-                breakpoint()
-
-                # imageio.imwrite(os.path.join(fg_save_dir, fname), fg)
-                # imageio.imwrite(os.path.join(bd_save_dir, fname), bd)
-                # imageio.imwrite(os.path.join(ws1_save_dir, fname), ws1)
-                # imageio.imwrite(os.path.join(ws2_save_dir, fname), ws2)
+                imageio.imwrite(os.path.join(fg_save_dir, fname), fg)
+                imageio.imwrite(os.path.join(bd_save_dir, fname), bd)
+                imageio.imwrite(os.path.join(ws1_save_dir, fname), ws1)
+                imageio.imwrite(os.path.join(ws2_save_dir, fname), ws2)
 
 
 def do_unetr_evaluation(
