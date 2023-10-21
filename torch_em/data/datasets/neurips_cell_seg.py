@@ -40,7 +40,8 @@ def to_rgb(image):
 # (but we would need to know mapping of images to modality)
 def _get_image_and_label_paths(root, split, val_fraction):
     path = os.path.join(root, "TrainLabeled")
-    assert os.path.exists(root), root
+    assert os.path.exists(root), "Please download the dataset and assort the data as expected here.\
+        See `get_neurips_cellseg_supervised_dataset`"
 
     image_folder = os.path.join(path, "images")
     assert os.path.exists(image_folder)
@@ -101,7 +102,8 @@ def get_neurips_cellseg_supervised_dataset(
 
     NOTE:
         - The dataset isn't available to download using an in-built functionality
-        - Please download the dataset from here: https://drive.google.com/drive/folders/1NFplvkQzc_nHFwpnB55lw2nD6coc91VV
+        - Please download the dataset from here:\
+            https://drive.google.com/drive/folders/1NFplvkQzc_nHFwpnB55lw2nD6coc91VV
         - REMEMBER: to convert the available data in the expected directory format
     """
     assert split in ("train", "val", None), split
@@ -150,7 +152,8 @@ def get_neurips_cellseg_supervised_loader(
 
 def _get_image_paths(root):
     path = os.path.join(root, "TrainUnlabeled")
-    assert os.path.exists(path), path
+    assert os.path.exists(path), "Please download the dataset and assort the data as expected here.\
+        See `get_neurips_cellseg_unsupervised_dataset`"
     image_paths = glob(os.path.join(path, "*"))
     image_paths.sort()
     return image_paths
@@ -158,7 +161,8 @@ def _get_image_paths(root):
 
 def _get_wholeslide_paths(root, patch_shape):
     path = os.path.join(root, "TrainUnlabeled_WholeSlide")
-    assert os.path.exists(path), path
+    assert os.path.exists(path), "Please download the dataset and assort the data as expected here.\
+        See `get_neurips_cellseg_unsupervised_dataset`"
     image_paths = glob(os.path.join(path, "*"))
     image_paths.sort()
 
@@ -192,7 +196,8 @@ def get_neurips_cellseg_unsupervised_dataset(
 
     NOTE:
         - The dataset isn't available to download using an in-built functionality
-        - Please download the dataset from here: https://drive.google.com/drive/folders/1NFplvkQzc_nHFwpnB55lw2nD6coc91VV
+        - Please download the dataset from here:\
+            https://drive.google.com/drive/folders/1NFplvkQzc_nHFwpnB55lw2nD6coc91VV
         - REMEMBER: to convert the available data in the expected directory format
     """
     if raw_transform is None:
