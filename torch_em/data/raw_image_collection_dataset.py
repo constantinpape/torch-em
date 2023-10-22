@@ -78,11 +78,20 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         ]
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
 
-    def _ensure_patch_shape(self, raw, have_raw_channels):
+    def _ensure_patch_shape(self, raw, have_raw_channels, channel_first):
         shape = raw.shape
+        if have_raw_channels and channel_first:
+            shape = shape[1:]
         if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
             pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
-            pw_raw = [*pw, (0, 0)] if have_raw_channels else pw
+
+            if have_raw_channels and channel_first:
+                pw_raw = [(0, 0), *pw]
+            elif have_raw_channels and not channel_first:
+                pw_raw = [*pw, (0, 0)]
+            else:
+                pw_raw = pw
+
             raw = np.pad(raw, pw_raw)
         return raw
 
@@ -92,7 +101,15 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         raw = load_image(self.raw_images[index])
         have_raw_channels = raw.ndim == 3
 
-        raw = self._ensure_patch_shape(raw, have_raw_channels)
+        # We determine if the image has channels as the first or last axis based on the array shape.
+        # This will work only for images with less than 16 channels!
+        # If the last axis has a length smaller than 16 we assume that it is the channel axis,
+        # otherwise we assume it is a spatial axis and that the first axis is the channel axis.
+        channel_first = None
+        if have_raw_channels:
+            channel_first = raw.shape[-1] > 16
+
+        raw = self._ensure_patch_shape(raw, have_raw_channels, channel_first)
 
         shape = raw.shape
         # we assume images are loaded with channel last!
