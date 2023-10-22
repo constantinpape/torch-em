@@ -109,7 +109,7 @@ def _convert_missing_tif_from_svs(patient_dir):
     for svs_path in all_svs_dir:
         save_tif_path = os.path.splitext(svs_path)[0] + ".tif"
         if not os.path.exists(save_tif_path):
-            img_array = util.convert_svs_to_tiff(svs_path)
+            img_array = util.convert_svs_to_array(svs_path)
             imageio.imwrite(save_tif_path, img_array)
 
 

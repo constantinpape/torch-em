@@ -103,9 +103,17 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
             shape = shape[1:]
         if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
             pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
-            pw_raw = [*pw, (0, 0)] if have_raw_channels else pw
-            pw_labels = [*pw, (0, 0)] if have_label_channels else pw
-            raw, labels = np.pad(raw, pw_raw), np.pad(labels, pw_labels)
+
+            if have_raw_channels and channel_first:
+                pw_raw = [(0, 0), *pw]
+            elif have_raw_channels and not channel_first:
+                pw_raw = [*pw, (0, 0)]
+            else:
+                pw_raw = pw
+
+            # TODO: ensure padding for labels with channels, when supported (see `_get_sample` below)
+
+            raw, labels = np.pad(raw, pw_raw), np.pad(labels, pw)
         return raw, labels
 
     def _get_sample(self, index):

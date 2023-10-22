@@ -214,8 +214,8 @@ def generate_labeled_array_from_xml(shape, xml_file):
     return mask
 
 
-def convert_svs_to_tiff(path, location=(0, 0), level=0, img_size=None):
-    """Converts .svs files to .tif format
+def convert_svs_to_array(path, location=(0, 0), level=0, img_size=None):
+    """Converts .svs files to numpy array format
 
     Argument:
         - path: [str] - Path to the svs file
@@ -226,6 +226,8 @@ def convert_svs_to_tiff(path, location=(0, 0), level=0, img_size=None):
 
     Returns:
         the image as numpy array
+
+    TODO: it can be extended to convert WSIs (or modalities with multiple resolutions)
     """
     assert path.endswith(".svs"), f"The provided file ({path}) isn't in svs format"
 
