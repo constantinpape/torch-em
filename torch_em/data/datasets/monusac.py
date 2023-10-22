@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, List
 
 import imageio.v3 as imageio
+from skimage.color import rgba2rgb
 
 import torch_em
 from . import util
@@ -61,6 +62,20 @@ def _download_monusac(path, download, split):
 
     _process_monusac(path, split)
 
+    _check_channel_consistency(path, split)
+
+
+def _check_channel_consistency(path, split):
+    "The provided tif images have RGBA channels, check and remove the alpha channel"
+    all_image_path = glob(os.path.join(path, "images", split, "*.tif"))
+    for image_path in all_image_path:
+        image = imageio.imread(image_path)
+
+        # the provided tif images are provided as channels last.
+        if image.shape[-1] == 4:
+            rgb_image = rgba2rgb(image)
+            imageio.imwrite(image_path, rgb_image)
+
 
 def _process_monusac(path, split):
     util.unzip(os.path.join(path, f"monusac_{split}.zip"), path)
@@ -110,6 +125,8 @@ def _convert_missing_tif_from_svs(patient_dir):
         save_tif_path = os.path.splitext(svs_path)[0] + ".tif"
         if not os.path.exists(save_tif_path):
             img_array = util.convert_svs_to_array(svs_path)
+            # the array from svs scans are supposed to be RGB images
+            assert img_array.shape[-1] == 3
             imageio.imwrite(save_tif_path, img_array)
 
 
@@ -140,6 +157,8 @@ def get_monusac_dataset(
 
         image_paths = [_path for _path in image_paths if get_patient_id(_path) in all_organ_splits]
         label_paths = [_path for _path in label_paths if get_patient_id(_path) in all_organ_splits]
+
+    assert len(image_paths) == len(label_paths)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
