@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Optional, List
 
 import imageio.v3 as imageio
-from skimage.color import rgba2rgb
 
 import torch_em
 from . import util
@@ -70,11 +69,9 @@ def _check_channel_consistency(path, split):
     all_image_path = glob(os.path.join(path, "images", split, "*.tif"))
     for image_path in all_image_path:
         image = imageio.imread(image_path)
-
-        # the provided tif images are provided as channels last.
-        if image.shape[-1] == 4:
-            rgb_image = rgba2rgb(image)
-            imageio.imwrite(image_path, rgb_image)
+        assert image.shape[-1] == 4, f"Image has an unexpected shape: {image.shape}"
+        rgb_image = image[..., :-1]  # get rid of the alpha channel
+        imageio.imwrite(image_path, rgb_image)
 
 
 def _process_monusac(path, split):
