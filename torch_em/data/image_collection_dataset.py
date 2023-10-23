@@ -102,11 +102,18 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         if have_raw_channels and channel_first:
             shape = shape[1:]
         if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
-            if have_raw_channels or have_label_channels:
-                raise NotImplementedError("Padding is not implemented for data with channels")
-            assert len(shape) == len(self.patch_shape)
             pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
-            raw, labels = np.pad(raw, pw), np.pad(labels, pw)
+
+            if have_raw_channels and channel_first:
+                pw_raw = [(0, 0), *pw]
+            elif have_raw_channels and not channel_first:
+                pw_raw = [*pw, (0, 0)]
+            else:
+                pw_raw = pw
+
+            # TODO: ensure padding for labels with channels, when supported (see `_get_sample` below)
+
+            raw, labels = np.pad(raw, pw_raw), np.pad(labels, pw)
         return raw, labels
 
     def _get_sample(self, index):
