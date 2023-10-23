@@ -212,3 +212,32 @@ def generate_labeled_array_from_xml(shape, xml_file):
         r, c = polygon(np.array(contour)[:, 1], np.array(contour)[:, 0], shape=shape)
         mask[r, c] = i
     return mask
+
+
+def convert_svs_to_array(path, location=(0, 0), level=0, img_size=None):
+    """Converts .svs files to numpy array format
+
+    Argument:
+        - path: [str] - Path to the svs file
+        (below mentioned arguments are used for multi-resolution images)
+        - location: tuple[int, int] - pixel location (x, y) in level 0 of the image (default: (0, 0))
+        - level: [int] -  target level used to read the image (default: 0)
+        - img_size: tuple[int, int] - expected size of the image (default: None -> obtains the original shape at the expected level)
+
+    Returns:
+        the image as numpy array
+
+    TODO: it can be extended to convert WSIs (or modalities with multiple resolutions)
+    """
+    assert path.endswith(".svs"), f"The provided file ({path}) isn't in svs format"
+
+    from tiffslide import TiffSlide
+
+    _slide = TiffSlide(path)
+
+    if img_size is None:
+        img_size = _slide.level_dimensions[0]
+
+    img_arr = _slide.read_region(location=location, level=level, size=img_size, as_array=True)
+
+    return img_arr
