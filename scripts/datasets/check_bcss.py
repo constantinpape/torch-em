@@ -42,7 +42,8 @@ def check_bcss():
         patch_shape=(512, 512),
         batch_size=2,
         download=False,
-        label_transform=BCSSLabelTrafo(label_choices=[0, 1, 2])
+        label_transform=BCSSLabelTrafo(label_choices=[0, 1, 2]),
+        split="train"
     )
     check_loader(chosen_label_loader, 8, instance_labels=True, rgb=True, plt=True, save_path="./bcss.png")
 
