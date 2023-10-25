@@ -3,8 +3,9 @@ import shutil
 from glob import glob
 from pathlib import Path
 
-import torch
+from sklearn.model_selection import train_test_split
 
+import torch
 import torch_em
 from torch_em.data.datasets import util
 from torch_em.data import ImageCollectionDataset
@@ -87,7 +88,7 @@ def _assort_bcss_data(path, download):
             shutil.copy(src=label_path, dst=dst_lab_path)
 
 
-def get_bcss_dataset(path, patch_shape, split, download=False, label_dtype=torch.int64, **kwargs):
+def get_bcss_dataset(path, patch_shape, split, val_fraction=0.2, download=False, label_dtype=torch.int64, **kwargs):
     """Dataset for breast cancer tissue segmentation in histopathology.
 
     This dataset is from https://bcsegmentation.grand-challenge.org/BCSS/.
@@ -117,13 +118,25 @@ def get_bcss_dataset(path, patch_shape, split, download=False, label_dtype=torch
         - 20: dcis
         - 21: other
     """
-    assert split in ["train", "test"], "Please choose from the available `train` / `test` splits"
+    assert split in ["train", "val", "test"], "Please choose from the available `train` / `val` / `test` splits"
 
     _assort_bcss_data(path, download)
 
-    # update the paths now based on the splits
-    image_paths = sorted(glob(os.path.join(path, split, "images", "*")))
-    label_paths = sorted(glob(os.path.join(path, split, "masks", "*")))
+    if split == "test":
+        image_paths = sorted(glob(os.path.join(path, "test", "images", "*")))
+        label_paths = sorted(glob(os.path.join(path, "test", "masks", "*")))
+    else:
+        image_paths = sorted(glob(os.path.join(path, "train", "images", "*")))
+        label_paths = sorted(glob(os.path.join(path, "train", "masks", "*")))
+
+        (train_image_paths, val_image_paths,
+         train_label_paths, val_label_paths) = train_test_split(
+             image_paths, label_paths, test_size=val_fraction, random_state=42
+         )
+
+        image_paths = train_image_paths if split == "train" else val_image_paths
+        label_paths = train_label_paths if split == "train" else val_label_paths
+
     assert len(image_paths) == len(label_paths)
 
     dataset = ImageCollectionDataset(
@@ -133,12 +146,12 @@ def get_bcss_dataset(path, patch_shape, split, download=False, label_dtype=torch
 
 
 def get_bcss_loader(
-        path, patch_shape, batch_size, split, download=False, label_dtype=torch.int64, **kwargs
+        path, patch_shape, batch_size, split, val_fraction=0.2, download=False, label_dtype=torch.int64, **kwargs
 ):
     """Dataloader for breast cancer tissue segmentation in histopathology. See `get_bcss_dataset` for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_bcss_dataset(
-        path, patch_shape, split, download=download, label_dtype=label_dtype, **ds_kwargs
+        path, patch_shape, split, val_fraction, download=download, label_dtype=label_dtype, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
     return loader
