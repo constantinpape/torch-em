@@ -1,8 +1,7 @@
 import numpy as np
 from typing import Optional, List
 
-import vigra
-
+import torch_em
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets import get_bcss_loader
 
@@ -22,13 +21,12 @@ class BCSSLabelTrafo():
             self,
             labels: np.ndarray
     ) -> np.ndarray:
-        """Returns the transformed labels (use-case for SAM)
-        """
+        """Returns the transformed labels (use-case for SAM)"""
         if self.label_choices is not None:
             labels[~np.isin(labels, self.label_choices)] = 0
-            segmentation, _, _ = vigra.analysis.relabelConsecutive(labels.astype("uint64"))
+            segmentation = torch_em.transform.label.label_consecutive(labels)
         else:
-            segmentation, _, _ = vigra.analysis.relabelConsecutive(labels)
+            segmentation = torch_em.transform.label.label_consecutive(labels)
 
         return segmentation
 
@@ -40,11 +38,11 @@ def check_bcss():
     chosen_label_loader = get_bcss_loader(
         path=BCSS_ROOT,
         patch_shape=(512, 512),
-        batch_size=2,
+        batch_size=1,
         download=False,
-        label_transform=BCSSLabelTrafo(label_choices=[0, 1, 2]),
-        split="train"
+        label_transform=BCSSLabelTrafo(label_choices=[0, 1, 2])
     )
+    print("Length of loader:", len(chosen_label_loader))
     check_loader(chosen_label_loader, 8, instance_labels=True, rgb=True, plt=True, save_path="./bcss.png")
 
 
