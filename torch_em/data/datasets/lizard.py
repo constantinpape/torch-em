@@ -1,4 +1,5 @@
 import os
+import warnings
 from glob import glob
 from shutil import rmtree
 
@@ -10,6 +11,10 @@ from scipy.io import loadmat
 from tqdm import tqdm
 from .import util
 
+# TODO: the links don't work anymore (?)
+# workaround to still make this work (kaggle still has the dataset in the same structure):
+#   - download the zip files manually from here - https://www.kaggle.com/datasets/aadimator/lizard-dataset
+#   - Kaggle API (TODO) - `kaggle datasets download -d aadimator/lizard-dataset`
 URL1 = "https://warwick.ac.uk/fac/cross_fac/tia/data/lizard/lizard_images1.zip"
 URL2 = "https://warwick.ac.uk/fac/cross_fac/tia/data/lizard/lizard_images2.zip"
 LABEL_URL = "https://warwick.ac.uk/fac/cross_fac/tia/data/lizard/lizard_labels.zip"
@@ -85,6 +90,9 @@ def get_lizard_dataset(path, patch_shape, download=False, **kwargs):
     This dataset is from the publication https://doi.org/10.48550/arXiv.2108.11195.
     Please cite it if you use this dataset for a publication.
     """
+    if download:
+        warnings.warn(f"The download link does not work right now. Please manually download the zip files to {path} from https://www.kaggle.com/datasets/aadimator/lizard-dataset")
+
     _require_lizard_data(path, download)
 
     data_paths = glob(os.path.join(path, "*.h5"))
