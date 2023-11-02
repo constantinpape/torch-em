@@ -40,7 +40,8 @@ def do_unetr_training(
         log_image_interval=50,
         compile_model=False,
         save_root=save_root,
-        loss=loss
+        loss=loss,
+        metric=loss
     )
     trainer.fit(iterations)
 
