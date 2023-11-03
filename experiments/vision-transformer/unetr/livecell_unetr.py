@@ -53,6 +53,7 @@ def do_unetr_inference(
         cell_types: List[str],
         root_save_dir: str,
         save_root: str,
+        with_affinities: bool
 ):
     for ctype in cell_types:
         test_img_dir = os.path.join(input_path, "images", "livecell_test_images", "*")
@@ -64,15 +65,11 @@ def do_unetr_inference(
         model.to(device)
         model.eval()
 
-        fg_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "foreground")
-        bd_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "boundary")
-        ws1_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "watershed1")
-        ws2_save_dir = os.path.join(root_save_dir, f"src-{ctype}", "watershed2")
-
-        os.makedirs(fg_save_dir, exist_ok=True)
-        os.makedirs(bd_save_dir, exist_ok=True)
-        os.makedirs(ws1_save_dir, exist_ok=True)
-        os.makedirs(ws2_save_dir, exist_ok=True)
+        # creating the respective directories for saving the outputs
+        _settings = ["foreground", "boundary", "watershed1", "watershed2"]
+        for _setting in _settings:
+            tmp_save_dir = os.path.join(root_save_dir, f"src-{ctype}", _setting)
+            os.makedirs(tmp_save_dir, exist_ok=True)
 
         with torch.no_grad():
             for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for all livecell with model {model_ckpt}"):
@@ -80,19 +77,21 @@ def do_unetr_inference(
 
                 input_img = imageio.imread(img_path)
                 input_img = standardize(input_img)
-                outputs = predict_with_halo(
-                    input_img, model, gpu_ids=[device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True
-                )
 
-                fg, bd = outputs[0, :, :], outputs[1, :, :]
+                if with_affinities:
+                    raise NotImplementedError("This still needs to be implemented for affinity-based training")
 
-                ws1 = segmentation.watershed_from_components(bd, fg, min_size=10)
-                ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=10, min_distance=1)
+                else:  # inference using foreground-boundary inputs - for the unetr training
+                    outputs = predict_with_halo(
+                        input_img, model, gpu_ids=[device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True
+                    )
+                    fg, bd = outputs[0, :, :], outputs[1, :, :]
+                    ws1 = segmentation.watershed_from_components(bd, fg, min_size=10)
+                    ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=10, min_distance=1)
 
-                imageio.imwrite(os.path.join(fg_save_dir, fname), fg)
-                imageio.imwrite(os.path.join(bd_save_dir, fname), bd)
-                imageio.imwrite(os.path.join(ws1_save_dir, fname), ws1)
-                imageio.imwrite(os.path.join(ws2_save_dir, fname), ws2)
+                    _save_outputs = [fg, bd, ws1, ws2]
+                    for _setting, _output in zip(_settings, _save_outputs):
+                        imageio.imwrite(os.path.join(root_save_dir, f"src-{ctype}", _setting, fname), _output)
 
 
 def do_unetr_evaluation(
@@ -233,7 +232,7 @@ def main(args):
         print("2d UNETR inference on LIVECell dataset")
         do_unetr_inference(
             input_path=args.input, device=device, model=model, cell_types=common.CELL_TYPES,
-            root_save_dir=root_save_dir, save_root=save_root
+            root_save_dir=root_save_dir, save_root=save_root, with_affinities=args.with_affinities
         )
 
     if args.evaluate:
