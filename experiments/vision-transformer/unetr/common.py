@@ -1,8 +1,18 @@
+import os
+import h5py
 import argparse
+import numpy as np
 from typing import Tuple
 
+import imageio.v3 as imageio
+
+from torch_em.util import segmentation
+from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask
+from torch_em.util.prediction import predict_with_halo, predict_with_padding
+
+import common
 
 
 OFFSETS = [
@@ -20,6 +30,15 @@ CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"
 # LIVECELL DATALOADERS
 #
 
+
+def _get_output_channels(with_affinities):
+    if with_affinities:
+        n_out = len(OFFSETS) + 1
+    else:
+        n_out = 2
+    return n_out
+
+
 def get_my_livecell_loaders(
         input_path: str,
         patch_shape: Tuple[int, int],
@@ -30,7 +49,6 @@ def get_my_livecell_loaders(
     """
     if with_affinities:
         # this returns dataloaders with affinity channels and foreground-background channels
-        n_out = len(OFFSETS) + 1
         train_loader = get_livecell_loader(
             path=input_path, split="train", patch_shape=patch_shape, batch_size=2,
             cell_types=[cell_types], download=True, offsets=OFFSETS, num_workers=16
@@ -42,7 +60,6 @@ def get_my_livecell_loaders(
 
     else:
         # this returns dataloaders with foreground and boundary channels
-        n_out = 2
         train_loader = get_livecell_loader(
             path=input_path, split="train", patch_shape=patch_shape, batch_size=2,
             cell_types=[cell_types], download=True, boundaries=True, num_workers=16
@@ -52,7 +69,7 @@ def get_my_livecell_loaders(
             cell_types=[cell_types], download=True, boundaries=True, num_workers=16
         )
 
-    return train_loader, val_loader, n_out
+    return train_loader, val_loader
 
 
 #
@@ -92,6 +109,43 @@ def get_unetr_model(
         raise ValueError(f"The available UNETR models are either from \"torch-em\" or \"monai\", choose from them instead of - {source_choice}")
 
     return model
+
+
+#
+# LIVECELL UNETR INFERENCE - foreground boundary / foreground affinities
+#
+
+def predict_for_unetr(img_path, model, root_save_dir, ctype, device, with_affinities):
+    input_ = imageio.imread(img_path)
+    input_ = standardize(input_)
+
+    if with_affinities:  # inference using affinities
+        outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
+        fg, affs = np.array(outputs[0, 0]), np.array(outputs[0, 1:])
+        mws = segmentation.mutex_watershed_segmentation(fg, affs, common.OFFSETS, 100)
+
+    else:  # inference using foreground-boundary inputs - for the unetr training
+        outputs = predict_with_halo(input_, model, [device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True)
+        fg, bd = outputs[0, :, :], outputs[1, :, :]
+        ws1 = segmentation.watershed_from_components(bd, fg, min_size=10)
+        ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=10, min_distance=1)
+
+    fname = os.path.split(img_path)[-1]
+    with h5py.File(os.path.join(root_save_dir, f"src-{ctype}", f"{fname}.h5"), "a") as f:
+        ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
+        ds[:] = fg
+        if with_affinities:
+            ds = f.require_dataset("affinities", shape=affs.shape, compression="gzip", dtype=affs.dtype)
+            ds[:] = affs
+            ds = f.require_dataset("segmentation", shape=mws.shape, compression="gzip", dtype=mws.dtype)
+            ds[:] = mws
+        else:
+            ds = f.require_dataset("boundary", shape=bd.shape, compression="gzip", dtype=bd.dtype)
+            ds[:] = bd
+            ds = f.require_dataset("watershed1", shape=ws1.shape, compression="gzip", dtype=ws1.dtype)
+            ds[:] = ws1
+            ds = f.require_dataset("watershed2", shape=ws2.shape, compression="gzip", dtype=ws2.dtype)
+            ds[:] = ws2
 
 
 #
