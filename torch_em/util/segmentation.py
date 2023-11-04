@@ -3,6 +3,7 @@ import numpy as np
 import vigra
 import elf.segmentation as elseg
 from elf.segmentation.utils import normalize_input
+from elf.segmentation.mutex_watershed import mutex_watershed
 
 from skimage.measure import label
 from skimage.filters import gaussian
@@ -46,9 +47,9 @@ def mutex_watershed_segmentation(foreground, affinities, offsets, min_size, thre
     """
     mask = (foreground >= threshold)
     strides = [2] * foreground.ndim
-    segmentation = elseg.mutex_watershed(affinities, offets=offsets, mask=mask, strides=strides, randomize_strides=True)
-    segmentation = size_filter(segmentation.astype("uint32"), min_size=min_size, hmap=affinities, with_background=True)
-    return segmentation
+    seg = mutex_watershed(affinities, offsets=offsets, mask=mask, strides=strides, randomize_strides=True)
+    seg = size_filter(seg.astype("uint32"), min_size=min_size, hmap=affinities, with_background=True)
+    return seg
 
 
 def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):

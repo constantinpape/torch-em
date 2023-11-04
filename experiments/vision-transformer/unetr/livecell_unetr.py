@@ -5,15 +5,12 @@ from glob import glob
 from tqdm import tqdm
 from typing import List
 
-import imageio.v2 as imageio
+import imageio.v3 as imageio
 from skimage.segmentation import find_boundaries
 from elf.evaluation import dice_score, mean_segmentation_accuracy
 
 import torch
 import torch_em
-from torch_em.util import segmentation
-from torch_em.transform.raw import standardize
-from torch_em.util.prediction import predict_with_halo
 
 import common
 
@@ -55,43 +52,21 @@ def do_unetr_inference(
         save_root: str,
         with_affinities: bool
 ):
+    test_img_dir = os.path.join(input_path, "images", "livecell_test_images", "*")
     for ctype in cell_types:
-        test_img_dir = os.path.join(input_path, "images", "livecell_test_images", "*")
-
         model_ckpt = os.path.join(save_root, "checkpoints", f"livecell-{ctype}", "best.pt")
-        assert os.path.exists(model_ckpt)
+        assert os.path.exists(model_ckpt), model_ckpt
 
         model.load_state_dict(torch.load(model_ckpt, map_location=torch.device('cpu'))["model_state"])
         model.to(device)
         model.eval()
 
         # creating the respective directories for saving the outputs
-        _settings = ["foreground", "boundary", "watershed1", "watershed2"]
-        for _setting in _settings:
-            tmp_save_dir = os.path.join(root_save_dir, f"src-{ctype}", _setting)
-            os.makedirs(tmp_save_dir, exist_ok=True)
+        os.makedirs(os.path.join(root_save_dir, f"src-{ctype}"), exist_ok=True)
 
         with torch.no_grad():
             for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for all livecell with model {model_ckpt}"):
-                fname = os.path.split(img_path)[-1]
-
-                input_img = imageio.imread(img_path)
-                input_img = standardize(input_img)
-
-                if with_affinities:
-                    raise NotImplementedError("This still needs to be implemented for affinity-based training")
-
-                else:  # inference using foreground-boundary inputs - for the unetr training
-                    outputs = predict_with_halo(
-                        input_img, model, gpu_ids=[device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True
-                    )
-                    fg, bd = outputs[0, :, :], outputs[1, :, :]
-                    ws1 = segmentation.watershed_from_components(bd, fg, min_size=10)
-                    ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=10, min_distance=1)
-
-                    _save_outputs = [fg, bd, ws1, ws2]
-                    for _setting, _output in zip(_settings, _save_outputs):
-                        imageio.imwrite(os.path.join(root_save_dir, f"src-{ctype}", _setting, fname), _output)
+                common.predict_for_unetr(img_path, model, root_save_dir, ctype, device, with_affinities)
 
 
 def do_unetr_evaluation(
@@ -195,28 +170,26 @@ def main(args):
         with_affinities=args.with_affinities  # takes care of calling the loss for training with affinities
     )
 
-    # get the desired livecell loaders for training
-    train_loader, val_loader, output_channels = common.get_my_livecell_loaders(
-        args.input, patch_shape, args.cell_type,
-        with_affinities=args.with_affinities  # this takes care of getting the loaders with affinities
-    )
-
     # get the model for the training and inference on livecell dataset
     model = common.get_unetr_model(
         model_name=args.model_name, source_choice=args.source_choice, patch_shape=patch_shape,
-        sam_initialization=args.do_sam_ini, output_channels=output_channels
+        sam_initialization=args.do_sam_ini, output_channels=common._get_output_channels(args.with_affinities)
     )
     model.to(device)
 
     # determining where to save the checkpoints and tensorboard logs
     save_root = os.path.join(
-        args.save_root,
-        "affinities" if args.with_affinities else "boundaries",
+        args.save_root, "affinities" if args.with_affinities else "boundaries",
         f"{args.source_choice}-sam" if args.do_sam_ini else f"{args.source_choice}-scratch"
     ) if args.save_root is not None else args.save_root
 
     if args.train:
         print("2d UNETR training on LIVECell dataset")
+        # get the desired livecell loaders for training
+        train_loader, val_loader = common.get_my_livecell_loaders(
+            args.input, patch_shape, args.cell_type,
+            with_affinities=args.with_affinities  # this takes care of getting the loaders with affinities
+        )
         do_unetr_training(
             train_loader=train_loader, val_loader=val_loader, model=model, cell_types=args.cell_type,
             device=device, save_root=save_root, iterations=args.iterations, loss=loss
@@ -224,7 +197,8 @@ def main(args):
 
     # determines the directory where the predictions will be saved
     root_save_dir = os.path.join(
-        args.save_dir, f"unetr-{args.source_choice}-sam" if args.do_sam_ini else f"unetr-{args.source_choice}-scratch"
+        args.save_dir, "affinities" if args.with_affinities else "boundaries",
+        f"{args.source_choice}-sam" if args.do_sam_ini else f"{args.source_choice}-scratch"
     )
     print("Predictions are saved in", root_save_dir)
 
