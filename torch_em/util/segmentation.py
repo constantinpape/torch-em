@@ -34,10 +34,21 @@ def size_filter(seg, min_size, hmap=None, with_background=False):
     return seg
 
 
-def mutex_watershed(affinities, offsets, mask=None, strides=None):
-    return elseg.mutex_watershed(
-        affinities, offsets, mask=mask, strides=strides, randomize_strides=True
-    ).astype("uint64")
+def mutex_watershed_segmentation(foreground, affinities, offsets, min_size, threshold=0.5):
+    """Computes the mutex watershed segmentation using the affinity maps for respective pixel offsets
+
+    Arguments:
+        - foreground: [np.ndarray] - The foreground background channel for the objects
+        - affinities [np.ndarray] - The input affinity maps
+        - offsets: [list[list[int]]] - The pixel offsets corresponding to the affinity channels
+        - min_size: [int] - The minimum pixels (below which) to filter objects
+        - threshold: [float] - To threshold foreground predictions
+    """
+    mask = (foreground >= threshold)
+    strides = [2] * foreground.ndim
+    segmentation = elseg.mutex_watershed(affinities, offets=offsets, mask=mask, strides=strides, randomize_strides=True)
+    segmentation = size_filter(segmentation.astype("uint32"), min_size=min_size, hmap=affinities, with_background=True)
+    return segmentation
 
 
 def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
