@@ -3,8 +3,11 @@ import h5py
 import argparse
 import numpy as np
 from typing import Tuple
+from pathlib import Path
 
 import imageio.v3 as imageio
+from skimage.segmentation import find_boundaries
+from elf.evaluation import dice_score, mean_segmentation_accuracy
 
 from torch_em.util import segmentation
 from torch_em.transform.raw import standardize
@@ -130,7 +133,7 @@ def predict_for_unetr(img_path, model, root_save_dir, ctype, device, with_affini
         ws1 = segmentation.watershed_from_components(bd, fg, min_size=10)
         ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=10, min_distance=1)
 
-    fname = os.path.split(img_path)[-1]
+    fname = Path(img_path).stem
     with h5py.File(os.path.join(root_save_dir, f"src-{ctype}", f"{fname}.h5"), "a") as f:
         ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
         ds[:] = fg
@@ -146,6 +149,50 @@ def predict_for_unetr(img_path, model, root_save_dir, ctype, device, with_affini
             ds[:] = ws1
             ds = f.require_dataset("watershed2", shape=ws2.shape, compression="gzip", dtype=ws2.dtype)
             ds[:] = ws2
+
+
+#
+# LIVECELL UNETR EVALUATION - foreground boundary / foreground affinities
+#
+
+def evaluate_for_unetr(gt_path, _save_dir, with_affinities):
+    # FIXME: fname = Path(img_path).stem
+    fname = os.path.split(gt_path)[-1]
+    gt = imageio.imread(gt_path)
+
+    output_file = os.path.join(_save_dir, f"{fname}.h5")
+    with h5py.File(output_file, "r") as f:
+        if with_affinities:
+            mws = f["segmentation"][:]
+        else:
+            fg = f["foreground"][:]
+            bd = f["boundary"][:]
+            ws1 = f["watershed1"][:]
+            ws2 = f["watershed2"][:]
+
+    if with_affinities:
+        mws_msa, mws_sa_acc = mean_segmentation_accuracy(mws, gt, return_accuracies=True)
+        return mws_msa, mws_sa_acc[0]
+
+    else:
+        true_bd = find_boundaries(gt)
+
+        # Compare the foreground prediction to the ground-truth.
+        # Here, it's important not to threshold the segmentation. Otherwise EVERYTHING will be set to
+        # foreground in the dice function, since we have a comparision > 0 in there, and everything in the
+        # binary prediction evaluates to true.
+        # For the GT we can set the threshold to 0, because this will map to the correct binary mask.
+        fg_dice = dice_score(fg, gt, threshold_gt=0, threshold_seg=None)
+
+        # Compare the background prediction to the ground-truth.
+        # Here, we don't need any thresholds: for the prediction the same holds as before.
+        # For the ground-truth we have already a binary label, so we don't need to threshold it again.
+        bd_dice = dice_score(bd, true_bd, threshold_gt=None, threshold_seg=None)
+
+        msa1, sa_acc1 = mean_segmentation_accuracy(ws1, gt, return_accuracies=True)  # type: ignore
+        msa2, sa_acc2 = mean_segmentation_accuracy(ws2, gt, return_accuracies=True)  # type: ignore
+
+        return fg_dice, bd_dice, msa1, sa_acc1, msa2, sa_acc2
 
 
 #
