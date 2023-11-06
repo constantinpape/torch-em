@@ -5,10 +5,6 @@ from glob import glob
 from tqdm import tqdm
 from typing import List
 
-import imageio.v3 as imageio
-from skimage.segmentation import find_boundaries
-from elf.evaluation import dice_score, mean_segmentation_accuracy
-
 import torch
 import torch_em
 
@@ -73,92 +69,88 @@ def do_unetr_evaluation(
         input_path: str,
         cell_types: List[str],
         root_save_dir: str,
-        sam_initialization: bool,
-        source_choice: str
+        csv_save_dir: str,
+        with_affinities: bool
 ):
+    # list for foreground-boundary evaluations
     fg_list, bd_list = [], []
     ws1_msa_list, ws2_msa_list, ws1_sa50_list, ws2_sa50_list = [], [], [], []
 
+    # lists for affinities evaluation
+    mws_msa_list, mws_sa50_list = [], []
+
     for c1 in cell_types:
+        # we check whether we have predictions from a particular cell-type
         _save_dir = os.path.join(root_save_dir, f"src-{c1}")
         if not os.path.exists(_save_dir):
             print("Skipping", _save_dir)
             continue
 
+        # dict for foreground-boundary evaluations
         fg_set, bd_set = {"CELL TYPE": c1}, {"CELL TYPE": c1}
         (ws1_msa_set, ws2_msa_set,
          ws1_sa50_set, ws2_sa50_set) = {"CELL TYPE": c1}, {"CELL TYPE": c1}, {"CELL TYPE": c1}, {"CELL TYPE": c1}
-        for c2 in tqdm(cell_types, desc=f"Evaluation on {c1} source models from {_save_dir}"):
-            fg_dir = os.path.join(_save_dir, "foreground")
-            bd_dir = os.path.join(_save_dir, "boundary")
-            ws1_dir = os.path.join(_save_dir, "watershed1")
-            ws2_dir = os.path.join(_save_dir, "watershed2")
 
+        # dict for affinities evaluation
+        mws_msa_set, mws_sa50_set = {"CELL TYPE": c1}, {"CELL TYPE": c1}
+
+        for c2 in tqdm(cell_types, desc=f"Evaluation on {c1} source models from {_save_dir}"):
             gt_dir = os.path.join(input_path, "annotations", "livecell_test_images", c2, "*")
+
+            # cell-wise evaluation list for foreground-boundary evaluations
             cwise_fg, cwise_bd = [], []
             cwise_ws1_msa, cwise_ws2_msa, cwise_ws1_sa50, cwise_ws2_sa50 = [], [], [], []
+
+            # cell-wise evaluation list for affinities evaluation
+            cwise_mws_msa, cwise_mws_sa50 = [], []
+
             for gt_path in glob(gt_dir):
-                fname = os.path.split(gt_path)[-1]
+                all_metrics = common.evaluate_for_unetr(gt_path, _save_dir, with_affinities)
+                if with_affinities:
+                    mws_msa, mws_sa50 = all_metrics
+                    cwise_mws_msa.append(mws_msa)
+                    cwise_mws_sa50.append(mws_sa50)
+                else:
+                    fg_dice, bd_dice, msa1, sa_acc1, msa2, sa_acc2 = all_metrics
+                    cwise_fg.append(fg_dice)
+                    cwise_bd.append(bd_dice)
+                    cwise_ws1_msa.append(msa1)
+                    cwise_ws2_msa.append(msa2)
+                    cwise_ws1_sa50.append(sa_acc1[0])
+                    cwise_ws2_sa50.append(sa_acc2[0])
 
-                gt = imageio.imread(gt_path)
-                fg = imageio.imread(os.path.join(fg_dir, fname))
-                bd = imageio.imread(os.path.join(bd_dir, fname))
-                ws1 = imageio.imread(os.path.join(ws1_dir, fname))
-                ws2 = imageio.imread(os.path.join(ws2_dir, fname))
+            if with_affinities:
+                mws_msa_set[c2], mws_sa50_set[c2] = np.mean(cwise_mws_msa), np.mean(cwise_mws_sa50)
+            else:
+                fg_set[c2], bd_set[c2] = np.mean(cwise_fg), np.mean(cwise_bd)
+                ws1_msa_set[c2], ws2_msa_set[c2] = np.mean(cwise_ws1_msa), np.mean(cwise_ws2_msa)
+                ws1_sa50_set[c2], ws2_sa50_set[c2] = np.mean(cwise_ws1_sa50), np.mean(cwise_ws2_sa50)
 
-                true_bd = find_boundaries(gt)
+        if with_affinities:
+            mws_msa_list.append(pd.DataFrame.from_dict([mws_msa_set]))
+            mws_sa50_list.append(pd.DataFrame.from_dict([mws_sa50_set]))
+        else:
+            fg_list.append(pd.DataFrame.from_dict([fg_set]))
+            bd_list.append(pd.DataFrame.from_dict([bd_set]))
+            ws1_msa_list.append(pd.DataFrame.from_dict([ws1_msa_set]))
+            ws2_msa_list.append(pd.DataFrame.from_dict([ws2_msa_set]))
+            ws1_sa50_list.append(pd.DataFrame.from_dict([ws1_sa50_set]))
+            ws2_sa50_list.append(pd.DataFrame.from_dict([ws2_sa50_set]))
 
-                # Compare the foreground prediction to the ground-truth.
-                # Here, it's important not to threshold the segmentation. Otherwise EVERYTHING will be set to
-                # foreground in the dice function, since we have a comparision > 0 in there, and everything in the
-                # binary prediction evaluates to true.
-                # For the GT we can set the threshold to 0, because this will map to the correct binary mask.
-                cwise_fg.append(dice_score(fg, gt, threshold_gt=0, threshold_seg=None))
-
-                # Compare the background prediction to the ground-truth.
-                # Here, we don't need any thresholds: for the prediction the same holds as before.
-                # For the ground-truth we have already a binary label, so we don't need to threshold it again.
-                cwise_bd.append(dice_score(bd, true_bd, threshold_gt=None, threshold_seg=None))
-
-                msa1, sa_acc1 = mean_segmentation_accuracy(ws1, gt, return_accuracies=True)  # type: ignore
-                msa2, sa_acc2 = mean_segmentation_accuracy(ws2, gt, return_accuracies=True)  # type: ignore
-
-                cwise_ws1_msa.append(msa1)
-                cwise_ws2_msa.append(msa2)
-                cwise_ws1_sa50.append(sa_acc1[0])
-                cwise_ws2_sa50.append(sa_acc2[0])
-
-            fg_set[c2] = np.mean(cwise_fg)
-            bd_set[c2] = np.mean(cwise_bd)
-            ws1_msa_set[c2] = np.mean(cwise_ws1_msa)
-            ws2_msa_set[c2] = np.mean(cwise_ws2_msa)
-            ws1_sa50_set[c2] = np.mean(cwise_ws1_sa50)
-            ws2_sa50_set[c2] = np.mean(cwise_ws2_sa50)
-
-        fg_list.append(pd.DataFrame.from_dict([fg_set]))  # type: ignore
-        bd_list.append(pd.DataFrame.from_dict([bd_set]))  # type: ignore
-        ws1_msa_list.append(pd.DataFrame.from_dict([ws1_msa_set]))  # type: ignore
-        ws2_msa_list.append(pd.DataFrame.from_dict([ws2_msa_set]))  # type: ignore
-        ws1_sa50_list.append(pd.DataFrame.from_dict([ws1_sa50_set]))  # type: ignore
-        ws2_sa50_list.append(pd.DataFrame.from_dict([ws2_sa50_set]))  # type: ignore
-
-    f_df_fg = pd.concat(fg_list, ignore_index=True)
-    f_df_bd = pd.concat(bd_list, ignore_index=True)
-    f_df_ws1_msa = pd.concat(ws1_msa_list, ignore_index=True)
-    f_df_ws2_msa = pd.concat(ws2_msa_list, ignore_index=True)
-    f_df_ws1_sa50 = pd.concat(ws1_sa50_list, ignore_index=True)
-    f_df_ws2_sa50 = pd.concat(ws2_sa50_list, ignore_index=True)
-
-    tmp_csv_name = f"{source_choice}-sam" if sam_initialization else f"{source_choice}-scratch"
-    csv_save_dir = f"./results/{tmp_csv_name}"
-    os.makedirs(csv_save_dir, exist_ok=True)
-
-    f_df_fg.to_csv(os.path.join(csv_save_dir, "foreground-dice.csv"))
-    f_df_bd.to_csv(os.path.join(csv_save_dir, "boundary-dice.csv"))
-    f_df_ws1_msa.to_csv(os.path.join(csv_save_dir, "watershed1-msa.csv"))
-    f_df_ws2_msa.to_csv(os.path.join(csv_save_dir, "watershed2-msa.csv"))
-    f_df_ws1_sa50.to_csv(os.path.join(csv_save_dir, "watershed1-sa50.csv"))
-    f_df_ws2_sa50.to_csv(os.path.join(csv_save_dir, "watershed2-sa50.csv"))
+    if with_affinities:
+        df_mws_msa, df_mws_sa50 = pd.concat(mws_msa_list, ignore_index=True), pd.concat(mws_sa50_list, ignore_index=True)
+        df_mws_msa.to_csv(os.path.join(csv_save_dir, "mws-affs-msa.csv"))
+        df_mws_sa50.to_csv(os.path.join(csv_save_dir, "mws-affs-sa50.csv"))
+    else:
+        df_fg, df_bd = pd.concat(fg_list, ignore_index=True), pd.concat(bd_list, ignore_index=True)
+        df_ws1_msa, df_ws2_msa = pd.concat(ws1_msa_list, ignore_index=True), pd.concat(ws2_msa_list, ignore_index=True)
+        df_ws1_sa50, df_ws2_sa50 = pd.concat(ws1_sa50_list, ignore_index=True), pd.concat(ws2_sa50_list, ignore_index=True)
+        df_fg.to_csv(os.path.join(csv_save_dir, "foreground-dice.csv"))
+        df_bd.to_csv(os.path.join(csv_save_dir, "boundary-dice.csv"))
+        df_ws1_msa.to_csv(os.path.join(csv_save_dir, "watershed1-msa.csv"))
+        df_ws2_msa.to_csv(os.path.join(csv_save_dir, "watershed2-msa.csv"))
+        df_ws1_sa50.to_csv(os.path.join(csv_save_dir, "watershed1-sa50.csv"))
+        df_ws2_sa50.to_csv(os.path.join(csv_save_dir, "watershed2-sa50.csv"))
 
 
 def main(args):
@@ -200,7 +192,6 @@ def main(args):
         args.save_dir, "affinities" if args.with_affinities else "boundaries",
         f"{args.source_choice}-sam" if args.do_sam_ini else f"{args.source_choice}-scratch"
     )
-    print("Predictions are saved in", root_save_dir)
 
     if args.predict:
         print("2d UNETR inference on LIVECell dataset")
@@ -208,12 +199,17 @@ def main(args):
             input_path=args.input, device=device, model=model, cell_types=common.CELL_TYPES,
             root_save_dir=root_save_dir, save_root=save_root, with_affinities=args.with_affinities
         )
+        print("Predictions are saved in", root_save_dir)
 
     if args.evaluate:
         print("2d UNETR evaluation on LIVECell dataset")
+        tmp_csv_name = f"{args.source_choice}-sam" if args.do_sam_ini else f"{args.source_choice}-scratch"
+        csv_save_dir = os.path.join("results", "affinities" if args.with_affinities else "boundaries", tmp_csv_name)
+        os.makedirs(csv_save_dir, exist_ok=True)
+
         do_unetr_evaluation(
             input_path=args.input, cell_types=common.CELL_TYPES, root_save_dir=root_save_dir,
-            sam_initialization=args.do_sam_ini, source_choice=args.source_choice
+            csv_save_dir=csv_save_dir, with_affinities=args.with_affinities
         )
 
 
