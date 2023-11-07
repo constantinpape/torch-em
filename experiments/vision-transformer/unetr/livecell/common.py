@@ -2,8 +2,8 @@ import os
 import h5py
 import argparse
 import numpy as np
-from typing import Tuple
 from pathlib import Path
+from typing import Tuple, Optional
 
 import imageio.v3 as imageio
 from skimage.segmentation import find_boundaries
@@ -14,8 +14,6 @@ from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask
 from torch_em.util.prediction import predict_with_halo, predict_with_padding
-
-import common
 
 
 OFFSETS = [
@@ -45,32 +43,37 @@ def _get_output_channels(with_affinities):
 def get_my_livecell_loaders(
         input_path: str,
         patch_shape: Tuple[int, int],
-        cell_types: str,
+        cell_types: Optional[str] = None,
         with_affinities: bool = False
 ):
     """Returns the LIVECell training and validation dataloaders
     """
-    if with_affinities:
+    train_loader = get_livecell_loader(
+        path=input_path,
+        split="train",
+        patch_shape=patch_shape,
+        batch_size=2,
+        download=True,
+        num_workers=16,
+        cell_types=None if cell_types is None else [cell_types],
         # this returns dataloaders with affinity channels and foreground-background channels
-        train_loader = get_livecell_loader(
-            path=input_path, split="train", patch_shape=patch_shape, batch_size=2,
-            cell_types=[cell_types], download=True, offsets=OFFSETS, num_workers=16
-        )
-        val_loader = get_livecell_loader(
-            path=input_path, split="val", patch_shape=patch_shape, batch_size=1,
-            cell_types=[cell_types], download=True, offsets=OFFSETS, num_workers=16
-        )
-
-    else:
+        offsets=OFFSETS if with_affinities else None,
         # this returns dataloaders with foreground and boundary channels
-        train_loader = get_livecell_loader(
-            path=input_path, split="train", patch_shape=patch_shape, batch_size=2,
-            cell_types=[cell_types], download=True, boundaries=True, num_workers=16
-        )
-        val_loader = get_livecell_loader(
-            path=input_path, split="val", patch_shape=patch_shape, batch_size=1,
-            cell_types=[cell_types], download=True, boundaries=True, num_workers=16
-        )
+        boundaries=False if with_affinities else True
+    )
+    val_loader = get_livecell_loader(
+        path=input_path,
+        split="val",
+        patch_shape=patch_shape,
+        batch_size=1,
+        download=True,
+        num_workers=16,
+        cell_types=None if cell_types is None else [cell_types],
+        # this returns dataloaders with affinity channels and foreground-background channels
+        offsets=OFFSETS if with_affinities else None,
+        # this returns dataloaders with foreground and boundary channels
+        boundaries=False if with_affinities else True
+    )
 
     return train_loader, val_loader
 
@@ -78,6 +81,11 @@ def get_my_livecell_loaders(
 #
 # UNETR MODEL(S) FROM MONAI AND torch_em
 #
+
+MODELS = {
+    "vit_b": "/scratch/projects/nim00007/sam/vanilla/sam_vit_b_01ec64.pth",
+    "vit_h": "/scratch/projects/nim00007/sam/vanilla/sam_vit_h_4b8939.pth"
+}
 
 
 def get_unetr_model(
@@ -94,7 +102,7 @@ def get_unetr_model(
         from torch_em import model as torch_em_models
         model = torch_em_models.UNETR(
             encoder=model_name, out_channels=output_channels,
-            encoder_checkpoint_path="/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_b_01ec64.pth" if sam_initialization else None
+            encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None
         )
 
     elif source_choice == "monai":
@@ -118,14 +126,14 @@ def get_unetr_model(
 # LIVECELL UNETR INFERENCE - foreground boundary / foreground affinities
 #
 
-def predict_for_unetr(img_path, model, root_save_dir, ctype, device, with_affinities):
+def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, ctype=None):
     input_ = imageio.imread(img_path)
     input_ = standardize(input_)
 
     if with_affinities:  # inference using affinities
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
         fg, affs = np.array(outputs[0, 0]), np.array(outputs[0, 1:])
-        mws = segmentation.mutex_watershed_segmentation(fg, affs, common.OFFSETS, 250)
+        mws = segmentation.mutex_watershed_segmentation(fg, affs, OFFSETS, 250)
 
     else:  # inference using foreground-boundary inputs - for the unetr training
         outputs = predict_with_halo(input_, model, [device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True)
@@ -134,7 +142,8 @@ def predict_for_unetr(img_path, model, root_save_dir, ctype, device, with_affini
         ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=250, min_distance=1)
 
     fname = Path(img_path).stem
-    with h5py.File(os.path.join(root_save_dir, f"src-{ctype}", f"{fname}.h5"), "a") as f:
+    save_path = os.path.join(root_save_dir, "src-all" if ctype is None else f"src-{ctype}", f"{fname}.h5")
+    with h5py.File(save_path, "a") as f:
         ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
         ds[:] = fg
         if with_affinities:
@@ -156,8 +165,7 @@ def predict_for_unetr(img_path, model, root_save_dir, ctype, device, with_affini
 #
 
 def evaluate_for_unetr(gt_path, _save_dir, with_affinities):
-    # FIXME: fname = Path(img_path).stem
-    fname = os.path.split(gt_path)[-1]
+    fname = Path(gt_path).stem
     gt = imageio.imread(gt_path)
 
     output_file = os.path.join(_save_dir, f"{fname}.h5")
