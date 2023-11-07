@@ -133,13 +133,13 @@ def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, c
     if with_affinities:  # inference using affinities
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
         fg, affs = np.array(outputs[0, 0]), np.array(outputs[0, 1:])
-        mws = segmentation.mutex_watershed_segmentation(fg, affs, OFFSETS, 250)
+        mws = segmentation.mutex_watershed_segmentation(fg, affs, offsets=OFFSETS)
 
     else:  # inference using foreground-boundary inputs - for the unetr training
         outputs = predict_with_halo(input_, model, [device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True)
         fg, bd = outputs[0, :, :], outputs[1, :, :]
-        ws1 = segmentation.watershed_from_components(bd, fg, min_size=250)
-        ws2 = segmentation.watershed_from_maxima(bd, fg, min_size=250, min_distance=1)
+        ws1 = segmentation.watershed_from_components(bd, fg)
+        ws2 = segmentation.watershed_from_maxima(bd, fg, min_distance=1)
 
     fname = Path(img_path).stem
     save_path = os.path.join(root_save_dir, "src-all" if ctype is None else f"src-{ctype}", f"{fname}.h5")

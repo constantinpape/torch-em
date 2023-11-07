@@ -35,7 +35,7 @@ def size_filter(seg, min_size, hmap=None, with_background=False):
     return seg
 
 
-def mutex_watershed_segmentation(foreground, affinities, offsets, min_size, threshold=0.5):
+def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=250, threshold=0.5):
     """Computes the mutex watershed segmentation using the affinity maps for respective pixel offsets
 
     Arguments:
@@ -60,7 +60,7 @@ def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
     return seg.astype("uint64")
 
 
-def watershed_from_components(boundaries, foreground, min_size, threshold1=0.5, threshold2=0.5):
+def watershed_from_components(boundaries, foreground, min_size=250, threshold1=0.5, threshold2=0.5):
     """The default approach:
     - Subtract the boundaries from the foreground to separate touching objects.
     - Use the connected components of this as seeds.
@@ -84,7 +84,7 @@ def watershed_from_components(boundaries, foreground, min_size, threshold1=0.5, 
     return seg
 
 
-def watershed_from_maxima(boundaries, foreground, min_size, min_distance, sigma=1.0, threshold1=0.5):
+def watershed_from_maxima(boundaries, foreground, min_distance, min_size=250, sigma=1.0, threshold1=0.5):
     """Find objects via seeded watershed starting from the maxima of the distance transform instead.
     This has the advantage that objects can be better separated, but it may over-segment
     if the objects have complex shapes.
