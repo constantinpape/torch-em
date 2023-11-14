@@ -5,6 +5,10 @@ import numpy as np
 from pathlib import Path
 from typing import Tuple, Optional
 
+from scipy import ndimage
+from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import center_of_mass
+import vigra
 import imageio.v3 as imageio
 from skimage.segmentation import find_boundaries
 from elf.evaluation import dice_score, mean_segmentation_accuracy
@@ -40,11 +44,50 @@ def _get_output_channels(with_affinities):
     return n_out
 
 
+def center_distance(labels):
+    # compute the eccentricty centers
+    # First expensive step: center computation (leave it here, it's done once per image)
+    centers = vigra.filters.eccentricityCenters(labels.astype("uint32"))  # 1 for all eccentricity centers of the cells 0 elsewhere
+
+    distances = np.zeros((2,) + labels.shape, dtype="float32")
+
+    # TODO: precompute the bounding boxes and then do the distance computation only per bounding box
+    def compute_distance_map(cell_id):
+        center = centers[cell_id]
+        center_mask = np.zeros_like(labels)
+        center_mask[center] = 1
+
+        mask = labels == cell_id
+        mask = np.concatenate([mask[None]] * 2, axis=0)
+
+        # compute directed distance to the current center
+        # Second expensive step: compute the distance transform
+        # this is done for each instance so we want to reduce the effort by restricting this to the bounding box
+        this_distances = vigra.filters.vectorDistanceTransform(center_mask).transpose((2, 0, 1))  # directed distance transform applied to the centers
+
+        this_distances[~mask] = 0
+
+        # nornmalize the distances
+        this_distances /= this_distances.max()
+
+        # set all distances outside of cells to 0
+        distances[mask] = this_distances[mask]
+
+    cell_ids = np.unique(labels)[1:]
+    for cell_id in cell_ids:
+        compute_distance_map(cell_id)
+
+    return distances
+
+
 def get_my_livecell_loaders(
         input_path: str,
         patch_shape: Tuple[int, int],
         cell_types: Optional[str] = None,
-        with_affinities: bool = False
+        with_binary: bool = False,
+        with_boundary: bool = False,
+        with_affinities: bool = False,
+        with_distance_maps: bool = False,
 ):
     """Returns the LIVECell training and validation dataloaders
     """
@@ -58,8 +101,9 @@ def get_my_livecell_loaders(
         cell_types=None if cell_types is None else [cell_types],
         # this returns dataloaders with affinity channels and foreground-background channels
         offsets=OFFSETS if with_affinities else None,
-        # this returns dataloaders with foreground and boundary channels
-        boundaries=False if with_affinities else True
+        boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
+        binary=with_binary,
+        label_transform=get_xy_maps_label_trafo if with_distance_maps else None
     )
     val_loader = get_livecell_loader(
         path=input_path,
@@ -71,8 +115,9 @@ def get_my_livecell_loaders(
         cell_types=None if cell_types is None else [cell_types],
         # this returns dataloaders with affinity channels and foreground-background channels
         offsets=OFFSETS if with_affinities else None,
-        # this returns dataloaders with foreground and boundary channels
-        boundaries=False if with_affinities else True
+        boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
+        binary=with_binary,
+        label_transform=get_xy_maps_label_trafo if with_distance_maps else None
     )
 
     return train_loader, val_loader
