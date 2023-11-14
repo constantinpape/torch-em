@@ -116,7 +116,7 @@ def get_my_livecell_loaders(
         offsets=OFFSETS if with_affinities else None,
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
-        label_transform=get_xy_maps_label_trafo if with_distance_maps else None
+        label_transform=center_distance if with_distance_maps else None
     )
     val_loader = get_livecell_loader(
         path=input_path,
@@ -130,7 +130,7 @@ def get_my_livecell_loaders(
         offsets=OFFSETS if with_affinities else None,
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
-        label_transform=get_xy_maps_label_trafo if with_distance_maps else None
+        label_transform=center_distance if with_distance_maps else None
     )
 
     return train_loader, val_loader
