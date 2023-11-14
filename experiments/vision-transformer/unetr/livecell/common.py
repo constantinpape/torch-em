@@ -5,9 +5,6 @@ import numpy as np
 from pathlib import Path
 from typing import Tuple, Optional
 
-from scipy import ndimage
-from scipy.ndimage import distance_transform_edt
-from scipy.ndimage import center_of_mass
 import vigra
 import imageio.v3 as imageio
 from skimage.segmentation import find_boundaries
@@ -18,6 +15,8 @@ from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask
 from torch_em.util.prediction import predict_with_halo, predict_with_padding
+
+from micro_sam.util import get_centers_and_bounding_boxes
 
 
 OFFSETS = [
@@ -49,35 +48,49 @@ def center_distance(labels):
     # First expensive step: center computation (leave it here, it's done once per image)
     centers = vigra.filters.eccentricityCenters(labels.astype("uint32"))  # 1 for all eccentricity centers of the cells 0 elsewhere
 
-    distances = np.zeros((2,) + labels.shape, dtype="float32")
+    center_mask = np.zeros_like(labels)
+    for center in centers:
+        center_mask[center] = 1
+
+    x_distances = np.zeros(labels.shape, dtype="float32")
+    y_distances = np.zeros(labels.shape, dtype="float32")
+
+    _, bbox_coordinates = get_centers_and_bounding_boxes(labels, mode="p")
 
     # TODO: precompute the bounding boxes and then do the distance computation only per bounding box
     def compute_distance_map(cell_id):
-        center = centers[cell_id]
-        center_mask = np.zeros_like(labels)
-        center_mask[center] = 1
-
         mask = labels == cell_id
-        mask = np.concatenate([mask[None]] * 2, axis=0)
+
+        # getting the bounding box coordinates for masking the roi
+        bbox = bbox_coordinates[cell_id]
+
+        # crop the respective inputs to the bbox shape (for getting the distance transforms in the roi)
+        cropped_center_mask = center_mask[max(bbox[0], 0): min(bbox[2], mask.shape[-2]),max(bbox[1], 0): min(bbox[3], mask.shape[-1])]
+        cropped_mask = mask[max(bbox[0], 0): min(bbox[2], mask.shape[-2]), max(bbox[1], 0): min(bbox[3], mask.shape[-1])]
 
         # compute directed distance to the current center
         # Second expensive step: compute the distance transform
         # this is done for each instance so we want to reduce the effort by restricting this to the bounding box
-        this_distances = vigra.filters.vectorDistanceTransform(center_mask).transpose((2, 0, 1))  # directed distance transform applied to the centers
+        this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask).transpose((2, 0, 1))  # directed distance transform applied to the centers
+        this_x_distances, this_y_distances = this_distances[0], this_distances[1]
 
-        this_distances[~mask] = 0
+        # masking the distance transforms in the instances
+        this_x_distances[~cropped_mask] = 0
+        this_y_distances[~cropped_mask] = 0
 
         # nornmalize the distances
-        this_distances /= this_distances.max()
+        this_x_distances /= this_x_distances.max()
+        this_y_distances /= this_y_distances.max()
 
         # set all distances outside of cells to 0
-        distances[mask] = this_distances[mask]
+        x_distances[max(bbox[0], 0): min(bbox[2], mask.shape[-2]), max(bbox[1], 0): min(bbox[3], mask.shape[-1])][cropped_mask] = this_x_distances[cropped_mask]
+        y_distances[max(bbox[0], 0): min(bbox[2], mask.shape[-2]), max(bbox[1], 0): min(bbox[3], mask.shape[-1])][cropped_mask] = this_y_distances[cropped_mask]
 
-    cell_ids = np.unique(labels)[1:]
+    cell_ids = np.unique(labels)[1:]  # excluding background id
     for cell_id in cell_ids:
         compute_distance_map(cell_id)
 
-    return distances
+    return np.stack([x_distances[None], y_distances[None]], axis=0)
 
 
 def get_my_livecell_loaders(
