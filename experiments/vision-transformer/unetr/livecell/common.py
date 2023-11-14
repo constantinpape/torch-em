@@ -10,6 +10,7 @@ import imageio.v3 as imageio
 from skimage.segmentation import find_boundaries
 from elf.evaluation import dice_score, mean_segmentation_accuracy
 
+import torch
 from torch_em.util import segmentation
 from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
@@ -43,11 +44,13 @@ def _get_output_channels(with_affinities):
     return n_out
 
 
-def center_distance(labels):
+def get_distance_maps(labels):
+    labels = vigra.analysis.relabelConsecutive(labels.astype("uint32"))[0]
     # compute the eccentricty centers
     # First expensive step: center computation (leave it here, it's done once per image)
-    centers = vigra.filters.eccentricityCenters(labels.astype("uint32"))  # 1 for all eccentricity centers of the cells 0 elsewhere
+    centers = vigra.filters.eccentricityCenters(labels.astype("uint32"))
 
+    # 1 for all eccentricity centers of the cells 0 elsewhere
     center_mask = np.zeros_like(labels)
     for center in centers:
         center_mask[center] = 1
@@ -57,7 +60,6 @@ def center_distance(labels):
 
     _, bbox_coordinates = get_centers_and_bounding_boxes(labels, mode="p")
 
-    # TODO: precompute the bounding boxes and then do the distance computation only per bounding box
     def compute_distance_map(cell_id):
         mask = labels == cell_id
 
@@ -65,8 +67,14 @@ def center_distance(labels):
         bbox = bbox_coordinates[cell_id]
 
         # crop the respective inputs to the bbox shape (for getting the distance transforms in the roi)
-        cropped_center_mask = center_mask[max(bbox[0], 0): min(bbox[2], mask.shape[-2]),max(bbox[1], 0): min(bbox[3], mask.shape[-1])]
-        cropped_mask = mask[max(bbox[0], 0): min(bbox[2], mask.shape[-2]), max(bbox[1], 0): min(bbox[3], mask.shape[-1])]
+        cropped_center_mask = center_mask[
+            max(bbox[0], 0): min(bbox[2], mask.shape[-2]),
+            max(bbox[1], 0): min(bbox[3], mask.shape[-1])
+        ]
+        cropped_mask = mask[
+            max(bbox[0], 0): min(bbox[2], mask.shape[-2]),
+            max(bbox[1], 0): min(bbox[3], mask.shape[-1])
+        ]
 
         # compute directed distance to the current center
         # Second expensive step: compute the distance transform
@@ -83,14 +91,21 @@ def center_distance(labels):
         this_y_distances /= this_y_distances.max()
 
         # set all distances outside of cells to 0
-        x_distances[max(bbox[0], 0): min(bbox[2], mask.shape[-2]), max(bbox[1], 0): min(bbox[3], mask.shape[-1])][cropped_mask] = this_x_distances[cropped_mask]
-        y_distances[max(bbox[0], 0): min(bbox[2], mask.shape[-2]), max(bbox[1], 0): min(bbox[3], mask.shape[-1])][cropped_mask] = this_y_distances[cropped_mask]
+        x_distances[
+            max(bbox[0], 0): min(bbox[2], mask.shape[-2]),
+            max(bbox[1], 0): min(bbox[3], mask.shape[-1])
+        ][cropped_mask] = this_x_distances[cropped_mask]
+        y_distances[
+            max(bbox[0], 0): min(bbox[2], mask.shape[-2]),
+            max(bbox[1], 0): min(bbox[3], mask.shape[-1])
+        ][cropped_mask] = this_y_distances[cropped_mask]
 
     cell_ids = np.unique(labels)[1:]  # excluding background id
     for cell_id in cell_ids:
         compute_distance_map(cell_id)
 
-    return np.stack([x_distances[None], y_distances[None]], axis=0)
+    binary_labels = labels > 0
+    return np.stack([binary_labels, x_distances, y_distances], axis=0)
 
 
 def get_my_livecell_loaders(
@@ -116,7 +131,8 @@ def get_my_livecell_loaders(
         offsets=OFFSETS if with_affinities else None,
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
-        label_transform=center_distance if with_distance_maps else None
+        label_transform=get_distance_maps if with_distance_maps else None,
+        label_dtype=torch.float32
     )
     val_loader = get_livecell_loader(
         path=input_path,
@@ -130,7 +146,8 @@ def get_my_livecell_loaders(
         offsets=OFFSETS if with_affinities else None,
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
-        label_transform=center_distance if with_distance_maps else None
+        label_transform=get_distance_maps if with_distance_maps else None,
+        label_dtype=torch.float32
     )
 
     return train_loader, val_loader
