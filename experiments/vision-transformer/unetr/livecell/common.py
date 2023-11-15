@@ -11,6 +11,7 @@ from skimage.segmentation import find_boundaries
 from elf.evaluation import dice_score, mean_segmentation_accuracy
 
 import torch
+import torch.nn as nn
 from torch_em.util import segmentation
 from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
@@ -343,6 +344,111 @@ def get_parser():
 #
 
 
+class HoVerNetLoss(nn.Module):
+    """Computes the overall loss for the HoVer-Net style training
+    Reference: https://github.com/vqdang/hover_net/blob/master/models/hovernet/utils.py
+
+    Arguments:
+        compute_dice: The function to compute the dice loss (default: None)
+            - If `None`, we use the implementation from `torch_em.loss`
+        compute_mse: The function to compute the mse loss (default: None)
+            - If `None`, we use the implementation from PyTorch.
+        compute_bce: The function to compute the binary cross entropy loss (default: None)
+            - If `None`, we use the implementation from PyTorch.
+        device: To move the respective tensors to desired device (default: None)
+            - If `None`, we make use of `cuda` if GPU is found, else use `cpu` instead
+    """
+    def __init__(
+            self,
+            compute_dice=None,
+            compute_mse=None,
+            compute_bce=None,
+            device=None,
+            sobel_kernel_size: int = 5
+    ):
+        self.compute_dice = DiceLoss() if compute_dice is None else compute_dice
+        self.compute_mse = nn.MSELoss() if compute_mse is None else compute_mse
+        self.compute_bce = nn.BCELoss() if compute_bce is None else compute_bce
+
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+        
+        self.sobel_kernel_size = sobel_kernel_size
+
+    def get_sobel_kernel(self, size):
+        "Get the sobel kernel of a given window size"
+        assert size % 2 == 1, f"The expected window size should be odd, but {size} was passed"
+        hrange = torch.arange(-size // 2+1, size // 2+1, dtype=torch.float32)
+        vrange = torch.arange(-size // 2+1, size // 2+1, dtype=torch.float32)
+        h, v = torch.meshgrid(hrange, vrange)
+        kernel_y = h / (h*h + v*v + 1e-15)
+        kernel_x = v / (h*h + v*v + 1e-15)
+        return kernel_x, kernel_y
+
+    def get_distance_gradients(self, h_map, v_map):
+        "Calculates the gradients of the respective distance maps"
+        kernel_x, kernel_y = self.get_sobel_kernel(self.sobel_kernel_size)
+        kernel_x = kernel_x.view(1, 1, self.sobel_kernel_size, self.sobel_kernel_size)
+        kernel_y = kernel_y.view(1, 1, self.sobel_kernel_size, self.sobel_kernel_size)
+
+        h_ch = torch.from_numpy(h_map[None, None])
+        v_ch = torch.from_numpy(v_map[None, None])
+
+        g_h = nn.functional.conv2d(h_ch, kernel_x, padding=2)
+        g_v = nn.functional.conv2d(v_ch, kernel_y, padding=2)
+        ghv = torch.cat([g_h, g_v], dim=1)
+        return ghv
+
+    def compute_msge(self, input_, target, focus):
+        "Computes the mse loss for the respective gradients of distance maps and combines them together"
+        input_hmap, input_vmap = input_[0], input_[1]
+        target_hmap, target_vmap = target[0], target[1]
+
+        input_grad = self.get_distance_gradients(input_hmap, input_vmap)
+        target_grad = self.get_distance_gradients(target_hmap, target_vmap)
+        msge_loss = self.compute_mse(input_grad * focus, target_grad * focus)
+        return msge_loss
+
+    def get_np_branch_loss(self, input_, target):
+        "Computes the loss for the binary predictions w.r.t. the ground truth."
+        dice_loss = self.compute_dice(input_, target)
+        bce_loss = self.compute_bce(input_, target)
+
+        # losses added together to get overall loss for foreground background channel
+        output = dice_loss + bce_loss
+        return output
+
+    def get_hv_branch_loss(self, input_, target, focus):
+        "Computes the loss for the distances maps w.r.t. their respective ground truth."
+        focus = torch.cat([focus[None]] * 2)
+        # mean squared error loss of combined predicted hv distance maps w.r.t. the true hv distance maps
+        mse_loss = self.compute_mse(input_, target)
+
+        # mean squared error loss of the gradients of predicted h & v distance maps w.r.t. the true h & v maps
+        msge_loss = self.compute_msge(input_, target, focus)
+
+        # losses added together to get overall loss for distance maps (1*MSE + 2*MSGE - HoVerNet's empirical selection)
+        output = mse_loss + 2 * msge_loss
+        return output
+
+    def forward(self, input_, target):
+        # expected shape of both `input_` and `target` is (3*H*W)
+        # first channel is binary predictions; secound and third channels are horizontal and vertical maps respectively
+        assert input_.ndim == target.ndim == 3, input_.ndim
+        assert input_.shape[0] == target.shape[0] == 3, input_.shape
+
+        fg_input_, fg_target = input_[0], target[0]
+        binary_channel_loss = self.get_np_branch_loss(fg_input_, fg_target)
+
+        hv_input_, hv_target = input_[1:], target[1:]
+        distances_channel_loss = self.get_hv_branch_loss(hv_input_, hv_target, focus=fg_target)
+
+        overall_loss = binary_channel_loss + distances_channel_loss
+        return overall_loss
+
+
 def get_loss_function(with_affinities, with_distance_maps):
     if with_affinities:
         loss = LossWrapper(
@@ -350,14 +456,7 @@ def get_loss_function(with_affinities, with_distance_maps):
             transform=ApplyAndRemoveMask(masking_method="multiply")
         )
     elif with_distance_maps:
-        # TODO: need to create the loss function which takes care of all the model outputs automatically (hovernet logic)
-        # required loss functions:
-        #   - TODO: mse for combined predicted horizontal and vertical distances w.r.t. combined true horizontal and vertical distances
-        #   - TODO: msge (for gradients of hv maps) - for the gradients of predicted horizontal and true horizontal distances and respectively for vertical distances
-        #   - @torch_em: dice (?) or combined bce-dice (?) for foreground background predictions w.r.t. true fg labels
-        #       - if the choice is bce-dice, we add the two loss components as overall loss
-        # NEXT: we average these losses?
-        raise NotImplementedError
+        loss = HoVerNetLoss()
     else:
         loss = DiceLoss()
 
