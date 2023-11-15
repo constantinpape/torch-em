@@ -35,19 +35,11 @@ def main(args):
         args.input, patch_shape, args.cell_type, with_distance_maps=True
     )
 
-    from torch_em.util.debug import check_loader
-    check_loader(train_loader, 8, True, True, False, "livecell_train.png")
-
-    breakpoint()
-
-    quit()
-
     # directory folder to save different parts of the scheme
     dir_structure = os.path.join(args.model_name, "hovernet", "torch-em-sam")
 
     # get the desired loss function for training
-    # TODO: curate the loss function for us
-    loss = None
+    loss = common.get_loss_function(with_distance_maps=True)
 
     # get the model for the training and inference on livecell dataset
     model = common.get_unetr_model(

@@ -449,7 +449,7 @@ class HoVerNetLoss(nn.Module):
         return overall_loss
 
 
-def get_loss_function(with_affinities, with_distance_maps):
+def get_loss_function(with_affinities=False, with_distance_maps=False):
     if with_affinities:
         loss = LossWrapper(
             loss=DiceLoss(),
