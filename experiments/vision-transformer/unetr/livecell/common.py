@@ -374,7 +374,7 @@ class HoVerNetLoss(nn.Module):
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             self.device = device
-        
+
         self.sobel_kernel_size = sobel_kernel_size
 
     def get_sobel_kernel(self, size):
