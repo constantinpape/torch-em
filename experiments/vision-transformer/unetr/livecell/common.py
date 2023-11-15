@@ -338,12 +338,26 @@ def get_parser():
     return parser
 
 
-def get_loss_function(with_affinities=True):
+#
+# LOSS FUNCTIONS
+#
+
+
+def get_loss_function(with_affinities, with_distance_maps):
     if with_affinities:
         loss = LossWrapper(
             loss=DiceLoss(),
             transform=ApplyAndRemoveMask(masking_method="multiply")
         )
+    elif with_distance_maps:
+        # TODO: need to create the loss function which takes care of all the model outputs automatically (hovernet logic)
+        # required loss functions:
+        #   - TODO: mse for combined predicted horizontal and vertical distances w.r.t. combined true horizontal and vertical distances
+        #   - TODO: msge (for gradients of hv maps) - for the gradients of predicted horizontal and true horizontal distances and respectively for vertical distances
+        #   - @torch_em: dice (?) or combined bce-dice (?) for foreground background predictions w.r.t. true fg labels
+        #       - if the choice is bce-dice, we add the two loss components as overall loss
+        # NEXT: we average these losses?
+        raise NotImplementedError
     else:
         loss = DiceLoss()
 
