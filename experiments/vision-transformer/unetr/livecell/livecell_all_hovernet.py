@@ -31,10 +31,6 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # overwrite to use complex device setups
     patch_shape = (512, 512)  # patch size used for training on livecell
 
-    train_loader, val_loader = common.get_my_livecell_loaders(
-        args.input, patch_shape, args.cell_type, with_distance_maps=True
-    )
-
     # directory folder to save different parts of the scheme
     dir_structure = os.path.join(args.model_name, "hovernet", "torch-em-sam")
 
@@ -52,10 +48,10 @@ def main(args):
     save_root = os.path.join(args.save_root, dir_structure) if args.save_root is not None else args.save_root
 
     if args.train:
-        print("2d UNETR hovernet-idea training on LIVECell dataset")
+        print("2d UNETR hovernet-style training on LIVECell dataset")
         # get the desried livecell loaders for training
         train_loader, val_loader = common.get_my_livecell_loaders(
-            args.input, patch_shape, args.cell_type  # TODO: pass label transform to make the transform
+            args.input, patch_shape, args.cell_type, with_distance_maps=True
         )
         do_unetr_hovernet_training(
             train_loader=train_loader, val_loader=val_loader, model=model,
