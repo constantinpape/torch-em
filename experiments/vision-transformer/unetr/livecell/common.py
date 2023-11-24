@@ -82,7 +82,7 @@ def get_distance_maps(labels):
         # Second expensive step: compute the distance transform
         # this is done for each instance so we want to reduce the effort by restricting this to the bounding box
         this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask).transpose((2, 0, 1))  # directed distance transform applied to the centers
-        this_x_distances, this_y_distances = this_distances[0], this_distances[1]
+        this_y_distances, this_x_distances = this_distances[0], this_distances[1]
 
         # masking the distance transforms in the instances
         this_x_distances[~cropped_mask] = 0
@@ -391,21 +391,21 @@ class HoVerNetLoss(nn.Module):
         hrange = torch.arange(-size // 2+1, size // 2+1, dtype=torch.float32)
         vrange = torch.arange(-size // 2+1, size // 2+1, dtype=torch.float32)
         h, v = torch.meshgrid(hrange, vrange, indexing="ij")
-        kernel_x = h / (h*h + v*v + 1e-15)
-        kernel_y = v / (h*h + v*v + 1e-15)
-        return kernel_x, kernel_y
+        kernel_h = h / (h*h + v*v + 1e-15)
+        kernel_v = v / (h*h + v*v + 1e-15)
+        return kernel_h, kernel_v
 
     def get_distance_gradients(self, h_map, v_map):
         "Calculates the gradients of the respective distance maps"
-        kernel_x, kernel_y = self.get_sobel_kernel(self.sobel_kernel_size)
-        kernel_x = kernel_x.view(1, 1, self.sobel_kernel_size, self.sobel_kernel_size).to(self.device)
-        kernel_y = kernel_y.view(1, 1, self.sobel_kernel_size, self.sobel_kernel_size).to(self.device)
+        kernel_h, kernel_v = self.get_sobel_kernel(self.sobel_kernel_size)
+        kernel_h = kernel_h.view(1, 1, self.sobel_kernel_size, self.sobel_kernel_size).to(self.device)
+        kernel_v = kernel_v.view(1, 1, self.sobel_kernel_size, self.sobel_kernel_size).to(self.device)
 
         h_ch = h_map[:, None, ...]
         v_ch = v_map[:, None, ...]
 
-        g_h = nn.functional.conv2d(h_ch, kernel_x, padding=2)
-        g_v = nn.functional.conv2d(v_ch, kernel_y, padding=2)
+        g_h = nn.functional.conv2d(h_ch, kernel_h, padding=2)
+        g_v = nn.functional.conv2d(v_ch, kernel_v, padding=2)
         ghv = torch.cat([g_h, g_v], dim=1)
         return ghv
 

@@ -15,7 +15,7 @@ def do_unetr_hovernet_training(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        learning_rate=1e-4,
+        learning_rate=1e-5,
         device=device,
         mixed_precision=True,
         log_image_interval=50,
