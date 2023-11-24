@@ -15,7 +15,7 @@ def do_unetr_hovernet_training(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        learning_rate=1e-5,
+        learning_rate=1e-4,
         device=device,
         mixed_precision=True,
         log_image_interval=50,
@@ -39,8 +39,8 @@ def main(args):
 
     # get the model for the training and inference on livecell dataset
     model = common.get_unetr_model(
-        model_name=args.model_name, source_choice="torch-em", patch_shape=patch_shape, sam_initialization=True,
-        output_channels=3  # foreground-background, x-map, y-map
+        model_name=args.model_name, source_choice="torch-em", patch_shape=patch_shape,
+        sam_initialization=args.do_sam_ini, output_channels=3  # foreground-background, x-map, y-map
     )
     model.to(device)
 

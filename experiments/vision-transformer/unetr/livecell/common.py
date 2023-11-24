@@ -89,8 +89,14 @@ def get_distance_maps(labels):
         this_y_distances[~cropped_mask] = 0
 
         # nornmalize the distances
-        this_x_distances /= this_x_distances.max() + 1e-7
-        this_y_distances /= this_y_distances.max() + 1e-7
+        this_x_distances /= np.abs(this_x_distances).max() + 1e-7
+        this_y_distances /= np.abs(this_y_distances).max() + 1e-7
+
+        if np.abs(this_x_distances).max() > 1:
+            raise RuntimeError(np.unique(this_x_distances))
+
+        if np.abs(this_y_distances).max() > 1:
+            raise RuntimeError(np.unique(this_y_distances))
 
         # set all distances outside of cells to 0
         x_distances[
