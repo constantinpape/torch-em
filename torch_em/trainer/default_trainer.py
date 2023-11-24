@@ -69,6 +69,7 @@ class DefaultTrainer:
 
         self.mixed_precision = mixed_precision
         self.early_stopping = early_stopping
+        self.train_time = 0.0
 
         self.scaler = amp.GradScaler() if mixed_precision else None
 
@@ -457,7 +458,7 @@ class DefaultTrainer:
         best_metric = np.inf
         return best_metric
 
-    def save_checkpoint(self, name, best_metric, **extra_save_dict):
+    def save_checkpoint(self, name, best_metric, train_time=0.0, **extra_save_dict):
         save_path = os.path.join(self.checkpoint_folder, f"{name}.pt")
         extra_init_dict = extra_save_dict.pop("init", {})
         save_dict = {
@@ -468,6 +469,7 @@ class DefaultTrainer:
             "model_state": self.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
             "init": self.init_data | extra_init_dict,
+            "train_time": train_time,
         }
         save_dict.update(**extra_save_dict)
         if self.scaler is not None:
@@ -492,6 +494,7 @@ class DefaultTrainer:
         self._epoch = save_dict["epoch"]
         self._best_epoch = save_dict["best_epoch"]
         self.best_metric = save_dict["best_metric"]
+        self.train_time = save_dict.get("train_time", 0.0)
 
         model_state = save_dict["model_state"]
         # to enable loading compiled models
@@ -549,6 +552,7 @@ class DefaultTrainer:
         msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
 
         train_epochs = self.max_epoch - self._epoch
+        t_start = time.time()
         for _ in range(train_epochs):
 
             # run training and validation for this epoch
@@ -561,19 +565,22 @@ class DefaultTrainer:
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step(current_metric)
 
+            # how long did we train in total?
+            total_train_time = (time.time() - t_start) + self.train_time
+
             # save this checkpoint as the new best checkpoint if
             # it has the best overall validation metric
             if current_metric < best_metric:
                 best_metric = current_metric
                 self._best_epoch = self._epoch
-                self.save_checkpoint("best", best_metric)
+                self.save_checkpoint("best", best_metric, train_time=total_train_time)
 
             # save this checkpoint as the latest checkpoint
-            self.save_checkpoint("latest", best_metric)
+            self.save_checkpoint("latest", best_metric, train_time=total_train_time)
 
             # if we save after every k-th epoch then check if we need to save now
             if save_every_kth_epoch is not None and (self._epoch + 1) % save_every_kth_epoch == 0:
-                self.save_checkpoint(f"epoch-{self._epoch + 1}", best_metric)
+                self.save_checkpoint(f"epoch-{self._epoch + 1}", best_metric, train_time=total_train_time)
 
             # if early stopping has been specified then check if the stopping condition is met
             if self.early_stopping is not None:
@@ -590,6 +597,9 @@ class DefaultTrainer:
 
         if self._generate_name:
             self.name = None
+
+        # Update the train time
+        self.train_time = total_train_time
 
         # TODO save the model to wandb if we have the wandb logger
         if isinstance(self.logger, WandbLogger):

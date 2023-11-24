@@ -56,8 +56,11 @@ class TestDefaultTrainer(unittest.TestCase):
 
     def test_fit(self):
         from torch_em.trainer import DefaultTrainer
+
         trainer = DefaultTrainer(**self._get_kwargs())
         trainer.fit(10)
+        train_time = trainer.train_time
+        self.assertGreater(train_time, 0.0)
 
         save_folder = os.path.join(self.checkpoint_folder, self.name)
         self.assertTrue(os.path.exists(save_folder))
@@ -69,6 +72,7 @@ class TestDefaultTrainer(unittest.TestCase):
 
         trainer.fit(2)
         self.assertEqual(trainer.iteration, 12)
+        self.assertGreater(trainer.train_time, train_time)
 
         trainer = DefaultTrainer(**self._get_kwargs())
         trainer.fit(8, load_from_checkpoint="latest")
@@ -76,6 +80,7 @@ class TestDefaultTrainer(unittest.TestCase):
 
     def test_from_checkpoint(self):
         from torch_em.trainer import DefaultTrainer
+
         trainer = DefaultTrainer(**self._get_kwargs(with_roi=True))
         trainer.fit(10)
         exp_model = trainer.model
@@ -86,6 +91,7 @@ class TestDefaultTrainer(unittest.TestCase):
             name="latest"
         )
         self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertEqual(trainer.train_time, trainer2.train_time)
         self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
         self.assertTrue(torch_em.util.model_is_equal(exp_model, trainer2.model))
 
@@ -100,6 +106,7 @@ class TestDefaultTrainer(unittest.TestCase):
     @unittest.skipIf(sys.version_info.minor > 10, "Not supported for python > 3.10")
     def test_compiled_model(self):
         from torch_em.trainer import DefaultTrainer
+
         trainer = DefaultTrainer(**self._get_kwargs(compile_model=True))
         trainer.fit(10)
         exp_model = trainer.model
