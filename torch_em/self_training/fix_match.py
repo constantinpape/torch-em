@@ -136,7 +136,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
     # functionality for saving checkpoints and initialization
     #
 
-    def save_checkpoint(self, name, best_metric):
+    def save_checkpoint(self, name, best_metric, **extra_save_dict):
         train_loader_kwargs = get_constructor_arguments(self.train_loader)
         val_loader_kwargs = get_constructor_arguments(self.val_loader)
         extra_state = {
@@ -151,6 +151,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 "metric_kwargs": {},
             },
         }
+        extra_state.update(**extra_save_dict)
         super().save_checkpoint(name, best_metric, **extra_state)
 
     # distribution alignment - encourages the distribution of the model's generated pseudo labels to match the marginal
