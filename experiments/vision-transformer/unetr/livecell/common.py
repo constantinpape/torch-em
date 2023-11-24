@@ -399,7 +399,6 @@ class HoVerNetLoss(nn.Module):
     def get_distance_gradients(self, v_map, h_map):
         "Calculates the gradients of the respective distance maps"
         kernel_v, kernel_h = self.get_sobel_kernel(self.sobel_kernel_size)
-        breakpoint()
         kernel_v = kernel_v.view(1, 1, self.sobel_kernel_size, self.sobel_kernel_size).to(self.device)
         kernel_h = kernel_h.view(1, 1, self.sobel_kernel_size, self.sobel_kernel_size).to(self.device)
 
@@ -408,8 +407,7 @@ class HoVerNetLoss(nn.Module):
 
         g_v = nn.functional.conv2d(v_ch, kernel_v, padding=2)
         g_h = nn.functional.conv2d(h_ch, kernel_h, padding=2)
-        gvh = torch.cat([g_v, g_h], dim=1)
-        return gvh
+        return torch.cat([g_v, g_h], dim=1)
 
     def compute_msge(self, input_, target, focus):
         "Computes the mse loss for the respective gradients of distance maps and combines them together"
