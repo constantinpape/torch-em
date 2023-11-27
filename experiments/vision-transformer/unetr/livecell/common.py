@@ -421,12 +421,10 @@ class HoVerNetLoss(nn.Module):
 
     def get_np_branch_loss(self, input_, target):
         "Computes the loss for the binary predictions w.r.t. the ground truth."
+        input_, target = input_[:, None, ...], target[:, None, ...]
         dice_loss = self.compute_dice(input_, target)
         bce_loss = self.compute_bce(input_, target)
-
-        # losses added together to get overall loss for foreground background channel
-        output = dice_loss + bce_loss
-        return output
+        return dice_loss, bce_loss
 
     def get_hv_branch_loss(self, input_, target, focus):
         "Computes the loss for the distances maps w.r.t. their respective ground truth."
@@ -438,9 +436,7 @@ class HoVerNetLoss(nn.Module):
         # mean squared error loss of the gradients of predicted v & h distance maps w.r.t. the true v & h maps
         msge_loss = self.compute_msge(input_, target, focus)
 
-        # losses added together to get overall loss for distance maps (1*MSE + 2*MSGE - HoVerNet's empirical selection)
-        output = mse_loss + 2 * msge_loss
-        return output
+        return mse_loss, msge_loss
 
     def forward(self, input_, target):
         # expected shape of both `input_` and `target` is (B*3*H*W)
@@ -448,12 +444,15 @@ class HoVerNetLoss(nn.Module):
         assert input_.shape == target.shape, input_.shape
 
         fg_input_, fg_target = input_[:, 0, ...], target[:, 0, ...]
-        binary_channel_loss = self.get_np_branch_loss(fg_input_, fg_target)
+        dice_loss, bce_loss = self.get_np_branch_loss(fg_input_, fg_target)
 
         hv_input_, hv_target = input_[:, 1:, ...], target[:, 1:, ...]
-        distances_channel_loss = self.get_hv_branch_loss(hv_input_, hv_target, focus=fg_target)
+        mse_loss, msge_loss = self.get_hv_branch_loss(hv_input_, hv_target, focus=fg_target)
 
-        overall_loss = binary_channel_loss + distances_channel_loss
+        # losses added together to get overall loss
+        #     - for foreground background channel: losses added together to get overall loss (1 * (BCE + DICE))
+        #     - for distance maps: 1 * MSE + 2 * MSGE - HoVerNet's empirical selection)
+        overall_loss = dice_loss + bce_loss + mse_loss + 2 * msge_loss
         return overall_loss
 
 
