@@ -1,4 +1,6 @@
+import json
 import numpy as np
+
 import torch
 from torchvision import transforms
 
@@ -227,3 +229,81 @@ def get_default_mean_teacher_augmentations(
         augmentation1=aug1,
         augmentation2=aug2
     )
+
+
+class nnUNetRawTransformBase:
+    """nnUNetRawTransformBase is an interface to implement specific raw transforms for nnUNet.
+
+    Adapted from: https://github.com/MIC-DKFZ/nnUNet/tree/master/nnunetv2/preprocessing/normalization
+    """
+    def __init__(
+            self,
+            plans_file: str,
+            expected_dtype: type = np.float32,
+            tolerance: float = 1e-8
+    ):
+        self.expected_dtype = expected_dtype
+        self.tolerance = tolerance
+
+        self.intensity_properties = self.load_json(plans_file)
+        self.intensity_properties = self.intensity_properties["foreground_intensity_properties_per_channel"]
+
+    def load_json(self, _file: str):
+        # credits: `batchgenerators.utilities.file_and_folder_operations`
+        with open(_file, 'r') as f:
+            a = json.load(f)
+        return a
+
+    def __call__(
+            self,
+            raw: np.ndarray,
+            modality: str
+    ) -> np.ndarray:  # the transformed raw inputs
+        """Returns the raw inputs after applying the pre-processing from nnUNet.
+
+        Args:
+            raw: The raw array inputs
+                Expectd a float array of shape H * W * C
+
+        Returns:
+            The transformed raw inputs (the same shape as inputs)
+        """
+        raise NotImplementedError("It's a class template for raw transforms from nnUNet. \
+                                  Use a child class that implements the expected raw transform instead")
+
+
+class nnUNet_CT_RawTransform(nnUNetRawTransformBase):
+    """Apply transformation on the raw inputs (adapted from nnUNetv2's `CTNormalization`)
+
+    You can use this class to apply the necessary raw transformations on CT and PET volume channels.
+
+    Here's an example for how to use this class:
+    ```python
+    # Initialize the raw transform.
+    raw_transform = nnUNet_CT_RawTransform(plans_file="...nnUNetplans.json")
+
+    # Apply transformation on the inputs.
+    ct_raw = raw_transform(ct_volume)
+    pet_raw = raw_transform(pet_volume)
+    ```
+    """
+    def __call__(
+            self,
+            raw: np.ndarray,
+            modality_index: str
+    ) -> np.ndarray:
+        assert self.intensity_properties is not None, \
+            "Intensity properties are required here. Please make sure that you pass the `nnUNetplans.json correctly."
+
+        raw = raw.astype(self.expected_dtype)
+
+        # intensity properties for the respective modality
+        props = self.intensity_properties[modality_index]
+
+        mean = props['mean']
+        std = props['std']
+        lower_bound = props['percentile_00_5']
+        upper_bound = props['percentile_99_5']
+        raw = np.clip(raw, lower_bound, upper_bound)
+        raw = (raw - mean) / max(std, self.tolerance)
+        return raw
