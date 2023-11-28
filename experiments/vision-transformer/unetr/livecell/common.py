@@ -257,7 +257,9 @@ def hovernet_instance_segmentation(prediction, threshold=0.5):
     return instances
 
 
-def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, with_distance_maps, ctype=None):
+def predict_for_unetr(
+        img_path, model, root_save_dir, device, with_affinities=False, with_distance_maps=False, ctype=None
+):
     input_ = imageio.imread(img_path)
     input_ = standardize(input_)
 
@@ -267,9 +269,8 @@ def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, w
         mws = segmentation.mutex_watershed_segmentation(fg, affs, offsets=OFFSETS)
 
     elif with_distance_maps:
-        # calculate predictions
-        # pass it to the watershed to get the instances
-        pass
+        outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
+        instances = hovernet_instance_segmentation(outputs.squeeze())
 
     else:  # inference using foreground-boundary inputs - for the unetr training
         outputs = predict_with_halo(input_, model, [device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True)
@@ -280,14 +281,21 @@ def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, w
     fname = Path(img_path).stem
     save_path = os.path.join(root_save_dir, "src-all" if ctype is None else f"src-{ctype}", f"{fname}.h5")
     with h5py.File(save_path, "a") as f:
-        ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
-        ds[:] = fg
         if with_affinities:
+            ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
+            ds[:] = fg
             ds = f.require_dataset("affinities", shape=affs.shape, compression="gzip", dtype=affs.dtype)
             ds[:] = affs
             ds = f.require_dataset("segmentation", shape=mws.shape, compression="gzip", dtype=mws.dtype)
             ds[:] = mws
+
+        elif with_distance_maps:
+            ds = f.require_dataset("segmentation", shape=instances.shape, compression="gzip", dtype=instances.dtype)
+            ds[:] = instances
+
         else:
+            ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
+            ds[:] = fg
             ds = f.require_dataset("boundary", shape=bd.shape, compression="gzip", dtype=bd.dtype)
             ds[:] = bd
             ds = f.require_dataset("watershed1", shape=ws1.shape, compression="gzip", dtype=ws1.dtype)
@@ -300,7 +308,7 @@ def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, w
 # LIVECELL UNETR EVALUATION - foreground boundary / foreground affinities
 #
 
-def evaluate_for_unetr(gt_path, _save_dir, with_affinities):
+def evaluate_for_unetr(gt_path, _save_dir, with_affinities=False, with_distance_maps=False):
     fname = Path(gt_path).stem
     gt = imageio.imread(gt_path)
 
@@ -308,6 +316,10 @@ def evaluate_for_unetr(gt_path, _save_dir, with_affinities):
     with h5py.File(output_file, "r") as f:
         if with_affinities:
             mws = f["segmentation"][:]
+
+        elif with_distance_maps:
+            instances = f["segmentation"][:]
+
         else:
             fg = f["foreground"][:]
             bd = f["boundary"][:]
@@ -317,6 +329,10 @@ def evaluate_for_unetr(gt_path, _save_dir, with_affinities):
     if with_affinities:
         mws_msa, mws_sa_acc = mean_segmentation_accuracy(mws, gt, return_accuracies=True)
         return mws_msa, mws_sa_acc[0]
+
+    elif with_distance_maps:
+        instances_msa, instances_sa_acc = mean_segmentation_accuracy(instances, gt, return_accuracies=True)
+        return instances_msa, instances_sa_acc[0]
 
     else:
         true_bd = find_boundaries(gt)
