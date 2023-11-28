@@ -7,7 +7,9 @@ from typing import Tuple, Optional
 
 import vigra
 import imageio.v3 as imageio
-from skimage.segmentation import find_boundaries
+from skimage.segmentation import find_boundaries, watershed
+from skimage.measure import label
+from skimage.filters import sobel_h, sobel_v, gaussian
 from elf.evaluation import dice_score, mean_segmentation_accuracy
 
 import torch
@@ -18,6 +20,7 @@ from torch_em.data.datasets import get_livecell_loader
 from torch_em.loss import LossWrapper, ApplyAndRemoveMask
 from torch_em.loss.dice import DiceLoss, DiceLossWithLogits
 from torch_em.util.prediction import predict_with_halo, predict_with_padding
+from torch_em.transform.raw import normalize
 
 from micro_sam.util import get_centers_and_bounding_boxes
 
@@ -212,7 +215,46 @@ def get_unetr_model(
 # LIVECELL UNETR INFERENCE - foreground boundary / foreground affinities
 #
 
-def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, ctype=None):
+
+def hovernet_instance_segmentation(prediction, threshold=0.5):
+    # let's get the channel-wise components for separate use-cases
+    binary_raw = prediction[0, ...]
+    v_map_raw = prediction[1, ...]
+    h_map_raw = prediction[2, ...]
+
+    # connected components
+    cc = label(binary_raw >= threshold)[0]
+    cc[cc > 0] = 1
+
+    # normalize the distance maps
+    v_map = normalize(v_map_raw)
+    h_map = normalize(h_map_raw)
+
+    # sobel filter on the respective distance maps
+    v_grad = sobel_v(v_map)
+    h_grad = sobel_h(h_map)
+
+    v_grad = 1 - normalize(v_grad)
+    h_grad = 1 - normalize(h_grad)
+
+    overall = np.maximum(sobel_v, sobel_h)
+    overall = overall - (1 - cc)
+    overall[overall < 0] = 0
+
+    dist = (1.0 - overall) * cc
+    dist = -gaussian(dist)
+
+    overall = np.array(overall >= 0.4, dtype=np.int32)
+
+    marker = cc - overall
+    marker[marker < 0] = 0
+    marker = label(marker)[0]
+
+    instances = watershed(dist, markers=marker, mask=cc)
+    return instances
+
+
+def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, with_distance_maps, ctype=None):
     input_ = imageio.imread(img_path)
     input_ = standardize(input_)
 
@@ -220,6 +262,11 @@ def predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, c
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
         fg, affs = np.array(outputs[0, 0]), np.array(outputs[0, 1:])
         mws = segmentation.mutex_watershed_segmentation(fg, affs, offsets=OFFSETS)
+
+    elif with_distance_maps:
+        # calculate predictions
+        # pass it to the watershed to get the instances
+        pass
 
     else:  # inference using foreground-boundary inputs - for the unetr training
         outputs = predict_with_halo(input_, model, [device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True)
@@ -453,8 +500,8 @@ class HoVerNetLoss(nn.Module):
         fg_input_, fg_target = input_[:, 0, ...], target[:, 0, ...]
         dice_loss, bce_loss = self.get_np_branch_loss(fg_input_, fg_target)
 
-        hv_input_, hv_target = input_[:, 1:, ...], target[:, 1:, ...]
-        mse_loss, msge_loss = self.get_hv_branch_loss(hv_input_, hv_target, focus=fg_target)
+        vh_input_, vh_target = input_[:, 1:, ...], target[:, 1:, ...]
+        mse_loss, msge_loss = self.get_hv_branch_loss(vh_input_, vh_target, focus=fg_target)
 
         # losses added together to get overall loss
         #     - for foreground background channel: losses added together to get overall loss (1 * (BCE + DICE))

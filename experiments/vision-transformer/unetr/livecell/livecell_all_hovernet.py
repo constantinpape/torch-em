@@ -40,7 +40,8 @@ def main(args):
     # get the model for the training and inference on livecell dataset
     model = common.get_unetr_model(
         model_name=args.model_name, source_choice="torch-em", patch_shape=patch_shape,
-        sam_initialization=args.do_sam_ini, output_channels=3  # foreground-background, x-map, y-map
+        sam_initialization=args.do_sam_ini, output_channels=3,  # foreground-background, x-map, y-map
+        backbone=args.pretrained_choice
     )
     model.to(device)
 
