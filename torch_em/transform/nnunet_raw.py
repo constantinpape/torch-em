@@ -67,6 +67,8 @@ class nnUNetRawTransform:
         """
         assert raw.shape[0] == len(self.per_channel_scheme), "Number of channels & transforms from data plan must match"
 
+        raw = raw.astype(self.expected_dtype)
+
         normalized_channels = []
         for idxx, (channel_transform, channel) in enumerate(zip(self.per_channel_scheme, raw)):
             properties = self.intensity_properties[str(idxx)]
