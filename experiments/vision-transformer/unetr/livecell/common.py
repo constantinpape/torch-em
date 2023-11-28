@@ -227,8 +227,14 @@ def hovernet_instance_segmentation(prediction, threshold=0.5):
     cc[cc > 0] = 1
 
     # sobel filter on the respective (normalized) distance maps
-    v_grad = sobel_v(normalize(v_map_raw))
-    h_grad = sobel_h(normalize(h_map_raw))
+    # NOTE: the convention here follows our logic of implementation,
+    # hence has been reversed
+    # EXPLANATION: we call distances along y axis as vertical maps,
+    # and along x as horizontal
+    # hence, we just pass the distance maps to the correct sobel filters
+    # (see docstring of `sobel_v` and `sobel_h` for the filters used)
+    v_grad = sobel_v(normalize(h_map_raw))
+    h_grad = sobel_h(normalize(v_map_raw))
 
     v_grad = 1 - normalize(v_grad)
     h_grad = 1 - normalize(h_grad)
@@ -247,6 +253,7 @@ def hovernet_instance_segmentation(prediction, threshold=0.5):
     marker = label(marker)
 
     instances = watershed(dist, markers=marker, mask=cc)
+
     return instances
 
 
