@@ -223,21 +223,17 @@ def hovernet_instance_segmentation(prediction, threshold=0.5):
     h_map_raw = prediction[2, ...]
 
     # connected components
-    cc = label(binary_raw >= threshold)[0]
+    cc = label(binary_raw >= threshold)
     cc[cc > 0] = 1
 
-    # normalize the distance maps
-    v_map = normalize(v_map_raw)
-    h_map = normalize(h_map_raw)
-
-    # sobel filter on the respective distance maps
-    v_grad = sobel_v(v_map)
-    h_grad = sobel_h(h_map)
+    # sobel filter on the respective (normalized) distance maps
+    v_grad = sobel_v(normalize(v_map_raw))
+    h_grad = sobel_h(normalize(h_map_raw))
 
     v_grad = 1 - normalize(v_grad)
     h_grad = 1 - normalize(h_grad)
 
-    overall = np.maximum(sobel_v, sobel_h)
+    overall = np.maximum(v_grad, h_grad)
     overall = overall - (1 - cc)
     overall[overall < 0] = 0
 
@@ -248,7 +244,7 @@ def hovernet_instance_segmentation(prediction, threshold=0.5):
 
     marker = cc - overall
     marker[marker < 0] = 0
-    marker = label(marker)[0]
+    marker = label(marker)
 
     instances = watershed(dist, markers=marker, mask=cc)
     return instances

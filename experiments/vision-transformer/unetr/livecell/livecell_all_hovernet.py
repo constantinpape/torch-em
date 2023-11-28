@@ -54,6 +54,10 @@ def main(args):
         train_loader, val_loader = common.get_my_livecell_loaders(
             args.input, patch_shape, args.cell_type, with_distance_maps=True
         )
+
+        for x, y in train_loader:
+            instances = common.hovernet_instance_segmentation(y[0].numpy())
+
         do_unetr_hovernet_training(
             train_loader=train_loader, val_loader=val_loader, model=model,
             device=device, save_root=save_root, iterations=args.iterations, loss=loss
