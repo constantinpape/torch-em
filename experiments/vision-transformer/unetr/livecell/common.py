@@ -177,7 +177,8 @@ def get_unetr_model(
         source_choice: str,
         patch_shape: Tuple[int, int],
         sam_initialization: bool,
-        output_channels: int
+        output_channels: int,
+        backbone: str = "sam"
 ):
     """Returns the expected UNETR model
     """
@@ -185,8 +186,9 @@ def get_unetr_model(
         # this returns the unetr model whihc uses the vision transformer from segment anything
         from torch_em import model as torch_em_models
         model = torch_em_models.UNETR(
-            encoder=model_name, out_channels=output_channels,
-            encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None
+            backbone=backbone, encoder=model_name, out_channels=output_channels,
+            encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None,
+            use_sam_stats=sam_initialization  # FIXME: add mae weight initialization
         )
 
     elif source_choice == "monai":
@@ -336,6 +338,11 @@ def get_parser():
     parser.add_argument(
         "--save_dir", type=str, default="/scratch/usr/nimanwai/predictions/unetr",
         help="Path to save predictions from UNETR model"
+    )
+
+    # this argument takes care of which ViT encoder to use for the UNETR (as ViTs from SAM and MAE are different)
+    parser.add_argument(
+        "--pretrained_choice", type=str, default="sam",
     )
 
     parser.add_argument(
