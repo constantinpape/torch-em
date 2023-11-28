@@ -97,7 +97,7 @@ def get_distance_maps(labels):
             raise RuntimeError(np.unique(this_y_distances))
 
         if np.abs(this_x_distances).max() > 1:
-            raise RuntimeError(np.unique(this_x_distances))        
+            raise RuntimeError(np.unique(this_x_distances))
 
         # set all distances outside of cells to 0
         y_distances[
