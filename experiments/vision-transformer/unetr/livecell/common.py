@@ -10,6 +10,9 @@ import imageio.v3 as imageio
 from skimage.segmentation import find_boundaries, watershed
 from skimage.measure import label
 from skimage.filters import sobel_h, sobel_v, gaussian
+from skimage.morphology import disk, opening
+from scipy.ndimage import binary_fill_holes
+
 from elf.evaluation import dice_score, mean_segmentation_accuracy
 
 import torch
@@ -216,14 +219,18 @@ def get_unetr_model(
 #
 
 
-def hovernet_instance_segmentation(prediction, threshold=0.5):
+def hovernet_instance_segmentation(prediction, threshold1=0.5, threshold2=0.4, min_size=250):
+    """Adapted from HoVerNet's post-processing:
+        - https://github.com/vqdang/hover_net/blob/master/models/hovernet/post_proc.py
+    """
     # let's get the channel-wise components for separate use-cases
     binary_raw = prediction[0, ...]
     v_map_raw = prediction[1, ...]
     h_map_raw = prediction[2, ...]
 
     # connected components
-    cc = label(binary_raw >= threshold)
+    cc = label((binary_raw >= threshold1).astype(np.int32))
+    cc = segmentation.size_filter(cc, min_size)
     cc[cc > 0] = 1
 
     # sobel filter on the respective (normalized) distance maps
@@ -244,14 +251,23 @@ def hovernet_instance_segmentation(prediction, threshold=0.5):
     overall[overall < 0] = 0
 
     dist = (1.0 - overall) * cc
+    # foreground values form mountains so inverse to get basins
     dist = -gaussian(dist)
 
-    overall = np.array(overall >= 0.4, dtype=np.int32)
+    overall = np.array(overall >= threshold2, dtype=np.int32)
 
     marker = cc - overall
     marker[marker < 0] = 0
-    marker = label(marker)
+    marker = binary_fill_holes(marker)  # Q: no idea why we do this twice in the org. impl
 
+    # opening to get rid of small objects
+    struc_element = disk(5)
+    marker = opening(marker, struc_element)
+
+    marker = label(marker)
+    marker = segmentation.size_filter(marker, min_size)
+
+    # watershed segmentation
     instances = watershed(dist, markers=marker, mask=cc)
 
     return instances
