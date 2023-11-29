@@ -23,4 +23,7 @@ def get_btcv_loader(path):
     # get the dataset from elf, pass it to dataloader
     # make a split based on organs - by default uses ct scans from both organs
     # if specified, can use from either abdomen or cervix
+    # NOTE: logic to resample the inputs
+    # NOTE: logic for normalization for respective modalities
+    #       - easiest: follow logic from nnunet (raw-trafo now in torch_em)
     raise NotImplementedError
