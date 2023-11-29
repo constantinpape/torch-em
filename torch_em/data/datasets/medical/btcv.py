@@ -4,8 +4,8 @@
 #   step 1: join "Multi-Atlas Labeling Beyond the Cranial Vault - Workshop and Challenge"
 #       - link: https://www.synapse.org/#!Synapse:syn3193805
 #   step 2: go to "Files" ->
-#       - "Abdomen" -> "Abdomen.zip" to obtain all the abdominal CT scans
-#       - "Cervix" -> "Cervix.zip" to obtain all the cervical CT scans
+#       - "Abdomen" -> "RawData.zip" to obtain all the abdominal CT scans
+#       - "Cervix" -> "CervixRawData.zip" to obtain all the cervical CT scans
 #   step 3: provide the path to the zipped file(s) to the respective datasets that takes care of it.
 
 
