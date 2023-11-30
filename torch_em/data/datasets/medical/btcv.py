@@ -45,8 +45,10 @@ def assort_btcv_dataset(path):
 
 def get_btcv_dataset(path, download=False):
     if download:
-        raise NotImplementedError("The BTCV dataset cannot be automatically download from `torch_em`."\
-                                  "Please download the dataset and provide the directory where zip files are stored.")
+        raise NotImplementedError(
+            "The BTCV dataset cannot be automatically download from `torch_em`. \
+            Please download the dataset and provide the directory where zip files are stored."
+        )
     else:
         assort_btcv_dataset(path)
 
