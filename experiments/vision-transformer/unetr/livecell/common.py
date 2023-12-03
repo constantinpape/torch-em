@@ -17,6 +17,7 @@ from elf.evaluation import dice_score, mean_segmentation_accuracy
 
 import torch
 import torch.nn as nn
+import torch_em
 from torch_em.util import segmentation
 from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
@@ -134,6 +135,18 @@ def get_my_livecell_loaders(
 ):
     """Returns the LIVECell training and validation dataloaders
     """
+
+    if with_distance_maps:
+        label_trafo = torch_em.transform.label.PerObjectDistances(
+            distances=True,
+            boundary_distances=True,
+            directed_distances=False,
+            foreground=True,
+            min_size=10,
+        )
+    else:
+        label_trafo = None
+
     train_loader = get_livecell_loader(
         path=input_path,
         split="train",
@@ -146,7 +159,7 @@ def get_my_livecell_loaders(
         offsets=OFFSETS if with_affinities else None,
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
-        label_transform=get_distance_maps if with_distance_maps else None,  # NOTE: overwrite here with `gen_instance_hv_map` to make use of the original HoVerNet function
+        label_transform=label_trafo,
         label_dtype=torch.float32
     )
     val_loader = get_livecell_loader(
@@ -161,7 +174,7 @@ def get_my_livecell_loaders(
         offsets=OFFSETS if with_affinities else None,
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
-        label_transform=get_distance_maps if with_distance_maps else None, # NOTE: overwrite here with `gen_instance_hv_map` to make use of the original HoVerNet function
+        label_transform=label_trafo,
         label_dtype=torch.float32
     )
 
@@ -545,6 +558,37 @@ class HoVerNetLoss(nn.Module):
         return overall_loss
 
 
+class DistanceLoss(nn.Module):
+    def __init__(self, mask_distances_in_bg):
+        super().__init__()
+
+        self.dice_loss = DiceLoss()
+        self.mse_loss = nn.MSELoss()
+        self.mask_distances_in_bg = mask_distances_in_bg
+
+    def forward(self, input_, target):
+        assert input_.shape == target.shape, input_.shape
+        assert input_.shape[1] == 3, input_.shape
+
+        fg_input, fg_target = input_[:, 0, ...], target[:, 0, ...]
+        fg_loss = self.dice_loss(fg_target, fg_input)
+
+        cdist_input, cdist_target = input_[:, 1, ...], target[:, 1, ...]
+        if self.mask_distances_in_bg:
+            cdist_loss = self.mse_loss(cdist_target * fg_target, cdist_input * fg_target)
+        else:
+            cdist_loss = self.mse_loss(cdist_target, cdist_input)
+
+        bdist_input, bdist_target = input_[:, 2, ...], target[:, 2, ...]
+        if self.mask_distances_in_bg:
+            bdist_loss = self.mse_loss(bdist_target * fg_target, bdist_input * fg_target)
+        else:
+            bdist_loss = self.mse_loss(bdist_target, bdist_input)
+
+        overall_loss = fg_loss + cdist_loss + bdist_loss
+        return overall_loss
+
+
 def get_loss_function(with_affinities=False, with_distance_maps=False):
     if with_affinities:
         loss = LossWrapper(
@@ -552,7 +596,10 @@ def get_loss_function(with_affinities=False, with_distance_maps=False):
             transform=ApplyAndRemoveMask(masking_method="multiply")
         )
     elif with_distance_maps:
-        loss = HoVerNetLoss()
+        # loss = HoVerNetLoss()
+        # Updated the loss function for the simplfied distance loss.
+        # TODO we can try both with and without masking
+        loss = DistanceLoss(mask_distances_in_bg=True)
     else:
         loss = DiceLoss()
 
