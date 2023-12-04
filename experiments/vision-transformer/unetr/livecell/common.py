@@ -228,7 +228,7 @@ def get_unetr_model(
 
 
 #
-# LIVECELL UNETR INFERENCE - foreground boundary / foreground affinities
+# LIVECELL UNETR INFERENCE - foreground boundary / foreground affinities / foreground dist. maps
 #
 
 
@@ -297,9 +297,10 @@ def predict_for_unetr(
         fg, affs = np.array(outputs[0, 0]), np.array(outputs[0, 1:])
         mws = segmentation.mutex_watershed_segmentation(fg, affs, offsets=OFFSETS)
 
-    elif with_distance_maps:
+    elif with_distance_maps:  # inference using foreground and hv distance maps
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
-        instances = hovernet_instance_segmentation(outputs.squeeze())
+        fg, cdist, bdist = outputs.squeeze()
+        dm_seg = segmentation.watershed_from_center_and_boundary_distances(cdist, bdist, fg, min_size=50)
 
     else:  # inference using foreground-boundary inputs - for the unetr training
         outputs = predict_with_halo(input_, model, [device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True)
@@ -319,8 +320,8 @@ def predict_for_unetr(
             ds[:] = mws
 
         elif with_distance_maps:
-            ds = f.require_dataset("segmentation", shape=instances.shape, compression="gzip", dtype=instances.dtype)
-            ds[:] = instances
+            ds = f.require_dataset("segmentation", shape=dm_seg.shape, compression="gzip", dtype=dm_seg.dtype)
+            ds[:] = dm_seg
 
         else:
             ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
