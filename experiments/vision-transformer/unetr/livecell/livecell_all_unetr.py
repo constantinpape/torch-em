@@ -126,7 +126,8 @@ def main(args):
     # get the model for the training and inference on livecell dataset
     model = common.get_unetr_model(
         model_name=args.model_name, source_choice=args.source_choice, patch_shape=patch_shape,
-        sam_initialization=args.do_sam_ini, output_channels=common._get_output_channels(args.with_affinities)
+        sam_initialization=args.do_sam_ini, output_channels=common._get_output_channels(args.with_affinities),
+        backbone=args.pretrained_choice
     )
     model.to(device)
 
@@ -137,7 +138,7 @@ def main(args):
         print("2d UNETR training on LIVECell dataset")
         # get the desired livecell loaders for training
         train_loader, val_loader = common.get_my_livecell_loaders(
-            args.input, patch_shape, args.cell_type,
+            args.input, patch_shape, args.cell_type, with_boundary=not args.with_affinities,
             with_affinities=args.with_affinities  # this takes care of getting the loaders with affinities
         )
         do_unetr_training(
