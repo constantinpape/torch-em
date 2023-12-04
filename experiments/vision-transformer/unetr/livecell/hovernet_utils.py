@@ -32,21 +32,23 @@ def get_distance_maps(labels):
     # First expensive step: center computation (leave it here, it's done once per image)
     centers = vigra.filters.eccentricityCenters(labels.astype("uint32"))
 
-    # 1 for all eccentricity centers of the cells 0 elsewhere
-    center_mask = np.zeros_like(labels)
-    for center in centers:
-        center_mask[center] = 1
+    # the first center is the center for the bg, let's throw it away
+    centers = centers[1:]
 
     x_distances = np.zeros(labels.shape, dtype="float32")
     y_distances = np.zeros(labels.shape, dtype="float32")
 
     _, bbox_coordinates = get_centers_and_bounding_boxes(labels, mode="p")
 
-    def compute_distance_map(cell_id):
+    def compute_distance_map(cell_id, center):
         mask = labels == cell_id
 
         # getting the bounding box coordinates for masking the roi
         bbox = bbox_coordinates[cell_id]
+
+        # 1 for all eccentricity centers of the cells 0 elsewhere
+        center_mask = np.zeros_like(labels)
+        center_mask[center] = 1
 
         # crop the respective inputs to the bbox shape (for getting the distance transforms in the roi)
         cropped_center_mask = center_mask[
@@ -92,8 +94,8 @@ def get_distance_maps(labels):
         ][cropped_mask] = this_x_distances[cropped_mask]
 
     cell_ids = np.unique(labels)[1:]  # excluding background id
-    for cell_id in cell_ids:
-        compute_distance_map(cell_id)
+    for cell_id, center in zip(cell_ids, centers):
+        compute_distance_map(cell_id, center)
 
     binary_labels = labels > 0
     return np.stack([binary_labels, y_distances, x_distances], axis=0)  # channels - 0:binary, 1:vertical, 2:horizontal
