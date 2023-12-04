@@ -2,7 +2,6 @@ import numpy as np
 import skimage.measure
 import skimage.segmentation
 import vigra
-from scipy.ndimage import distance_transform_edt
 
 from ..util import ensure_array, ensure_spatial_array
 
@@ -193,17 +192,23 @@ class OneHotTransform:
 
 
 class DistanceTransform:
+    """Compute distances to foreground.
+    """
     eps = 1e-7
 
     def __init__(
         self,
-        distances=True, vector_distances=False,
-        normalize=True, max_distance=None,
-        foreground_id=1, invert=False, func=None
+        distances=True,
+        directed_distances=False,
+        normalize=True,
+        max_distance=None,
+        foreground_id=1,
+        invert=False,
+        func=None
     ):
-        if sum((distances, vector_distances)) == 0:
-            raise ValueError("At least one of 'distances' or 'vector_distances' must be set to 'True'")
-        self.vector_distances = vector_distances
+        if sum((distances, directed_distances)) == 0:
+            raise ValueError("At least one of 'distances' or 'directed_distances' must be set to 'True'")
+        self.directed_distances = directed_distances
         self.distances = distances
         self.normalize = normalize
         self.max_distance = max_distance
@@ -211,7 +216,8 @@ class DistanceTransform:
         self.invert = invert
         self.func = func
 
-    def _compute_distances(self, distances):
+    def _compute_distances(self, directed_distances):
+        distances = np.linalg.norm(directed_distances, axis=0)
         if self.max_distance is not None:
             distances = np.clip(distances, 0, self.max_distance)
         if self.normalize:
@@ -222,62 +228,53 @@ class DistanceTransform:
             distances = self.func(distances)
         return distances
 
-    def _compute_vector_distances(self, indices):
-        coordinates = np.indices(indices.shape[1:]).astype("float32")
-        vector_distances = indices - coordinates
+    def _compute_directed_distances(self, directed_distances):
         if self.max_distance is not None:
-            vector_distances = np.clip(vector_distances, -self.max_distance, self.max_distance)
+            directed_distances = np.clip(directed_distances, -self.max_distance, self.max_distance)
         if self.normalize:
-            vector_distances /= (np.abs(vector_distances).max(axis=(1, 2), keepdims=True) + self.eps)
+            directed_distances /= (np.abs(directed_distances).max(axis=(1, 2), keepdims=True) + self.eps)
         if self.invert:
-            vector_distances = vector_distances.max(axis=(1, 2), keepdims=True) - vector_distances
+            directed_distances = directed_distances.max(axis=(1, 2), keepdims=True) - directed_distances
         if self.func is not None:
-            vector_distances = self.func(vector_distances)
-        return vector_distances
+            directed_distances = self.func(directed_distances)
+        return directed_distances
 
     def _get_distances_for_empty_labels(self, labels):
         shape = labels.shape
-        fill_value = 0.0 if self.invert else np.linalg.norm(list(shape))
-        if self.distances and self.vector_distances:
-            data = (np.full(shape, fill_value), np.full((labels.ndim,) + shape, fill_value))
-        elif self.distances:
-            data = np.full(shape, fill_value)
-        elif self.vector_distances:
-            data = np.full((labels.ndim,) + shape, fill_value)
-        else:
-            raise RuntimeError
+        fill_value = 0.0 if self.invert else np.sqrt(np.linalg.norm(list(shape)) ** 2 / 2)
+        data = np.full((labels.ndim,) + shape, fill_value)
         return data
 
     def __call__(self, labels):
-        distance_mask = labels != self.foreground_id
+        distance_mask = (labels == self.foreground_id).astype("uint32")
         # the distances are not computed corrected if they are all zero
         # so this case needs to be handled separately
-        if distance_mask.sum() == distance_mask.size:
-            data = self._get_distances_for_empty_labels(labels)
+        if distance_mask.sum() == 0:
+            directed_distances = self._get_distances_for_empty_labels(labels)
         else:
-            data = distance_transform_edt(distance_mask,
-                                          return_distances=self.distances,
-                                          return_indices=self.vector_distances)
+            ndim = distance_mask.ndim
+            to_channel_first = (ndim,) + tuple(range(ndim))
+            directed_distances = vigra.filters.vectorDistanceTransform(distance_mask).transpose(to_channel_first)
 
         if self.distances:
-            distances = data[0] if self.vector_distances else data
-            distances = self._compute_distances(distances)
+            distances = self._compute_distances(directed_distances)
 
-        if self.vector_distances:
-            indices = data[1] if self.distances else data
-            vector_distances = self._compute_vector_distances(indices)
+        if self.directed_distances:
+            directed_distances = self._compute_directed_distances(directed_distances)
 
-        if self.distances and self.vector_distances:
-            return np.concatenate((distances[None], vector_distances), axis=0)
+        if self.distances and self.directed_distances:
+            return np.concatenate((distances[None], directed_distances), axis=0)
         if self.distances:
             return distances
-        if self.vector_distances:
-            return vector_distances
+        if self.directed_distances:
+            return directed_distances
 
 
-class PerObjectDistances:
-    """Compute the normalized (directed) distances per object in the segmentation.
+class PerObjectDistanceTransform:
+    """Compute normalized distances per object in a segmentation.
     """
+    eps = 1e-7
+
     def __init__(
         self,
         distances=True,
@@ -329,7 +326,10 @@ class PerObjectDistances:
         cropped_center_mask[cropped_center] = 1
 
         # Compute the directed distances,
-        this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask)
+        if self.distances or self.directed_distances:
+            this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask)
+        else:
+            this_distances = None
 
         # Keep only the specified distances:
         if self.distances and self.directed_distances:  # all distances
@@ -344,20 +344,20 @@ class PerObjectDistances:
         elif self.directed_distances:  # only directed distances
             pass  # We don't have to do anything becasue the directed distances are already computed.
 
-        else:  # this never happens because we check in the constructor
-            assert False
-
         # Add an extra channel for the boundary distances if specified.
         if self.boundary_distances:
             boundary_distances = (boundary_distances[max_dist_point] - boundary_distances)[..., None]
-            this_distances = np.concatenate([this_distances, boundary_distances], axis=-1)
+            if this_distances is None:
+                this_distances = boundary_distances
+            else:
+                this_distances = np.concatenate([this_distances, boundary_distances], axis=-1)
 
         # Set distances outside of the mask to zero.
         this_distances[~cropped_mask] = 0
 
         # Normalize the distances.
         spatial_axes = tuple(range(mask.ndim))
-        this_distances /= (np.abs(this_distances).max(axis=spatial_axes, keepdims=True) + 1e-7)
+        this_distances /= (np.abs(this_distances).max(axis=spatial_axes, keepdims=True) + self.eps)
 
         # Set the distance values in the global result.
         distances[bb][cropped_mask] = this_distances[cropped_mask]
