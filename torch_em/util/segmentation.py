@@ -3,6 +3,7 @@ import numpy as np
 import vigra
 import elf.segmentation as elseg
 from elf.segmentation.utils import normalize_input
+from elf.segmentation.mutex_watershed import mutex_watershed
 
 from skimage.measure import label
 from skimage.filters import gaussian
@@ -34,10 +35,21 @@ def size_filter(seg, min_size, hmap=None, with_background=False):
     return seg
 
 
-def mutex_watershed(affinities, offsets, mask=None, strides=None):
-    return elseg.mutex_watershed(
-        affinities, offsets, mask=mask, strides=strides, randomize_strides=True
-    ).astype("uint64")
+def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=250, threshold=0.5):
+    """Computes the mutex watershed segmentation using the affinity maps for respective pixel offsets
+
+    Arguments:
+        - foreground: [np.ndarray] - The foreground background channel for the objects
+        - affinities [np.ndarray] - The input affinity maps
+        - offsets: [list[list[int]]] - The pixel offsets corresponding to the affinity channels
+        - min_size: [int] - The minimum pixels (below which) to filter objects
+        - threshold: [float] - To threshold foreground predictions
+    """
+    mask = (foreground >= threshold)
+    strides = [2] * foreground.ndim
+    seg = mutex_watershed(affinities, offsets=offsets, mask=mask, strides=strides, randomize_strides=True)
+    seg = size_filter(seg.astype("uint32"), min_size=min_size, hmap=affinities, with_background=True)
+    return seg
 
 
 def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
@@ -48,7 +60,7 @@ def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
     return seg.astype("uint64")
 
 
-def watershed_from_components(boundaries, foreground, min_size, threshold1=0.5, threshold2=0.5):
+def watershed_from_components(boundaries, foreground, min_size=250, threshold1=0.5, threshold2=0.5):
     """The default approach:
     - Subtract the boundaries from the foreground to separate touching objects.
     - Use the connected components of this as seeds.
@@ -72,7 +84,7 @@ def watershed_from_components(boundaries, foreground, min_size, threshold1=0.5, 
     return seg
 
 
-def watershed_from_maxima(boundaries, foreground, min_size, min_distance, sigma=1.0, threshold1=0.5):
+def watershed_from_maxima(boundaries, foreground, min_distance, min_size=250, sigma=1.0, threshold1=0.5):
     """Find objects via seeded watershed starting from the maxima of the distance transform instead.
     This has the advantage that objects can be better separated, but it may over-segment
     if the objects have complex shapes.
