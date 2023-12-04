@@ -119,7 +119,9 @@ def get_unetr_model(
         model.out_channels = 2  # type: ignore
 
     else:
-        raise ValueError(f"The available UNETR models are either from \"torch-em\" or \"monai\", choose from them instead of - {source_choice}")
+        tmp_msg = "The available UNETR models are either from `torch-em` or `monai`. "
+        tmp_msg += f"Please choose from them instead of {source_choice}"
+        raise ValueError(tmp_msg)
 
     return model
 
