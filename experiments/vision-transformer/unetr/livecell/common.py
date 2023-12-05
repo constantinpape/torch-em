@@ -93,7 +93,8 @@ def get_unetr_model(
         source_choice: str,
         patch_shape: Tuple[int, int],
         sam_initialization: bool,
-        output_channels: int
+        output_channels: int,
+        backbone: str = "sam"
 ):
     """Returns the expected UNETR model
     """
@@ -101,8 +102,9 @@ def get_unetr_model(
         # this returns the unetr model whihc uses the vision transformer from segment anything
         from torch_em import model as torch_em_models
         model = torch_em_models.UNETR(
-            encoder=model_name, out_channels=output_channels,
-            encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None
+            backbone=backbone, encoder=model_name, out_channels=output_channels,
+            encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None,
+            use_sam_stats=sam_initialization  # FIXME: add mae weight initialization
         )
 
     elif source_choice == "monai":
@@ -117,7 +119,9 @@ def get_unetr_model(
         model.out_channels = 2  # type: ignore
 
     else:
-        raise ValueError(f"The available UNETR models are either from \"torch-em\" or \"monai\", choose from them instead of - {source_choice}")
+        tmp_msg = "The available UNETR models are either from `torch-em` or `monai`. "
+        tmp_msg += f"Please choose from them instead of {source_choice}"
+        raise ValueError(tmp_msg)
 
     return model
 
