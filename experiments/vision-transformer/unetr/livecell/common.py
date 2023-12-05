@@ -56,7 +56,7 @@ def get_my_livecell_loaders(
     """
 
     if with_distance_maps:
-        label_trafo = torch_em.transform.label.PerObjectDistances(
+        label_trafo = torch_em.transform.label.PerObjectDistanceTransform(
             distances=True,
             boundary_distances=True,
             directed_distances=False,
