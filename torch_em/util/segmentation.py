@@ -19,6 +19,9 @@ from scipy.ndimage import distance_transform_edt
 
 # could also refactor this into elf
 def size_filter(seg, min_size, hmap=None, with_background=False):
+    if min_size == 0:
+        return seg
+
     if hmap is None:
         ids, sizes = np.unique(seg, return_counts=True)
         bg_ids = ids[sizes < min_size]
@@ -112,4 +115,46 @@ def watershed_from_maxima(boundaries, foreground, min_distance, min_size=250, si
     seeds[seed_points[:, 0], seed_points[:, 1]] = np.arange(1, len(seed_points) + 1)
     seg = watershed(boundaries, markers=seeds, mask=foreground)
     seg = size_filter(seg, min_size)
+    return seg
+
+
+def watershed_from_center_and_boundary_distances(
+    center_distances,
+    boundary_distances,
+    foreground_map,
+    center_distance_threshold=0.5,
+    boundary_distance_threshold=0.9,
+    foreground_threshold=0.5,
+    min_size=0,
+):
+    """Seeded watershed based on distance predictions to object center and boundaries.
+
+    The seeds are computed by finding connected components where
+
+    Args:
+        center_distances [np.ndarray] - Distance prediction to the objcet center.
+        boundary_distances [np.ndarray] - Inverted distance prediction to object boundaries.
+        foreground_map [np.ndarray] - Predictio for foreground probabilities.
+        center_distance_threshold [float] - Center distance predictions below this value will be
+            used to find seeds (intersected with thresholded boundary distance predictions).
+        boundary_distance_threshold [float] - Boundary distance predictions below this value will be
+            used to find seeds (intersected with thresholded center distance predictions).
+        foreground_threshold [float] - Foreground predictions above this value will be used as foreground mask.
+        min_size [int] - Minimal object size in the segmentation result.
+
+    Returns:
+        np.ndarray - The instance segmentation.
+    """
+    fg = foreground_map > foreground_threshold
+
+    marker_map = np.logical_and(
+        center_distances < center_distance_threshold,
+        boundary_distances < boundary_distance_threshold
+    )
+    marker_map[~fg] = 0
+    markers = label(marker_map)
+
+    seg = watershed(boundary_distances, markers=markers, mask=fg)
+    seg = size_filter(seg, min_size)
+
     return seg
