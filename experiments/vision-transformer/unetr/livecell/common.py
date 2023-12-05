@@ -61,7 +61,7 @@ def get_my_livecell_loaders(
             boundary_distances=True,
             directed_distances=False,
             foreground=True,
-            min_size=10,
+            min_size=25,
         )
     else:
         label_trafo = None

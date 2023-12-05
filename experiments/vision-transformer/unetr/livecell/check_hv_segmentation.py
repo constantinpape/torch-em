@@ -7,12 +7,12 @@ LIVECELL_FOLDER = "/home/pape/Work/data/incu_cyte/livecell"
 
 
 def check_hv_segmentation(image, gt):
-    from torch_em.transform.label import PerObjectDistances
+    from torch_em.transform.label import PerObjectDistanceTransform
     from common import opencv_hovernet_instance_segmentation
 
     # This transform gives only directed boundary distances
     # and foreground probabilities.
-    trafo = PerObjectDistances(
+    trafo = PerObjectDistanceTransform(
         distances=False,
         boundary_distances=False,
         directed_distances=True,
@@ -31,12 +31,12 @@ def check_hv_segmentation(image, gt):
 
 
 def check_distance_segmentation(image, gt):
-    from torch_em.transform.label import PerObjectDistances
+    from torch_em.transform.label import PerObjectDistanceTransform
     from torch_em.util.segmentation import watershed_from_center_and_boundary_distances
 
     # This transform gives distance to the centroid,
     # to the boundaries and the foreground probabilities
-    trafo = PerObjectDistances(
+    trafo = PerObjectDistanceTransform(
         distances=True,
         boundary_distances=True,
         directed_distances=False,
