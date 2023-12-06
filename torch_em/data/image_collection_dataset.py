@@ -29,7 +29,6 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
                 else:
                     assert is_multichan == multichan
 
-                # we assume axis last
                 if is_multichan:
                     # use heuristic to decide whether the data is stored in channel last or channel first order:
                     # if the last axis has a length smaller than 16 we assume that it's the channel axis,

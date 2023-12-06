@@ -27,7 +27,8 @@ class UNETR(nn.Module):
         out_channels=1,
         use_sam_stats=False,
         use_mae_stats=False,
-        encoder_checkpoint_path=None
+        encoder_checkpoint_path=None,
+        final_activation=None,
     ) -> None:
         super().__init__()
 
@@ -72,7 +73,6 @@ class UNETR(nn.Module):
 
         self.base = ConvBlock2d(self.encoder.embed_dim, features_decoder[0])
         self.out_conv = nn.Conv2d(features_decoder[-1], out_channels, 1)
-        self.final_activation = nn.Sigmoid()
 
         self.deconv1 = Deconv2DBlock(self.encoder.embed_dim, features_decoder[0])
         self.deconv2 = Deconv2DBlock(features_decoder[0], features_decoder[1])
@@ -81,6 +81,19 @@ class UNETR(nn.Module):
         self.deconv4 = SingleDeconv2DBlock(features_decoder[-1], features_decoder[-1])
 
         self.decoder_head = ConvBlock2d(2*features_decoder[-1], features_decoder[-1])
+        self.final_activation = self._get_activation(final_activation)
+
+    def _get_activation(self, activation):
+        return_activation = None
+        if activation is None:
+            return None
+        if isinstance(activation, nn.Module):
+            return activation
+        if isinstance(activation, str):
+            return_activation = getattr(nn, activation, None)
+        if return_activation is None:
+            raise ValueError(f"Invalid activation: {activation}")
+        return return_activation()
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -147,7 +160,8 @@ class UNETR(nn.Module):
         x = self.decoder_head(x)
 
         x = self.out_conv(x)
-        x = self.final_activation(x)
+        if self.final_activation is not None:
+            x = self.final_activation(x)
 
         x = self.postprocess_masks(x, org_shape, org_shape)
         return x
