@@ -139,7 +139,8 @@ def main(args):
         # get the desired livecell loaders for training
         train_loader, val_loader = common.get_my_livecell_loaders(
             args.input, patch_shape, args.cell_type, with_boundary=not args.with_affinities,
-            with_affinities=args.with_affinities  # this takes care of getting the loaders with affinities
+            with_affinities=args.with_affinities,  # this takes care of getting the loaders with affinities
+            no_input_norm=args.do_sam_ini  # if sam ini, use identity raw trafo, else use default raw trafo
         )
         do_unetr_training(
             train_loader=train_loader, val_loader=val_loader, model=model,

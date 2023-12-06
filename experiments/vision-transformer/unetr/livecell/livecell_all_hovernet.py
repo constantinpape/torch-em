@@ -89,14 +89,17 @@ def main(args):
     patch_shape = (512, 512)  # patch size used for training on livecell
 
     # directory folder to save different parts of the scheme
-    dir_structure = os.path.join(args.model_name, "hovernet", "torch-em-sam")
+    dir_structure = os.path.join(
+        args.model_name, "hovernet",
+        f"{args.source_choice}-sam" if args.do_sam_ini else f"{args.source_choice}-scratch"
+    )
 
     # get the desired loss function for training
     loss = common.get_loss_function(with_distance_maps=True)
 
     # get the model for the training and inference on livecell dataset
     model = common.get_unetr_model(
-        model_name=args.model_name, source_choice="torch-em", patch_shape=patch_shape,
+        model_name=args.model_name, source_choice=args.source_choice, patch_shape=patch_shape,
         sam_initialization=args.do_sam_ini, output_channels=3,  # foreground-background, x-map, y-map
         backbone=args.pretrained_choice
     )
@@ -109,7 +112,8 @@ def main(args):
         print("2d UNETR hovernet-style training on LIVECell dataset")
         # get the desried livecell loaders for training
         train_loader, val_loader = common.get_my_livecell_loaders(
-            args.input, patch_shape, args.cell_type, with_distance_maps=True
+            args.input, patch_shape, args.cell_type, with_distance_maps=True,
+            no_input_norm=args.do_sam_ini  # if sam ini, use identity raw trafo, else use default raw trafo
         )
         do_unetr_hovernet_training(
             train_loader=train_loader, val_loader=val_loader, model=model,

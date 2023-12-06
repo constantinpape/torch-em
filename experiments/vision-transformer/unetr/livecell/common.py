@@ -18,6 +18,15 @@ from torch_em.data.datasets import get_livecell_loader
 from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask
 from torch_em.util.prediction import predict_with_halo, predict_with_padding
 
+try:
+    from micro_sam.training import identity
+except ModuleNotFoundError:
+    import warnings
+    warnings.warn("`micro_sam` could not be imported, hence we build an identity fn for the raw transform.")
+
+    def identity(raw):
+        return raw
+
 
 OFFSETS = [
     [-1, 0], [0, -1],
@@ -51,6 +60,7 @@ def get_my_livecell_loaders(
         with_boundary: bool = False,
         with_affinities: bool = False,
         with_distance_maps: bool = False,
+        no_input_norm: bool = True  # if True, we use identity raw trafo, else we use default raw trafo
 ):
     """Returns the LIVECell training and validation dataloaders
     """
@@ -66,6 +76,13 @@ def get_my_livecell_loaders(
     else:
         label_trafo = None
 
+    if no_input_norm:
+        print("Using identity raw transform...")
+        raw_transform = identity
+    else:
+        print("Using default raw transform...")
+        raw_transform = torch_em.transform.get_raw_transform()
+
     train_loader = get_livecell_loader(
         path=input_path,
         split="train",
@@ -79,7 +96,8 @@ def get_my_livecell_loaders(
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
         label_transform=label_trafo,
-        label_dtype=torch.float32
+        label_dtype=torch.float32,
+        raw_transform=raw_transform
     )
     val_loader = get_livecell_loader(
         path=input_path,
@@ -94,7 +112,8 @@ def get_my_livecell_loaders(
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
         label_transform=label_trafo,
-        label_dtype=torch.float32
+        label_dtype=torch.float32,
+        raw_transform=raw_transform
     )
 
     return train_loader, val_loader
@@ -138,7 +157,7 @@ def get_unetr_model(
             img_size=patch_shape,
             spatial_dims=2
         )
-        model.out_channels = 2  # type: ignore
+        model.out_channels = 2
 
     else:
         tmp_msg = "The available UNETR models are either from `torch-em` or `monai`. "
@@ -323,8 +342,6 @@ def get_loss_function(with_affinities=False, with_distance_maps=False):
             transform=ApplyAndRemoveMask(masking_method="multiply")
         )
     elif with_distance_maps:
-        # Updated the loss function for the simplfied distance loss.
-        # TODO we can try both with and without masking
         loss = DistanceLoss(mask_distances_in_bg=True)
     else:
         loss = DiceLoss()
