@@ -3,35 +3,61 @@ import torch.nn as nn
 from .dice import DiceLoss
 
 
-# TODO
-# - check how the loss can be extended to support training with BCE + Dice
-# - test and document it
 class DistanceLoss(nn.Module):
-    def __init__(self, mask_distances_in_bg):
+    """Loss for distance based instance segmentation.
+
+    Expects input and targets with three channels: foreground and two distance channels.
+    Typically the distance channels are centroid and inverted boundary distance.
+
+    Args:
+        mask_distances_in_bg: whether to mask the loss for distance predictions in the background.
+        foreground_loss: the loss for comparing foreground predictions and target.
+        distance_loss: the loss for comparing distance predictions and target.
+    """
+    def __init__(
+        self,
+        mask_distances_in_bg: bool,
+        foreground_loss: nn.Module = DiceLoss(),
+        distance_loss: nn.Module = nn.MSELoss(reduction="mean")
+    ) -> None:
         super().__init__()
 
-        self.dice_loss = DiceLoss()
-        self.mse_loss = nn.MSELoss()
+        self.foreground_loss = foreground_loss
+        self.distance_loss = distance_loss
         self.mask_distances_in_bg = mask_distances_in_bg
 
     def forward(self, input_, target):
         assert input_.shape == target.shape, input_.shape
         assert input_.shape[1] == 3, input_.shape
 
-        fg_input, fg_target = input_[:, 0, ...], target[:, 0, ...]
-        fg_loss = self.dice_loss(fg_target, fg_input)
+        # IMPORTANT: preserve the channels!
+        # Otherwise the Dice Loss will do all kinds of shennanigans.
+        # Because it always interprets the first axis as channel,
+        # and treats it differently (sums over it independently).
+        # This will lead to a very large dice loss that dominates over everything else.
+        fg_input, fg_target = input_[:, 0:1], target[:, 0:1]
+        fg_loss = self.foreground_loss(fg_input, fg_target)
 
-        cdist_input, cdist_target = input_[:, 1, ...], target[:, 1, ...]
+        cdist_input, cdist_target = input_[:, 1:2], target[:, 1:2]
         if self.mask_distances_in_bg:
-            cdist_loss = self.mse_loss(cdist_target * fg_target, cdist_input * fg_target)
+            mask = fg_target
+            cdist_loss = self.distance_loss(cdist_input * mask, cdist_target * mask)
         else:
-            cdist_loss = self.mse_loss(cdist_target, cdist_input)
+            cdist_loss = self.distance_loss(cdist_input, cdist_target)
 
-        bdist_input, bdist_target = input_[:, 2, ...], target[:, 2, ...]
+        bdist_input, bdist_target = input_[:, 2:3], target[:, 2:3]
         if self.mask_distances_in_bg:
-            bdist_loss = self.mse_loss(bdist_target * fg_target, bdist_input * fg_target)
+            mask = fg_target
+            bdist_loss = self.distance_loss(bdist_input * mask, bdist_target * mask)
         else:
-            bdist_loss = self.mse_loss(bdist_target, bdist_input)
+            bdist_loss = self.distance_loss(bdist_input, bdist_target)
 
         overall_loss = fg_loss + cdist_loss + bdist_loss
         return overall_loss
+
+
+class DiceBasedDistanceLoss(DistanceLoss):
+    """Similar to DistanceLoss and uses dice for all losses.
+    """
+    def __init__(self, mask_distances_in_bg: bool) -> None:
+        super().__init__(mask_distances_in_bg, foreground_loss=DiceLoss(), distance_loss=DiceLoss())
