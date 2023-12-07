@@ -11,12 +11,11 @@ from elf.evaluation import dice_score, mean_segmentation_accuracy
 
 import torch
 import torch_em
-import torch.nn as nn
 from torch_em.util import segmentation
 from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
-from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask
 from torch_em.util.prediction import predict_with_halo, predict_with_padding
+from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask, DistanceLoss, DiceBasedDistanceLoss
 
 try:
     from micro_sam.training import identity
@@ -71,7 +70,7 @@ def get_my_livecell_loaders(
             boundary_distances=True,
             directed_distances=False,
             foreground=True,
-            min_size=25,
+            min_size=25
         )
     else:
         label_trafo = None
@@ -145,7 +144,8 @@ def get_unetr_model(
         model = torch_em_models.UNETR(
             backbone=backbone, encoder=model_name, out_channels=output_channels,
             encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None,
-            use_sam_stats=sam_initialization  # FIXME: add mae weight initialization
+            use_sam_stats=sam_initialization,  # FIXME: add mae weight initialization
+            final_activation="Sigmoid"
         )
 
     elif source_choice == "monai":
@@ -342,39 +342,9 @@ def get_loss_function(with_affinities=False, with_distance_maps=False):
             transform=ApplyAndRemoveMask(masking_method="multiply")
         )
     elif with_distance_maps:
-        loss = DistanceLoss(mask_distances_in_bg=True)
+        # loss = DistanceLoss(mask_distances_in_bg=True)
+        loss = DiceBasedDistanceLoss(mask_distances_in_bg=True)
     else:
         loss = DiceLoss()
 
     return loss
-
-
-class DistanceLoss(nn.Module):
-    def __init__(self, mask_distances_in_bg):
-        super().__init__()
-
-        self.dice_loss = DiceLoss()
-        self.mse_loss = nn.MSELoss()
-        self.mask_distances_in_bg = mask_distances_in_bg
-
-    def forward(self, input_, target):
-        assert input_.shape == target.shape, input_.shape
-        assert input_.shape[1] == 3, input_.shape
-
-        fg_input, fg_target = input_[:, 0, ...], target[:, 0, ...]
-        fg_loss = self.dice_loss(fg_target, fg_input)
-
-        cdist_input, cdist_target = input_[:, 1, ...], target[:, 1, ...]
-        if self.mask_distances_in_bg:
-            cdist_loss = self.mse_loss(cdist_target * fg_target, cdist_input * fg_target)
-        else:
-            cdist_loss = self.mse_loss(cdist_target, cdist_input)
-
-        bdist_input, bdist_target = input_[:, 2, ...], target[:, 2, ...]
-        if self.mask_distances_in_bg:
-            bdist_loss = self.mse_loss(bdist_target * fg_target, bdist_input * fg_target)
-        else:
-            bdist_loss = self.mse_loss(bdist_target, bdist_input)
-
-        overall_loss = fg_loss + cdist_loss + bdist_loss
-        return overall_loss
