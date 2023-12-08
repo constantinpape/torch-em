@@ -19,6 +19,30 @@ except ImportError:
 
 
 class UNETR(nn.Module):
+
+    def _load_encoder_from_checkpoint(self, backbone, encoder, checkpoint):
+
+        if backbone == "sam":
+            # If we have a SAM encoder, then we first try to load the full SAM Model
+            # (using micro_sam) and otherwise fall back on directly loading the encoder state
+            # from the checkpoint
+            try:
+                _, model = get_sam_model(
+                    model_type=encoder,
+                    checkpoint_path=checkpoint,
+                    return_sam=True
+                )
+                encoder_state = model.image_encoder.state_dict()
+            except Exception:
+                # If we have a MAE encoder, then we directly load the encoder state
+                # from the checkpoint.
+                encoder_state = torch.load(checkpoint)
+
+        elif backbone == "mae":
+            encoder_state = torch.load(checkpoint)
+
+        self.encoder.load_state_dict(encoder_state)
+
     def __init__(
         self,
         backbone="sam",
@@ -36,20 +60,9 @@ class UNETR(nn.Module):
         self.use_mae_stats = use_mae_stats
 
         print(f"Using {encoder} from {backbone.upper()}")
-
         self.encoder = get_vision_transformer(backbone=backbone, model=encoder)
-
         if encoder_checkpoint_path is not None:
-            if backbone == "sam":
-                _, model = get_sam_model(
-                    model_type=encoder,
-                    checkpoint_path=encoder_checkpoint_path,
-                    return_sam=True
-                )
-                for param1, param2 in zip(model.parameters(), self.encoder.parameters()):
-                    param2.data = param1
-            elif backbone == "mae":
-                raise NotImplementedError
+            self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint_path)
 
         # parameters for the decoder network
         depth = 3
