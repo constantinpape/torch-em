@@ -206,8 +206,8 @@ def do_unetr_inference(
         model,
         root_save_dir: str,
         save_root: str,
-        with_affinities: bool,
-        with_distances: bool
+        with_affinities: bool = False,
+        with_distances: bool = False
 ):
     test_img_dir = os.path.join(input_path, "images", "livecell_test_images", "*")
     model_ckpt = os.path.join(save_root, "checkpoints", "livecell-all", "best.pt")
@@ -250,17 +250,16 @@ def predict_for_unetr(
     fname = Path(img_path).stem
     save_path = os.path.join(root_save_dir, "src-all" if ctype is None else f"src-{ctype}", f"{fname}.h5")
     with h5py.File(save_path, "a") as f:
+        ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
+        ds[:] = fg
+
         if with_affinities:
-            ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
-            ds[:] = fg
             ds = f.require_dataset("affinities", shape=affs.shape, compression="gzip", dtype=affs.dtype)
             ds[:] = affs
             ds = f.require_dataset("segmentation", shape=mws.shape, compression="gzip", dtype=mws.dtype)
             ds[:] = mws
 
         elif with_distances:
-            ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
-            ds[:] = fg
             ds = f.require_dataset("cdist", shape=cdist.shape, compression="gzip", dtype=cdist.dtype)
             ds[:] = cdist
             ds = f.require_dataset("bdist", shape=bdist.shape, compression="gzip", dtype=bdist.dtype)
@@ -269,8 +268,6 @@ def predict_for_unetr(
             ds[:] = dm_seg
 
         else:
-            ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
-            ds[:] = fg
             ds = f.require_dataset("boundary", shape=bd.shape, compression="gzip", dtype=bd.dtype)
             ds[:] = bd
             ds = f.require_dataset("watershed1", shape=ws1.shape, compression="gzip", dtype=ws1.dtype)
