@@ -39,7 +39,11 @@ class ViT_Sam(ImageEncoderViT):
                 "and then rerun your code."
             )
 
-        super().__init__(embed_dim=embed_dim, **kwargs)
+        super().__init__(
+            embed_dim=embed_dim,
+            global_attn_indexes=global_attn_indexes,
+            **kwargs,
+        )
         self.chunks_for_projection = global_attn_indexes
         self.in_chans = in_chans
         self.embed_dim = embed_dim
