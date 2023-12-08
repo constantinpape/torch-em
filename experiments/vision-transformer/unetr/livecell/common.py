@@ -89,7 +89,7 @@ def get_my_livecell_loaders(
         with_boundary: bool = False,
         with_affinities: bool = False,
         with_distances: bool = False,
-        no_input_norm: bool = True  # if True, we use identity raw trafo, else we use default raw trafo
+        input_norm: bool = True  # if True, use default raw trafo, else use identity raw trafo
 ):
     """Returns the LIVECell training and validation dataloaders
     """
@@ -105,12 +105,12 @@ def get_my_livecell_loaders(
     else:
         label_trafo = None
 
-    if no_input_norm:
-        print("Using identity raw transform...")
-        raw_transform = identity
-    else:
+    if input_norm:
         print("Using default raw transform...")
         raw_transform = torch_em.transform.get_raw_transform()
+    else:
+        print("Using identity raw transform...")
+        raw_transform = identity
 
     train_loader = get_livecell_loader(
         path=input_path,
@@ -207,7 +207,8 @@ def do_unetr_inference(
         root_save_dir: str,
         save_root: str,
         with_affinities: bool = False,
-        with_distances: bool = False
+        with_distances: bool = False,
+        input_norm: bool = True
 ):
     test_img_dir = os.path.join(input_path, "images", "livecell_test_images", "*")
     model_ckpt = os.path.join(save_root, "checkpoints", "livecell-all", "best.pt")
@@ -222,14 +223,15 @@ def do_unetr_inference(
 
     with torch.no_grad():
         for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for all livecell with model {model_ckpt}"):
-            predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, with_distances)
+            predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, with_distances, input_norm)
 
 
 def predict_for_unetr(
-        img_path, model, root_save_dir, device, with_affinities=False, with_distances=False, ctype=None
+        img_path, model, root_save_dir, device, with_affinities=False, with_distances=False, input_norm=True, ctype=None
 ):
     input_ = imageio.imread(img_path)
-    input_ = standardize(input_)
+    if input_norm:
+        input_ = standardize(input_)
 
     if with_affinities:  # inference using affinities
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
@@ -242,8 +244,11 @@ def predict_for_unetr(
         dm_seg = segmentation.watershed_from_center_and_boundary_distances(cdist, bdist, fg, min_size=50)
 
     else:  # inference using foreground-boundary inputs - for the unetr training
-        outputs = predict_with_halo(input_, model, [device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True)
-        fg, bd = outputs[0, :, :], outputs[1, :, :]
+        outputs = predict_with_halo(
+            input_, model, [device], block_shape=[384, 384], halo=[64, 64],
+            disable_tqdm=True, preprocess=standardize if input_norm else None
+        )
+        fg, bd = outputs
         ws1 = segmentation.watershed_from_components(bd, fg)
         ws2 = segmentation.watershed_from_maxima(bd, fg, min_distance=1)
 
