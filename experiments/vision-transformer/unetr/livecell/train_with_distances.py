@@ -11,7 +11,7 @@ def main(args):
 
     # directory folder to save different parts of the scheme
     dir_structure = os.path.join(
-        args.model_name, "distances",
+        args.model_name, "distances", "dicebaseddistloss" if args.with_dice else "distloss",
         f"{args.source_choice}-sam" if args.do_sam_ini else f"{args.source_choice}-scratch"
     )
 
