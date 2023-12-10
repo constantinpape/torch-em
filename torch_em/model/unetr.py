@@ -41,7 +41,18 @@ class UNETR(nn.Module):
                     encoder_state = torch.load(checkpoint)
 
             elif backbone == "mae":
-                encoder_state = torch.load(checkpoint)
+                # vit initialization hints from:
+                #     - https://github.com/facebookresearch/mae/blob/main/main_finetune.py#L233-L242
+                encoder_state = torch.load(checkpoint)["model"]
+                encoder_state = OrderedDict({
+                    k: v for k, v in encoder_state.items()
+                    if (k != "mask_token" and not k.startswith("decoder"))
+                })
+
+                # let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
+                current_encoder_state = self.encoder.state_dict()
+                if "head.weight" and "head.bias" in current_encoder_state:
+                    del self.encoder.head
 
         else:
             encoder_state = checkpoint
@@ -50,6 +61,7 @@ class UNETR(nn.Module):
 
     def __init__(
         self,
+        img_size: int = 1024,
         backbone: str = "sam",
         encoder: str = "vit_b",
         decoder: Optional[nn.Module] = None,
@@ -65,7 +77,7 @@ class UNETR(nn.Module):
         self.use_mae_stats = use_mae_stats
 
         print(f"Using {encoder} from {backbone.upper()}")
-        self.encoder = get_vision_transformer(backbone=backbone, model=encoder)
+        self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder)
         if encoder_checkpoint is not None:
             self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint)
 
