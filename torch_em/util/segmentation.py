@@ -123,13 +123,18 @@ def watershed_from_center_and_boundary_distances(
     boundary_distances,
     foreground_map,
     center_distance_threshold=0.5,
-    boundary_distance_threshold=0.9,
+    boundary_distance_threshold=0.5,
     foreground_threshold=0.5,
+    distance_smoothing=1.6,
     min_size=0,
+    debug=False,
 ):
     """Seeded watershed based on distance predictions to object center and boundaries.
 
-    The seeds are computed by finding connected components where
+    The seeds are computed by finding connected components where both distance predictions
+    are smaller than the respective thresholds. Using both distances here should prevent merging
+    narrow adjacent objects (if only using the center distance) or finding multiple seeds for non-convex
+    cells (if only using the boundary distances).
 
     Args:
         center_distances [np.ndarray] - Distance prediction to the objcet center.
@@ -140,21 +145,35 @@ def watershed_from_center_and_boundary_distances(
         boundary_distance_threshold [float] - Boundary distance predictions below this value will be
             used to find seeds (intersected with thresholded center distance predictions).
         foreground_threshold [float] - Foreground predictions above this value will be used as foreground mask.
+        distance_smoothing [float] - Sigma value for smoothing the distance predictions.
         min_size [int] - Minimal object size in the segmentation result.
+        debug [bool] - Return all intermediate results for debugging.
 
     Returns:
         np.ndarray - The instance segmentation.
     """
-    fg = foreground_map > foreground_threshold
+    center_distances = vigra.filters.gaussianSmoothing(center_distances, distance_smoothing)
+    boundary_distances = vigra.filters.gaussianSmoothing(boundary_distances, distance_smoothing)
+
+    fg_mask = foreground_map > foreground_threshold
 
     marker_map = np.logical_and(
         center_distances < center_distance_threshold,
         boundary_distances < boundary_distance_threshold
     )
-    marker_map[~fg] = 0
+    marker_map[~fg_mask] = 0
     markers = label(marker_map)
 
-    seg = watershed(boundary_distances, markers=markers, mask=fg)
+    seg = watershed(boundary_distances, markers=markers, mask=fg_mask)
     seg = size_filter(seg, min_size)
+
+    if debug:
+        debug_output = {
+            "center_distances": center_distances,
+            "boundary_distances": boundary_distances,
+            "foreground_mask": fg_mask,
+            "markers": markers,
+        }
+        return seg, debug_output
 
     return seg
