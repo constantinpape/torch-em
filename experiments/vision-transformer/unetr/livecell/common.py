@@ -2,6 +2,9 @@ import os
 import h5py
 import argparse
 import numpy as np
+import pandas as pd
+from glob import glob
+from tqdm import tqdm
 from pathlib import Path
 from typing import Tuple, Optional
 
@@ -11,12 +14,20 @@ from elf.evaluation import dice_score, mean_segmentation_accuracy
 
 import torch
 import torch_em
-import torch.nn as nn
 from torch_em.util import segmentation
 from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
-from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask
 from torch_em.util.prediction import predict_with_halo, predict_with_padding
+from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask, DistanceLoss, DiceBasedDistanceLoss
+
+try:
+    from micro_sam.training import identity
+except ModuleNotFoundError:
+    import warnings
+    warnings.warn("`micro_sam` could not be imported, hence we build an identity fn for the raw transform.")
+
+    def identity(raw):
+        return raw
 
 
 OFFSETS = [
@@ -31,16 +42,43 @@ CELL_TYPES = ["A172", "BT474", "BV2", "Huh7", "MCF7", "SHSY5Y", "SkBr3", "SKOV3"
 
 
 #
-# LIVECELL DATALOADERS
+# LIVECELL TRAINING SCHEME
 #
 
 
-def _get_output_channels(with_affinities):
-    if with_affinities:
-        n_out = len(OFFSETS) + 1
-    else:
-        n_out = 2
-    return n_out
+def do_unetr_training(
+        train_loader,
+        val_loader,
+        model,
+        loss,
+        device=None,
+        iterations=1e5,
+        save_root=None,
+        name="livecell-all",
+        learning_rate=1e-5,
+        msg="Run training for all cell types"
+):
+    print(msg)
+    trainer = torch_em.default_segmentation_trainer(
+        name=name,
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        learning_rate=learning_rate,
+        device=device,
+        mixed_precision=True,
+        log_image_interval=50,
+        compile_model=False,
+        save_root=save_root,
+        loss=loss,
+        metric=loss
+    )
+    trainer.fit(iterations)
+
+
+#
+# LIVECELL DATALOADERS
+#
 
 
 def get_my_livecell_loaders(
@@ -50,21 +88,29 @@ def get_my_livecell_loaders(
         with_binary: bool = False,
         with_boundary: bool = False,
         with_affinities: bool = False,
-        with_distance_maps: bool = False,
+        with_distances: bool = False,
+        input_norm: bool = True  # if True, use default raw trafo, else use identity raw trafo
 ):
     """Returns the LIVECell training and validation dataloaders
     """
 
-    if with_distance_maps:
+    if with_distances:
         label_trafo = torch_em.transform.label.PerObjectDistanceTransform(
             distances=True,
             boundary_distances=True,
             directed_distances=False,
             foreground=True,
-            min_size=25,
+            min_size=25
         )
     else:
         label_trafo = None
+
+    if input_norm:
+        print("Using default raw transform...")
+        raw_transform = torch_em.transform.get_raw_transform()
+    else:
+        print("Using identity raw transform...")
+        raw_transform = identity
 
     train_loader = get_livecell_loader(
         path=input_path,
@@ -79,7 +125,8 @@ def get_my_livecell_loaders(
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
         label_transform=label_trafo,
-        label_dtype=torch.float32
+        label_dtype=torch.float32,
+        raw_transform=raw_transform
     )
     val_loader = get_livecell_loader(
         path=input_path,
@@ -94,7 +141,8 @@ def get_my_livecell_loaders(
         boundaries=with_boundary,  # this returns dataloaders with foreground and boundary channels
         binary=with_binary,
         label_transform=label_trafo,
-        label_dtype=torch.float32
+        label_dtype=torch.float32,
+        raw_transform=raw_transform
     )
 
     return train_loader, val_loader
@@ -125,8 +173,8 @@ def get_unetr_model(
         from torch_em import model as torch_em_models
         model = torch_em_models.UNETR(
             backbone=backbone, encoder=model_name, out_channels=output_channels,
+            use_sam_stats=sam_initialization, final_activation="Sigmoid",
             encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None,
-            use_sam_stats=sam_initialization  # FIXME: add mae weight initialization
         )
 
     elif source_choice == "monai":
@@ -138,12 +186,11 @@ def get_unetr_model(
             img_size=patch_shape,
             spatial_dims=2
         )
-        model.out_channels = 2  # type: ignore
+        model.out_channels = 2
 
     else:
-        tmp_msg = "The available UNETR models are either from `torch-em` or `monai`. "
-        tmp_msg += f"Please choose from them instead of {source_choice}"
-        raise ValueError(tmp_msg)
+        raise ValueError(f"The available UNETR models are either from `torch-em` or `monai`. \
+                         Please choose from them instead of {source_choice}")
 
     return model
 
@@ -152,46 +199,80 @@ def get_unetr_model(
 # LIVECELL UNETR INFERENCE - foreground boundary / foreground affinities / foreground dist. maps
 #
 
+
+def do_unetr_inference(
+        input_path: str,
+        device: torch.device,
+        model,
+        root_save_dir: str,
+        save_root: str,
+        with_affinities: bool = False,
+        with_distances: bool = False,
+        input_norm: bool = True
+):
+    test_img_dir = os.path.join(input_path, "images", "livecell_test_images", "*")
+    model_ckpt = os.path.join(save_root, "checkpoints", "livecell-all", "best.pt")
+    assert os.path.exists(model_ckpt), model_ckpt
+
+    model.load_state_dict(torch.load(model_ckpt, map_location=torch.device('cpu'))["model_state"])
+    model.to(device)
+    model.eval()
+
+    # creating the respective directories for saving the outputs
+    os.makedirs(os.path.join(root_save_dir, "src-all"), exist_ok=True)
+
+    with torch.no_grad():
+        for img_path in tqdm(glob(test_img_dir), desc=f"Run inference for all livecell with model {model_ckpt}"):
+            predict_for_unetr(img_path, model, root_save_dir, device, with_affinities, with_distances, input_norm)
+
+
 def predict_for_unetr(
-        img_path, model, root_save_dir, device, with_affinities=False, with_distance_maps=False, ctype=None
+        img_path, model, root_save_dir, device, with_affinities=False, with_distances=False, input_norm=True, ctype=None
 ):
     input_ = imageio.imread(img_path)
-    input_ = standardize(input_)
+    if input_norm:
+        input_ = standardize(input_)
 
     if with_affinities:  # inference using affinities
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
         fg, affs = np.array(outputs[0, 0]), np.array(outputs[0, 1:])
         mws = segmentation.mutex_watershed_segmentation(fg, affs, offsets=OFFSETS)
 
-    elif with_distance_maps:  # inference using foreground and hv distance maps
+    elif with_distances:  # inference using foreground and hv distance maps
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
         fg, cdist, bdist = outputs.squeeze()
         dm_seg = segmentation.watershed_from_center_and_boundary_distances(cdist, bdist, fg, min_size=50)
 
     else:  # inference using foreground-boundary inputs - for the unetr training
-        outputs = predict_with_halo(input_, model, [device], block_shape=[384, 384], halo=[64, 64], disable_tqdm=True)
-        fg, bd = outputs[0, :, :], outputs[1, :, :]
+        outputs = predict_with_halo(
+            input_, model, [device], block_shape=[384, 384], halo=[64, 64],
+            disable_tqdm=True, preprocess=standardize if input_norm else None
+        )
+        fg, bd = outputs
         ws1 = segmentation.watershed_from_components(bd, fg)
         ws2 = segmentation.watershed_from_maxima(bd, fg, min_distance=1)
 
     fname = Path(img_path).stem
     save_path = os.path.join(root_save_dir, "src-all" if ctype is None else f"src-{ctype}", f"{fname}.h5")
     with h5py.File(save_path, "a") as f:
+        ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
+        ds[:] = fg
+
         if with_affinities:
-            ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
-            ds[:] = fg
             ds = f.require_dataset("affinities", shape=affs.shape, compression="gzip", dtype=affs.dtype)
             ds[:] = affs
             ds = f.require_dataset("segmentation", shape=mws.shape, compression="gzip", dtype=mws.dtype)
             ds[:] = mws
 
-        elif with_distance_maps:
+        elif with_distances:
+            ds = f.require_dataset("cdist", shape=cdist.shape, compression="gzip", dtype=cdist.dtype)
+            ds[:] = cdist
+            ds = f.require_dataset("bdist", shape=bdist.shape, compression="gzip", dtype=bdist.dtype)
+            ds[:] = bdist
             ds = f.require_dataset("segmentation", shape=dm_seg.shape, compression="gzip", dtype=dm_seg.dtype)
             ds[:] = dm_seg
 
         else:
-            ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
-            ds[:] = fg
             ds = f.require_dataset("boundary", shape=bd.shape, compression="gzip", dtype=bd.dtype)
             ds[:] = bd
             ds = f.require_dataset("watershed1", shape=ws1.shape, compression="gzip", dtype=ws1.dtype)
@@ -204,7 +285,60 @@ def predict_for_unetr(
 # LIVECELL UNETR EVALUATION - foreground boundary / foreground affinities
 #
 
-def evaluate_for_unetr(gt_path, _save_dir, with_affinities=False, with_distance_maps=False):
+
+def do_unetr_evaluation(
+        input_path: str,
+        root_save_dir: str,
+        csv_save_dir: str,
+        with_affinities: bool = False,
+        with_distances: bool = False
+):
+    _save_dir = os.path.join(root_save_dir, "src-all")
+    assert os.path.exists(_save_dir), _save_dir
+
+    gt_dir = os.path.join(input_path, "annotations", "livecell_test_images", "*", "*")
+
+    msa_list, sa50_list = [], []
+    fg_list, bd_list, msa1_list, sa501_list, msa2_list, sa502_list = [], [], [], [], [], []
+    for gt_path in tqdm(glob(gt_dir)):
+        all_metrics = evaluate_for_unetr(
+            gt_path, _save_dir, with_affinities=with_affinities, with_distances=with_distances
+        )
+        if with_affinities or with_distances:
+            msa, sa50 = all_metrics
+            msa_list.append(msa)
+            sa50_list.append(sa50)
+
+        else:
+            fg_dice, bd_dice, msa1, sa_acc1, msa2, sa_acc2 = all_metrics
+            fg_list.append(fg_dice)
+            bd_list.append(bd_dice)
+            msa1_list.append(msa1)
+            sa501_list.append(sa_acc1[0])
+            msa2_list.append(msa2)
+            sa502_list.append(sa_acc2[0])
+
+    if with_affinities or with_distances:
+        res_dict = {
+            "LiveCELL": "Metrics",
+            "mSA": np.mean(msa_list),
+            "SA50": np.mean(sa50_list)
+        }
+
+    else:
+        res_dict = {
+            "LiveCELL": "Metrics",
+            "ws1_mSA": np.mean(msa1_list),
+            "ws1_SA50": np.mean(sa501_list),
+            "ws2_mSA": np.mean(msa2_list),
+            "ws2_SA50": np.mean(sa502_list)
+        }
+
+    df = pd.DataFrame.from_dict([res_dict])
+    df.to_csv(os.path.join(csv_save_dir, "livecell.csv"))
+
+
+def evaluate_for_unetr(gt_path, _save_dir, with_affinities=False, with_distances=False):
     fname = Path(gt_path).stem
     gt = imageio.imread(gt_path)
 
@@ -213,7 +347,7 @@ def evaluate_for_unetr(gt_path, _save_dir, with_affinities=False, with_distance_
         if with_affinities:
             mws = f["segmentation"][:]
 
-        elif with_distance_maps:
+        elif with_distances:
             instances = f["segmentation"][:]
 
         else:
@@ -226,7 +360,7 @@ def evaluate_for_unetr(gt_path, _save_dir, with_affinities=False, with_distance_
         mws_msa, mws_sa_acc = mean_segmentation_accuracy(mws, gt, return_accuracies=True)
         return mws_msa, mws_sa_acc[0]
 
-    elif with_distance_maps:
+    elif with_distances:
         instances_msa, instances_sa_acc = mean_segmentation_accuracy(instances, gt, return_accuracies=True)
         return instances_msa, instances_sa_acc[0]
 
@@ -307,57 +441,24 @@ def get_parser():
         "--pretrained_choice", type=str, default="sam",
     )
 
-    parser.add_argument(
-        "--with_affinities", action="store_true",
-        help="Trains the UNETR model with affinities"
-    )
-
     parser.add_argument("--iterations", type=int, default=100000)
     return parser
 
 
-def get_loss_function(with_affinities=False, with_distance_maps=False):
+def get_loss_function(with_affinities=False, with_distances=False, combine_dist_with_dice=False):
     if with_affinities:
         loss = LossWrapper(
             loss=DiceLoss(),
             transform=ApplyAndRemoveMask(masking_method="multiply")
         )
-    elif with_distance_maps:
-        # Updated the loss function for the simplfied distance loss.
-        # TODO we can try both with and without masking
+
+    elif with_distances and combine_dist_with_dice:
+        loss = DiceBasedDistanceLoss(mask_distances_in_bg=True)
+
+    elif with_distances and not combine_dist_with_dice:
         loss = DistanceLoss(mask_distances_in_bg=True)
+
     else:
         loss = DiceLoss()
 
     return loss
-
-
-class DistanceLoss(nn.Module):
-    def __init__(self, mask_distances_in_bg):
-        super().__init__()
-
-        self.dice_loss = DiceLoss()
-        self.mse_loss = nn.MSELoss()
-        self.mask_distances_in_bg = mask_distances_in_bg
-
-    def forward(self, input_, target):
-        assert input_.shape == target.shape, input_.shape
-        assert input_.shape[1] == 3, input_.shape
-
-        fg_input, fg_target = input_[:, 0, ...], target[:, 0, ...]
-        fg_loss = self.dice_loss(fg_target, fg_input)
-
-        cdist_input, cdist_target = input_[:, 1, ...], target[:, 1, ...]
-        if self.mask_distances_in_bg:
-            cdist_loss = self.mse_loss(cdist_target * fg_target, cdist_input * fg_target)
-        else:
-            cdist_loss = self.mse_loss(cdist_target, cdist_input)
-
-        bdist_input, bdist_target = input_[:, 2, ...], target[:, 2, ...]
-        if self.mask_distances_in_bg:
-            bdist_loss = self.mse_loss(bdist_target * fg_target, bdist_input * fg_target)
-        else:
-            bdist_loss = self.mse_loss(bdist_target, bdist_input)
-
-        overall_loss = fg_loss + cdist_loss + bdist_loss
-        return overall_loss
