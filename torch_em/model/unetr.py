@@ -51,7 +51,7 @@ class UNETR(nn.Module):
 
                 # let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
                 current_encoder_state = self.encoder.state_dict()
-                if "head.weight" and "head.bias" in current_encoder_state:
+                if ("head.weight" in current_encoder_state) and ("head.bias" in current_encoder_state):
                     del self.encoder.head
 
         else:
