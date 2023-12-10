@@ -1,8 +1,9 @@
+from collections import OrderedDict
+from typing import Optional, Tuple, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from typing import Tuple
 
 from .unet import Decoder, ConvBlock2d, Upsampler2d
 from .vit import get_vision_transformer
@@ -22,37 +23,53 @@ class UNETR(nn.Module):
 
     def _load_encoder_from_checkpoint(self, backbone, encoder, checkpoint):
 
-        if backbone == "sam":
-            # If we have a SAM encoder, then we first try to load the full SAM Model
-            # (using micro_sam) and otherwise fall back on directly loading the encoder state
-            # from the checkpoint
-            try:
-                _, model = get_sam_model(
-                    model_type=encoder,
-                    checkpoint_path=checkpoint,
-                    return_sam=True
-                )
-                encoder_state = model.image_encoder.state_dict()
-            except Exception:
-                # If we have a MAE encoder, then we directly load the encoder state
-                # from the checkpoint.
-                encoder_state = torch.load(checkpoint)
+        if isinstance(checkpoint, str):
+            if backbone == "sam":
+                # If we have a SAM encoder, then we first try to load the full SAM Model
+                # (using micro_sam) and otherwise fall back on directly loading the encoder state
+                # from the checkpoint
+                try:
+                    _, model = get_sam_model(
+                        model_type=encoder,
+                        checkpoint_path=checkpoint,
+                        return_sam=True
+                    )
+                    encoder_state = model.image_encoder.state_dict()
+                except Exception:
+                    # If we have a MAE encoder, then we directly load the encoder state
+                    # from the checkpoint.
+                    encoder_state = torch.load(checkpoint)
 
-        elif backbone == "mae":
-            encoder_state = torch.load(checkpoint)
+            elif backbone == "mae":
+                # vit initialization hints from:
+                #     - https://github.com/facebookresearch/mae/blob/main/main_finetune.py#L233-L242
+                encoder_state = torch.load(checkpoint)["model"]
+                encoder_state = OrderedDict({
+                    k: v for k, v in encoder_state.items()
+                    if (k != "mask_token" and not k.startswith("decoder"))
+                })
+
+                # let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
+                current_encoder_state = self.encoder.state_dict()
+                if ("head.weight" in current_encoder_state) and ("head.bias" in current_encoder_state):
+                    del self.encoder.head
+
+        else:
+            encoder_state = checkpoint
 
         self.encoder.load_state_dict(encoder_state)
 
     def __init__(
         self,
-        backbone="sam",
-        encoder="vit_b",
-        decoder=None,
-        out_channels=1,
-        use_sam_stats=False,
-        use_mae_stats=False,
-        encoder_checkpoint_path=None,
-        final_activation=None,
+        img_size: int = 1024,
+        backbone: str = "sam",
+        encoder: str = "vit_b",
+        decoder: Optional[nn.Module] = None,
+        out_channels: int = 1,
+        use_sam_stats: bool = False,
+        use_mae_stats: bool = False,
+        encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
+        final_activation: Optional[Union[str, nn.Module]] = None,
     ) -> None:
         super().__init__()
 
@@ -60,9 +77,9 @@ class UNETR(nn.Module):
         self.use_mae_stats = use_mae_stats
 
         print(f"Using {encoder} from {backbone.upper()}")
-        self.encoder = get_vision_transformer(backbone=backbone, model=encoder)
-        if encoder_checkpoint_path is not None:
-            self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint_path)
+        self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder)
+        if encoder_checkpoint is not None:
+            self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint)
 
         # parameters for the decoder network
         depth = 3

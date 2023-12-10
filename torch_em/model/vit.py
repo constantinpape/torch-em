@@ -123,7 +123,7 @@ class ViT_MAE(VisionTransformer):
         return x, list_from_encoder
 
 
-def get_vision_transformer(backbone: str, model: str):
+def get_vision_transformer(backbone: str, model: str, img_size: int = 1024):
     if backbone == "sam":
         if model == "vit_b":
             encoder = ViT_Sam(
@@ -155,18 +155,18 @@ def get_vision_transformer(backbone: str, model: str):
     elif backbone == "mae":
         if model == "vit_b":
             encoder = ViT_MAE(
-                patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-                norm_layer=partial(nn.LayerNorm, eps=1e-6)
+                img_size=img_size, patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
+                qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)
             )
         elif model == "vit_l":
             encoder = ViT_MAE(
-                patch_size=16, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4, qkv_bias=True,
-                norm_layer=partial(nn.LayerNorm, eps=1e-6)
+                img_size=img_size, patch_size=16, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4,
+                qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)
             )
         elif model == "vit_h":
             encoder = ViT_MAE(
-                patch_size=14, embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4, qkv_bias=True,
-                norm_layer=partial(nn.LayerNorm, eps=1e-6)
+                img_size=img_size, patch_size=14, embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4,
+                qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)
             )
         else:
             raise ValueError(f"{model} is not supported by MAE. Currently vit_b, vit_l, vit_h are supported.")

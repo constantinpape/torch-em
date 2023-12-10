@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import skimage.measure
 import skimage.segmentation
@@ -192,16 +194,25 @@ class OneHotTransform:
 
 
 class DistanceTransform:
-    """Compute distances to foreground.
+    """Compute distances to foreground in the labels.
+
+    Args:
+        distances: Whether to compute the absolute distances.
+        directed_distances: Whether to compute the directed distances (vector distances).
+        normalize: Whether to normalize the computed distances.
+        max_distance: Maximal distance at which to threshold the distances.
+        foreground_id: Label id to which the distance is compute.
+        invert Whether to invert the distances:
+        func: Normalization function for the distances.
     """
     eps = 1e-7
 
     def __init__(
         self,
-        distances=True,
-        directed_distances=False,
-        normalize=True,
-        max_distance=None,
+        distances: bool = True,
+        directed_distances: bool = False,
+        normalize: bool = True,
+        max_distance: Optional[float] = None,
         foreground_id=1,
         invert=False,
         func=None
@@ -272,6 +283,16 @@ class DistanceTransform:
 
 class PerObjectDistanceTransform:
     """Compute normalized distances per object in a segmentation.
+
+    Args:
+        distances: Whether to compute the undirected distances.
+        boundary_distances: Whether to compute the distances to the object boundaries.
+        directed_distances: Whether to compute the directed distances (vector distances).
+        foreground: Whether to return a foreground channel.
+        apply_label: Whether to apply connected components to the labels before computing distances.
+        correct_centers: Whether to correct centers that are not in the objects.
+        min_size: Minimal size of objects for distance calculdation.
+        distance_fill_value: Fill value for the distances outside of objects.
     """
     eps = 1e-7
 
