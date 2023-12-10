@@ -16,7 +16,7 @@ class DistanceLoss(nn.Module):
     """
     def __init__(
         self,
-        mask_distances_in_bg: bool,
+        mask_distances_in_bg: bool = True,
         foreground_loss: nn.Module = DiceLoss(),
         distance_loss: nn.Module = nn.MSELoss(reduction="mean")
     ) -> None:
@@ -25,6 +25,8 @@ class DistanceLoss(nn.Module):
         self.foreground_loss = foreground_loss
         self.distance_loss = distance_loss
         self.mask_distances_in_bg = mask_distances_in_bg
+
+        self.init_kwargs = {"mask_distances_in_bg": mask_distances_in_bg}
 
     def forward(self, input_, target):
         assert input_.shape == target.shape, input_.shape

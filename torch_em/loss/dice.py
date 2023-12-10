@@ -84,6 +84,32 @@ class DiceLossWithLogits(nn.Module):
         )
 
 
+class BCEDiceLoss(nn.Module):
+
+    def __init__(self, alpha=1., beta=1., channelwise=True, eps=1e-7):
+        super().__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.channelwise = channelwise
+        self.eps = eps
+
+        # all torch_em classes should store init kwargs to easily recreate the init call
+        self.init_kwargs = {"alpha": alpha, "beta": beta, "channelwise": channelwise, "eps": self.eps}
+
+    def forward(self, input_, target):
+        loss_dice = dice_score(
+            input_,
+            target,
+            invert=True,
+            channelwise=self.channelwise,
+            eps=self.eps
+        )
+        loss_bce = nn.functional.binary_cross_entropy(
+            input_, target
+        )
+        return self.alpha * loss_dice + self.beta * loss_bce
+
+
 # TODO think about how to handle combined losses like this for mixed precision training
 class BCEDiceLossWithLogits(nn.Module):
 
