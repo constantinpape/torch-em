@@ -19,6 +19,9 @@ from scipy.ndimage import distance_transform_edt
 
 # could also refactor this into elf
 def size_filter(seg, min_size, hmap=None, with_background=False):
+    if min_size == 0:
+        return seg
+
     if hmap is None:
         ids, sizes = np.unique(seg, return_counts=True)
         bg_ids = ids[sizes < min_size]
@@ -35,7 +38,7 @@ def size_filter(seg, min_size, hmap=None, with_background=False):
     return seg
 
 
-def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=250, threshold=0.5):
+def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=50, threshold=0.5):
     """Computes the mutex watershed segmentation using the affinity maps for respective pixel offsets
 
     Arguments:
@@ -60,7 +63,7 @@ def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
     return seg.astype("uint64")
 
 
-def watershed_from_components(boundaries, foreground, min_size=250, threshold1=0.5, threshold2=0.5):
+def watershed_from_components(boundaries, foreground, min_size=50, threshold1=0.5, threshold2=0.5):
     """The default approach:
     - Subtract the boundaries from the foreground to separate touching objects.
     - Use the connected components of this as seeds.
@@ -84,7 +87,7 @@ def watershed_from_components(boundaries, foreground, min_size=250, threshold1=0
     return seg
 
 
-def watershed_from_maxima(boundaries, foreground, min_distance, min_size=250, sigma=1.0, threshold1=0.5):
+def watershed_from_maxima(boundaries, foreground, min_distance, min_size=50, sigma=1.0, threshold1=0.5):
     """Find objects via seeded watershed starting from the maxima of the distance transform instead.
     This has the advantage that objects can be better separated, but it may over-segment
     if the objects have complex shapes.
@@ -112,4 +115,65 @@ def watershed_from_maxima(boundaries, foreground, min_distance, min_size=250, si
     seeds[seed_points[:, 0], seed_points[:, 1]] = np.arange(1, len(seed_points) + 1)
     seg = watershed(boundaries, markers=seeds, mask=foreground)
     seg = size_filter(seg, min_size)
+    return seg
+
+
+def watershed_from_center_and_boundary_distances(
+    center_distances,
+    boundary_distances,
+    foreground_map,
+    center_distance_threshold=0.5,
+    boundary_distance_threshold=0.5,
+    foreground_threshold=0.5,
+    distance_smoothing=1.6,
+    min_size=0,
+    debug=False,
+):
+    """Seeded watershed based on distance predictions to object center and boundaries.
+
+    The seeds are computed by finding connected components where both distance predictions
+    are smaller than the respective thresholds. Using both distances here should prevent merging
+    narrow adjacent objects (if only using the center distance) or finding multiple seeds for non-convex
+    cells (if only using the boundary distances).
+
+    Args:
+        center_distances [np.ndarray] - Distance prediction to the objcet center.
+        boundary_distances [np.ndarray] - Inverted distance prediction to object boundaries.
+        foreground_map [np.ndarray] - Predictio for foreground probabilities.
+        center_distance_threshold [float] - Center distance predictions below this value will be
+            used to find seeds (intersected with thresholded boundary distance predictions).
+        boundary_distance_threshold [float] - Boundary distance predictions below this value will be
+            used to find seeds (intersected with thresholded center distance predictions).
+        foreground_threshold [float] - Foreground predictions above this value will be used as foreground mask.
+        distance_smoothing [float] - Sigma value for smoothing the distance predictions.
+        min_size [int] - Minimal object size in the segmentation result.
+        debug [bool] - Return all intermediate results for debugging.
+
+    Returns:
+        np.ndarray - The instance segmentation.
+    """
+    center_distances = vigra.filters.gaussianSmoothing(center_distances, distance_smoothing)
+    boundary_distances = vigra.filters.gaussianSmoothing(boundary_distances, distance_smoothing)
+
+    fg_mask = foreground_map > foreground_threshold
+
+    marker_map = np.logical_and(
+        center_distances < center_distance_threshold,
+        boundary_distances < boundary_distance_threshold
+    )
+    marker_map[~fg_mask] = 0
+    markers = label(marker_map)
+
+    seg = watershed(boundary_distances, markers=markers, mask=fg_mask)
+    seg = size_filter(seg, min_size)
+
+    if debug:
+        debug_output = {
+            "center_distances": center_distances,
+            "boundary_distances": boundary_distances,
+            "foreground_mask": fg_mask,
+            "markers": markers,
+        }
+        return seg, debug_output
+
     return seg

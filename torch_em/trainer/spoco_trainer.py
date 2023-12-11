@@ -32,9 +32,8 @@ class SPOCOTrainer(DefaultTrainer):
         for param_model, param_teacher in zip(self.model.parameters(), self.model2.parameters()):
             param_teacher.data = param_teacher.data * self.momentum + param_model.data * (1. - self.momentum)
 
-    def save_checkpoint(self, name, best_metric):
-        model2_state = {"model2_state": self.model2.state_dict()}
-        super().save_checkpoint(name, best_metric, **model2_state)
+    def save_checkpoint(self, name, best_metric, **extra_save_dict):
+        super().save_checkpoint(name, best_metric, model2_state=self.model2.state_dict(), **extra_save_dict)
 
     def load_checkpoint(self, checkpoint="best"):
         save_dict = super().load_checkpoint(checkpoint)
