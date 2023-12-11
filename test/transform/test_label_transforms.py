@@ -58,7 +58,6 @@ def affs_brute_force_with_mask(seg, offsets, mask_bg_transition=True):
 class TestLabelTransforms(unittest.TestCase):
     def get_labels(self, with_zero):
         shape = (64, 64)
-        # shape = (6, 6)
         labels = np.random.randint(1, 6, size=shape).astype("uint64")
         if with_zero:
             bg_prob = 0.25
@@ -132,14 +131,14 @@ class TestLabelTransforms(unittest.TestCase):
         self.assertTrue((tnew >= 0).all())
         self.assertTrue((tnew <= 5).all())
 
-        trafo = DistanceTransform(normalize=False, vector_distances=True)
+        trafo = DistanceTransform(normalize=False, directed_distances=True)
         tnew = trafo(target)
         self.assertEqual(tnew.shape, (3,) + target.shape)
         distances, vector_distances = tnew[0], tnew[1:]
         abs_dist = np.linalg.norm(vector_distances, axis=0)
         self.assertTrue(np.allclose(distances, abs_dist))
 
-        trafo = DistanceTransform(normalize=True, vector_distances=True)
+        trafo = DistanceTransform(normalize=True, directed_distances=True)
         tnew = trafo(target)
         self.assertEqual(tnew.shape, (3,) + target.shape)
         self.assertTrue((tnew >= -1).all())
@@ -168,6 +167,45 @@ class TestLabelTransforms(unittest.TestCase):
         trafo = DistanceTransform(invert=False, normalize=True)
         tnew = trafo(target)
         self.assertTrue(np.allclose(tnew, 1.0))
+
+    def test_per_object_distance_transform(self):
+        from torch_em.transform.label import PerObjectDistanceTransform
+        from skimage.data import binary_blobs
+        from skimage.measure import label
+
+        labels = label(binary_blobs(256, volume_fraction=0.25))
+
+        trafo = PerObjectDistanceTransform(
+            distances=True, boundary_distances=False, directed_distances=False, foreground=False,
+        )
+        result = trafo(labels)
+        self.assertEqual(result.shape, (1,) + labels.shape)
+        self.assertGreaterEqual(result.min(), 0)
+        self.assertLessEqual(result.max(), 1)
+
+        trafo = PerObjectDistanceTransform(
+            distances=False, boundary_distances=True, directed_distances=False, foreground=False,
+        )
+        result = trafo(labels)
+        self.assertEqual(result.shape, (1,) + labels.shape)
+        self.assertGreaterEqual(result.min(), 0)
+        self.assertLessEqual(result.max(), 1)
+
+        trafo = PerObjectDistanceTransform(
+            distances=False, boundary_distances=False, directed_distances=True, foreground=False,
+        )
+        result = trafo(labels)
+        self.assertEqual(result.shape, (2,) + labels.shape)
+        self.assertGreaterEqual(result.min(), -1)
+        self.assertLessEqual(result.max(), 1)
+
+        trafo = PerObjectDistanceTransform(
+            distances=True, boundary_distances=True, directed_distances=False, foreground=True,
+        )
+        result = trafo(labels)
+        self.assertEqual(result.shape, (3,) + labels.shape)
+        self.assertGreaterEqual(result.min(), 0)
+        self.assertLessEqual(result.max(), 1)
 
 
 if __name__ == "__main__":
