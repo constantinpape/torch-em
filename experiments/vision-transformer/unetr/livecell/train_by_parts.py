@@ -12,16 +12,19 @@ def prune_prefix(checkpoint_path):
     model_state = state["model_state"]
 
     # let's prune the `.sam` prefix for the finetuned models
-    sam_prefix = "sam."
-    model_state = OrderedDict(
-        [(k[len(sam_prefix):] if k.startswith(sam_prefix) else k, v) for k, v in model_state.items()]
-    )
-    return model_state
+    sam_prefix = "sam.image_encoder."
+    updated_model_state = []
+    for k, v in model_state.items():
+        if k.startswith(sam_prefix):
+            updated_model_state.append((k[len(sam_prefix):], v))
+    updated_model_state = OrderedDict(updated_model_state)
+
+    return updated_model_state
 
 
 def get_custom_unetr_model(device, model_name, sam_initialization, output_channels, checkpoint_path):
     if checkpoint_path is not None:
-        if checkpoint_path.endswith("best.pt"):  # for finetuned models
+        if checkpoint_path.endswith("pt"):  # for finetuned models
             model_state = prune_prefix(checkpoint_path)
         else:  # for vanilla sam models
             model_state = checkpoint_path
