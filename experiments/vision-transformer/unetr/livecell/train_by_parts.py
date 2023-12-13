@@ -22,7 +22,7 @@ def prune_prefix(checkpoint_path):
     return updated_model_state
 
 
-def get_custom_unetr_model(device, model_name, sam_initialization, output_channels, checkpoint_path):
+def get_custom_unetr_model(device, model_name, sam_initialization, output_channels, checkpoint_path, freeze_encoder):
     if checkpoint_path is not None:
         if checkpoint_path.endswith("pt"):  # for finetuned models
             model_state = prune_prefix(checkpoint_path)
@@ -37,7 +37,8 @@ def get_custom_unetr_model(device, model_name, sam_initialization, output_channe
         out_channels=output_channels,
         use_sam_stats=sam_initialization,
         final_activation="Sigmoid",
-        encoder_checkpoint=model_state
+        encoder_checkpoint=model_state,
+        freeze_encoder=freeze_encoder
     )
     model.to(device)
     return model
@@ -49,7 +50,7 @@ def main(args):
 
     # directory folder to save different parts of the scheme
     dir_structure = os.path.join(
-        args.model_name, "distances", "dicebaseddistloss",
+        args.model_name, f"freeze_encoder_{args.freeze_encoder}", "distances", "dicebaseddistloss",
         f"{args.source_choice}-sam" if args.do_sam_ini else f"{args.source_choice}-scratch"
     )
 
@@ -58,7 +59,8 @@ def main(args):
 
     # get the custom model for the training and inference on livecell dataset
     model = get_custom_unetr_model(
-        device, args.model_name, sam_initialization=args.do_sam_ini, output_channels=3, checkpoint_path=args.checkpoint
+        device, args.model_name, sam_initialization=args.do_sam_ini, output_channels=3,
+        checkpoint_path=args.checkpoint, freeze_encoder=args.freeze_encoder
     )
 
     # determining where to save the checkpoints and tensorboard logs
@@ -87,6 +89,9 @@ if __name__ == "__main__":
     parser = common.get_parser()
     parser.add_argument(
         "--checkpoint", type=str, default=None, help="The checkpoint to the specific pretrained models."
+    )
+    parser.add_argument(
+        "--freeze_encoder", action="store_true", help="Experiments to freeze the encoder."
     )
     args = parser.parse_args()
     main(args)
