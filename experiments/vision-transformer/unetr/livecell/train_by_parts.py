@@ -66,6 +66,9 @@ def main(args):
     # determining where to save the checkpoints and tensorboard logs
     save_root = os.path.join(args.save_root, dir_structure) if args.save_root is not None else args.save_root
 
+    # determines the directory where the predictions will be saved
+    root_save_dir = os.path.join(args.save_dir, dir_structure)
+
     if args.train:
         print("2d (custom) UNETR training (with distances) on LiveCELL...")
 
@@ -78,6 +81,27 @@ def main(args):
         common.do_unetr_training(
             train_loader=train_loader, val_loader=val_loader, model=model, loss=loss,
             device=device, save_root=save_root, iterations=args.iterations
+        )
+
+    if args.predict:
+        print("2d (custom) UNETR inference (with distances) on LiveCELL...")
+        common.do_unetr_inference(
+            input_path=args.input, device=device, model=model, save_root=save_root,
+            root_save_dir=root_save_dir, with_distances=True,
+            # the logic written for `input_norm` is complicated, but the idea is simple:
+            # - should standardize the inputs when we "DONOT" use SAM initialization
+            # - should not standardize the inputs when we use SAM initialization
+            input_norm=not args.do_sam_ini
+        )
+        print("Predictions are saved in", root_save_dir)
+
+    if args.evaluate:
+        print("2d (custom) UNETR evaluation (with distances) on LiveCELL...")
+        csv_save_dir = os.path.join("results", dir_structure)
+        os.makedirs(csv_save_dir, exist_ok=True)
+
+        common.do_unetr_evaluation(
+            input_path=args.input, root_save_dir=root_save_dir, csv_save_dir=csv_save_dir, with_distances=True
         )
 
 

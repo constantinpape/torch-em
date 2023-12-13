@@ -241,7 +241,12 @@ def predict_for_unetr(
     elif with_distances:  # inference using foreground and hv distance maps
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
         fg, cdist, bdist = outputs.squeeze()
-        dm_seg = segmentation.watershed_from_center_and_boundary_distances(cdist, bdist, fg, min_size=50)
+        dm_seg = segmentation.watershed_from_center_and_boundary_distances(
+            cdist, bdist, fg, min_size=50,
+            center_distance_threshold=0.5,
+            boundary_distance_threshold=0.6,
+            distance_smoothing=1.0
+        )
 
     else:  # inference using foreground-boundary inputs - for the unetr training
         outputs = predict_with_halo(
