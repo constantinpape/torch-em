@@ -59,10 +59,6 @@ class UNETR(nn.Module):
 
         self.encoder.load_state_dict(encoder_state)
 
-    def _freeze_encoder_network(self):
-        for _, param in self.encoder.named_parameters():
-            param.requires_grad = False
-
     def __init__(
         self,
         img_size: int = 1024,
@@ -73,8 +69,7 @@ class UNETR(nn.Module):
         use_sam_stats: bool = False,
         use_mae_stats: bool = False,
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
-        final_activation: Optional[Union[str, nn.Module]] = None,
-        freeze_encoder: bool = False
+        final_activation: Optional[Union[str, nn.Module]] = None
     ) -> None:
         super().__init__()
 
@@ -85,10 +80,6 @@ class UNETR(nn.Module):
         self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder)
         if encoder_checkpoint is not None:
             self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint)
-
-        # freeze the encoder component of the model if `freeze_encoder` is passed.
-        if freeze_encoder:
-            self._freeze_encoder_network()
 
         # parameters for the decoder network
         depth = 3
