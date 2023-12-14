@@ -69,7 +69,7 @@ class UNETR(nn.Module):
         use_sam_stats: bool = False,
         use_mae_stats: bool = False,
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
-        final_activation: Optional[Union[str, nn.Module]] = None
+        final_activation: Optional[Union[str, nn.Module]] = None,
     ) -> None:
         super().__init__()
 
