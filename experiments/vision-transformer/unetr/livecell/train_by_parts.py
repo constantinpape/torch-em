@@ -37,10 +37,16 @@ def get_custom_unetr_model(device, model_name, sam_initialization, output_channe
         out_channels=output_channels,
         use_sam_stats=sam_initialization,
         final_activation="Sigmoid",
-        encoder_checkpoint=model_state,
-        freeze_encoder=freeze_encoder
+        encoder_checkpoint=model_state
     )
     model.to(device)
+
+    # if expected, let's freeze the image encoder
+    if freeze_encoder:
+        for name, param in model.named_parameters():
+            if name.startswith("encoder"):
+                param.requires_grad = False
+
     return model
 
 
