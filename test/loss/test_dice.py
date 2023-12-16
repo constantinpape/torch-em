@@ -48,6 +48,21 @@ class TestDiceLoss(unittest.TestCase):
         with self.assertRaises(ValueError):
             loss(x, y)
 
+    def test_bce_dice_with_logits(self):
+        from torch_em.loss.dice import BCEDiceLossWithLogits
+        loss = BCEDiceLossWithLogits()
+
+        shape = (1, 1, 32, 32)
+        x = 18 * torch.ones(*shape)
+        y = torch.ones(*shape)
+        lval = loss(x, y)
+        self.assertAlmostEqual(lval.item(), 0.0)
+
+        x = 18 * torch.ones(*shape)
+        y = torch.zeros(*shape)
+        lval = loss(x, y)
+        self.assertGreater(lval.item(), 1.0)
+
 
 if __name__ == '__main__':
     unittest.main()
