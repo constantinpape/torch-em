@@ -196,6 +196,10 @@ def get_normalizer(trainer):
         isinstance(dataset, torch.utils.data.dataset.ConcatDataset)
     ):
         dataset = dataset.datasets[0]
+
+    if isinstance(dataset, torch.utils.data.dataset.Subset):
+        dataset = dataset.dataset
+
     preprocessor = dataset.raw_transform
 
     if hasattr(preprocessor, "normalizer"):
