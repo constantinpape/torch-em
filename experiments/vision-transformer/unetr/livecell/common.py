@@ -174,7 +174,7 @@ def get_unetr_model(
         model = torch_em_models.UNETR(
             backbone=backbone, encoder=model_name, out_channels=output_channels,
             use_sam_stats=sam_initialization, final_activation="Sigmoid",
-            encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None,
+            encoder_checkpoint=MODELS[model_name] if sam_initialization else None,
         )
 
     elif source_choice == "monai":
