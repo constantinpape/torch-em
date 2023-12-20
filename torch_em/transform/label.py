@@ -302,6 +302,7 @@ class PerObjectDistanceTransform:
         boundary_distances=True,
         directed_distances=False,
         foreground=True,
+        instances=False,
         apply_label=True,
         correct_centers=True,
         min_size=0,
@@ -313,6 +314,7 @@ class PerObjectDistanceTransform:
         self.boundary_distances = boundary_distances
         self.directed_distances = directed_distances
         self.foreground = foreground
+        self.instances = instances
 
         self.apply_label = apply_label
         self.correct_centers = correct_centers
@@ -440,5 +442,8 @@ class PerObjectDistanceTransform:
         if self.foreground:
             binary_labels = (labels > 0).astype("float32")
             distances = np.concatenate([binary_labels[None], distances], axis=0)
+
+        if self.instances:
+            distances = np.concatenate([labels[None], distances], axis=0)
 
         return distances
