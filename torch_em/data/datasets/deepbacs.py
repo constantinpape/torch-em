@@ -1,4 +1,7 @@
 import os
+import shutil
+import numpy as np
+from glob import glob
 
 import torch_em
 from . import util
@@ -24,6 +27,31 @@ def _require_deebacs_dataset(path, bac_type, download):
     if not os.path.exists(zip_path):
         util.download_source(zip_path, URLS[bac_type], download, checksum=CHECKSUMS[bac_type])
     util.unzip(zip_path, os.path.join(path, bac_type))
+
+    # let's get a val split for the expected bacteria type
+    _assort_val_set(path, bac_type)
+
+
+def _assort_val_set(path, bac_type):
+    image_paths = glob(os.path.join(path, bac_type, "training", "source", "*"))
+
+    val_partition = int(0.2 * len(image_paths))
+    val_image_paths = np.random.choice(image_paths, size=val_partition, replace=False)
+
+    val_image_dir = os.path.join(path, bac_type, "val", "source")
+    val_label_dir = os.path.join(path, bac_type, "val", "target")
+    os.makedirs(val_image_dir, exist_ok=True)
+    os.makedirs(val_label_dir, exist_ok=True)
+
+    for src_val_image_path in val_image_paths:
+        sample_id = os.path.split(src_val_image_path)[-1]
+
+        dst_val_image_path = os.path.join(val_image_dir, sample_id)
+        shutil.move(src_val_image_path, dst_val_image_path)
+
+        src_val_label_path = os.path.join(path, bac_type, "training", "target", sample_id)
+        dst_val_label_path = os.path.join(val_label_dir, sample_id)
+        shutil.move(src_val_label_path, dst_val_label_path)
 
 
 def _get_paths(path, bac_type, split):
