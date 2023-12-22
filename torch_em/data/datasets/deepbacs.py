@@ -57,14 +57,15 @@ def _assort_val_set(path, bac_type):
 def _get_paths(path, bac_type, split):
     # the bacteria types other than mixed are a bit more complicated so we don't have the dataloaders for them yet
     # mixed is the combination of all other types
+    if split == "train":
+        dir_choice = "training"
+    else:
+        dir_choice = split
+
     if bac_type != "mixed":
         raise NotImplementedError(f"Currently only the bacteria type 'mixed' is supported, not {bac_type}")
-    image_folder = os.path.join(
-        path, bac_type, "training" if split == "train" else "test", "source"
-    )
-    label_folder = os.path.join(
-        path, bac_type, "training" if split == "train" else "test", "target"
-    )
+    image_folder = os.path.join(path, bac_type, dir_choice, "source")
+    label_folder = os.path.join(path, bac_type, dir_choice, "target")
     return image_folder, label_folder
 
 
@@ -76,7 +77,7 @@ def get_deepbacs_dataset(
     This dataset is from the publication https://doi.org/10.1038/s42003-022-03634-z.
     Please cite it if you use this dataset for a publication.
     """
-    assert split in ("train", "test")
+    assert split in ("train", "val", "test")
     bac_types = list(URLS.keys())
     assert bac_type in bac_types, f"{bac_type} is not in expected bacteria types: {bac_types}"
 
