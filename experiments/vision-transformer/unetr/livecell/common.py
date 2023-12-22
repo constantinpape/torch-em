@@ -174,7 +174,7 @@ def get_unetr_model(
         model = torch_em_models.UNETR(
             backbone=backbone, encoder=model_name, out_channels=output_channels,
             use_sam_stats=sam_initialization, final_activation="Sigmoid",
-            encoder_checkpoint_path=MODELS[model_name] if sam_initialization else None,
+            encoder_checkpoint=MODELS[model_name] if sam_initialization else None,
         )
 
     elif source_choice == "monai":
@@ -241,7 +241,12 @@ def predict_for_unetr(
     elif with_distances:  # inference using foreground and hv distance maps
         outputs = predict_with_padding(model, input_, device=device, min_divisible=(16, 16))
         fg, cdist, bdist = outputs.squeeze()
-        dm_seg = segmentation.watershed_from_center_and_boundary_distances(cdist, bdist, fg, min_size=50)
+        dm_seg = segmentation.watershed_from_center_and_boundary_distances(
+            cdist, bdist, fg, min_size=50,
+            center_distance_threshold=0.5,
+            boundary_distance_threshold=0.6,
+            distance_smoothing=1.0
+        )
 
     else:  # inference using foreground-boundary inputs - for the unetr training
         outputs = predict_with_halo(
