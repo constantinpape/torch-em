@@ -34,18 +34,35 @@ def _require_deebacs_dataset(path, bac_type, download):
 
 def _assort_val_set(path, bac_type):
     image_paths = glob(os.path.join(path, bac_type, "training", "source", "*"))
+    image_paths = [os.path.split(_path)[-1] for _path in image_paths]
 
-    val_partition = int(0.2 * len(image_paths))
-    val_image_paths = np.random.choice(image_paths, size=val_partition, replace=False)
+    val_partition = 0.2
+    # let's get a balanced set of bacterias, if bac_type is mixed
+    if bac_type == "mixed":
+        _sort_1, _sort_2, _sort_3 = [], [], []
+        for _path in image_paths:
+            if _path.startswith("JE2"):
+                _sort_1.append(_path)
+            elif _path.startswith("pos"):
+                _sort_2.append(_path)
+            elif _path.startswith("train_"):
+                _sort_3.append(_path)
+
+        val_image_paths = [
+            *np.random.choice(_sort_1, size=int(val_partition * len(_sort_1)), replace=False),
+            *np.random.choice(_sort_2, size=int(val_partition * len(_sort_2)), replace=False),
+            *np.random.choice(_sort_3, size=int(val_partition * len(_sort_3)), replace=False)
+        ]
+    else:
+        val_image_paths = np.random.choice(image_paths, size=int(val_partition * len(image_paths)), replace=False)
 
     val_image_dir = os.path.join(path, bac_type, "val", "source")
     val_label_dir = os.path.join(path, bac_type, "val", "target")
     os.makedirs(val_image_dir, exist_ok=True)
     os.makedirs(val_label_dir, exist_ok=True)
 
-    for src_val_image_path in val_image_paths:
-        sample_id = os.path.split(src_val_image_path)[-1]
-
+    for sample_id in val_image_paths:
+        src_val_image_path = os.path.join(path, bac_type, "training", "source", sample_id)
         dst_val_image_path = os.path.join(val_image_dir, sample_id)
         shutil.move(src_val_image_path, dst_val_image_path)
 
