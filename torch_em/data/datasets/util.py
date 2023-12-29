@@ -6,7 +6,8 @@ import numpy as np
 from tqdm import tqdm
 from warnings import warn
 from xml.dom import minidom
-from shutil import copyfileobj
+from shutil import copyfileobj, which
+from subprocess import run
 
 from skimage.draw import polygon
 
@@ -87,16 +88,16 @@ def download_source(path, url, download, checksum=None, verify=True):
 
 
 def download_source_gdrive(path, url, download, checksum=None, download_type="zip"):
-    if gdown is None:
-        raise RuntimeError(
-            "Need gdown library to download data from google drive."
-            "Please isntall gdown and then rerun."
-        )
-
     if os.path.exists(path):
         return
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    if gdown is None:
+        raise RuntimeError(
+            "Need gdown library to download data from google drive."
+            "Please install gdown and then rerun."
+        )
 
     if download_type == "zip":
         gdown.download(url, path, quiet=False)
@@ -108,6 +109,37 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
         raise ValueError("`download_path` argument expects either `zip`/`folder`")
 
     _check_checksum(path, checksum)
+
+
+def download_source_empiar(path, access_id, download):
+    download_path = os.path.join(path, access_id)
+
+    if os.path.exists(download_path):
+        return download_path
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    if which("ascp") is None:
+        raise RuntimeError(
+            "Need aspera-cli to download data from empiar."
+            "You can install it via 'mamba install -c hcc aspera-cli'."
+        )
+
+    key_file = os.path.expanduser("~/.aspera/cli/etc/asperaweb_id_dsa.openssh")
+    if not os.path.exists(key_file):
+        conda_root = os.environ["CONDA_PREFIX"]
+        key_file = os.path.join(conda_root, "etc/asperaweb_id_dsa.openssh")
+
+    if not os.path.exists(key_file):
+        raise RuntimeError("Could not find the aspera ssh keyfile")
+
+    cmd = [
+        "ascp", "-QT", "-l", "200M", "-P33001",
+        "-i", key_file, f"emp_ext2@fasp.ebi.ac.uk:/{access_id}", path
+    ]
+    run(cmd)
+
+    return download_path
 
 
 def update_kwargs(kwargs, key, value, msg=None):
