@@ -107,7 +107,10 @@ def _get_model(trainer, postprocessing):
 
 def _pad(input_data, trainer):
     try:
-        ndim = trainer.train_loader.dataset.ndim
+        if isinstance(trainer.train_loader.dataset, torch.utils.data.dataset.Subset):
+            ndim = trainer.train_loader.dataset.dataset.ndim
+        else:
+            ndim = trainer.train_loader.dataset.ndim
     except AttributeError:
         ndim = trainer.train_loader.dataset.datasets[0].ndim
     target_dims = ndim + 2
@@ -305,7 +308,10 @@ def _write_weights(model, export_folder):
 
 def _get_preprocessing(trainer):
     try:
-        ndim = trainer.train_loader.dataset.ndim
+        if isinstance(trainer.train_loader.dataset, torch.utils.data.dataset.Subset):
+            ndim = trainer.train_loader.dataset.dataset.ndim
+        else:
+            ndim = trainer.train_loader.dataset.ndim
     except AttributeError:
         ndim = trainer.train_loader.dataset.datasets[0].ndim
     normalizer = get_normalizer(trainer)
