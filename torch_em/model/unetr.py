@@ -13,6 +13,11 @@ try:
 except ImportError:
     get_sam_model = None
 
+try:
+    from segment_anything.utils.transforms import ResizeLongestSide
+except ImportError:
+    ResizeLongestSide = None
+
 
 #
 # UNETR IMPLEMENTATION [Vision Transformer (ViT from MAE / ViT from SAM) + UNet Decoder from `torch_em`]
@@ -68,10 +73,11 @@ class UNETR(nn.Module):
         out_channels: int = 1,
         use_sam_stats: bool = False,
         use_mae_stats: bool = False,
+        resize_input: bool = False,  # TODO should this be the default???
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
         use_skip_connection: bool = True,
-        embed_dim: Optional[int] = None
+        embed_dim: Optional[int] = None,
     ) -> None:
         super().__init__()
 
@@ -104,6 +110,13 @@ class UNETR(nn.Module):
                     embed_dim = self.encoder.patch_embed.proj.out_channels
 
             in_chans = self.encoder.patch_embed.proj.in_channels
+
+        if resize_input:
+            if ResizeLongestSide is None:
+                raise RuntimeError("ResizeLongestSide is not available. Please install segment anything.")
+            self.transform = ResizeLongestSide(self.encoder.img_size)
+        else:
+            self.transform = None
 
         # parameters for the decoder network
         depth = 3
@@ -153,11 +166,11 @@ class UNETR(nn.Module):
         return return_activation()
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = x.device
 
         if self.use_sam_stats:
-            pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1).to(device)
-            pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1).to(device)
+            pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(1, -1, 1, 1).to(device)
+            pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(1, -1, 1, 1).to(device)
         elif self.use_mae_stats:
             # TODO: add mean std from mae experiments (or open up arguments for this)
             raise NotImplementedError
@@ -165,12 +178,17 @@ class UNETR(nn.Module):
             pixel_mean = torch.Tensor([0.0, 0.0, 0.0]).view(-1, 1, 1).to(device)
             pixel_std = torch.Tensor([1.0, 1.0, 1.0]).view(-1, 1, 1).to(device)
 
+        transform = getattr(self, "transform", None)
+        if transform is None:
+            x = transform.apply_image_torch(x)
+        input_shape = x.shape[-2:]
+
         x = (x - pixel_mean) / pixel_std
         h, w = x.shape[-2:]
         padh = self.encoder.img_size - h
         padw = self.encoder.img_size - w
         x = F.pad(x, (0, padw, 0, padh))
-        return x
+        return x, input_shape
 
     def postprocess_masks(
         self,
@@ -189,10 +207,11 @@ class UNETR(nn.Module):
         return masks
 
     def forward(self, x):
-        org_shape = x.shape[-2:]
+        original_shape = x.shape[-2:]
 
-        # backbone used for reshaping inputs to the desired "encoder" shape
-        x = torch.stack([self.preprocess(e) for e in x], dim=0)
+        # Reshape the inputs to the shape expected by the encoder
+        # and normalize the inputs if normalization is part of the model.
+        x, input_shape = self.preprocess(x)
 
         use_skip_connection = getattr(self, "use_skip_connection", True)
 
@@ -236,7 +255,7 @@ class UNETR(nn.Module):
         if self.final_activation is not None:
             x = self.final_activation(x)
 
-        x = self.postprocess_masks(x, org_shape, org_shape)
+        x = self.postprocess_masks(x, input_shape, original_shape)
         return x
 
 
