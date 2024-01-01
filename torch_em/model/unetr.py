@@ -175,8 +175,8 @@ class UNETR(nn.Module):
             # TODO: add mean std from mae experiments (or open up arguments for this)
             raise NotImplementedError
         else:
-            pixel_mean = torch.Tensor([0.0, 0.0, 0.0]).view(-1, 1, 1).to(device)
-            pixel_std = torch.Tensor([1.0, 1.0, 1.0]).view(-1, 1, 1).to(device)
+            pixel_mean = torch.Tensor([0.0, 0.0, 0.0]).view(1, -1, 1, 1).to(device)
+            pixel_std = torch.Tensor([1.0, 1.0, 1.0]).view(1, -1, 1, 1).to(device)
 
         transform = getattr(self, "transform", None)
         if transform is not None:
