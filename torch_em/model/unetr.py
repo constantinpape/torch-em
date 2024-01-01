@@ -13,11 +13,6 @@ try:
 except ImportError:
     get_sam_model = None
 
-try:
-    from segment_anything.utils.transforms import ResizeLongestSide
-except ImportError:
-    ResizeLongestSide = None
-
 
 #
 # UNETR IMPLEMENTATION [Vision Transformer (ViT from MAE / ViT from SAM) + UNet Decoder from `torch_em`]
@@ -41,8 +36,7 @@ class UNETR(nn.Module):
                     )
                     encoder_state = model.image_encoder.state_dict()
                 except Exception:
-                    # If we have a MAE encoder, then we directly load the encoder state
-                    # from the checkpoint.
+                    # Try loading the encoder state directly from a checkpoint.
                     encoder_state = torch.load(checkpoint)
 
             elif backbone == "mae":
@@ -73,7 +67,7 @@ class UNETR(nn.Module):
         out_channels: int = 1,
         use_sam_stats: bool = False,
         use_mae_stats: bool = False,
-        resize_input: bool = False,  # TODO should this be the default???
+        resize_input: bool = True,
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
         use_skip_connection: bool = True,
@@ -84,6 +78,7 @@ class UNETR(nn.Module):
         self.use_sam_stats = use_sam_stats
         self.use_mae_stats = use_mae_stats
         self.use_skip_connection = use_skip_connection
+        self.resize_input = resize_input
 
         if isinstance(encoder, str):  # "vit_b" / "vit_l" / "vit_h"
             print(f"Using {encoder} from {backbone.upper()}")
@@ -110,13 +105,6 @@ class UNETR(nn.Module):
                     embed_dim = self.encoder.patch_embed.proj.out_channels
 
             in_chans = self.encoder.patch_embed.proj.in_channels
-
-        if resize_input:
-            if ResizeLongestSide is None:
-                raise RuntimeError("ResizeLongestSide is not available. Please install segment anything.")
-            self.transform = ResizeLongestSide(self.encoder.img_size)
-        else:
-            self.transform = None
 
         # parameters for the decoder network
         depth = 3
@@ -165,6 +153,26 @@ class UNETR(nn.Module):
             raise ValueError(f"Invalid activation: {activation}")
         return return_activation()
 
+    @staticmethod
+    def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int) -> Tuple[int, int]:
+        """Compute the output size given input size and target long side length.
+        """
+        scale = long_side_length * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        neww = int(neww + 0.5)
+        newh = int(newh + 0.5)
+        return (newh, neww)
+
+    def resize_longest_side(self, image: torch.Tensor) -> torch.Tensor:
+        """Resizes the image so that the longest side has the correct length.
+
+        Expects batched images with shape BxCxHxW and float format.
+        """
+        target_size = self.get_preprocess_shape(image.shape[2], image.shape[3], self.encoder.img_size)
+        return F.interpolate(
+            image, target_size, mode="bilinear", align_corners=False, antialias=True
+        )
+
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         device = x.device
 
@@ -178,9 +186,8 @@ class UNETR(nn.Module):
             pixel_mean = torch.Tensor([0.0, 0.0, 0.0]).view(1, -1, 1, 1).to(device)
             pixel_std = torch.Tensor([1.0, 1.0, 1.0]).view(1, -1, 1, 1).to(device)
 
-        transform = getattr(self, "transform", None)
-        if transform is not None:
-            x = transform.apply_image_torch(x)
+        if self.resize_input:
+            x = self.resize_longest_side(x)
         input_shape = x.shape[-2:]
 
         x = (x - pixel_mean) / pixel_std
