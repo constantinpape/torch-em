@@ -179,7 +179,7 @@ class UNETR(nn.Module):
             pixel_std = torch.Tensor([1.0, 1.0, 1.0]).view(-1, 1, 1).to(device)
 
         transform = getattr(self, "transform", None)
-        if transform is None:
+        if transform is not None:
             x = transform.apply_image_torch(x)
         input_shape = x.shape[-2:]
 
