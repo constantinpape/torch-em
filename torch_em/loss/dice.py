@@ -24,9 +24,10 @@ def flatten_samples(input_):
     return flattened
 
 
-def dice_score(input_, target, invert=False, channelwise=True, eps=1e-7):
+def dice_score(input_, target, invert=False, channelwise=True, reduce_channel="sum", eps=1e-7):
     if input_.shape != target.shape:
         raise ValueError(f"Expect input and target of same shape, got: {input_.shape}, {target.shape}.")
+
     if channelwise:
         # Flatten input and target to have the shape (C, N),
         # where N is the number of samples
@@ -39,40 +40,58 @@ def dice_score(input_, target, invert=False, channelwise=True, eps=1e-7):
         channelwise_score = 2 * (numerator / denominator.clamp(min=eps))
         if invert:
             channelwise_score = 1. - channelwise_score
-        # Sum over the channels to compute the total score
-        score = channelwise_score.sum()
+
+        # Reduce the dice score over the channels to compute the overall dice score.
+        # (default is to use the sum)
+        if reduce_channel is None:
+            score = channelwise_score
+        elif reduce_channel == "sum":
+            score = channelwise_score.sum()
+        elif reduce_channel == "mean":
+            score = channelwise_score.mean()
+        elif reduce_channel == "max":
+            score = channelwise_score.max()
+        elif reduce_channel == "min":
+            score = channelwise_score.min()
+        else:
+            raise ValueError(f"Unsupported channel reduction {reduce_channel}")
+
     else:
         numerator = (input_ * target).sum()
         denominator = (input_ * input_).sum() + (target * target).sum()
         score = 2. * (numerator / denominator.clamp(min=eps))
         if invert:
             score = 1. - score
+
     return score
 
 
 class DiceLoss(nn.Module):
-    def __init__(self, channelwise=True, eps=1e-7):
+    def __init__(self, channelwise=True, eps=1e-7, reduce_channel="sum"):
+        if reduce_channel not in ("sum", "mean", "max", "min", None):
+            raise ValueError(f"Unsupported channel reduction {reduce_channel}")
         super().__init__()
         self.channelwise = channelwise
         self.eps = eps
+        self.reduce_channel = reduce_channel
 
         # all torch_em classes should store init kwargs to easily recreate the init call
-        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps}
+        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps, "reduce_channel": self.reduce_channel}
 
     def forward(self, input_, target):
         return dice_score(input_, target,
                           invert=True, channelwise=self.channelwise,
-                          eps=self.eps)
+                          eps=self.eps, reduce_channel=self.reduce_channel)
 
 
 class DiceLossWithLogits(nn.Module):
-    def __init__(self, channelwise=True, eps=1e-7):
+    def __init__(self, channelwise=True, eps=1e-7, reduce_channel="sum"):
         super().__init__()
         self.channelwise = channelwise
         self.eps = eps
 
         # all torch_em classes should store init kwargs to easily recreate the init call
-        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps}
+        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps, "reduce_channel": self.reduce_channel}
 
     def forward(self, input_, target):
         return dice_score(
@@ -80,7 +99,8 @@ class DiceLossWithLogits(nn.Module):
             target,
             invert=True,
             channelwise=self.channelwise,
-            eps=self.eps
+            eps=self.eps,
+            reduce_channel=self.reduce_channel,
         )
 
 
