@@ -38,7 +38,7 @@ def size_filter(seg, min_size, hmap=None, with_background=False):
     return seg
 
 
-def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=50, threshold=0.5):
+def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=50, threshold=0.5, strides=None):
     """Computes the mutex watershed segmentation using the affinity maps for respective pixel offsets
 
     Arguments:
@@ -49,7 +49,8 @@ def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=50, t
         - threshold: [float] - To threshold foreground predictions
     """
     mask = (foreground >= threshold)
-    strides = [2] * foreground.ndim
+    if strides is None:
+        strides = [2] * foreground.ndim
     seg = mutex_watershed(affinities, offsets=offsets, mask=mask, strides=strides, randomize_strides=True)
     seg = size_filter(seg.astype("uint32"), min_size=min_size, hmap=affinities, with_background=True)
     return seg
