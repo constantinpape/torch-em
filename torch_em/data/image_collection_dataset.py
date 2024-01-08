@@ -6,6 +6,7 @@ from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
 
 class ImageCollectionDataset(torch.utils.data.Dataset):
     max_sampling_attempts = 500
+    max_sampling_attempts_image = 50
 
     def _check_inputs(self, raw_images, label_images, full_check):
         if len(raw_images) != len(label_images):
@@ -115,13 +116,9 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
             raw, labels = np.pad(raw, pw_raw), np.pad(labels, pw)
         return raw, labels
 
-    def _get_sample(self, index):
-        if self.sample_random_index:
-            index = np.random.randint(0, len(self.raw_images))
-        # these are just the file paths
-        raw, label = self.raw_images[index], self.label_images[index]
-        raw = load_image(raw, memmap=False)
-        label = load_image(label, memmap=False)
+    def _load_data(self, raw_path, label_path):
+        raw = load_image(raw_path, memmap=False)
+        label = load_image(label_path, memmap=False)
 
         have_raw_channels = raw.ndim == 3
         have_label_channels = label.ndim == 3
@@ -147,7 +144,19 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
             else:
                 shape = shape[:-1]
 
-        # sample random bounding box for this image
+        return raw, label, shape, prefix_box, have_raw_channels
+
+    def _get_sample(self, index):
+        if self.sample_random_index:
+            index = np.random.randint(0, len(self.raw_images))
+
+        # The filepath corresponding to this image.
+        raw_path, label_path = self.raw_images[index], self.label_images[index]
+
+        # Load the corresponding data.
+        raw, label, shape, prefix_box, have_raw_channels = self._load_data(raw_path, label_path)
+
+        # Sample random bounding box for this image.
         bb = self._sample_bounding_box(shape)
         raw_patch = np.array(raw[prefix_box + bb])
         label_patch = np.array(label[bb])
@@ -159,6 +168,15 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
                 raw_patch = np.array(raw[prefix_box + bb])
                 label_patch = np.array(label[bb])
                 sample_id += 1
+
+                # We need to avoid sampling from the same image over and over agagin,
+                # otherwise this will fail just because of one or a few empty images.
+                # Hence we update the image from which we sample sometimes.
+                if sample_id % self.max_sampling_attempts_image == 0:
+                    index = np.random.randint(0, len(self.raw_images))
+                    raw_path, label_path = self.raw_images[index], self.label_images[index]
+                    raw, label, shape, prefix_box, have_raw_channels = self._load_data(raw_path, label_path)
+
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
