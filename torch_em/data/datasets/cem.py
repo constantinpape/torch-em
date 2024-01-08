@@ -97,8 +97,8 @@ def _get_non_empty_images(path):
 
     raw_paths, label_paths = [], []
     for folder in folders:
-        labels = sorted(glob(os.path.join(folder, "masks", "*.tiff")))
         images = sorted(glob(os.path.join(folder, "images", "*.tiff")))
+        labels = sorted(glob(os.path.join(folder, "masks", "*.tiff")))
         assert len(images) > 0
         assert len(images) == len(labels)
 
