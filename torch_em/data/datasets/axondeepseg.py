@@ -125,7 +125,7 @@ def _require_axondeepseg_data(path, name, download):
 
 
 def get_axondeepseg_dataset(
-    path, name, patch_shape, download=False, one_hot_encoding=False, data_fraction=None, split=None, **kwargs
+    path, name, patch_shape, download=False, one_hot_encoding=False, val_fraction=None, split=None, **kwargs
 ):
     """Dataset for the segmentation of myelinated axons in EM.
 
@@ -141,10 +141,10 @@ def get_axondeepseg_dataset(
         data_root = _require_axondeepseg_data(path, nn, download)
         paths = glob(os.path.join(data_root, "*.h5"))
         paths.sort()
-        if data_fraction is not None:
+        if val_fraction is not None:
             assert split is not None
-            n_samples = int(len(paths) * data_fraction)
-            paths = paths[:n_samples] if split == "train" else paths[-n_samples:]
+            n_samples = int(len(paths) * val_fraction)
+            paths = paths[:-n_samples] if split == "train" else paths[-n_samples:]
         all_paths.extend(paths)
 
     if one_hot_encoding:
@@ -171,13 +171,13 @@ def get_axondeepseg_dataset(
 def get_axondeepseg_loader(
     path, name, patch_shape, batch_size,
     download=False, one_hot_encoding=False,
-    data_fraction=None, split=None, **kwargs
+    val_fraction=None, split=None, **kwargs
 ):
     """Dataloader for the segmentation of myelinated axons. See 'get_axondeepseg_dataset' for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_axondeepseg_dataset(
         path, name, patch_shape, download=download, one_hot_encoding=one_hot_encoding,
-        data_fraction=data_fraction, split=split, **ds_kwargs
+        val_fraction=val_fraction, split=split, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
