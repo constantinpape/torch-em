@@ -143,8 +143,8 @@ def get_axondeepseg_dataset(
         paths.sort()
         if val_fraction is not None:
             assert split is not None
-            n_samples = int(len(paths) * val_fraction)
-            paths = paths[:-n_samples] if split == "train" else paths[-n_samples:]
+            n_samples = int(len(paths) * (1 - val_fraction))
+            paths = paths[:n_samples] if split == "train" else paths[n_samples:]
         all_paths.extend(paths)
 
     if one_hot_encoding:
