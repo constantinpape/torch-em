@@ -91,6 +91,7 @@ def download_source(path, url, download, checksum=None, verify=True):
 def download_source_gdrive(path, url, download, checksum=None, download_type="zip", expected_samples=10000):
     if os.path.exists(path):
         return
+
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
 
@@ -99,6 +100,9 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
             "Need gdown library to download data from google drive."
             "Please install gdown and then rerun."
         )
+
+    print("Downloading the dataset. Might take a few minutes...")
+
     if download_type == "zip":
         gdown.download(url, path, quiet=False)
         _check_checksum(path, checksum)
@@ -108,6 +112,7 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
         gdown.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
     else:
         raise ValueError("`download_path` argument expects either `zip`/`folder`")
+    print("Download completed.")
 
 
 def download_source_empiar(path, access_id, download):

@@ -1,6 +1,5 @@
 import os
 from glob import glob
-import subprocess
 
 import h5py
 import torch_em
