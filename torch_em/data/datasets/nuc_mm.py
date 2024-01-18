@@ -1,10 +1,13 @@
 import os
 from glob import glob
+import subprocess
 
 import h5py
 import torch_em
 
 from . import util
+
+URL = "https://drive.google.com/drive/folders/1_4CrlYvzx0ITnGlJOHdgcTRgeSkm9wT8"
 
 
 def _extract_split(image_folder, label_folder, output_folder):
@@ -24,12 +27,14 @@ def _extract_split(image_folder, label_folder, output_folder):
             f.create_dataset("labels", data=seg, compression="gzip")
 
 
-def _require_dataset(path, sample):
+def _require_dataset(path, sample, download):
+    # downloading the dataset
+    util.download_source_gdrive(path, URL, download, download_type="folder")
+
     if sample == "mouse":
-        input_folder = os.path.join(path, "NucMM-Release", "Mouse (NucMM-M)")
+        input_folder = os.path.join(path, "Mouse (NucMM-M)")
     else:
-        input_folder = os.path.join(path, "NucMM-Release", "Zebrafish (NucMM-Z)")
-    # TODO print instructions on how to get the data if it's not found
+        input_folder = os.path.join(path, "Zebrafish (NucMM-Z)")
     assert os.path.exists(input_folder), input_folder
 
     sample_folder = os.path.join(path, sample)
@@ -54,7 +59,7 @@ def get_nuc_mm_dataset(path, sample, split, patch_shape, download=False, **kwarg
 
     sample_folder = os.path.join(path, sample)
     if not os.path.exists(sample_folder):
-        _require_dataset(path, sample)
+        _require_dataset(path, sample, download)
 
     split_folder = os.path.join(sample_folder, split)
     paths = sorted(glob(os.path.join(split_folder, "*.h5")))

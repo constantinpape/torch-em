@@ -8,6 +8,7 @@ from warnings import warn
 from xml.dom import minidom
 from shutil import copyfileobj, which
 from subprocess import run
+from packaging import version
 
 from skimage.draw import polygon
 
@@ -87,7 +88,7 @@ def download_source(path, url, download, checksum=None, verify=True):
     _check_checksum(path, checksum)
 
 
-def download_source_gdrive(path, url, download, checksum=None, download_type="zip"):
+def download_source_gdrive(path, url, download, checksum=None, download_type="zip", expected_samples=10000):
     if os.path.exists(path):
         return
     if not download:
@@ -98,17 +99,15 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
             "Need gdown library to download data from google drive."
             "Please install gdown and then rerun."
         )
-
     if download_type == "zip":
         gdown.download(url, path, quiet=False)
+        _check_checksum(path, checksum)
     elif download_type == "folder":
-        # gdown has a limit of only 50 files download, limits the usage of folder-based downloads
-        # here below, we need to manually increase the max number of files we want to download
+        assert version.parse(gdown.__version__) == version.parse("4.6.3"), "Please install `gdown==4.6.3`."
+        gdown.download_folder.__globals__["MAX_NUMBER_FILES"] = expected_samples
         gdown.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
     else:
         raise ValueError("`download_path` argument expects either `zip`/`folder`")
-
-    _check_checksum(path, checksum)
 
 
 def download_source_empiar(path, access_id, download):
@@ -254,7 +253,8 @@ def convert_svs_to_array(path, location=(0, 0), level=0, img_size=None):
         (below mentioned arguments are used for multi-resolution images)
         - location: tuple[int, int] - pixel location (x, y) in level 0 of the image (default: (0, 0))
         - level: [int] -  target level used to read the image (default: 0)
-        - img_size: tuple[int, int] - expected size of the image (default: None -> obtains the original shape at the expected level)
+        - img_size: tuple[int, int] - expected size of the image
+                                      (default: None -> obtains the original shape at the expected level)
 
     Returns:
         the image as numpy array
