@@ -104,7 +104,10 @@ class UNETR(nn.Module):
                 else:
                     embed_dim = self.encoder.patch_embed.proj.out_channels
 
-            in_chans = self.encoder.patch_embed.proj.in_channels
+            try:
+                in_chans = self.encoder.patch_embed.proj.in_channels
+            except AttributeError:  # for getting the input channels while using vit_t from MobileSam
+                in_chans = self.encoder.patch_embed.seq[0].c.in_channels
 
         # parameters for the decoder network
         depth = 3
