@@ -36,6 +36,12 @@ def run_livecell_training(args):
     # the vision-mamba + decoder (UNet-based) model
     model = get_vimunet_model(checkpoint=checkpoint)
 
+    # saving the model checkpoints
+    save_root = os.path.join(
+        args.save_root,
+        "pretrained" if args.pretrained else "scratch"
+    )
+
     # trainer for the segmentation task
     trainer = torch_em.default_segmentation_trainer(
         name="livecell-vimunet",
@@ -43,7 +49,7 @@ def run_livecell_training(args):
         train_loader=train_loader,
         val_loader=val_loader,
         learning_rate=1e-4,
-        save_root=args.save_root,
+        save_root=save_root,
         compile_model=False
     )
     trainer.fit(iterations=int(args.iterations))
