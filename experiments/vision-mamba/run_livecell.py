@@ -1,5 +1,10 @@
 import os
 import argparse
+from glob import glob
+
+import imageio.v3 as imageio
+
+import torch
 
 import torch_em
 from torch_em.data.datasets import get_livecell_loader
@@ -55,8 +60,27 @@ def run_livecell_training(args):
     trainer.fit(iterations=int(args.iterations))
 
 
+def run_livecell_inference(args):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # the vision-mamba + decoder (UNet-based) model
+    model = get_vimunet_model(checkpoint=args.checkpoint)
+
+    for image_path in glob(os.path.join(ROOT, "data", "livecell", "images", "livecell_test_images", "*")):
+        image = imageio.imread(image_path)
+        tensor_image = torch.from_numpy(image)[None, None].to(device)
+
+        predictions = model(tensor_image)
+        predictions = predictions.squeeze().detach().cpu().numpy()
+
+
 def main(args):
-    run_livecell_training(args)
+    if args.train:
+        run_livecell_training(args)
+
+    if args.predict:
+        assert args.checkpoint is not None, "Provide the checkpoint path to the trained model."
+        run_livecell_inference(args)
 
 
 if __name__ == "__main__":
@@ -65,5 +89,8 @@ if __name__ == "__main__":
     parser.add_argument("--iterations", type=int, default=1e4)
     parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vision-mamba"))
     parser.add_argument("--pretrained", action="store_true")
+    parser.add_argument("--train", action="store_true")
+    parser.add_argument("--predict", action="store_true")
+    parser.add_argument("-c", "--checkpoint", default=None, type=str)
     args = parser.parse_args()
     main(args)

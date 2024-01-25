@@ -4,6 +4,8 @@
 
 # pretrained model weights: vim_t - https://huggingface.co/hustvl/Vim-tiny/blob/main/vim_tiny_73p1.pth
 
+from collections import OrderedDict
+
 import torch
 
 from torch_em.model import UNETR
@@ -101,6 +103,7 @@ def get_vimunet_model(device=None, checkpoint=None):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     encoder = ViM(
+        img_size=1024,
         patch_size=16,
         embed_dim=192,
         depth=24,
@@ -119,7 +122,21 @@ def get_vimunet_model(device=None, checkpoint=None):
 
     if checkpoint is not None:
         state = torch.load(checkpoint, map_location="cpu")
-        encoder_state = state["model"]
+
+        if checkpoint.endswith(".pth"):  # from Vim
+            encoder_state = state["model"]
+
+        else:  # from torch_em
+            model_state = state["model_state"]
+
+            encoder_prefix = "encoder."
+            encoder_state = []
+            for k, v in model_state.items():
+                if k.startswith(encoder_prefix):
+                    encoder_state.append((k[len(encoder_prefix):], v))
+
+            encoder_state = OrderedDict(encoder_state)
+
         encoder.load_state_dict(encoder_state)
 
     encoder.img_size = encoder.patch_embed.img_size[0]
