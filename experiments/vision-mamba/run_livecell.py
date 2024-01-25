@@ -28,8 +28,13 @@ def run_livecell_training(args):
     # the dataloaders for livecell dataset
     train_loader, val_loader = get_loaders(path=args.input)
 
+    if args.pretrained:
+        checkpoint = "/scratch/usr/nimanwai/models/Vim-tiny/vim_tiny_73p1.pth"
+    else:
+        checkpoint = None
+
     # the vision-mamba + decoder (UNet-based) model
-    model = get_vimunet_model(checkpoint=args.checkpoint)
+    model = get_vimunet_model(checkpoint=checkpoint)
 
     # trainer for the segmentation task
     trainer = torch_em.default_segmentation_trainer(
@@ -37,7 +42,7 @@ def run_livecell_training(args):
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        learning_rate=1e-3,
+        learning_rate=1e-4,
         save_root=args.save_root,
         compile_model=False
     )
@@ -53,8 +58,6 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"))
     parser.add_argument("--iterations", type=int, default=1e4)
     parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vision-mamba"))
-    parser.add_argument(
-        "--checkpoint", type=str, default=os.path.join(ROOT, "models", "Vim-tiny", "vim_tiny_73p1.pth")
-    )
+    parser.add_argument("--pretrained", action="store_true")
     args = parser.parse_args()
     main(args)
