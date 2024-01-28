@@ -68,7 +68,7 @@ def get_covid_if_loader(
     path, patch_shape, batch_size, sample_range=None, target="cells", download=False,
     offsets=None, boundaries=False, binary=False, **kwargs
 ):
-    """Dataloader for the segmentation of myelinated axons. See 'get_covid_if_loader' for details.
+    """Dataloader for the segmentation of cells and nuclei in immunofluoroscence. See 'get_covid_if_loader' for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_covid_if_dataset(
