@@ -39,10 +39,11 @@ def _get_vnc_data(path, download):
 
     with h5py.File(train_path, "w") as f:
         _create_volume(f, "raw", os.path.join(root, "stack1", "raw", "*.tif"))
+        # FIXME label doesn't work here due to touching objects
         _create_volume(f, "labels/mitochondria", os.path.join(root, "stack1", "mitochondria", "*.png"), process=label)
         _create_volume(f, "labels/synapses", os.path.join(root, "stack1", "synapses", "*.png"), process=label)
-        # TODO find the post-processing to go from neuron labels to membrane labels
-        # _create_volume(f, "labels/neurons", os.path.join(root, "stack1", "membranes", "*.png"))
+        # TODO post-processing for neurons
+        _create_volume(f, "labels/neurons", os.path.join(root, "stack1", "membranes", "*.png"))
 
     with h5py.File(test_path, "w") as f:
         _create_volume(f, "raw", os.path.join(root, "stack2", "raw", "*.tif"))
@@ -50,8 +51,9 @@ def _get_vnc_data(path, download):
     rmtree(root)
 
 
-def get_vnc_mito_dataset(
+def get_vnc_dataset(
     path,
+    structure,
     patch_shape,
     offsets=None,
     boundaries=False,
@@ -59,11 +61,12 @@ def get_vnc_mito_dataset(
     download=False,
     **kwargs
 ):
-    """Dataset for the segmentation of mitochondria in EM.
+    """Dataset for the segmentation of neurons, mitochondria or synapses in EM.
 
     This dataset is from https://doi.org/10.6084/m9.figshare.856713.v1.
     Please cite it if you use this dataset for a publication.
     """
+    assert structure in ("mitochondria", "synapses", "neurons")
     _get_vnc_data(path, download)
     data_path = os.path.join(path, "vnc_train.h5")
 
@@ -72,12 +75,13 @@ def get_vnc_mito_dataset(
     )
 
     raw_key = "raw"
-    label_key = "labels/mitochondria"
+    label_key = f"labels/{structure}"
     return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
 
 
-def get_vnc_mito_loader(
+def get_vnc_loader(
     path,
+    structure,
     patch_shape,
     batch_size,
     offsets=None,
@@ -86,17 +90,11 @@ def get_vnc_mito_loader(
     download=False,
     **kwargs
 ):
-    """Dataloader for the segmentation of mitochondria in EM. See 'get_vnc_mito_loader'."""
+    """Dataloader for segmentation of neurons, mitochondria or synapses in EM. See 'get_vnc_dataset'."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
     ds = get_vnc_mito_dataset(
-        path, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **kwargs
+        path, structure, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **kwargs
     )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
-
-
-# TODO implement
-# TODO extra kwargs for binary / boundaries / affinities
-def get_vnc_neuron_loader(path, patch_shape, download=False, **kwargs):
-    raise NotImplementedError

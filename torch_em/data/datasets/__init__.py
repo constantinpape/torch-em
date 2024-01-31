@@ -33,4 +33,4 @@ from .sponge_em import get_sponge_em_loader, get_sponge_em_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
 from .util import get_bioimageio_dataset_id
-from .vnc import get_vnc_mito_loader, get_vnc_mito_dataset
+from .vnc import get_vnc_loader, get_vnc_dataset
