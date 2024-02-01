@@ -38,7 +38,7 @@ def default_grid_search_values_boundary_based_instance_segmentation(
     }
 
 
-class BoundaryBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
+class _InstanceSegmentationBase(InstanceSegmentationWithDecoder):
     def __init__(self, model, preprocess=None, block_shape=None, halo=None):
         self._model = model
         self._preprocess = standardize if preprocess is None else preprocess
@@ -46,56 +46,6 @@ class BoundaryBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
         assert (block_shape is None) == (halo is None)
         self._block_shape = block_shape
         self._halo = halo
-
-        self._foreground = None
-        self._boundaries = None
-
-        self._is_initialized = False
-
-    def initialize(self, data):
-        device = next(iter(self._model.parameters())).device
-
-        if self._block_shape is None:
-            scale_factors = self._model.init_kwargs["scale_factors"]
-            min_divisible = [int(np.prod([sf[i] for sf in scale_factors])) for i in range(3)]
-            input_ = self._preprocess(data)
-            output = predict_with_padding(self._model, input_, min_divisible, device)
-        else:
-            output = predict_with_halo(
-                data, self._model, [device], self._block_shape, self._halo,
-                preprocess=self._preprocess,
-            )
-
-        self._foreground = output[0]
-        self._boundaries = output[1]
-
-        self._is_initialized = True
-
-    def generate(self, min_size=50, threshold1=0.5, threshold2=0.5, output_mode="binary_mask"):
-        segmentation = watershed_from_components(
-            self._boundaries, self._foreground,
-            min_size=min_size, threshold1=threshold1, threshold2=threshold2,
-        )
-        if output_mode is not None:
-            segmentation = self._to_masks(segmentation, output_mode)
-        return segmentation
-
-
-class DistanceBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
-    """Over-write micro_sam functionality so that it works for distance based
-    segmentation with a U-net.
-    """
-    def __init__(self, model, preprocess=None, block_shape=None, halo=None):
-        self._model = model
-        self._preprocess = standardize if preprocess is None else preprocess
-
-        assert (block_shape is None) == (halo is None)
-        self._block_shape = block_shape
-        self._halo = halo
-
-        self._foreground = None
-        self._center_distances = None
-        self._boundary_distances = None
 
         self._is_initialized = False
 
@@ -131,7 +81,52 @@ class DistanceBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
             raise NotImplementedError
         return output
 
-    # TODO refactor all this so that we can have a common base class that takes care of it
+
+class BoundaryBasedInstanceSegmentation(_InstanceSegmentationBase):
+    def __init__(self, model, preprocess=None, block_shape=None, halo=None):
+        super().__init__(
+            model=model, preprocess=preprocess, block_shape=block_shape, halo=halo
+        )
+
+        self._foreground = None
+        self._boundaries = None
+
+    def initialize(self, data):
+        if isinstance(self._model, nn.Module):
+            output = self._initialize_torch(data)
+        else:
+            output = self._initialize_modelzoo(data)
+
+        assert output.shape[0] == 2
+
+        self._foreground = output[0]
+        self._boundaries = output[1]
+
+        self._is_initialized = True
+
+    def generate(self, min_size=50, threshold1=0.5, threshold2=0.5, output_mode="binary_mask"):
+        segmentation = watershed_from_components(
+            self._boundaries, self._foreground,
+            min_size=min_size, threshold1=threshold1, threshold2=threshold2,
+        )
+        if output_mode is not None:
+            segmentation = self._to_masks(segmentation, output_mode)
+        return segmentation
+
+
+class DistanceBasedInstanceSegmentation(_InstanceSegmentationBase):
+    """Over-write micro_sam functionality so that it works for distance based
+    segmentation with a U-net.
+    """
+    def __init__(self, model, preprocess=None, block_shape=None, halo=None):
+        super().__init__(
+            model=model, preprocess=preprocess, block_shape=block_shape, halo=halo
+        )
+
+        self._foreground = None
+        self._center_distances = None
+        self._boundary_distances = None
+
     def initialize(self, data):
         if isinstance(self._model, nn.Module):
             output = self._initialize_torch(data)
