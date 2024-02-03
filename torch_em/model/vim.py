@@ -6,7 +6,7 @@
 
 import torch
 
-from torch_em.model import UNETR
+from .unetr import UNETR
 
 from vim.models_mamba import VisionMamba, rms_norm_fn, RMSNorm, layer_norm_fn
 
@@ -40,7 +40,7 @@ class ViM(VisionMamba):
             x = x + self.pos_embed
             x = self.pos_drop(x)
 
-        # mamba impl
+        # mamba implementation
         residual = None
         hidden_states = x
         for layer in self.layers:
@@ -61,7 +61,7 @@ class ViM(VisionMamba):
                 residual = residual + self.drop_path(hidden_states)
             hidden_states = self.norm_f(residual.to(dtype=self.norm_f.weight.dtype))
         else:
-            # Set prenorm=False here since we don't need the residual
+            # Set prenorm = False here since we don't need the residual
             fused_add_norm_fn = rms_norm_fn if isinstance(self.norm_f, RMSNorm) else layer_norm_fn
             hidden_states = fused_add_norm_fn(
                 self.drop_path(hidden_states),
@@ -96,27 +96,73 @@ class ViM(VisionMamba):
         return x  # from here, the tokens can be upsampled easily (N x H x W x C)
 
 
-def get_vimunet_model(out_channels, device=None, checkpoint=None):
+def get_vim_encoder(model_type="vim_t", with_cls_token=True):
+    if model_type == "vim_t":
+        # `vim_tiny_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_rope_also_residual_with_cls_token`
+        # *has an imagenet pretrained model
+        encoder = ViM(
+            img_size=1024,
+            patch_size=16,
+            embed_dim=192,
+            depth=24,
+            rms_norm=True,
+            residual_in_fp32=True,
+            fused_add_norm=True,
+            final_pool_type='all',
+            if_abs_pos_embed=True,
+            if_rope=True,
+            if_rope_residual=True,
+            bimamba_type="v2",
+            if_cls_token=with_cls_token,
+        )
+    elif model_type == "vim_s":
+        # `vim_small_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_rope_also_residual`
+        # AA: added a class token to the default models
+        encoder = ViM(
+            img_size=1024,
+            patch_size=16,
+            embed_dim=384,
+            depth=24,
+            rms_norm=True,
+            residual_in_fp32=True,
+            fused_add_norm=True,
+            final_pool_type='all',
+            if_abs_pos_embed=True,
+            if_rope=True,
+            if_rope_residual=True,
+            bimamba_type="v2",
+            if_cls_token=with_cls_token,
+        )
+    elif model_type == "vim_b":
+        # `vim_base_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_rope_also_residual`
+        # AA: added a class token to the default models
+        encoder = ViM(
+            img_size=1024,
+            patch_size=16,
+            embed_dim=768,
+            depth=24,
+            rms_norm=True,
+            residual_in_fp32=True,
+            fused_add_norm=True,
+            final_pool_type='all',
+            if_abs_pos_embed=True,
+            if_rope=True,
+            if_rope_residual=True,
+            bimamba_type="v2",
+            if_cls_token=with_cls_token,
+        )
+    else:
+        raise ValueError("Choose from `vim_t` or `vim_b`")
+
+    encoder.default_cfg = _cfg()
+    return encoder
+
+
+def get_vimunet_model(out_channels, model_type="vim_t", with_cls_token=True, device=None, checkpoint=None):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    encoder = ViM(
-        img_size=1024,
-        patch_size=16,
-        embed_dim=192,
-        depth=24,
-        rms_norm=True,
-        residual_in_fp32=True,
-        fused_add_norm=True,
-        final_pool_type='all',
-        if_abs_pos_embed=True,
-        if_rope=True,
-        if_rope_residual=True,
-        bimamba_type="v2",
-        if_cls_token=True,
-    )
-
-    encoder.default_cfg = _cfg()
+    encoder = get_vim_encoder(model_type, with_cls_token)
 
     model_state = None
     if checkpoint is not None:

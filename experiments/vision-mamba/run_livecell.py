@@ -11,13 +11,12 @@ import torch
 
 import torch_em
 from torch_em.util import segmentation
+from torch_em.model import get_vimunet_model
 from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask, DiceBasedDistanceLoss
 
 from elf.evaluation import mean_segmentation_accuracy
-
-from vimunet import get_vimunet_model
 
 
 ROOT = "/scratch/usr/nimanwai"
@@ -128,7 +127,7 @@ def run_livecell_training(args):
     output_channels = get_output_channels(args)
 
     # the vision-mamba + decoder (UNet-based) model
-    model = get_vimunet_model(out_channels=output_channels, checkpoint=checkpoint)
+    model = get_vimunet_model(out_channels=output_channels, model_type=args.model_type, checkpoint=checkpoint)
 
     save_root = get_save_root(args)
 
@@ -160,7 +159,12 @@ def run_livecell_inference(args):
     checkpoint = os.path.join(save_root, "checkpoints", "livecell-vimunet", "best.pt")
 
     # the vision-mamba + decoder (UNet-based) model
-    model = get_vimunet_model(out_channels=output_channels, checkpoint=checkpoint)
+    model = get_vimunet_model(
+        out_channels=output_channels,
+        model_type=args.model_type,
+        with_cls_token=args.with_cls_token,
+        checkpoint=checkpoint
+    )
 
     test_image_dir = os.path.join(ROOT, "data", "livecell", "images", "livecell_test_images")
     all_test_labels = glob(os.path.join(ROOT, "data", "livecell", "annotations", "livecell_test_images", "*", "*"))
@@ -228,6 +232,8 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"))
     parser.add_argument("--iterations", type=int, default=1e4)
     parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vision-mamba"))
+    parser.add_argument("-m", "--model_type", type=str, default="vim_t")
+    parser.add_argument("--with_cls_token", action="store_true")
 
     parser.add_argument("--pretrained", action="store_true")
 
