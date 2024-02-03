@@ -138,7 +138,9 @@ class UNETR(nn.Module):
         self.deconv3 = Deconv2DBlock(features_decoder[1], features_decoder[2])
         self.deconv4 = Deconv2DBlock(features_decoder[2], features_decoder[3])
 
-        self.deconv_out = SingleDeconv2DBlock(features_decoder[-1], features_decoder[-1])
+        self.deconv_out = Upsampler2d(
+            scale_factor=2, in_channels=features_decoder[-1], out_channels=features_decoder[-1]
+        )
 
         self.decoder_head = ConvBlock2d(2 * features_decoder[-1], features_decoder[-1])
 
@@ -274,15 +276,6 @@ class UNETR(nn.Module):
 #
 
 
-class SingleDeconv2DBlock(nn.Module):
-    def __init__(self, in_planes, out_planes):
-        super().__init__()
-        self.block = nn.ConvTranspose2d(in_planes, out_planes, kernel_size=2, stride=2, padding=0, output_padding=0)
-
-    def forward(self, x):
-        return self.block(x)
-
-
 class SingleConv2DBlock(nn.Module):
     def __init__(self, in_planes, out_planes, kernel_size):
         super().__init__()
@@ -310,7 +303,7 @@ class Deconv2DBlock(nn.Module):
     def __init__(self, in_planes, out_planes, kernel_size=3):
         super().__init__()
         self.block = nn.Sequential(
-            SingleDeconv2DBlock(in_planes, out_planes),
+            Upsampler2d(scale_factor=2, in_channels=in_planes, out_channels=out_planes),
             SingleConv2DBlock(out_planes, out_planes, kernel_size),
             nn.BatchNorm2d(out_planes),
             nn.ReLU(True)
