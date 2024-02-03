@@ -127,16 +127,27 @@ class UNETR(nn.Module):
         else:
             self.decoder = decoder
 
-        self.z_inputs = ConvBlock2d(in_chans, features_decoder[-1])
+        if use_skip_connection:
+            self.deconv1 = Deconv2DBlock(embed_dim, features_decoder[0])
+            self.deconv2 = nn.Sequential(
+                Deconv2DBlock(embed_dim, features_decoder[0]),
+                Deconv2DBlock(features_decoder[0], features_decoder[1])
+            )
+            self.deconv3 = nn.Sequential(
+                Deconv2DBlock(embed_dim, features_decoder[0]),
+                Deconv2DBlock(features_decoder[0], features_decoder[1]),
+                Deconv2DBlock(features_decoder[1], features_decoder[2])
+            )
+            self.deconv4 = ConvBlock2d(in_chans, features_decoder[-1])
+        else:
+            self.deconv1 = Deconv2DBlock(embed_dim, features_decoder[0])
+            self.deconv2 = Deconv2DBlock(features_decoder[0], features_decoder[1])
+            self.deconv3 = Deconv2DBlock(features_decoder[1], features_decoder[2])
+            self.deconv4 = Deconv2DBlock(features_decoder[2], features_decoder[3])
 
         self.base = ConvBlock2d(embed_dim, features_decoder[0])
 
         self.out_conv = nn.Conv2d(features_decoder[-1], out_channels, 1)
-
-        self.deconv1 = Deconv2DBlock(embed_dim, features_decoder[0])
-        self.deconv2 = Deconv2DBlock(features_decoder[0], features_decoder[1])
-        self.deconv3 = Deconv2DBlock(features_decoder[1], features_decoder[2])
-        self.deconv4 = Deconv2DBlock(features_decoder[2], features_decoder[3])
 
         self.deconv_out = Upsampler2d(
             scale_factor=2, in_channels=features_decoder[-1], out_channels=features_decoder[-1]
@@ -235,18 +246,11 @@ class UNETR(nn.Module):
             z12 = encoder_outputs
 
         if use_skip_connection:
-            # TODO: we share the weights in the deconv(s), and should preferably avoid doing that
             from_encoder = from_encoder[::-1]
             z9 = self.deconv1(from_encoder[0])
-
-            z6 = self.deconv1(from_encoder[1])
-            z6 = self.deconv2(z6)
-
-            z3 = self.deconv1(from_encoder[2])
-            z3 = self.deconv2(z3)
-            z3 = self.deconv3(z3)
-
-            z0 = self.z_inputs(x)
+            z6 = self.deconv2(from_encoder[1])
+            z3 = self.deconv3(from_encoder[2])
+            z0 = self.deconv4(x)
 
         else:
             z9 = self.deconv1(z12)
