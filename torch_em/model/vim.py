@@ -8,7 +8,11 @@ import torch
 
 from .unetr import UNETR
 
-from vim.models_mamba import VisionMamba, rms_norm_fn, RMSNorm, layer_norm_fn
+try:
+    from vim.models_mamba import VisionMamba, rms_norm_fn, RMSNorm, layer_norm_fn
+except ModuleNotFoundError:
+    VisionMamba = rms_norm_fn = RMSNorm = layer_norm_fn = None
+
 
 from timm.models.vision_transformer import _cfg
 
