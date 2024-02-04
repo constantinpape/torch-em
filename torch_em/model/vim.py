@@ -10,9 +10,13 @@ from .unetr import UNETR
 
 try:
     from vim.models_mamba import VisionMamba, rms_norm_fn, RMSNorm, layer_norm_fn
+except ImportError:
+    VisionMamba = object
+    rms_norm_fn = RMSNorm = layer_norm_fn = None
+
+try:
     from timm.models.vision_transformer import _cfg
-except ModuleNotFoundError:
-    VisionMamba = rms_norm_fn = RMSNorm = layer_norm_fn = None
+except ImportError:
     _cfg = None
 
 
