@@ -105,11 +105,16 @@ def get_save_root(args):
     else:
         raise ValueError
 
+    model_name = args.model_type
+    if args.with_cls_token:
+        model_name += "-with_cls_token"
+
     # saving the model checkpoints
     save_root = os.path.join(
         args.save_root,
         "pretrained" if args.pretrained else "scratch",
-        experiment_type
+        experiment_type,
+        model_name
     )
 
     return save_root
