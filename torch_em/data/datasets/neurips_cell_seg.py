@@ -32,7 +32,7 @@ def to_rgb(image):
     if image.ndim == 2:
         image = np.concatenate([image[None]] * 3, axis=0)
 
-    if image.ndim == 3 and image.shape[0] == 3:
+    if image.ndim == 3 and image.shape[-1] == 3:
         image = image.transpose(2, 0, 1)
 
     assert image.ndim == 3
