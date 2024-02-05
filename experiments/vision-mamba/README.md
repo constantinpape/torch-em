@@ -10,6 +10,7 @@
 - Install from `vim_requirements.txt` -> `pip install -r vim/vim_requirements.txt`
 - `pip install -e causal_conv1d/`
 - `pip install -e mamba/`
+- `pip install -e .`
 
 
 ### Known Errors:
