@@ -180,9 +180,9 @@ def run_livecell_inference(args):
     all_test_labels = glob(os.path.join(ROOT, "data", "livecell", "annotations", "livecell_test_images", "*", "*"))
 
     res_path = os.path.join(save_root, "results.csv")
-    # if os.path.exists(res_path):
-    #     print(pd.read_csv(res_path))
-    #     return
+    if os.path.exists(res_path):
+        print(pd.read_csv(res_path))
+        return
 
     msa_list, sa50_list = [], []
 
