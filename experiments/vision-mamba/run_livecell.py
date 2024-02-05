@@ -132,7 +132,12 @@ def run_livecell_training(args):
     output_channels = get_output_channels(args)
 
     # the vision-mamba + decoder (UNet-based) model
-    model = get_vimunet_model(out_channels=output_channels, model_type=args.model_type, checkpoint=checkpoint)
+    model = get_vimunet_model(
+        out_channels=output_channels,
+        model_type=args.model_type,
+        checkpoint=checkpoint,
+        with_cls_token=args.with_cls_token
+    )
 
     save_root = get_save_root(args)
 
@@ -174,6 +179,11 @@ def run_livecell_inference(args):
     test_image_dir = os.path.join(ROOT, "data", "livecell", "images", "livecell_test_images")
     all_test_labels = glob(os.path.join(ROOT, "data", "livecell", "annotations", "livecell_test_images", "*", "*"))
 
+    res_path = os.path.join(save_root, "results.csv")
+    # if os.path.exists(res_path):
+    #     print(pd.read_csv(res_path))
+    #     return
+
     msa_list, sa50_list = [], []
 
     for label_path in tqdm(all_test_labels):
@@ -208,8 +218,6 @@ def run_livecell_inference(args):
         msa, sa_acc = mean_segmentation_accuracy(instances, labels, return_accuracies=True)
         msa_list.append(msa)
         sa50_list.append(sa_acc[0])
-
-    res_path = os.path.join(save_root, "results.csv")
 
     res = {
         "LiveCELL": "Metrics",
