@@ -11,10 +11,13 @@ import z5py
 from tqdm import tqdm
 from . import util
 
+# TODO: update the links to the new host location at huggingface.
+# - https://mitoem.grand-challenge.org/ (see `Dataset` for the links)
+
 URLS = {
     "raw": {
         "human": "https://www.dropbox.com/s/z41qtu4y735j95e/EM30-H-im.zip?dl=1",
-        "rat": "https://www.dropbox.com/s/kobmxbrabdfkx7y/EM30-R-im.zip?dl=1"
+        "rat": "https://huggingface.co/datasets/pytc/EM30/resolve/main/EM30-R-im.zip"
     },
     "labels": {
         "human": "https://www.dropbox.com/s/dhf89bc14kemw4e/EM30-H-mito-train-val-v2.zip?dl=1",

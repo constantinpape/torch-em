@@ -26,14 +26,24 @@ class TestUnetr(unittest.TestCase):
         from torch_em.model import UNETR
 
         model = UNETR()
-        self._test_net(model, (1, 3, 256, 256))
+        self._test_net(model, (1, 3, 512, 512))
+
+    def test_unetr_no_resize(self):
+        from torch_em.model import UNETR
+
+        model = UNETR(resize_input=False)
+        self._test_net(model, (1, 3, 512, 512))
 
     @unittest.skipIf(micro_sam is None, "Needs micro_sam")
     def test_unetr_from_sam(self):
-        from torch_em.model import build_unetr_with_sam_intialization
+        from torch_em.model import UNETR
+        from micro_sam.util import models
 
-        model = build_unetr_with_sam_intialization()
-        self._test_net(model, (1, 3, 256, 256))
+        model_registry = models()
+        checkpoint = model_registry.fetch("vit_b")
+
+        model = UNETR(encoder_checkpoint=checkpoint)
+        self._test_net(model, (1, 3, 512, 512))
 
 
 if __name__ == "__main__":

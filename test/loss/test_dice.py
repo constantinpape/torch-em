@@ -48,6 +48,22 @@ class TestDiceLoss(unittest.TestCase):
         with self.assertRaises(ValueError):
             loss(x, y)
 
+    def test_dice_reduction(self):
+        from torch_em.loss import DiceLoss
+
+        shape = (1, 3, 32, 32)
+        x = torch.rand(*shape)
+        y = torch.rand(*shape)
+
+        for reduction in (None, "mean", "min", "max", "sum"):
+            loss = DiceLoss(reduce_channel=reduction)
+            lval = loss(x, y)
+            if reduction is None:
+                self.assertEqual(tuple(lval.shape), (3,))
+            else:
+                self.assertEqual(tuple(lval.shape), tuple())
+                self.assertEqual(lval.numel(), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

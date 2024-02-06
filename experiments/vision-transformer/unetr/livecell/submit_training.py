@@ -7,7 +7,7 @@ from glob import glob
 from datetime import datetime
 
 
-def write_batch_script(out_path, ini_sam=True, source_choice="torch-em"):
+def write_batch_script(out_path, ini_sam=True, source_choice="torch-em", with_affinity=True):
     """
     inputs:
         source_choice:str - [torch_em / monai] source of the unetr model coming from
@@ -22,7 +22,7 @@ def write_batch_script(out_path, ini_sam=True, source_choice="torch-em"):
 #SBATCH --ntasks=1
 #SBATCH -p grete:shared
 #SBATCH -G A100:1
-#SBATCH -c 8
+#SBATCH -c 16
 #SBATCH -A gzz0001
 """
         if ini_sam:
@@ -42,9 +42,11 @@ python livecell_unetr.py --train """
         add_source_choice = f"--source_choice {source_choice} "
         batch_script += add_ctype + add_source_choice
 
-        add_sam_ini = "--do_sam_ini "
         if ini_sam:
-            batch_script += add_sam_ini
+            batch_script += "--do_sam_ini "
+
+        if with_affinity:
+            batch_script += "--with_affinities "
 
         _op = out_path[:-3] + f"_{i}.sh"
 
@@ -58,7 +60,7 @@ def submit_slurm():
     tmp_folder = os.path.expanduser("./gpu_jobs")
     os.makedirs(tmp_folder, exist_ok=True)
 
-    script_name = "unetr-monai"
+    script_name = "unetr_"
     dt = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_%f")
     tmp_name = script_name + dt
 
