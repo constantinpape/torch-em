@@ -2,11 +2,12 @@ import os
 from glob import glob
 from typing import Optional, List, Tuple
 
-from .. import util
-
 import torch
 
 import torch_em
+
+from .. import util
+from ... import ConcatDataset
 
 
 _PATHS = {
@@ -105,14 +106,10 @@ def _get_organ_ids(anatomy, organs):
 
 
 def _get_raw_and_label_paths(path, anatomy):
-    raw_paths, label_paths = [], []
+    raw_paths, label_paths = {}, {}
     for _region in anatomy:
-        all_raw_paths = sorted(glob(os.path.join(path, _region, "RawData", "Training", "img", "*.nii.gz")))
-        all_label_paths = sorted(glob(os.path.join(path, _region, "RawData", "Training", "label", "*.nii.gz")))
-        for tmp_raw_path, tmp_label_path in zip(all_raw_paths, all_label_paths):
-            raw_paths.append(tmp_raw_path)
-            label_paths.append(tmp_label_path)
-
+        raw_paths[_region] = sorted(glob(os.path.join(path, _region, "RawData", "Training", "img", "*.nii.gz")))
+        label_paths[_region] = sorted(glob(os.path.join(path, _region, "RawData", "Training", "label", "*.nii.gz")))
     return raw_paths, label_paths
 
 
@@ -163,14 +160,21 @@ def get_btcv_dataset(
     anatomy = _assort_btcv_dataset(path, anatomy)
     organs = _check_organ_match_anatomy(organs, anatomy)
     organs = _get_organ_ids(anatomy, organs)
-
     raw_paths, label_paths = _get_raw_and_label_paths(path, anatomy)
 
     assert len(raw_paths) == len(label_paths)
 
-    return torch_em.default_segmentation_dataset(
-        raw_paths, "data", label_paths, "data", patch_shape, ndim=ndim, **kwargs
-    )
+    all_datasets = []
+    for per_anatomy in anatomy:
+        dataset = torch_em.default_segmentation_dataset(
+            raw_paths[per_anatomy], "data",
+            label_paths[per_anatomy], "data",
+            patch_shape, ndim=ndim, semantic_ids=organs[per_anatomy],
+            **kwargs
+        )
+        all_datasets.append(dataset)
+
+    return ConcatDataset(*all_datasets)
 
 
 def get_btcv_loader(
