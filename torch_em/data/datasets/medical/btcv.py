@@ -92,6 +92,18 @@ def _check_organ_match_anatomy(organs, anatomy):
     return all_organs
 
 
+def _get_organ_ids(anatomy, organs):
+    # now, let's get the organ ids
+    for _region in anatomy:
+        _region_dict = ABDOMEN_ORGANS if _region == "Abdomen" else CERVICAL_ORGANS
+        per_region_organ_ids = [
+            _region_dict[organ_name] for organ_name in organs[_region]
+        ]
+        organs[_region] = per_region_organ_ids
+
+    return organs
+
+
 def _get_raw_and_label_paths(path, anatomy):
     raw_paths, label_paths = [], []
     for _region in anatomy:
@@ -143,22 +155,14 @@ def get_btcv_dataset(
     """
     if download:
         raise NotImplementedError(
-            "The BTCV dataset cannot be automatically download from `torch_em`. \n
+            "The BTCV dataset cannot be automatically download from `torch_em`. \
             Please download the dataset (see `get_btcv_dataset` for the download steps) \
             and provide the parent directory where the zip files are stored."
         )
 
     anatomy = _assort_btcv_dataset(path, anatomy)
     organs = _check_organ_match_anatomy(organs, anatomy)
-    # now, let's get the organ ids
-    for _region in anatomy:
-        per_region_organs = organs[_region]
-        _region_dict = ABDOMEN_ORGANS if _region == "Abdomen" else CERVICAL_ORGANS
-        per_region_organ_ids = [
-            _region_dict[organ_name] for organ_name in per_region_organs
-        ]
-    # TODO: still need to get all the organ ids, and pass them to the 3d sampling logic: look at this later
-
+    organs = _get_organ_ids(anatomy, organs)
 
     raw_paths, label_paths = _get_raw_and_label_paths(path, anatomy)
 
