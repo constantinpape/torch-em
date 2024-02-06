@@ -31,7 +31,6 @@ CERVICAL_ORGANS = {
 
 def _unzip_btcv_data(path, region):
     _target_dir = os.path.join(path, region)
-    zip_path = os.path.join(path, _PATHS[region])
 
     # if the directory exists, we assume the assorting has been done
     if os.path.exists(_target_dir):
@@ -41,55 +40,68 @@ def _unzip_btcv_data(path, region):
     os.makedirs(_target_dir)
 
     # let's unzip the objects to the desired directory
+    zip_path = os.path.join(path, _PATHS[region])
     assert os.path.exists(zip_path), f"Looks like the zip file for {region} CT scans is missing."
-    util.unzip(
-        zip_path, _target_dir, remove=False
-    )
+    util.unzip(zip_path, _target_dir, remove=False)
 
 
 def _assort_btcv_dataset(path, anatomy):
+    if anatomy is None:  # if not specified, we take both the anatomies into account
+        anatomy = list(_PATHS.keys())
+
     if isinstance(anatomy, str):
-        assert anatomy in _PATHS.keys(), anatomy
-        _unzip_btcv_data(path, anatomy)
+        anatomy = [anatomy]
 
-    elif isinstance(anatomy, list):
-        for _region in anatomy:
-            assert _region in _PATHS.keys(), anatomy
-            _unzip_btcv_data(path, _region)
+    for _region in anatomy:
+        assert _region in _PATHS.keys(), anatomy
+        _unzip_btcv_data(path, _region)
 
-    else:
-        raise TypeError
+    return anatomy
 
 
-# TODO: we need to return specific labels, not 100% sure how to implement it
 def _check_organ_match_anatomy(organs, anatomy):
-    # if passed None, we return all organ labels
-    if organs is None:
-        return
+    # the sequence of anatomies assorted are:
+    # we have a list of two list. list at first index is for abdomen, and second is for cervix
+    from collections import defaultdict
+    all_organs = defaultdict(list)
+    if organs is None:  # if passed None, we return all organ labels
+        if "Abdomen" in anatomy:
+            all_organs["Abdomen"].append(list(ABDOMEN_ORGANS.keys()))
 
-    for organ in organs:
-        if anatomy == "Abdomen":
-            assert organ in ABDOMEN_ORGANS.keys(), f"{organ} not in {ABDOMEN_ORGANS.keys()}"
-        elif anatomy == "Cervix":
-            assert organ in CERVICAL_ORGANS.keys(), f"{organ} not in {CERVICAL_ORGANS.keys()}"
+        if "Cervix" in anatomy:
+            all_organs["Cervix"].append(list(CERVICAL_ORGANS.keys()))
+
+        return all_organs
+
+    if isinstance(organs, str):
+        organs = [organs]
+
+    for organ_name in organs:
+        _match_found = False
+        if organ_name in ABDOMEN_ORGANS and "Abdomen" in anatomy:
+            all_organs["Abdomen"].append(organ_name)
+            _match_found = True
+
+        if organ_name in CERVICAL_ORGANS and "Cervix" in anatomy:
+            all_organs["Cervix"].append(organ_name)
+            _match_found = True
+
+        if not _match_found:
+            raise ValueError(f"{organ_name} not in {anatomy}")
+
+    return all_organs
 
 
-def _get_raw_and_label_paths(path, organs, anatomy):
-    if isinstance(anatomy, str):
-        _check_organ_match_anatomy(organs, anatomy)
-        raw_paths = sorted(glob(os.path.join(path, anatomy, "Training", "img", "*.nii.gz")))
-        label_paths = sorted(glob(os.path.join(path, anatomy, "Training", "label", "*.nii.gz")))
+def _get_raw_and_label_paths(path, anatomy):
+    raw_paths, label_paths = [], []
+    for _region in anatomy:
+        all_raw_paths = sorted(glob(os.path.join(path, _region, "RawData", "Training", "img", "*.nii.gz")))
+        all_label_paths = sorted(glob(os.path.join(path, _region, "RawData", "Training", "label", "*.nii.gz")))
+        for tmp_raw_path, tmp_label_path in zip(all_raw_paths, all_label_paths):
+            raw_paths.append(tmp_raw_path)
+            label_paths.append(tmp_label_path)
 
-    elif isinstance(anatomy, list):
-        breakpoint()
-        raw_paths, label_paths = [], []
-        for _region in anatomy:
-            _check_organ_match_anatomy(organs, _region)
-            all_raw_paths = sorted(glob(os.path.join(path, _region, "RawData", "Training", "img", "*.nii.gz")))
-            all_label_paths = sorted(glob(os.path.join(path, _region, "RawData", "Training", "label", "*.nii.gz")))
-            for tmp_raw_path, tmp_label_path in zip(all_raw_paths, all_label_paths):
-                raw_paths.append(tmp_raw_path)
-                label_paths.append(tmp_label_path)
+    return raw_paths, label_paths
 
 
 def get_btcv_dataset(
@@ -131,14 +143,25 @@ def get_btcv_dataset(
     """
     if download:
         raise NotImplementedError(
-            "The BTCV dataset cannot be automatically download from `torch_em`. \
+            "The BTCV dataset cannot be automatically download from `torch_em`. \n
             Please download the dataset (see `get_btcv_dataset` for the download steps) \
             and provide the parent directory where the zip files are stored."
         )
 
-    _assort_btcv_dataset(path, anatomy)
+    anatomy = _assort_btcv_dataset(path, anatomy)
+    organs = _check_organ_match_anatomy(organs, anatomy)
+    # now, let's get the organ ids
+    for _region in anatomy:
+        per_region_organs = organs[_region]
+        _region_dict = ABDOMEN_ORGANS if _region == "Abdomen" else CERVICAL_ORGANS
+        per_region_organ_ids = [
+            _region_dict[organ_name] for organ_name in per_region_organs
+        ]
+    # TODO: still need to get all the organ ids, and pass them to the 3d sampling logic: look at this later
 
-    raw_paths, label_paths = _get_raw_and_label_paths(path, organs, anatomy)
+
+    raw_paths, label_paths = _get_raw_and_label_paths(path, anatomy)
+
     assert len(raw_paths) == len(label_paths)
 
     return torch_em.default_segmentation_dataset(
@@ -156,7 +179,7 @@ def get_btcv_loader(
         download=False,
         **kwargs
 ):
-    """Dataloader for multi-organ segmentation in CT scans.  See `get_btcv_dataset` for details."""
+    """Dataloader for multi-organ segmentation in CT scans. See `get_btcv_dataset` for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
