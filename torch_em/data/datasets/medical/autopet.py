@@ -15,8 +15,8 @@ CHECKSUM = ""
 
 def _assort_autopet_dataset(path, download):
     target_dir = os.path.join(path, "AutoPET-II")
-    # if os.path.exists(target_dir):
-    #     return
+    if os.path.exists(target_dir):
+        return
 
     os.makedirs(target_dir)
     zip_path = os.path.join(path, "autopet.zip")
@@ -60,7 +60,7 @@ def get_autopet_dataset(
     """
     _assort_autopet_dataset(path, download)
     breakpoint()
-    raw_paths, label_paths = ...
+    raw_paths, label_paths = _get_paths
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths, "data", label_paths, "data", patch_shape, ndim=ndim, **kwargs
