@@ -1,7 +1,7 @@
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_btcv_loader
 
-BTCV_ROOT = "/scratch/usr/nimanwai/data/btcv/"
+BTCV_ROOT = "/scratch/projects/nim00007/data/btcv/"
 
 
 def check_btcv():
@@ -11,7 +11,7 @@ def check_btcv():
         batch_size=2,
         ndim=2,
         anatomy=None,
-        organs="aorta",
+        organs="spleen",
         min_foreground_fraction=0.001,
     )
     print(f"Length of the loader: {len(loader)}")
