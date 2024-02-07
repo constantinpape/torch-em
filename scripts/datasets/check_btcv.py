@@ -11,7 +11,7 @@ def check_btcv():
         batch_size=2,
         ndim=2,
         anatomy=None,
-        organs=None,
+        organs="aorta",
         min_foreground_fraction=0.001,
     )
     print(f"Length of the loader: {len(loader)}")

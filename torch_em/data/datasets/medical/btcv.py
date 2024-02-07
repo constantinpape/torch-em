@@ -126,7 +126,7 @@ class InstancesFromOneHot:
 
     def __call__(self, labels):
         labels = self.transform(labels)
-        instances = np.zeros(labels.shape[-2:])
+        instances = np.zeros(labels.shape[1:])
         for i, _channel in enumerate(labels):
             instances[_channel == 1] = i+1
 
