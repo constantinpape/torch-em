@@ -105,16 +105,12 @@ def get_save_root(args):
     else:
         raise ValueError
 
-    model_name = args.model_type
-    if args.with_cls_token:
-        model_name += "-with_cls_token"
-
     # saving the model checkpoints
     save_root = os.path.join(
         args.save_root,
         "pretrained" if args.pretrained else "scratch",
         experiment_type,
-        model_name
+        args.model_type
     )
 
     return save_root
@@ -136,7 +132,7 @@ def run_livecell_training(args):
         out_channels=output_channels,
         model_type=args.model_type,
         checkpoint=checkpoint,
-        with_cls_token=args.with_cls_token
+        with_cls_token=True
     )
 
     save_root = get_save_root(args)
@@ -172,7 +168,7 @@ def run_livecell_inference(args):
     model = get_vimunet_model(
         out_channels=output_channels,
         model_type=args.model_type,
-        with_cls_token=args.with_cls_token,
+        with_cls_token=True,
         checkpoint=checkpoint
     )
 
@@ -243,10 +239,9 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"))
-    parser.add_argument("--iterations", type=int, default=1e4)
+    parser.add_argument("--iterations", type=int, default=1e5)
     parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vision-mamba"))
     parser.add_argument("-m", "--model_type", type=str, default="vim_t")
-    parser.add_argument("--with_cls_token", action="store_true")
 
     parser.add_argument("--pretrained", action="store_true")
 
