@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from glob import glob
 from typing import Optional, List, Tuple
 
@@ -7,7 +8,8 @@ import torch
 import torch_em
 
 from .. import util
-from ... import ConcatDataset
+from ....transform.label import OneHotTransform
+from ... import ConcatDataset, MinSemanticLabelForegroundSampler
 
 
 _PATHS = {
@@ -67,10 +69,10 @@ def _check_organ_match_anatomy(organs, anatomy):
     all_organs = defaultdict(list)
     if organs is None:  # if passed None, we return all organ labels
         if "Abdomen" in anatomy:
-            all_organs["Abdomen"].append(list(ABDOMEN_ORGANS.keys()))
+            all_organs["Abdomen"] = list(ABDOMEN_ORGANS.keys())
 
         if "Cervix" in anatomy:
-            all_organs["Cervix"].append(list(CERVICAL_ORGANS.keys()))
+            all_organs["Cervix"] = list(CERVICAL_ORGANS.keys())
 
         return all_organs
 
@@ -113,14 +115,33 @@ def _get_raw_and_label_paths(path, anatomy):
     return raw_paths, label_paths
 
 
+class InstancesFromOneHot:
+    def __init__(self, class_ids, transform=None):
+        self.class_ids = class_ids
+
+        if transform is None:
+            self.transform = OneHotTransform(class_ids=self.class_ids)
+        else:
+            self.transform = transform
+
+    def __call__(self, labels):
+        labels = self.transform(labels)
+        instances = np.zeros(labels.shape[-2:])
+        for i, _channel in enumerate(labels):
+            instances[_channel == 1] = i+1
+
+        return instances
+
+
 def get_btcv_dataset(
-        path: str,
-        patch_shape: Tuple[int, ...],
-        ndim: int,
-        organs: Optional[List] = None,
-        anatomy: Optional[List] = None,
-        download: bool = False,
-        **kwargs
+    path: str,
+    patch_shape: Tuple[int, ...],
+    ndim: int,
+    organs: Optional[List] = None,
+    anatomy: Optional[List] = None,
+    min_foreground_fraction: float = 0.001,
+    download: bool = False,
+    **kwargs
 ) -> torch.utils.data.Dataset:
     """Dataset for multi-organ segmentation in CT scans.
 
@@ -157,6 +178,8 @@ def get_btcv_dataset(
             and provide the parent directory where the zip files are stored."
         )
 
+    min_fraction_per_id = False if organs is None and anatomy is None else True
+
     anatomy = _assort_btcv_dataset(path, anatomy)
     organs = _check_organ_match_anatomy(organs, anatomy)
     organs = _get_organ_ids(anatomy, organs)
@@ -166,31 +189,41 @@ def get_btcv_dataset(
 
     all_datasets = []
     for per_anatomy in anatomy:
+        semantic_ids = organs[per_anatomy]
+        sampler = MinSemanticLabelForegroundSampler(
+            semantic_ids=semantic_ids,
+            min_fraction=min_foreground_fraction,
+            min_fraction_per_id=min_fraction_per_id
+        )
+        label_transform = InstancesFromOneHot(class_ids=semantic_ids)
         dataset = torch_em.default_segmentation_dataset(
-            raw_paths[per_anatomy], "data",
-            label_paths[per_anatomy], "data",
-            patch_shape, ndim=ndim, semantic_ids=organs[per_anatomy],
+            raw_paths[per_anatomy], "data", label_paths[per_anatomy], "data",
+            patch_shape, ndim=ndim, sampler=sampler, label_transform=label_transform,
             **kwargs
         )
+        for _ds in dataset.datasets:
+            _ds.max_sampling_attempts = 5000
+
         all_datasets.append(dataset)
 
     return ConcatDataset(*all_datasets)
 
 
 def get_btcv_loader(
-        path,
-        patch_shape,
-        batch_size,
-        ndim,
-        organs=None,
-        anatomy=None,
-        download=False,
-        **kwargs
+    path,
+    patch_shape,
+    batch_size,
+    ndim,
+    organs=None,
+    anatomy=None,
+    min_foreground_fraction=0.001,
+    download=False,
+    **kwargs
 ):
     """Dataloader for multi-organ segmentation in CT scans. See `get_btcv_dataset` for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
-    ds = get_btcv_dataset(path, patch_shape, ndim, organs, anatomy, download, **ds_kwargs)
+    ds = get_btcv_dataset(path, patch_shape, ndim, organs, anatomy, min_foreground_fraction, download, **ds_kwargs)
     loader = torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
     return loader
