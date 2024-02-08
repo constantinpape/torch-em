@@ -11,4 +11,5 @@ from .sampler import (
     MinIntensitySampler,
     MinNoToBackgroundBoundarySampler,
     MinTwoInstanceSampler,
+    MinSemanticLabelForegroundSampler,
 )
