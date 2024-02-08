@@ -38,7 +38,7 @@ def _get_paths(path, modality):
     elif modality == "PET":
         raw_paths = pet_paths
     else:
-        raise ValueError(f"Choose from the available modalities: `CT` / `PET`")
+        raise ValueError("Choose from the available modalities: `CT` / `PET`")
 
     return raw_paths, label_paths
 
@@ -68,7 +68,7 @@ def get_autopet_dataset(
 
     Returns:
         dataset: The segmentation dataset for the respective modalities.
-    """ 
+    """
     _assort_autopet_dataset(path, download)
     raw_paths, label_paths = _get_paths(path, modality)
     dataset = torch_em.default_segmentation_dataset(
@@ -76,6 +76,9 @@ def get_autopet_dataset(
         patch_shape, ndim=ndim, with_channels=modality is None,
         **kwargs
     )
+    if "sampler" in kwargs:
+        for ds in dataset.datasets:
+            ds.max_sampling_attempts = 5000
     return dataset
 
 
