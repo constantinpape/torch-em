@@ -1,6 +1,7 @@
 # TODO this should be partially refactored into elf.io before the next elf release
 # and then be used in image_stack_wrapper as welll
 import os
+import numpy as np
 
 from elf.io import open_file
 try:
@@ -38,8 +39,30 @@ def load_image(image_path, memmap=True):
         return imageio.imread(image_path)
 
 
+class MultiDatasetWrapper:
+    def __init__(self, *file_datasets):
+        # Make sure we have the same shapes.
+        reference_shape = file_datasets[0].shape
+        assert all(reference_shape == ds.shape for ds in file_datasets)
+        self.file_datasets = file_datasets
+
+        self.shape = (len(self.file_datasets),) + reference_shape
+
+    def __getitem__(self, index):
+        data = []
+        for ds in self.file_datasets:
+            ds_data = ds[index]
+            data.append(ds_data)
+        return np.stack(data)
+
+
 def load_data(path, key, mode="r"):
-    if key is None:
+    have_single_file = isinstance(path, str)
+    if key is None and have_single_file:
         return load_image(path)
-    else:
+    elif key is None and not have_single_file:
+        return np.stack([load_image(p) for p in path])
+    elif key is not None and have_single_file:
         return open_file(path, mode=mode)[key]
+    elif key is not None and not have_single_file:
+        return MultiDatasetWrapper(*[open_file(p, mode=mode)[key] for p in path])
