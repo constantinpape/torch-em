@@ -2,7 +2,7 @@ from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_autopet_loader
 from torch_em.data import MinInstanceSampler
 
-AUTOPET_ROOT = "/scratch/usr/nimanwai/test/data/"
+AUTOPET_ROOT = "/scratch/projects/nim00007/data/autopet/"
 
 
 # TODO: need to rescale the inputs using raw transform (preferably to 8-bit)
