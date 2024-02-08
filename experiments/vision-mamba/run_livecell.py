@@ -132,17 +132,26 @@ def run_livecell_training(args):
         out_channels=output_channels,
         model_type=args.model_type,
         checkpoint=checkpoint,
-        with_cls_token=True
+        with_cls_token=True,
+        use_conv_transpose=args.use_conv_transpose
     )
+
+    print(model.decoder.samplers)
 
     save_root = get_save_root(args)
 
     # loss function
     loss = get_loss_function(args)
 
+    name = "livecell-vimunet"
+    if args.use_conv_transpose:
+        name += "-conv-transpose"
+    else:
+        name += "-bilinear"
+
     # trainer for the segmentation task
     trainer = torch_em.default_segmentation_trainer(
-        name="livecell-vimunet",
+        name=name,
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -169,7 +178,8 @@ def run_livecell_inference(args):
         out_channels=output_channels,
         model_type=args.model_type,
         with_cls_token=True,
-        checkpoint=checkpoint
+        checkpoint=checkpoint,
+        use_conv_transpose=args.use_conv_transpose
     )
 
     test_image_dir = os.path.join(ROOT, "data", "livecell", "images", "livecell_test_images")
@@ -243,6 +253,7 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vision-mamba"))
     parser.add_argument("-m", "--model_type", type=str, default="vim_t")
 
+    parser.add_argument("--use_conv_transpose", action="store_true")
     parser.add_argument("--pretrained", action="store_true")
 
     parser.add_argument("--train", action="store_true")
