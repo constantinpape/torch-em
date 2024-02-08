@@ -1,3 +1,5 @@
+import os
+
 import torch_em
 from . import util
 
@@ -14,10 +16,14 @@ def get_isbi_dataset(
     This dataset is from the publication https://doi.org/10.3389/fnana.2015.00142.
     Please cite it if you use this dataset for a publication.
     """
-    if not path.endswith(".h5"):
-        raise ValueError("Isbi path must be a hdf5 file.")
+    if path.endswith(".h5"):
+        volume_path = path
+    else:
+        os.makedirs(path, exist_ok=True)
+        volume_path = os.path.join(path, "isbi.h5")
+
     assert len(patch_shape) == 3
-    util.download_source(path, ISBI_URL, download, CHECKSUM)
+    util.download_source(volume_path, ISBI_URL, download, CHECKSUM)
     ndim = 2 if patch_shape[0] == 1 else 3
     kwargs = util.update_kwargs(kwargs, "ndim", ndim)
 
@@ -28,7 +34,7 @@ def get_isbi_dataset(
     raw_key = "raw"
     label_key = "labels/membranes" if use_original_labels else "labels/gt_segmentation"
 
-    return torch_em.default_segmentation_dataset(path, raw_key, path, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(volume_path, raw_key, volume_path, label_key, patch_shape, **kwargs)
 
 
 def get_isbi_loader(

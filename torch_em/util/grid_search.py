@@ -1,4 +1,8 @@
 import numpy as np
+import torch.nn as nn
+import xarray
+
+import bioimageio.core
 
 from micro_sam.instance_segmentation import InstanceSegmentationWithDecoder
 from micro_sam.evaluation.instance_segmentation import (
@@ -34,7 +38,7 @@ def default_grid_search_values_boundary_based_instance_segmentation(
     }
 
 
-class BoundaryBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
+class _InstanceSegmentationBase(InstanceSegmentationWithDecoder):
     def __init__(self, model, preprocess=None, block_shape=None, halo=None):
         self._model = model
         self._preprocess = standardize if preprocess is None else preprocess
@@ -43,17 +47,20 @@ class BoundaryBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
         self._block_shape = block_shape
         self._halo = halo
 
-        self._foreground = None
-        self._boundaries = None
-
         self._is_initialized = False
 
-    def initialize(self, data):
+    def _initialize_torch(self, data):
         device = next(iter(self._model.parameters())).device
 
         if self._block_shape is None:
-            scale_factors = self._model.init_kwargs["scale_factors"]
-            min_divisible = [int(np.prod([sf[i] for sf in scale_factors])) for i in range(3)]
+            if hasattr(self._model, "scale_factors"):
+                scale_factors = self._model.init_kwargs["scale_factors"]
+                min_divisible = [int(np.prod([sf[i] for sf in scale_factors])) for i in range(3)]
+            elif hasattr(self._model, "depth"):
+                depth = self._model.depth
+                min_divisible = [2**depth, 2**depth]
+            else:
+                raise RuntimeError
             input_ = self._preprocess(data)
             output = predict_with_padding(self._model, input_, min_divisible, device)
         else:
@@ -61,6 +68,36 @@ class BoundaryBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
                 data, self._model, [device], self._block_shape, self._halo,
                 preprocess=self._preprocess,
             )
+        return output
+
+    def _initialize_modelzoo(self, data):
+        if self._block_shape is None:
+            with bioimageio.core.create_prediction_pipeline(self._model) as pp:
+                dims = tuple("bcyx") if data.ndim == 2 else tuple("bczyx")
+                input_ = xarray.DataArray(data[None, None], dims=dims)
+                output = bioimageio.core.prediction.predict_with_padding(pp, input_, padding=True)[0]
+                output = output.squeeze().values
+        else:
+            raise NotImplementedError
+        return output
+
+
+class BoundaryBasedInstanceSegmentation(_InstanceSegmentationBase):
+    def __init__(self, model, preprocess=None, block_shape=None, halo=None):
+        super().__init__(
+            model=model, preprocess=preprocess, block_shape=block_shape, halo=halo
+        )
+
+        self._foreground = None
+        self._boundaries = None
+
+    def initialize(self, data):
+        if isinstance(self._model, nn.Module):
+            output = self._initialize_torch(data)
+        else:
+            output = self._initialize_modelzoo(data)
+
+        assert output.shape[0] == 2
 
         self._foreground = output[0]
         self._boundaries = output[1]
@@ -77,38 +114,26 @@ class BoundaryBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
         return segmentation
 
 
-class DistanceBasedInstanceSegmentation(InstanceSegmentationWithDecoder):
+class DistanceBasedInstanceSegmentation(_InstanceSegmentationBase):
     """Over-write micro_sam functionality so that it works for distance based
     segmentation with a U-net.
     """
     def __init__(self, model, preprocess=None, block_shape=None, halo=None):
-        self._model = model
-        self._preprocess = standardize if preprocess is None else preprocess
-
-        assert (block_shape is None) == (halo is None)
-        self._block_shape = block_shape
-        self._halo = halo
+        super().__init__(
+            model=model, preprocess=preprocess, block_shape=block_shape, halo=halo
+        )
 
         self._foreground = None
         self._center_distances = None
         self._boundary_distances = None
 
-        self._is_initialized = False
-
     def initialize(self, data):
-        device = next(iter(self._model.parameters())).device
-
-        if self._block_shape is None:
-            scale_factors = self._model.init_kwargs["scale_factors"]
-            min_divisible = [int(np.prod([sf[i] for sf in scale_factors])) for i in range(3)]
-            input_ = self._preprocess(data)
-            output = predict_with_padding(self._model, input_, min_divisible, device)
+        if isinstance(self._model, nn.Module):
+            output = self._initialize_torch(data)
         else:
-            output = predict_with_halo(
-                data, self._model, [device], self._block_shape, self._halo,
-                preprocess=self._preprocess,
-            )
+            output = self._initialize_modelzoo(data)
 
+        assert output.shape[0] == 3
         self._foreground = output[0]
         self._center_distances = output[1]
         self._boundary_distances = output[2]
