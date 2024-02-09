@@ -1,6 +1,6 @@
 import os
 from glob import glob
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 import torch
 
@@ -69,6 +69,7 @@ def get_autopet_dataset(
     Returns:
         dataset: The segmentation dataset for the respective modalities.
     """
+    assert isinstance(modality, Union[str, None])
     _assort_autopet_dataset(path, download)
     raw_paths, label_paths = _get_paths(path, modality)
     dataset = torch_em.default_segmentation_dataset(

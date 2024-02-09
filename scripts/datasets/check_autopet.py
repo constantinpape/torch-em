@@ -13,7 +13,7 @@ def check_autopet():
         batch_size=2,
         ndim=2,
         download=True,
-        modality="PET",
+        modality=None,
         sampler=MinInstanceSampler()
     )
     print(f"Length of the loader: {len(loader)}")
