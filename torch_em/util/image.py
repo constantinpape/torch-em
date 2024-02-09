@@ -49,11 +49,14 @@ class MultiDatasetWrapper:
         self.shape = (len(self.file_datasets),) + reference_shape
 
     def __getitem__(self, index):
+        channel_index, spatial_index = index[:1], index[1:]
         data = []
         for ds in self.file_datasets:
-            ds_data = ds[index]
+            ds_data = ds[spatial_index]
             data.append(ds_data)
-        return np.stack(data)
+        data = np.stack(data)
+        data = data[channel_index]
+        return data
 
 
 def load_data(path, key, mode="r"):
