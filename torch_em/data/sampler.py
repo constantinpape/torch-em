@@ -28,6 +28,27 @@ class MinForegroundSampler:
             return np.random.rand() > self.p_reject
 
 
+class MinSemanticLabelForegroundSampler:
+    def __init__(self, semantic_ids, min_fraction, min_fraction_per_id=False, p_reject=1.0):
+        self.semantic_ids = semantic_ids
+        self.min_fraction = min_fraction
+        self.p_reject = p_reject
+        self.min_fraction_per_id = min_fraction_per_id
+
+    def __call__(self, x, y):
+        size = float(y.size)
+
+        if self.min_fraction_per_id:
+            foreground_fraction = [np.sum(np.isin(y, idx)) / size for idx in self.semantic_ids]
+        else:
+            foreground_fraction = [np.sum(np.isin(y, self.semantic_ids))]
+
+        if all(foreground_fraction) > self.min_fraction:
+            return True
+        else:
+            return np.random.rand() > self.p_reject
+
+
 class MinIntensitySampler:
     def __init__(self, min_intensity, function="median", p_reject=1.0):
         self.min_intensity = min_intensity

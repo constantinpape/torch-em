@@ -3,6 +3,7 @@ from .bcss import get_bcss_loader, get_bcss_dataset
 from .cem import get_mitolab_loader
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .cremi import get_cremi_loader, get_cremi_dataset
+from .ctc import get_ctc_segmentation_loader, get_ctc_segmentation_dataset
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
 from .dsb import get_dsb_loader, get_dsb_dataset
 from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
