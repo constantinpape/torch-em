@@ -40,11 +40,14 @@ def _require_ctc_dataset(path, dataset_name, download):
 
     data_path = os.path.join(path, dataset_name)
 
-    if not os.path.exists(data_path):
-        url, checksum = CTC_URLS[dataset_name], CTC_CHECKSUMS[dataset_name]
-        zip_path = os.path.join(path, f"{dataset_name}.zip")
-        util.download_source(zip_path, url, download, checksum=checksum)
-        util.unzip(zip_path, path, remove=True)
+    if os.path.exists(data_path):
+        return data_path
+
+    os.makedirs(data_path)
+    url, checksum = CTC_URLS[dataset_name], CTC_CHECKSUMS[dataset_name]
+    zip_path = os.path.join(path, f"{dataset_name}.zip")
+    util.download_source(zip_path, url, download, checksum=checksum)
+    util.unzip(zip_path, path, remove=True)
 
     return data_path
 
@@ -101,6 +104,8 @@ def get_ctc_segmentation_dataset(
         splits = glob(os.path.join(data_path, "*_GT"))
         splits = [os.path.basename(split) for split in splits]
         splits = [split.rstrip("_GT") for split in splits]
+    else:
+        splits = split
 
     image_path, label_path = _require_gt_images(data_path, splits)
 
