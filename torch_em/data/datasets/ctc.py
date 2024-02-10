@@ -111,12 +111,9 @@ def get_ctc_segmentation_dataset(
     cell tracking challenge. If you use this data in your research please cite
     https://doi.org/10.1038/nmeth.4473
     """
-    assert split in ["train", "test"]
+    assert split in ["train"]
 
     data_path = _require_ctc_dataset(path, dataset_name, download, split)
-
-    if split == "test":
-        return
 
     if vol_id is None:
         vol_ids = glob(os.path.join(data_path, "*_GT"))
@@ -152,9 +149,6 @@ def get_ctc_segmentation_loader(
     dataset = get_ctc_segmentation_dataset(
         path, dataset_name, patch_shape, split=split, vol_id=vol_id, download=download, **ds_kwargs,
     )
-
-    if split == "test":
-        return
 
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
     return loader

@@ -22,9 +22,8 @@ def check_ctc_segmentation(split):
             split=split,
             sampler=MinInstanceSampler()
         )
-        if split == "train":
-            check_loader(loader, 8, plt=True)
+        check_loader(loader, 8, plt=True)
 
 
 if __name__ == "__main__":
-    check_ctc_segmentation("test")
+    check_ctc_segmentation("train")
