@@ -59,25 +59,25 @@ def _require_ctc_dataset(path, dataset_name, download, split):
     url, checksum = get_ctc_url_and_checksum(dataset_name, split)
     zip_path = os.path.join(path, f"{dataset_name}.zip")
     util.download_source(zip_path, url, download, checksum=checksum)
-    util.unzip(zip_path, path, remove=True)
+    util.unzip(zip_path, os.path.join(path, split), remove=True)
 
     return data_path
 
 
-def _require_gt_images(data_path, vol_ids, split):
+def _require_gt_images(data_path, vol_ids):
     image_paths, label_paths = [], []
 
     if isinstance(vol_ids, str):
         vol_ids = [vol_ids]
 
     for vol_id in vol_ids:
-        image_folder = os.path.join(data_path, split, vol_id)
+        image_folder = os.path.join(data_path, vol_id)
         assert os.path.join(image_folder), f"Cannot find volume id, {vol_id} in {data_path}."
 
-        label_folder = os.path.join(data_path, split, f"{vol_id}_GT", "SEG")
+        label_folder = os.path.join(data_path, f"{vol_id}_GT", "SEG")
 
         # copy over the images corresponding to the labeled frames
-        label_image_folder = os.path.join(data_path, split, f"{vol_id}_GT", "IM")
+        label_image_folder = os.path.join(data_path, f"{vol_id}_GT", "IM")
         os.makedirs(label_image_folder, exist_ok=True)
 
         this_label_paths = glob(os.path.join(label_folder, "*.tif"))
@@ -117,13 +117,12 @@ def get_ctc_segmentation_dataset(
 
     if vol_id is None:
         vol_ids = glob(os.path.join(data_path, "*_GT"))
-        vol_ids = [os.path.basename(split) for vol_id in vol_ids]
-        vol_ids = [split.rstrip("_GT") for vol_id in vol_ids]
+        vol_ids = [os.path.basename(vol_id) for vol_id in vol_ids]
+        vol_ids = [vol_id.rstrip("_GT") for vol_id in vol_ids]
     else:
         vol_ids = vol_id
 
-    image_path, label_path = _require_gt_images(data_path, vol_ids, split)
-    breakpoint()
+    image_path, label_path = _require_gt_images(data_path, vol_ids)
 
     kwargs = util.update_kwargs(kwargs, "ndim", 2)
     return torch_em.default_segmentation_dataset(
