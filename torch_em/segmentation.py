@@ -37,12 +37,18 @@ def samples_to_datasets(n_samples, raw_paths, raw_key, split="uniform"):
 
 
 def check_paths(raw_paths, label_paths):
-    if type(raw_paths) != type(label_paths):
+    if not isinstance(raw_paths, type(label_paths)):
         raise ValueError(f"Expect raw and label paths of same type, got {type(raw_paths)}, {type(label_paths)}")
 
     def _check_path(path):
-        if not os.path.exists(path):
-            raise ValueError(f"Could not find path {path}")
+        if isinstance(path, str):
+            if not os.path.exists(path):
+                raise ValueError(f"Could not find path {path}")
+        else:
+            # check for single path or multiple paths (for same volume - supports multi-modal inputs)
+            for per_path in path:
+                if not os.path.exists(per_path):
+                    raise ValueError(f"Could not find path {per_path}")
 
     if isinstance(raw_paths, str):
         _check_path(raw_paths)
