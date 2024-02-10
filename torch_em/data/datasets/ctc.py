@@ -20,16 +20,16 @@ CTC_CHECKSUMS = {
         "PhC-C2DL-PSC": "9d54bb8febc8798934a21bf92e05d92f5e8557c87e28834b2832591cdda78422",
     },
     "test": {
-        "BF-C2DL-HSC": "",
-        "BF-C2DL-MuSC": "",
-        "DIC-C2DH-HeLa": "",
-        "Fluo-C2DL-Huh7": "",
-        "Fluo-C2DL-MSC": "",
-        "Fluo-N2DH-GOWT1": "",
-        "Fluo-N2DH-SIM+": "",
-        "Fluo-N2DL-HeLa": "",
-        "PhC-C2DH-U373": "",
-        "PhC-C2DL-PSC": "",
+        "BF-C2DL-HSC": "fd1c05ec625fd0526c8369d1139babe137e885457eee98c10d957da578d0d5bc",
+        "BF-C2DL-MuSC": "c5cae259e6090e82a2596967fb54c8a768717c1772398f8546ad1c8df0820450",
+        "DIC-C2DH-HeLa": "5e5d5f2aa90aef99d750cf03f5c12d799d50b892f98c86950e07a2c5955ac01f",
+        "Fluo-C2DL-Huh7": "cc7359f8fb6b0c43995365e83ce0116d32f477ac644b2ca02b98bc253e2bcbbe",
+        "Fluo-C2DL-MSC": "c90b13e603dde52f17801d4f0cadde04ed7f21cc05296b1f0957d92dbfc8ffa6",
+        "Fluo-N2DH-GOWT1": "c6893ec2d63459de49d4dc21009b04275573403c62cc02e6ee8d0cb1a5068add",
+        "Fluo-N2DH-SIM+": "c4f257add739b284d02176057814de345dee2ac1a7438e360ccd2df73618db68",
+        "Fluo-N2DL-HeLa": "45cf3daf05e8495aa2ce0febacca4cf0928fab808c0b14ed2eb7289a819e6bb8",
+        "PhC-C2DH-U373": "7aa3162e4363a416b259149adc13c9b09cb8aecfe8165eb1428dd534b66bec8a",
+        "PhC-C2DL-PSC": "8c98ac6203e7490157ceb6aa1131d60a3863001b61fb75e784bc49d47ee264d5",
     }
 }
 
@@ -115,6 +115,9 @@ def get_ctc_segmentation_dataset(
 
     data_path = _require_ctc_dataset(path, dataset_name, download, split)
 
+    if split == "test":
+        return
+
     if vol_id is None:
         vol_ids = glob(os.path.join(data_path, "*_GT"))
         vol_ids = [os.path.basename(vol_id) for vol_id in vol_ids]
@@ -149,5 +152,9 @@ def get_ctc_segmentation_loader(
     dataset = get_ctc_segmentation_dataset(
         path, dataset_name, patch_shape, split=split, vol_id=vol_id, download=download, **ds_kwargs,
     )
+
+    if split == "test":
+        return
+
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
     return loader

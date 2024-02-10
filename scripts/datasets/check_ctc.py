@@ -9,9 +9,9 @@ ROOT = "/home/anwai/data/ctc/"
 # - Fluo-N2DH-GOWT1
 # - Fluo-N2DL-HeLa
 # Maybe depends on the split?!
-def check_ctc_segmentation():
+def check_ctc_segmentation(split):
     ctc_dataset_names = list(CTC_CHECKSUMS["train"].keys())
-    for name in [ctc_dataset_names]:
+    for name in ctc_dataset_names:
         print("Checking dataset", name)
         loader = get_ctc_segmentation_loader(
             path=ROOT,
@@ -19,11 +19,12 @@ def check_ctc_segmentation():
             patch_shape=(1, 512, 512),
             batch_size=1,
             download=True,
-            split="train",
+            split=split,
             sampler=MinInstanceSampler()
         )
-        check_loader(loader, 8)
+        if split == "train":
+            check_loader(loader, 8, plt=True)
 
 
 if __name__ == "__main__":
-    check_ctc_segmentation()
+    check_ctc_segmentation("test")
