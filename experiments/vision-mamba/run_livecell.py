@@ -105,12 +105,18 @@ def get_save_root(args):
     else:
         raise ValueError
 
+    model_name = args.model_type
+    if args.use_conv_transpose:
+        model_name += "-conv-transpose"
+    else:
+        model_name += "bilinear"
+
     # saving the model checkpoints
     save_root = os.path.join(
         args.save_root,
         "pretrained" if args.pretrained else "scratch",
         experiment_type,
-        args.model_type
+        model_name
     )
 
     return save_root
@@ -143,15 +149,9 @@ def run_livecell_training(args):
     # loss function
     loss = get_loss_function(args)
 
-    name = "livecell-vimunet"
-    if args.use_conv_transpose:
-        name += "-conv-transpose"
-    else:
-        name += "-bilinear"
-
     # trainer for the segmentation task
     trainer = torch_em.default_segmentation_trainer(
-        name=name,
+        name="livecell-vimunet",
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -171,6 +171,7 @@ def run_livecell_inference(args):
     output_channels = get_output_channels(args)
 
     save_root = get_save_root(args)
+
     checkpoint = os.path.join(save_root, "checkpoints", "livecell-vimunet", "best.pt")
 
     # the vision-mamba + decoder (UNet-based) model
@@ -188,6 +189,7 @@ def run_livecell_inference(args):
     res_path = os.path.join(save_root, "results.csv")
     if os.path.exists(res_path):
         print(pd.read_csv(res_path))
+        print(f"The result is saved at {res_path}")
         return
 
     msa_list, sa50_list = [], []
