@@ -147,6 +147,19 @@ MODELS = {
 }
 
 
+def get_unet_model(output_channels, use_conv_transpose):
+    from torch_em.model.unet import UNet2d, Upsampler2d
+    from torch_em.model.unetr import SingleDeconv2DBlock
+    model = UNet2d(
+        in_channels=1,
+        out_channels=output_channels,
+        initial_features=64,
+        final_activation="Sigmoid",
+        sampler_impl=SingleDeconv2DBlock if use_conv_transpose else Upsampler2d
+    )
+    return model
+
+
 def get_unetr_model(
     model_name: str,
     source_choice: str,
@@ -405,6 +418,12 @@ def get_parser():
     parser.add_argument(
         "--experiment_name", type=str, required=True, help="Choose from boundaries / affinities / distances"
     )
+
+    parser.add_argument(
+        "--use_unet", action='store_true', help="Use UNet2d for training on LiveCELL"
+    )
+
+    parser.add_argument("--patch_shape", type=int, nargs="+", default=(520, 704))
 
     parser.add_argument(
         "--source_choice", type=str, default="torch-em",
