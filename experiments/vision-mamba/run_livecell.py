@@ -109,7 +109,7 @@ def get_save_root(args):
     if args.use_conv_transpose:
         model_name += "-conv-transpose"
     else:
-        model_name += "bilinear"
+        model_name += "-bilinear"
 
     # saving the model checkpoints
     save_root = os.path.join(

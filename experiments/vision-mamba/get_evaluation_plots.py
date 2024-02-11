@@ -37,7 +37,6 @@ def get_plots(root_dir):
             container.bar_label(j, fmt='%.3f')
 
         ax[i].set(xlabel="Experiments", ylabel="Segmentation Quality")
-        ax[i].title.set_text(_method)
         ax[i].grid(axis="y")
 
     all_lines, all_labels = ax[-1].get_legend_handles_labels()
@@ -47,7 +46,7 @@ def get_plots(root_dir):
     fig.legend(all_lines, all_labels)
     plt.show()
     plt.tight_layout()
-    plt.subplots_adjust(top=0.90, right=0.90)
+    plt.subplots_adjust(top=0.90, right=0.89)
     fig.suptitle("ViMUNet - LiveCELL", fontsize=20)
     plt.savefig("plot.png")
 
