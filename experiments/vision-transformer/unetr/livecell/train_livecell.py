@@ -50,7 +50,7 @@ def main(args):
 
         # get the desired livecell loaders for training
         train_loader, val_loader = common.get_my_livecell_loaders(
-            args.input, patch_shape, args.cell_type, experiment_name=args.experiment_name,
+            args.input, patch_shape, experiment_name=args.experiment_name,
             # the logic written for `input_norm` is complicated, but the idea is simple:
             # - use default norm for the inputs when we "DONOT" use SAM initialization
             # - use identity trafo for the inputs when we use SAM initialization
@@ -65,12 +65,8 @@ def main(args):
     if args.predict:
         print(f"2d UNETR inference (with {args.experiment_name}) on LiveCELL...")
         common.do_unetr_inference(
-            input_path=args.input, device=device, model=model, save_root=save_root,
-            root_save_dir=root_save_dir, experiment_name=args.experiment_name,
-            # the logic written for `input_norm` is complicated, but the idea is simple:
-            # - should standardize the inputs when we "DONOT" use SAM initialization
-            # - should not standardize the inputs when we use SAM initialization
-            input_norm=not args.do_sam_ini
+            input_path=args.input, device=device, model=model, save_root=save_root, root_save_dir=root_save_dir,
+            experiment_name=args.experiment_name, input_norm=not args.do_sam_ini
         )
         print("Predictions are saved in", root_save_dir)
 
