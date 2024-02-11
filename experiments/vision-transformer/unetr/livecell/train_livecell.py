@@ -10,9 +10,8 @@ def main(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # overwrite to use complex device setups
     patch_shape = tuple(args.patch_shape)  # patch size used for training on livecell
-    print(patch_shape)
 
-    _name = args.model_name
+    _name = args.model_name if not args.use_unet else "unet"
     if args.use_bilinear:
         _name += "-bilinear"
     else:
@@ -45,8 +44,6 @@ def main(args):
         )
         _store_model_name = "unetr"
     model.to(device)
-
-    print(model.decoder.samplers)
 
     # determining where to save the checkpoints and tensorboard logs
     save_root = os.path.join(args.save_root, dir_structure) if args.save_root is not None else args.save_root
