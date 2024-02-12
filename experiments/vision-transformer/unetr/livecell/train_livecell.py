@@ -71,8 +71,9 @@ def main(args):
     if args.predict:
         print(f"2d {_store_model_name.upper()} inference (with {args.experiment_name}) on LiveCELL...")
         common.do_unetr_inference(
-            input_path=args.input, device=device, model=model, save_root=save_root, root_save_dir=root_save_dir,
-            experiment_name=args.experiment_name, input_norm=not args.do_sam_ini
+            input_path=args.input, device=device, model=model, save_root=save_root,
+            root_save_dir=root_save_dir, experiment_name=args.experiment_name,
+            input_norm=not args.do_sam_ini, name_extension=f"livecell-{_store_model_name}"
         )
         print("Predictions are saved in", root_save_dir)
 

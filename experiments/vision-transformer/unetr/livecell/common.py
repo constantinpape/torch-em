@@ -214,10 +214,11 @@ def do_unetr_inference(
     root_save_dir: str,
     save_root: str,
     experiment_name: str,
+    name_extension: str,
     input_norm: bool = True,
 ):
     test_img_dir = os.path.join(input_path, "images", "livecell_test_images", "*")
-    model_ckpt = os.path.join(save_root, "checkpoints", "livecell-all", "best.pt")
+    model_ckpt = os.path.join(save_root, "checkpoints", name_extension, "best.pt")
     assert os.path.exists(model_ckpt), model_ckpt
 
     model.load_state_dict(torch.load(model_ckpt, map_location=torch.device('cpu'))["model_state"])
