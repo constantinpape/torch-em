@@ -236,6 +236,11 @@ def do_unetr_inference(
 def predict_for_unetr(
     img_path, model, root_save_dir, device, experiment_name, input_norm=True,
 ):
+    fname = Path(img_path).stem
+    save_path = os.path.join(root_save_dir, f"{fname}.h5")
+    if os.path.exists(save_path):
+        return
+
     input_ = imageio.imread(img_path)
     if input_norm:
         input_ = standardize(input_)
@@ -264,8 +269,6 @@ def predict_for_unetr(
         ws1 = segmentation.watershed_from_components(bd, fg)
         ws2 = segmentation.watershed_from_maxima(bd, fg, min_distance=1)
 
-    fname = Path(img_path).stem
-    save_path = os.path.join(root_save_dir, f"{fname}.h5")
     with h5py.File(save_path, "a") as f:
         ds = f.require_dataset("foreground", shape=fg.shape, compression="gzip", dtype=fg.dtype)
         ds[:] = fg
@@ -309,6 +312,12 @@ def do_unetr_evaluation(
 
     gt_dir = os.path.join(input_path, "annotations", "livecell_test_images", "*", "*")
 
+    res_path = os.path.join(csv_save_dir, "livecell.csv")
+    if os.path.exists(res_path):
+        print(pd.read_csv(res_path))
+        print(f"Results are already saved at {res_path}")
+        return
+
     msa_list, sa50_list = [], []
     fg_list, bd_list, msa1_list, sa501_list, msa2_list, sa502_list = [], [], [], [], [], []
     for gt_path in tqdm(glob(gt_dir)):
@@ -346,7 +355,9 @@ def do_unetr_evaluation(
         }
 
     df = pd.DataFrame.from_dict([res_dict])
-    df.to_csv(os.path.join(csv_save_dir, "livecell.csv"))
+    df.to_csv(res_path)
+    print(df)
+    print(f"Results are saved at {res_path}")
 
 
 def evaluate_for_unetr(gt_path, _save_dir, experiment_name):
