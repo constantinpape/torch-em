@@ -415,6 +415,7 @@ def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", action='store_true', help="Enables UNETR training on LiveCELL dataset")
     parser.add_argument("--predict", action='store_true', help="Enables UNETR prediction on LiveCELL dataset")
+    parser.add_argument("--evaluate", action='store_true', help="Enables UNETR prediction on LiveCELL dataset")
     parser.add_argument(
         "--experiment_name", type=str, required=True, help="Choose from boundaries / affinities / distances"
     )
