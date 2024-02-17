@@ -48,7 +48,7 @@ def get_ctc_url_and_checksum(dataset_name, split):
 def _require_ctc_dataset(path, dataset_name, download, split):
     dataset_names = list(CTC_CHECKSUMS["train"].keys())
     if dataset_name not in dataset_names:
-        raise ValueError(f"Inalid dataset: {dataset_name}, choose one of {dataset_names}.")
+        raise ValueError(f"Invalid dataset: {dataset_name}, choose one of {dataset_names}.")
 
     data_path = os.path.join(path, split, dataset_name)
 
