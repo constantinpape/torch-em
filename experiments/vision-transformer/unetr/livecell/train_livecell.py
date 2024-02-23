@@ -12,10 +12,6 @@ def main(args):
     patch_shape = tuple(args.patch_shape)  # patch size used for training on livecell
 
     _name = args.model_name if not args.use_unet else "unet"
-    if args.use_bilinear:
-        _name += "-bilinear"
-    else:
-        _name += "-conv-transpose"
 
     # directory folder to save different parts of the scheme
     dir_structure = os.path.join(
@@ -27,10 +23,7 @@ def main(args):
     loss = common.get_loss_function(args.experiment_name)
 
     if args.use_unet:
-        model = common.get_unet_model(
-            output_channels=common.get_output_channels(args.experiment_name),
-            use_conv_transpose=not args.use_bilinear
-        )
+        model = common.get_unet_model(output_channels=common.get_output_channels(args.experiment_name))
         _store_model_name = "unet"
     else:
         # get the unetr model for the training and inference on livecell dataset
@@ -39,8 +32,7 @@ def main(args):
             source_choice=args.source_choice,
             patch_shape=patch_shape,
             sam_initialization=args.do_sam_ini,
-            output_channels=common.get_output_channels(args.experiment_name),
-            use_conv_transpose=not args.use_bilinear
+            output_channels=common.get_output_channels(args.experiment_name)
         )
         _store_model_name = "unetr"
     model.to(device)
