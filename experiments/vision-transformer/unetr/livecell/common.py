@@ -147,15 +147,15 @@ MODELS = {
 }
 
 
-def get_unet_model(output_channels, use_conv_transpose):
-    from torch_em.model.unet import UNet2d, Upsampler2d
+def get_unet_model(output_channels):
+    from torch_em.model.unet import UNet2d
     from torch_em.model.unetr import SingleDeconv2DBlock
     model = UNet2d(
         in_channels=1,
         out_channels=output_channels,
         initial_features=64,
         final_activation="Sigmoid",
-        sampler_impl=SingleDeconv2DBlock if use_conv_transpose else Upsampler2d
+        sampler_impl=SingleDeconv2DBlock
     )
     return model
 
@@ -166,7 +166,6 @@ def get_unetr_model(
     patch_shape: Tuple[int, int],
     sam_initialization: bool,
     output_channels: int,
-    use_conv_transpose: bool,
     backbone: str = "sam",
 ):
     """Returns the expected UNETR model
@@ -181,7 +180,7 @@ def get_unetr_model(
             use_sam_stats=sam_initialization,
             final_activation="Sigmoid",
             encoder_checkpoint=MODELS[model_name] if sam_initialization else None,
-            use_conv_transpose=use_conv_transpose
+            use_conv_transpose=True
         )
 
     elif source_choice == "monai":
@@ -468,9 +467,6 @@ def get_parser():
 
     # this argument takes care of which ViT encoder to use for the UNETR (as ViTs from SAM and MAE are different)
     parser.add_argument("--pretrained_choice", type=str, default="sam")
-    parser.add_argument(
-        "--use_bilinear", action="store_true", help="Use bilinear interpolation for upsampling."
-    )
     return parser
 
 
