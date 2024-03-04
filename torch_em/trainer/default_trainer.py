@@ -458,7 +458,7 @@ class DefaultTrainer:
         best_metric = np.inf
         return best_metric
 
-    def save_checkpoint(self, name, best_metric, train_time=0.0, **extra_save_dict):
+    def save_checkpoint(self, name, current_metric, best_metric, train_time=0.0, **extra_save_dict):
         save_path = os.path.join(self.checkpoint_folder, f"{name}.pt")
         extra_init_dict = extra_save_dict.pop("init", {})
         save_dict = {
@@ -466,6 +466,7 @@ class DefaultTrainer:
             "epoch": self._epoch,
             "best_epoch": self._best_epoch,
             "best_metric": best_metric,
+            "current_metric": current_metric,
             "model_state": self.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
             "init": self.init_data | extra_init_dict,
@@ -494,6 +495,7 @@ class DefaultTrainer:
         self._epoch = save_dict["epoch"]
         self._best_epoch = save_dict["best_epoch"]
         self.best_metric = save_dict["best_metric"]
+        self.current_metric = save_dict["current_metric"]
         self.train_time = save_dict.get("train_time", 0.0)
 
         model_state = save_dict["model_state"]
@@ -573,14 +575,16 @@ class DefaultTrainer:
             if current_metric < best_metric:
                 best_metric = current_metric
                 self._best_epoch = self._epoch
-                self.save_checkpoint("best", best_metric, train_time=total_train_time)
+                self.save_checkpoint("best", current_metric, best_metric, train_time=total_train_time)
 
             # save this checkpoint as the latest checkpoint
-            self.save_checkpoint("latest", best_metric, train_time=total_train_time)
+            self.save_checkpoint("latest", current_metric, best_metric, train_time=total_train_time)
 
             # if we save after every k-th epoch then check if we need to save now
             if save_every_kth_epoch is not None and (self._epoch + 1) % save_every_kth_epoch == 0:
-                self.save_checkpoint(f"epoch-{self._epoch + 1}", best_metric, train_time=total_train_time)
+                self.save_checkpoint(
+                    f"epoch-{self._epoch + 1}", current_metric, best_metric, train_time=total_train_time
+                )
 
             # if early stopping has been specified then check if the stopping condition is met
             if self.early_stopping is not None:

@@ -171,7 +171,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
     # functionality for saving checkpoints and initialization
     #
 
-    def save_checkpoint(self, name, best_metric, **extra_save_dict):
+    def save_checkpoint(self, name, current_metric, best_metric, **extra_save_dict):
         train_loader_kwargs = get_constructor_arguments(self.train_loader)
         val_loader_kwargs = get_constructor_arguments(self.val_loader)
         extra_state = {
@@ -188,7 +188,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             },
         }
         extra_state.update(**extra_save_dict)
-        super().save_checkpoint(name, best_metric, **extra_state)
+        super().save_checkpoint(name, current_metric, best_metric, **extra_state)
 
     def load_checkpoint(self, checkpoint="best"):
         save_dict = super().load_checkpoint(checkpoint)
