@@ -63,7 +63,6 @@ def _download_msd_data(path, task_name, download):
         )
 
 
-
 def get_msd_dataset(
     path: str,
     patch_shape: Tuple[int, ...],
@@ -97,9 +96,6 @@ def get_msd_dataset(
 
     for task_name in task_names:
         _download_msd_data(path, task_name, download)
-    
-    breakpoint()
-    
 
 
 def get_msd_loader(
