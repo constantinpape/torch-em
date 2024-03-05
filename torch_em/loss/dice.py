@@ -89,6 +89,7 @@ class DiceLossWithLogits(nn.Module):
         super().__init__()
         self.channelwise = channelwise
         self.eps = eps
+        self.reduce_channel = reduce_channel
 
         # all torch_em classes should store init kwargs to easily recreate the init call
         self.init_kwargs = {"channelwise": channelwise, "eps": self.eps, "reduce_channel": self.reduce_channel}
