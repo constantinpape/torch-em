@@ -1,7 +1,7 @@
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_msd_loader
 
-MSD_ROOT = "/home/anwai/data/msd/"
+MSD_ROOT = "/media/anwai/ANWAI/data/msd"
 
 
 def check_msd():

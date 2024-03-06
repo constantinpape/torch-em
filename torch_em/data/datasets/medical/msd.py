@@ -1,5 +1,7 @@
 import os
-from typing import Tuple, List, Optional
+from glob import glob
+from pathlib import Path
+from typing import Tuple, List, Optional, Union
 
 import torch_em
 
@@ -63,12 +65,11 @@ def _download_msd_data(path, task_name, download):
         )
 
 
-
 def get_msd_dataset(
     path: str,
     patch_shape: Tuple[int, ...],
     ndim: int,
-    task_names: Optional[List[str]] = None,
+    task_names: Optional[Union[str, List[str]]] = None,
     download: bool = False,
     **kwargs
 ):
@@ -95,11 +96,11 @@ def get_msd_dataset(
         if isinstance(task_names, str):
             task_names = [task_names]
 
+    image_paths, label_paths = [], []
     for task_name in task_names:
         _download_msd_data(path, task_name, download)
-    
-    breakpoint()
-    
+        image_paths.append(glob(os.path.join(path, task_name, Path(FILENAMES[task_name]).stem, "imagesTr", "*")))
+        label_paths.append(glob(os.path.join(path, task_name, Path(FILENAMES[task_name]).stem, "labelsTr", "*")))
 
 
 def get_msd_loader(
