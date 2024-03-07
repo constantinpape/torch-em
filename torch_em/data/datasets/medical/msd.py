@@ -6,6 +6,7 @@ from typing import Tuple, List, Optional, Union
 import torch_em
 
 from .. import util
+from ....data import ConcatDataset
 
 
 URL = {
@@ -80,6 +81,18 @@ def get_msd_dataset(
     Link: http://medicaldecathlon.com/
     Please cite it if you use this dataset for a publication.
 
+    Note: There is a possibility that the dataset cannot be downloaded from the drive links
+    with the following errors (most issues are linked to `gdown`). Please download the dataset
+    manually from the drive link to the MSD dataset (see above):
+        - `Permission Denied`
+        - `Cannot retrieve the public link of the file. You may need to change the permission
+        to 'Anyone with the link', or have had many accesses.`
+        - `Too many users have viewed or downloaded this file recently. Please try accessing
+        the file again later. If the file you are trying to access is particularly large or is
+        shared with many people, it may take up to 24 hours to be able to view or download the
+        file. If you still can't access a file after 24 hours, contact your domain administrator.`
+
+
     Arguments:
         path: The path to prepare the dataset.
         patch_shape: The patch shape (for 2d or 3d patches)
@@ -96,11 +109,17 @@ def get_msd_dataset(
         if isinstance(task_names, str):
             task_names = [task_names]
 
-    image_paths, label_paths = [], []
+    _datasets = []
     for task_name in task_names:
         _download_msd_data(path, task_name, download)
-        image_paths.append(glob(os.path.join(path, task_name, Path(FILENAMES[task_name]).stem, "imagesTr", "*")))
-        label_paths.append(glob(os.path.join(path, task_name, Path(FILENAMES[task_name]).stem, "labelsTr", "*")))
+        image_paths = glob(os.path.join(path, task_name, Path(FILENAMES[task_name]).stem, "imagesTr", "*.nii.gz"))
+        label_paths = glob(os.path.join(path, task_name, Path(FILENAMES[task_name]).stem, "labelsTr", "*.nii.gz"))
+        this_dataset = torch_em.default_segmentation_dataset(
+            image_paths, "data", label_paths, "data", patch_shape, ndim=ndim, **kwargs
+        )
+        _datasets.append(this_dataset)
+
+    return ConcatDataset(*_datasets)
 
 
 def get_msd_loader(
