@@ -42,24 +42,6 @@ def _download_asem_dataset(path, volume_id, download):
         b = quilt3.Bucket("s3://asem-project")
         b.fetch(key=f"datasets/{VOLUMES[volume_id]}", path=volume_path)
 
-    # import napari
-    # import z5py
-
-    # with z5py.File(volume_path, "r", use_zarr_format=True) as f:
-    #     raw = f["volumes/raw_equalized_0.02"][:]
-    #     er_labels = f["volumes/labels/er"][:]
-    #     mito_labels = f["volumes/labels/mito"][:]
-    #     golgi_labels = f["volumes/labels/golgi"][:]
-
-    #     v = napari.Viewer()
-    #     v.add_image(raw)
-    #     v.add_labels(er_labels, visible=False)
-    #     v.add_labels(mito_labels, visible=False)
-    #     v.add_labels(golgi_labels, visible=False)
-    #     napari.run()
-
-    #     breakpoint()
-
 
 def _check_input_args(input_arg, default_values):
     if input_arg is None:
