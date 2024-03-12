@@ -13,18 +13,18 @@ except ModuleNotFoundError:
 
 
 VOLUMES = {
-    "cell_3": "cell_3/cell_3_tiff/",
-    "cell_1": "cell_1/cell_1_tiff/",
-    "cell_2": "cell_2/cell_2_tiff/",
-    "cell_6": "cell_6/cell_6_tiff/",
-    "cell_8": "cell_8/cell_8_tiff/",
-    "cell_12": "cell_12/cell_12_tiff/",
-    "cell_13": "cell_13/cell_13_tiff/",
-    "cell_13a": "cell_13a/cell_13a_tiff/",
-    "cell_14": "cell_14/cell_14_tiff/",
-    "cell_15": "cell_15/cell_15_tiff/",
-    "cell_16": "cell_16/cell_16_tiff/",
-    "cell_17": "cell_17/cell_17_tiff/",
+    "cell_1": "cell_1/cell_1.zarr",
+    "cell_2": "cell_2/cell_2.zarr",
+    # "cell_3": "cell_3/cell_3.zarr",
+    "cell_6": "cell_6/cell_6.zarr",
+    "cell_8": "cell_8/cell_8.zarr",
+    "cell_12": "cell_12/cell_12.zarr",
+    "cell_13": "cell_13/cell_13.zarr",
+    "cell_13a": "cell_13a/cell_13a.zarr",
+    "cell_14": "cell_14/cell_14.zarr",
+    "cell_15": "cell_15/cell_15.zarr",
+    "cell_16": "cell_16/cell_16.zarr",
+    "cell_17": "cell_17/cell_17.zarr",
 }
 
 ORGANELLES = ["mito", "golgi", "er"]
@@ -43,29 +43,18 @@ def _download_asem_dataset(path, volume_ids, download):
             if not download:
                 raise FileNotFoundError(f"{VOLUMES[volume_id]} is not found, and 'download' is set to False.")
 
-            print(f"The ASEM dataset for sample {volume_id} is not available yet and will be downloaded and created.")
+            print(f"The ASEM dataset for sample '{volume_id}' is not available yet and will be downloaded and created.")
             print("Note that this dataset is large, so this step can take several hours (depending on your internet).")
-            b.fetch(key=f"datasets/{VOLUMES[volume_id]}", path=volume_path)
+            b.fetch(
+                key=f"datasets/{VOLUMES[volume_id]}/volumes/labels/",
+                path=os.path.join(volume_path, "volumes", "labels/")
+            )
+            b.fetch(
+                key=f"datasets/{VOLUMES[volume_id]}/volumes/raw/",
+                path=os.path.join(volume_path, "volumes", "raw/")
+            )
 
         volume_paths.append(volume_path)
-
-        # import napari
-        # import z5py
-
-        # with z5py.File(volume_path, "r", use_zarr_format=True) as f:
-        #     raw = f["volumes/raw_equalized_0.02"][:]
-        #     er_labels = f["volumes/labels/er"][:]
-        #     mito_labels = f["volumes/labels/mito"][:]
-        #     golgi_labels = f["volumes/labels/golgi"][:]
-
-        #     v = napari.Viewer()
-        #     v.add_image(raw)
-        #     v.add_labels(er_labels, visible=False)
-        #     v.add_labels(mito_labels, visible=False)
-        #     v.add_labels(golgi_labels, visible=False)
-        #     napari.run()
-
-        #     breakpoint()
 
     return volume_paths
 
