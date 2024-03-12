@@ -10,16 +10,16 @@ from ....data import ConcatDataset
 
 
 URL = {
-    "braintumour": "https://drive.google.com/uc?export=download&id=1A2IU8Sgea1h3fYLpYtFb2v7NYdMjvEhU",
-    "heart": "https://drive.google.com/uc?export=download&id=1wEB2I6S6tQBVEPxir8cA5kFB8gTQadYY",
-    "liver": "https://drive.google.com/uc?export=download&id=1jyVGUGyxKBXV6_9ivuZapQS8eUJXCIpu",
-    "hippocampus": "https://drive.google.com/uc?export=download&id=1RzPB1_bqzQhlWvU-YGvZzhx2omcDh38C",
-    "prostate": "https://drive.google.com/uc?export=download&id=1Ff7c21UksxyT4JfETjaarmuKEjdqe1-a",
-    "lung": "https://drive.google.com/uc?export=download&id=1I1LR7XjyEZ-VBQ-Xruh31V7xExMjlVvi",
-    "pancreas": "https://drive.google.com/uc?export=download&id=1YZQFSonulXuagMIfbJkZeTFJ6qEUuUxL",
-    "hepaticvessel": "https://drive.google.com/uc?export=download&id=1qVrpV7vmhIsUxFiH189LmAn0ALbAPrgS",
-    "spleen": "https://drive.google.com/uc?export=download&id=1jzeNU1EKnK81PyTsrx0ujfNl-t0Jo8uE",
-    "colon": "https://drive.google.com/uc?export=download&id=1m7tMpE9qEcQGQjL_BdMD-Mvgmc44hG1Y",
+    "braintumour": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task01_BrainTumour.tar",
+    "heart": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task02_Heart.tar",
+    "liver": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task03_Liver.tar",
+    "hippocampus": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task04_Hippocampus.tar",
+    "prostate": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task05_Prostate.tar",
+    "lung": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task06_Lung.tar",
+    "pancreas": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task07_Pancreas.tar",
+    "hepaticvessel": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task08_HepaticVessel.tar",
+    "spleen": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task09_Spleen.tar",
+    "colon": "https://msd-for-monai.s3-us-west-2.amazonaws.com/Task10_Colon.tar",
 }
 
 CHECKSUM = {
