@@ -2,7 +2,7 @@ from torch_em.util.debug import check_loader
 from torch_em.data.datasets import get_asem_loader
 
 
-ASEM_ROOT = "/media/anwai/ANWAI/data/asem"
+ASEM_ROOT = "/scratch/usr/nimanwai/data/asem"
 
 
 def check_asem():

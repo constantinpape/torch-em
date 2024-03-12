@@ -43,6 +43,7 @@ def _download_asem_dataset(path, volume_ids, download):
             if not download:
                 raise FileNotFoundError(f"{VOLUMES[volume_id]} is not found, and 'download' is set to False.")
 
+<<<<<<< HEAD
             print(f"The ASEM dataset for sample {volume_id} is not available yet and will be downloaded and created.")
             print("Note that this dataset is large, so this step can take several hours (depending on your internet).")
             b.fetch(key=f"datasets/{VOLUMES[volume_id]}", path=volume_path)
@@ -69,6 +70,8 @@ def _download_asem_dataset(path, volume_ids, download):
 
     return volume_paths
 
+=======
+>>>>>>> 229e63f493fcbda37790f1ced3c34d22a10d157a
 
 def _check_input_args(input_arg, default_values):
     if input_arg is None:
