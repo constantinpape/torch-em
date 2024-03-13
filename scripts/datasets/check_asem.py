@@ -14,7 +14,6 @@ def check_asem():
         batch_size=2,
         ndim=2,
         download=True,
-        volume_ids="cell_1",
         organelles="er",
         sampler=MinForegroundSampler(min_fraction=0.01)
     )

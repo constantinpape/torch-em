@@ -153,7 +153,6 @@ def get_asem_dataset(
     # now let's get the chosen volumes have the chosen organelles
     all_datasets = []
     for organelle in organelles:
-        print(organelle)
         if volume_ids is None:
             volume_ids = ORGANELLES[organelle]
         else:
@@ -161,12 +160,12 @@ def get_asem_dataset(
                 volume_ids = [volume_ids]
 
             for volume_id in volume_ids:
-                assert volume_id in ORGANELLES[organelle], "The chosen volume and organelle combination does not match."
+                assert volume_id in ORGANELLES[organelle], \
+                    f"The chosen volume and organelle combination does not match: '{volume_id}' & '{organelle}'"
 
         volume_paths = _download_asem_dataset(path, volume_ids, download)
 
         for volume_path in volume_paths:
-            print(volume_path)
             have_volumes_inconsistent = _make_volumes_consistent(volume_path, organelle)
 
             raw_key = f"volumes/raw_{organelle}" if have_volumes_inconsistent else "volumes/raw"
