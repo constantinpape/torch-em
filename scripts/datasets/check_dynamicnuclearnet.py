@@ -1,17 +1,8 @@
-import numpy as np
-from torch_em.transform.raw import standardize, normalize_percentile
-
-from torch_em.data.datasets import get_dynamicnuclearnet_loader
 from torch_em.util.debug import check_loader
+from torch_em.data.datasets import get_dynamicnuclearnet_loader
+
 
 DYNAMICNUCLEARNET_ROOT = "/home/anwai/data/deepcell/"
-
-
-def raw_trafo(raw):
-    raw = normalize_percentile(raw, axis=(1, 2))
-    raw = np.mean(raw, axis=0)
-    raw = standardize(raw)
-    return raw
 
 
 # NOTE: the DynamicNuclearNet data cannot be downloaded automatically.
