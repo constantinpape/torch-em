@@ -50,7 +50,10 @@ def _create_dataset(path, zip_path):
 def get_dynamicnuclearnet_dataset(
     path, split, patch_shape, download=False, **kwargs
 ):
-    """TODO"""
+    """Dataset for the segmentation of cell nuclei imaged with fluorescene microscopy.
+
+    This dataset is from the publication https://doi.org/10.1101/803205.
+    Please cite it if you use this dataset for a publication."""
     splits = ["train", "val", "test"]
     assert split in splits
 
@@ -81,7 +84,9 @@ def get_dynamicnuclearnet_dataset(
 def get_dynamicnuclearnet_loader(
     path, split, patch_shape, batch_size, download, **kwargs
 ):
-    """TODO"""
+    """Dataloader for the segmentation of cell nuclei for 5 different cell lines in fluorescence microscopes.
+    See `get_dynamicnuclearnet_dataset` for details.
+"""
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_dynamicnuclearnet_dataset(path, split, patch_shape, download, **ds_kwargs)
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
