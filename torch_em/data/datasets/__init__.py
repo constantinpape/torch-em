@@ -7,6 +7,7 @@ from .cremi import get_cremi_loader, get_cremi_dataset
 from .ctc import get_ctc_segmentation_loader, get_ctc_segmentation_dataset
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
 from .dsb import get_dsb_loader, get_dsb_dataset
+from .dynamicnuclearnet import get_dynamicnuclearnet_loader, get_dynamicnuclearnet_dataset
 from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
