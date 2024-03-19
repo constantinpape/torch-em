@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .unet import Decoder, ConvBlock2d, Upsampler2d
-from .vit import get_vision_transformer, ViT_MAE, ViT_Sam
+from .vit import get_vision_transformer
 
 try:
     from micro_sam.util import get_sam_model
@@ -244,7 +244,10 @@ class UNETR(nn.Module):
 
         encoder_outputs = self.encoder(x)
 
-        if isinstance(self.encoder, ViT_Sam) or isinstance(self.encoder, ViT_MAE):
+        if isinstance(encoder_outputs[-1], list):
+            # `encoder_outputs` can be arranged in only two forms:
+            #   - either we only return the image embeddings
+            #   - or, we return the image embeddings and the "list" of global attention layers
             z12, from_encoder = encoder_outputs
         else:
             z12 = encoder_outputs

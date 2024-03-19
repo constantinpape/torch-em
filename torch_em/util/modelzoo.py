@@ -125,8 +125,6 @@ def _write_depedencies(export_folder, dependencies):
         ver = torch.__version__
         major, minor = list(map(int, ver.split(".")[:2]))
         assert major in (1, 2)
-        if major == 2:
-            warn("Modelzoo functionality is not fully tested for PyTorch 2")
         # the torch zip layout changed for a few versions:
         torch_min_version = "1.0"
         if minor > 6 and minor < 10:
@@ -363,7 +361,7 @@ def _get_preprocessing(trainer):
         if std is not None:
             preprocessing[0]["kwargs"]["std"] = std
 
-    elif name == "torch_em.transform.normalize_percentile":
+    elif name == "torch_em.transform.raw.normalize_percentile":
 
         lower, upper = kwargs.get("lower", 1.0), kwargs.get("upper", 99.0)
         axes = _get_axes(kwargs.get("axis", None))
