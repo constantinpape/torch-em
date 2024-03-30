@@ -159,14 +159,14 @@ def get_vim_encoder(model_type="vim_t", with_cls_token=True):
             if_cls_token=with_cls_token,
         )
     else:
-        raise ValueError("Choose from `vim_t` or `vim_b`")
+        raise ValueError("Choose from 'vim_t' / 'vim_s' / 'vim_b'")
 
     encoder.default_cfg = _cfg()
     return encoder
 
 
 def get_vimunet_model(
-    out_channels, model_type="vim_t", with_cls_token=True, device=None, checkpoint=None, use_conv_transpose=True
+    out_channels, model_type="vim_t", with_cls_token=True, device=None, checkpoint=None
 ):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -192,7 +192,6 @@ def get_vimunet_model(
         resize_input=False,
         use_skip_connection=False,
         final_activation="Sigmoid",
-        use_conv_transpose=use_conv_transpose
     )
 
     if model_state is not None:
