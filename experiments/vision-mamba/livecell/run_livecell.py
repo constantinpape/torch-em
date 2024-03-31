@@ -29,7 +29,7 @@ OFFSETS = [
 ]
 
 
-def get_loaders(args, patch_shape=(520, 704)):
+def get_loaders(args, patch_shape=(512, 512)):
     if args.distances:
         label_trafo = torch_em.transform.label.PerObjectDistanceTransform(
             distances=True,
@@ -106,19 +106,11 @@ def get_save_root(args):
         raise ValueError
 
     model_name = args.model_type
-    if args.use_conv_transpose:
-        model_name += "-conv-transpose"
-    else:
-        model_name += "-bilinear"
 
     # saving the model checkpoints
     save_root = os.path.join(
-        args.save_root,
-        "pretrained" if args.pretrained else "scratch",
-        experiment_type,
-        model_name
+        args.save_root, "pretrained" if args.pretrained else "scratch", experiment_type, model_name
     )
-
     return save_root
 
 
@@ -139,10 +131,7 @@ def run_livecell_training(args):
         model_type=args.model_type,
         checkpoint=checkpoint,
         with_cls_token=True,
-        use_conv_transpose=args.use_conv_transpose
     )
-
-    print(model.decoder.samplers)
 
     save_root = get_save_root(args)
 
@@ -165,9 +154,7 @@ def run_livecell_training(args):
     trainer.fit(iterations=int(args.iterations))
 
 
-def run_livecell_inference(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+def run_livecell_inference(args, device):
     output_channels = get_output_channels(args)
 
     save_root = get_save_root(args)
@@ -180,7 +167,6 @@ def run_livecell_inference(args):
         model_type=args.model_type,
         with_cls_token=True,
         checkpoint=checkpoint,
-        use_conv_transpose=args.use_conv_transpose
     )
 
     test_image_dir = os.path.join(ROOT, "data", "livecell", "images", "livecell_test_images")
@@ -192,8 +178,7 @@ def run_livecell_inference(args):
         print(f"The result is saved at {res_path}")
         return
 
-    msa_list, sa50_list = [], []
-
+    msa_list, sa50_list, sa75_list = [], [], []
     for label_path in tqdm(all_test_labels):
         labels = imageio.imread(label_path)
         image_id = os.path.split(label_path)[-1]
@@ -226,11 +211,13 @@ def run_livecell_inference(args):
         msa, sa_acc = mean_segmentation_accuracy(instances, labels, return_accuracies=True)
         msa_list.append(msa)
         sa50_list.append(sa_acc[0])
+        sa75_list.append(sa_acc[5])
 
     res = {
         "LiveCELL": "Metrics",
         "mSA": np.mean(msa_list),
-        "SA50": np.mean(sa50_list)
+        "SA50": np.mean(sa50_list),
+        "SA75": np.mean(sa75_list)
     }
     df = pd.DataFrame.from_dict([res])
     df.to_csv(res_path)
@@ -241,22 +228,27 @@ def run_livecell_inference(args):
 def main(args):
     assert (args.boundaries + args.affinities + args.distances) == 1
 
+    print(torch.cuda.get_device_name() if torch.cuda.is_available() else "GPU not available, hence running on CPU")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     if args.train:
         run_livecell_training(args)
 
     if args.predict:
-        run_livecell_inference(args)
+        run_livecell_inference(args, device)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"))
+
     parser.add_argument("--iterations", type=int, default=1e5)
-    parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vision-mamba"))
+    parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vimunet"))
     parser.add_argument("-m", "--model_type", type=str, default="vim_t")
 
-    parser.add_argument("--use_conv_transpose", action="store_true")
     parser.add_argument("--pretrained", action="store_true")
+
+    parser.add_argument("--force", action="store_true")
 
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--predict", action="store_true")
