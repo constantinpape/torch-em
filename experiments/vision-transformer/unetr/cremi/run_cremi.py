@@ -174,12 +174,13 @@ def run_cremi_unetr_training(args, device):
         train_loader=train_loader,
         val_loader=val_loader,
         device=device,
-        learning_rate=1e-4,
+        learning_rate=1e-5,
         loss=loss,
         metric=loss,
         log_image_interval=50,
         save_root=save_root,
-        compile_model=False
+        compile_model=False,
+        scheduler_kwargs={"mode": "min", "factor": 0.9, "patience": 10}
     )
 
     trainer.fit(args.iterations)
