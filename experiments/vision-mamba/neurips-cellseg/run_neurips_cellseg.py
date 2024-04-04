@@ -34,7 +34,7 @@ def get_loaders(args, patch_shape=(512, 512)):
     sampler = MinInstanceSampler(min_num_instances=3)
 
     train_loader = get_neurips_cellseg_supervised_loader(
-        root=ROOT,
+        root=args.input,
         split="train",
         patch_shape=patch_shape,
         batch_size=2,
@@ -45,7 +45,7 @@ def get_loaders(args, patch_shape=(512, 512)):
         sampler=sampler,
     )
     val_loader = get_neurips_cellseg_supervised_loader(
-        root=ROOT,
+        root=args.input,
         split="val",
         patch_shape=patch_shape,
         batch_size=1,

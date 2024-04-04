@@ -9,6 +9,7 @@ SCRIPT_NAMES = {
     "livecell": "livecell/run_livecell.py",
     "cremi": "cremi/run_cremi.py",
     "neurips-cellseg": "neurips-cellseg/run_neurips_cellseg.py",
+    "lm": "light_microscopy/run_lm.py"
 }
 ALL_MODELS = ["vim_t", "vim_s", "vim_b"]
 ALL_SETTINGS = ["boundaries", "affinities", "distances"]
@@ -33,8 +34,10 @@ mamba activate vm3
 
     python_script = f"python {SCRIPT_NAMES[dataset]} "
     python_script += f"--{mode} "  # train or predict
-    python_script += f"--{setting} "  # boundaries / affinities / distances
     python_script += f"-m {model_type} "
+
+    if dataset != "lm":
+        python_script += f"--{setting} "  # boundaries / affinities / distances
 
     batch_script += python_script
 
@@ -62,6 +65,8 @@ def write_all_scripts(batch_script, mode, dataset=None, model_type=None, setting
 
     for _dataset in dataset:
         for _model in model_type:
+            # we overwrite setting for the lm training
+            setting = ["distances"] if _dataset == "lm" else setting
             for _setting in setting:
                 write_batch_script(
                     out_path=batch_script,
