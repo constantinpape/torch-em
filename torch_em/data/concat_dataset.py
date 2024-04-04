@@ -1,9 +1,13 @@
 import numpy as np
+
 from torch.utils.data import Dataset
 
 
 class ConcatDataset(Dataset):
-    def __init__(self, *datasets):
+    def __init__(
+        self,
+        *datasets: Dataset
+    ):
         self.datasets = datasets
         self.ndim = datasets[0].ndim
 
