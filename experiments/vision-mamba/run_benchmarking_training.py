@@ -13,7 +13,7 @@ SCRIPT_NAMES = {
 }
 ALL_MODELS = ["vim_t", "vim_s", "vim_b"]
 ALL_SETTINGS = ["boundaries", "affinities", "distances"]
-ROOT = "/scratch/usr/nimanwai/experiments/"
+ROOT = "/scratch/usr/nimanwai/experiments"
 
 
 def write_batch_script(out_path, dataset, model_type, setting, learning_rate):
@@ -35,7 +35,7 @@ mamba activate vm3
     python_script = f"python {SCRIPT_NAMES[dataset]} "
     python_script += f"-m {model_type} "
     python_script += f"--lr {learning_rate} "
-    python_script += f"-s /scratch/usr/nimanwai/experiments/vimunet_lr_{learning_rate}/ "
+    python_script += f"-s {ROOT}/vimunet_lr_{learning_rate}/ "
 
     if dataset != "lm":
         python_script += f"--{setting} "  # boundaries / affinities / distances
