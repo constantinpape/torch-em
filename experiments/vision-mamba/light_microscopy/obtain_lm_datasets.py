@@ -150,6 +150,6 @@ def get_lm_loaders(input_path, patch_shape):
     """
     train_dataset = get_concat_lm_datasets(input_path, patch_shape, "train")
     val_dataset = get_concat_lm_datasets(input_path, patch_shape, "val")
-    train_loader = torch_em.get_data_loader(train_dataset, batch_size=8, shuffle=True, num_workers=16)
+    train_loader = torch_em.get_data_loader(train_dataset, batch_size=2, shuffle=True, num_workers=16)
     val_loader = torch_em.get_data_loader(val_dataset, batch_size=1, shuffle=True, num_workers=16)
     return train_loader, val_loader

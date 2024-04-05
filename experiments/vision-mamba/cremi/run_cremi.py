@@ -156,7 +156,7 @@ def run_cremi_training(args):
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        learning_rate=1e-5,
+        learning_rate=args.lr,
         loss=loss,
         metric=loss,
         log_image_interval=50,
@@ -321,6 +321,7 @@ if __name__ == "__main__":
     parser.add_argument("--iterations", type=int, default=int(1e5))
     parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vimunet"))
     parser.add_argument("-m", "--model_type", type=str, default="vim_t")
+    parser.add_argument("--lr", type=float, default=1e-5)
 
     parser.add_argument("--pretrained", action="store_true")
 
