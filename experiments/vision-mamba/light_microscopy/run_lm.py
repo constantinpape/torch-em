@@ -1,5 +1,6 @@
 import os
 import argparse
+from glob import glob
 
 import numpy as np
 import pandas as pd
@@ -10,10 +11,13 @@ import torch
 
 import torch_em
 from torch_em.util import segmentation
+from torch_em.transform.raw import standardize
 from torch_em.model import get_vimunet_model
-from torch_em.util.prediction import predict_with_halo
 from torch_em.loss import DiceBasedDistanceLoss
 
+import elf.segmentation.multicut as mc
+import elf.segmentation.watershed as ws
+import elf.segmentation.features as feats
 from elf.evaluation import mean_segmentation_accuracy
 
 from obtain_lm_datasets import get_lm_loaders
@@ -65,6 +69,71 @@ def run_lm_training(args):
     trainer.fit(iterations=args.iterations)
 
 
+def _do_bd_multicut_watershed(bd):
+    ws_seg, max_id = ws.distance_transform_watershed(bd, threshold=0.5, sigma_seeds=2.0)
+
+    # compute the region adjacency graph
+    rag = feats.compute_rag(ws_seg)
+
+    # compute the edge costs
+    costs = feats.compute_boundary_features(rag, bd)[:, 0]
+
+    # transform the edge costs from [0, 1] to  [-inf, inf], which is
+    # necessary for the multicut. This is done by intepreting the values
+    # as probabilities for an edge being 'true' and then taking the negative log-likelihood.
+
+    # in addition, we weight the costs by the size of the corresponding edge
+    # for z and xy edges
+    z_edges = feats.compute_z_edge_mask(rag, ws_seg)
+    xy_edges = np.logical_not(z_edges)
+    edge_populations = [z_edges, xy_edges]
+    edge_sizes = feats.compute_boundary_mean_and_length(rag, bd)[:, 1]
+    costs = mc.transform_probabilities_to_costs(costs, edge_sizes=edge_sizes, edge_populations=edge_populations)
+
+    # run the multicut partitioning, here, we use the kernighan lin
+    # heuristics to solve the problem, introduced in
+    # http://xilinx.asia/_hdl/4/eda.ee.ucla.edu/EE201A-04Spring/kl.pdf
+    node_labels = mc.multicut_kernighan_lin(rag, costs)
+
+    # map the results back to pixels to obtain the final segmentation
+    seg = feats.project_node_labels_to_pixels(rag, node_labels)
+
+    return seg
+
+
+def _do_affs_multicut_watershed(affs, offsets):
+    # first, we have to make a single channel input map for the watershed,
+    # which we obtain by averaging the affinities
+    boundary_input = np.mean(affs, axis=0)
+
+    ws_seg, max_id = ws.distance_transform_watershed(boundary_input, threshold=0.25, sigma_seeds=2.0)
+
+    # compute the region adjacency graph
+    rag = feats.compute_rag(ws_seg)
+
+    # compute the edge costs
+    # the offsets encode the pixel transition encoded by the
+    # individual affinity channels. Here, we only have nearest neighbor transitions
+    costs = feats.compute_affinity_features(rag, affs, offsets)[:, 0]
+
+    # transform the edge costs from [0, 1] to  [-inf, inf], which is
+    # necessary for the multicut. This is done by intepreting the values
+    # as probabilities for an edge being 'true' and then taking the negative log-likelihood.
+    # in addition, we weight the costs by the size of the corresponding edge
+    edge_sizes = feats.compute_boundary_mean_and_length(rag, boundary_input)[:, 1]
+    costs = mc.transform_probabilities_to_costs(costs, edge_sizes=edge_sizes)
+
+    # run the multicut partitioning, here, we use the kernighan lin
+    # heuristics to solve the problem, introduced in
+    # http://xilinx.asia/_hdl/4/eda.ee.ucla.edu/EE201A-04Spring/kl.pdf
+    node_labels = mc.multicut_kernighan_lin(rag, costs)
+
+    # map the results back to pixels to obtain the final segmentation
+    seg = feats.project_node_labels_to_pixels(rag, node_labels)
+
+    return seg
+
+
 def run_lm_inference(args, device):
     # saving the model checkpoints
     save_root = os.path.join(
@@ -81,7 +150,8 @@ def run_lm_inference(args, device):
         checkpoint=checkpoint
     )
 
-    raise NotImplementedError
+    test_image_dir = os.path.join(ROOT, "livecell", "images", "livecell_test_images")
+    all_test_labels = glob(os.path.join(ROOT, "livecell", "annotations", "livecell_test_images", "*", "*"))
 
     res_path = os.path.join(save_root, "results.csv")
     if os.path.exists(res_path) and not args.force:
@@ -90,13 +160,17 @@ def run_lm_inference(args, device):
         return
 
     msa_list, sa50_list, sa75_list = [], [], []
-    for image_path, label_path in tqdm(zip(all_test_images, all_test_labels), total=len(all_test_images)):
-        image = imageio.imread(image_path)
+    for label_path in tqdm(all_test_labels):
         labels = imageio.imread(label_path)
+        image_id = os.path.split(label_path)[-1]
 
-        predictions = predict_with_halo(
-            image, model, [device], block_shape=[512, 512], halo=[128, 128], disable_tqdm=True,
-        )
+        image = imageio.imread(os.path.join(test_image_dir, image_id))
+        image = standardize(image)
+
+        tensor_image = torch.from_numpy(image)[None, None].to(device)
+
+        predictions = model(tensor_image)
+        predictions = predictions.squeeze().detach().cpu().numpy()
 
         fg, cdist, bdist = predictions
         instances = segmentation.watershed_from_center_and_boundary_distances(

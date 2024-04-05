@@ -168,7 +168,7 @@ def run_cremi_training(args):
 
 
 def _do_bd_multicut_watershed(bd):
-    ws_seg, max_id = ws.distance_transform_watershed(bd, threshold=0.5, sigma_seeds=2.0)
+    ws_seg, max_id = ws.distance_transform_watershed(bd, threshold=0.25, sigma_seeds=2.0)
 
     # compute the region adjacency graph
     rag = feats.compute_rag(ws_seg)
@@ -179,14 +179,8 @@ def _do_bd_multicut_watershed(bd):
     # transform the edge costs from [0, 1] to  [-inf, inf], which is
     # necessary for the multicut. This is done by intepreting the values
     # as probabilities for an edge being 'true' and then taking the negative log-likelihood.
-
-    # in addition, we weight the costs by the size of the corresponding edge
-    # for z and xy edges
-    z_edges = feats.compute_z_edge_mask(rag, ws_seg)
-    xy_edges = np.logical_not(z_edges)
-    edge_populations = [z_edges, xy_edges]
     edge_sizes = feats.compute_boundary_mean_and_length(rag, bd)[:, 1]
-    costs = mc.transform_probabilities_to_costs(costs, edge_sizes=edge_sizes, edge_populations=edge_populations)
+    costs = mc.transform_probabilities_to_costs(costs, edge_sizes=edge_sizes)
 
     # run the multicut partitioning, here, we use the kernighan lin
     # heuristics to solve the problem, introduced in
@@ -268,14 +262,18 @@ def run_cremi_inference(args, device):
         if args.boundaries:
             bd = predictions.squeeze()
 
-            # instances = segmentation.watershed_from_components(bd, np.ones_like(bd))
-            instances = _do_bd_multicut_watershed(bd)
+            if args.multicut:
+                instances = _do_bd_multicut_watershed(bd)
+            else:
+                instances = segmentation.watershed_from_components(bd, np.ones_like(bd))
 
         elif args.affinities:
             affs = predictions
 
-            # instances = segmentation.mutex_watershed_segmentation(np.ones_like(labels), affs, offsets=OFFSETS)
-            instances = _do_affs_multicut_watershed(affs[:2], OFFSETS[:2])
+            if args.multicut:
+                instances = _do_affs_multicut_watershed(affs[:4], OFFSETS[:4])
+            else:
+                instances = segmentation.mutex_watershed_segmentation(np.ones_like(labels), affs, offsets=OFFSETS)
 
         elif args.distances:
             fg, cdist, bdist = predictions
@@ -330,6 +328,8 @@ if __name__ == "__main__":
     parser.add_argument("--predict", action="store_true")
 
     parser.add_argument("--force", action="store_true")
+
+    parser.add_argument("--multicut", action="store_true")
 
     parser.add_argument("--boundaries", action="store_true")
     parser.add_argument("--affinities", action="store_true")
