@@ -27,6 +27,7 @@ def write_batch_script(out_path, dataset, model_type, setting, learning_rate):
 #SBATCH -c 16
 #SBATCH --mem 64GB
 #SBATCH -A gzz0001
+#SBATCH --constraint=80gb
 #SBATCH --job-name={model_name}-{dataset}
 
 source ~/.bashrc
