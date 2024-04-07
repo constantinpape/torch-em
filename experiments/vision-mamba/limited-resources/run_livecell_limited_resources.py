@@ -123,7 +123,7 @@ def get_save_root(args):
     # saving the model checkpoints
     save_root = os.path.join(
         args.save_root,
-        args.lr,
+        f"{args.lr}",
         "pretrained" if args.pretrained else "scratch",
         experiment_type,
         model_name
