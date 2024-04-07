@@ -12,6 +12,7 @@ Notebook link: TODO
 
 - Create a new mamba environment: `mamba create -n vimunet python=3.10.13`
 - Activate the environment: `mamba activate vimunet`
+- Install `torch-em` from source: https://github.com/constantinpape/torch-em#from-source
 - Install PyTorch: `pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118`
   - Why use `pip`? - For installation consistency
 - Install Vim: `git clone https://github.com/anwai98/Vim.git`
