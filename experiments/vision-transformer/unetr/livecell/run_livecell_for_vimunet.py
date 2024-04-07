@@ -191,14 +191,8 @@ def _do_bd_multicut_watershed(bd):
     # transform the edge costs from [0, 1] to  [-inf, inf], which is
     # necessary for the multicut. This is done by intepreting the values
     # as probabilities for an edge being 'true' and then taking the negative log-likelihood.
-
-    # in addition, we weight the costs by the size of the corresponding edge
-    # for z and xy edges
-    z_edges = feats.compute_z_edge_mask(rag, ws_seg)
-    xy_edges = np.logical_not(z_edges)
-    edge_populations = [z_edges, xy_edges]
     edge_sizes = feats.compute_boundary_mean_and_length(rag, bd)[:, 1]
-    costs = mc.transform_probabilities_to_costs(costs, edge_sizes=edge_sizes, edge_populations=edge_populations)
+    costs = mc.transform_probabilities_to_costs(costs, edge_sizes=edge_sizes)
 
     # run the multicut partitioning, here, we use the kernighan lin
     # heuristics to solve the problem, introduced in
