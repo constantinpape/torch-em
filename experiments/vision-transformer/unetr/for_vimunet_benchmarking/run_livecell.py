@@ -108,8 +108,8 @@ def get_model(args, device):
         model = UNETR(
             encoder=args.model_type,
             out_channels=output_channels,
-            use_sam_stats=args.pretrained,
-            final_activation="Sigmoid"
+            final_activation="Sigmoid",
+            use_skip_connection=False,
         )
         model.to(device)
 
