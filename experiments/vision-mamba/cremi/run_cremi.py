@@ -14,20 +14,13 @@ from torch_em.data import MinInstanceSampler
 from torch_em.model import get_vimunet_model
 from torch_em.data.datasets import get_cremi_loader
 from torch_em.util.prediction import predict_with_halo
-from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask, DiceBasedDistanceLoss
+from torch_em.loss import DiceLoss, DiceBasedDistanceLoss
 
 from elf.evaluation import mean_segmentation_accuracy
 
 
 ROOT = "/scratch/usr/nimanwai"
 CREMI_TEST_ROOT = "/scratch/projects/nim00007/sam/data/cremi/slices_original"
-
-OFFSETS = [
-    [-1, 0], [0, -1],
-    [-3, 0], [0, -3],
-    [-9, 0], [0, -9],
-    [-27, 0], [0, -27]
-]
 
 
 def get_loaders(args, patch_shape=(1, 512, 512)):
@@ -54,7 +47,6 @@ def get_loaders(args, patch_shape=(1, 512, 512)):
         label_dtype=torch.float32,
         defect_augmentation_kwargs=None,
         boundaries=args.boundaries,
-        offsets=OFFSETS if args.affinities else None,
         num_workers=16,
     )
     val_loader = get_cremi_loader(
@@ -68,7 +60,6 @@ def get_loaders(args, patch_shape=(1, 512, 512)):
         label_dtype=torch.float32,
         defect_augmentation_kwargs=None,
         boundaries=args.boundaries,
-        offsets=OFFSETS if args.affinities else None,
         num_workers=16,
     )
 
@@ -76,25 +67,17 @@ def get_loaders(args, patch_shape=(1, 512, 512)):
 
 
 def get_output_channels(args):
-    if args.boundaries:
-        output_channels = 1
-    elif args.distances:
+    if args.distances:
         output_channels = 3
-    elif args.affinities:
-        output_channels = len(OFFSETS)
+    else:
+        output_channels = 1
 
     return output_channels
 
 
 def get_loss_function(args):
-    if args.affinities:
-        loss = LossWrapper(
-            loss=DiceLoss(),
-            transform=ApplyAndRemoveMask(masking_method="multiply")
-        )
-    elif args.distances:
+    if args.distances:
         loss = DiceBasedDistanceLoss(mask_distances_in_bg=True)
-
     else:
         loss = DiceLoss()
 
@@ -102,22 +85,15 @@ def get_loss_function(args):
 
 
 def get_save_root(args):
-    # experiment_type
     if args.boundaries:
         experiment_type = "boundaries"
-    elif args.affinities:
-        experiment_type = "affinities"
-    elif args.distances:
-        experiment_type = "distances"
     else:
-        raise ValueError
+        experiment_type = "distances"
 
     model_name = args.model_type
 
     # saving the model checkpoints
-    save_root = os.path.join(
-        args.save_root, "pretrained" if args.pretrained else "scratch", experiment_type, model_name
-    )
+    save_root = os.path.join(args.save_root, "scratch", experiment_type, model_name)
     return save_root
 
 
@@ -125,18 +101,12 @@ def run_cremi_training(args):
     # the dataloaders for cremi dataset
     train_loader, val_loader = get_loaders(args)
 
-    if args.pretrained:
-        checkpoint = "/scratch/usr/nimanwai/models/Vim-tiny/vim_tiny_73p1.pth"
-    else:
-        checkpoint = None
-
     output_channels = get_output_channels(args)
 
     # the vision-mamba + decoder (UNet-based) model
     model = get_vimunet_model(
         out_channels=output_channels,
         model_type=args.model_type,
-        checkpoint=checkpoint,
         with_cls_token=True
     )
 
@@ -151,7 +121,7 @@ def run_cremi_training(args):
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        learning_rate=args.lr,
+        learning_rate=1e-4,
         loss=loss,
         metric=loss,
         log_image_interval=50,
@@ -159,7 +129,7 @@ def run_cremi_training(args):
         compile_model=False,
         scheduler_kwargs={"mode": "min", "factor": 0.9, "patience": 10}
     )
-    trainer.fit(iterations=args.iterations)
+    trainer.fit(iterations=1e5)
 
 
 def run_cremi_inference(args, device):
@@ -177,10 +147,6 @@ def run_cremi_inference(args, device):
         checkpoint=checkpoint
     )
 
-    state = torch.load(os.path.join(save_root, "checkpoints", "cremi-vimunet", "latest.pt"))
-    print(state["current_metric"])
-    print(state["iteration"])
-
     all_test_images = glob(os.path.join(CREMI_TEST_ROOT, "raw", "cremi_test_sampleC*.tif"))
     all_test_labels = glob(os.path.join(CREMI_TEST_ROOT, "labels", "cremi_test_sampleC*.tif"))
 
@@ -191,7 +157,7 @@ def run_cremi_inference(args, device):
         return
 
     msa_list, sa50_list, sa75_list = [], [], []
-    for i, (image_path, label_path) in enumerate(zip(all_test_images, all_test_labels)):
+    for image_path, label_path in zip(all_test_images, all_test_labels):
         image = imageio.imread(image_path)
         labels = imageio.imread(label_path)
 
@@ -203,14 +169,10 @@ def run_cremi_inference(args, device):
             bd = predictions.squeeze()
             instances = segmentation.watershed_from_components(bd, np.ones_like(bd))
 
-        elif args.affinities:
-            affs = predictions
-            instances = segmentation.mutex_watershed_segmentation(np.ones_like(labels), affs, offsets=OFFSETS)
-
-        elif args.distances:
+        else:
             fg, cdist, bdist = predictions
             instances = segmentation.watershed_from_center_and_boundary_distances(
-                cdist, bdist, fg, min_size=50,
+                cdist, bdist, np.ones_like(fg), min_size=50,
                 center_distance_threshold=0.5,
                 boundary_distance_threshold=0.6,
                 distance_smoothing=1.0
@@ -222,7 +184,7 @@ def run_cremi_inference(args, device):
         sa75_list.append(sa_acc[5])
 
     res = {
-        "LiveCELL": "Metrics",
+        "LIVECell": "Metrics",
         "mSA": np.mean(msa_list),
         "SA50": np.mean(sa50_list),
         "SA75": np.mean(sa75_list)
@@ -234,10 +196,9 @@ def run_cremi_inference(args, device):
 
 
 def main(args):
-    assert (args.boundaries + args.affinities + args.distances) == 1
+    assert (args.boundaries + args.distances) == 1
 
     print(torch.cuda.get_device_name() if torch.cuda.is_available() else "GPU not available, hence running on CPU")
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if args.train:
@@ -250,12 +211,8 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", type=str, default=os.path.join(ROOT, "data", "cremi"))
-    parser.add_argument("--iterations", type=int, default=int(1e5))
-    parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vimunet"))
+    parser.add_argument("-s", "--save_root", type=str, default=None)
     parser.add_argument("-m", "--model_type", type=str, default="vim_t")
-    parser.add_argument("--lr", type=float, default=1e-5)
-
-    parser.add_argument("--pretrained", action="store_true")
 
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--predict", action="store_true")
@@ -263,7 +220,6 @@ if __name__ == "__main__":
     parser.add_argument("--force", action="store_true")
 
     parser.add_argument("--boundaries", action="store_true")
-    parser.add_argument("--affinities", action="store_true")
     parser.add_argument("--distances", action="store_true")
 
     args = parser.parse_args()
