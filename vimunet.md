@@ -45,8 +45,8 @@ $ pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url htt
 $ git clone https://github.com/anwai98/Vim.git
 $ cd Vim
 $ pip install -r vim/vim_requirements.txt
-$ pip install causal_conv1d/
-$ pip install mamba/
+$ pip install -e causal_conv1d/
+$ pip install -e mamba/
 $ pip install -e .
 ```
 
