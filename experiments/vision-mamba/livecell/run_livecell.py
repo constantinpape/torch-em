@@ -141,14 +141,11 @@ def run_livecell_inference(args, device):
         checkpoint=checkpoint,
     )
 
+    # the splits are provided with the livecell dataset
+    # to reproduce the results:
+    # run the inference on the entire test datasets as it is.
     test_image_dir = os.path.join(ROOT, "data", "livecell", "images", "livecell_test_images")
     all_test_labels = glob(os.path.join(ROOT, "data", "livecell", "annotations", "livecell_test_images", "*", "*"))
-
-    res_path = os.path.join(save_root, "results.csv")
-    if os.path.exists(res_path) and not args.force:
-        print(pd.read_csv(res_path))
-        print(f"The result is saved at {res_path}")
-        return
 
     msa_list, sa50_list, sa75_list = [], [], []
     for label_path in all_test_labels:
@@ -187,6 +184,7 @@ def run_livecell_inference(args, device):
         "SA50": np.mean(sa50_list),
         "SA75": np.mean(sa75_list)
     }
+    res_path = os.path.join("./results.csv")
     df = pd.DataFrame.from_dict([res])
     df.to_csv(res_path)
     print(df)
@@ -194,7 +192,7 @@ def run_livecell_inference(args, device):
 
 
 def main(args):
-    assert (args.boundaries + args.distances) == 1
+    assert (args.boundaries + args.distances) == 1, "Choose only one of boundaries / distances to run."
 
     print(torch.cuda.get_device_name() if torch.cuda.is_available() else "GPU not available, hence running on CPU")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -208,17 +206,26 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"))
-    parser.add_argument("-s", "--save_root", type=str, default=None)
-    parser.add_argument("-m", "--model_type", type=str, default="vim_t")
-
-    parser.add_argument("--train", action="store_true")
-    parser.add_argument("--predict", action="store_true")
-
-    parser.add_argument("--force", action="store_true")
-
-    parser.add_argument("--boundaries", action="store_true")
-    parser.add_argument("--distances", action="store_true")
-
+    parser.add_argument(
+        "-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"), help="Path to LIVECell dataset."
+    )
+    parser.add_argument(
+        "-s", "--save_root", type=str, default=None, help="Path where the model checkpoints will be saved."
+    )
+    parser.add_argument(
+        "-m", "--model_type", type=str, default="vim_t", help="Choice of ViM backbone."
+    )
+    parser.add_argument(
+        "--train", action="store_true", help="Whether to train the model."
+    )
+    parser.add_argument(
+        "--predict", action="store_true", help="Whether to run inference on the trained model."
+    )
+    parser.add_argument(
+        "--boundaries", action="store_true", help="Runs the boundary-based methods."
+    )
+    parser.add_argument(
+        "--distances", action="store_true", help="Runs the distance-based methods."
+    )
     args = parser.parse_args()
     main(args)
