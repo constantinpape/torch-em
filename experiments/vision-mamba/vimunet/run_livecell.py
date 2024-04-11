@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from glob import glob
+from tqdm import tqdm
 
 import imageio.v3 as imageio
 
@@ -41,7 +42,8 @@ def get_loaders(args, patch_shape=(512, 512)):
         label_dtype=torch.float32,
         boundaries=args.boundaries,
         label_transform=label_trafo,
-        num_workers=16
+        num_workers=16,
+        download=True,
     )
 
     val_loader = get_livecell_loader(
@@ -52,7 +54,8 @@ def get_loaders(args, patch_shape=(512, 512)):
         label_dtype=torch.float32,
         boundaries=args.boundaries,
         label_transform=label_trafo,
-        num_workers=16
+        num_workers=16,
+        download=True,
     )
 
     return train_loader, val_loader
@@ -123,7 +126,7 @@ def run_livecell_training(args):
         compile_model=False,
         scheduler_kwargs={"mode": "min", "factor": 0.9, "patience": 10}
     )
-    trainer.fit(iterations=1e5)
+    trainer.fit(iterations=int(1e5))
 
 
 def run_livecell_inference(args, device):
@@ -148,7 +151,7 @@ def run_livecell_inference(args, device):
     all_test_labels = glob(os.path.join(ROOT, "data", "livecell", "annotations", "livecell_test_images", "*", "*"))
 
     msa_list, sa50_list, sa75_list = [], [], []
-    for label_path in all_test_labels:
+    for label_path in tqdm(all_test_labels):
         labels = imageio.imread(label_path)
         image_id = os.path.split(label_path)[-1]
 
@@ -184,7 +187,7 @@ def run_livecell_inference(args, device):
         "SA50": np.mean(sa50_list),
         "SA75": np.mean(sa75_list)
     }
-    res_path = os.path.join("./results.csv")
+    res_path = os.path.join(args.result_path, "results.csv")
     df = pd.DataFrame.from_dict([res])
     df.to_csv(res_path)
     print(df)
@@ -210,7 +213,7 @@ if __name__ == "__main__":
         "-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"), help="Path to LIVECell dataset."
     )
     parser.add_argument(
-        "-s", "--save_root", type=str, default=None, help="Path where the model checkpoints will be saved."
+        "-s", "--save_root", type=str, default="./", help="Path where the model checkpoints will be saved."
     )
     parser.add_argument(
         "-m", "--model_type", type=str, default="vim_t", help="Choice of ViM backbone."
@@ -220,6 +223,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--predict", action="store_true", help="Whether to run inference on the trained model."
+    )
+    parser.add_argument(
+        "--result_path", type=str, default="./", help="Path to save quantitative results."
     )
     parser.add_argument(
         "--boundaries", action="store_true", help="Runs the boundary-based methods."

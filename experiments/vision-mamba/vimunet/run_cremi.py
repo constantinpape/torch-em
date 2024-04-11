@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from glob import glob
+from tqdm import tqdm
 
 import imageio.v3 as imageio
 
@@ -23,7 +24,7 @@ ROOT = "/scratch/usr/nimanwai"
 
 # the splits have been customed made
 # to reproduce the results:
-# create slices ranging from "100 to 125" for all three volumes
+# extract slices ranging from "100 to 125" for all three volumes
 CREMI_TEST_ROOT = "/scratch/projects/nim00007/sam/data/cremi/slices_original"
 
 
@@ -44,6 +45,7 @@ def get_loaders(args, patch_shape=(1, 512, 512)):
         defect_augmentation_kwargs=None,
         boundaries=True,
         num_workers=16,
+        download=True,
     )
     val_loader = get_cremi_loader(
         path=args.input,
@@ -56,6 +58,7 @@ def get_loaders(args, patch_shape=(1, 512, 512)):
         defect_augmentation_kwargs=None,
         boundaries=True,
         num_workers=16,
+        download=True,
     )
     return train_loader, val_loader
 
@@ -90,7 +93,7 @@ def run_cremi_training(args):
         compile_model=False,
         scheduler_kwargs={"mode": "min", "factor": 0.9, "patience": 10}
     )
-    trainer.fit(iterations=1e5)
+    trainer.fit(iterations=int(1e5))
 
 
 def run_cremi_inference(args, device):
@@ -109,7 +112,7 @@ def run_cremi_inference(args, device):
     all_test_labels = glob(os.path.join(CREMI_TEST_ROOT, "labels", "cremi_test_*.tif"))
 
     msa_list, sa50_list, sa75_list = [], [], []
-    for image_path, label_path in zip(all_test_images, all_test_labels):
+    for image_path, label_path in tqdm(zip(all_test_images, all_test_labels), total=len(all_test_images)):
         image = imageio.imread(image_path)
         labels = imageio.imread(label_path)
 
@@ -126,12 +129,12 @@ def run_cremi_inference(args, device):
         sa75_list.append(sa_acc[5])
 
     res = {
-        "LIVECell": "Metrics",
+        "CREMI": "Metrics",
         "mSA": np.mean(msa_list),
         "SA50": np.mean(sa50_list),
         "SA75": np.mean(sa75_list)
     }
-    res_path = os.path.join("./results.csv")
+    res_path = os.path.join(args.result_path, "results.csv")
     df = pd.DataFrame.from_dict([res])
     df.to_csv(res_path)
     print(df)
@@ -155,10 +158,11 @@ if __name__ == "__main__":
         "-i", "--input", type=str, default=os.path.join(ROOT, "data", "cremi"), help="Path to CREMI dataset."
     )
     parser.add_argument(
-        "-s", "--save_root", type=str, default=None, help="Path where the model checkpoints will be saved."
+        "-s", "--save_root", type=str, default="./", help="Path where the model checkpoints will be saved."
     )
-    parser.add_argument("-m", "--model_type", type=str, default="vim_t", path="Choice of ViM backbone")
-
+    parser.add_argument(
+        "-m", "--model_type", type=str, default="vim_t", help="Choice of ViM backbone"
+    )
     parser.add_argument(
         "--train", action="store_true", help="Whether to train the model."
     )
@@ -166,7 +170,7 @@ if __name__ == "__main__":
         "--predict", action="store_true", help="Whether to run inference on the trained model."
     )
     parser.add_argument(
-        "--boundaries", action="store_true", help="Runs the boundary-based methods"
+        "--result_path", type=str, default="./", help="Path to save quantitative results."
     )
     args = parser.parse_args()
     main(args)
