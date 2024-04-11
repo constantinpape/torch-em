@@ -1,35 +1,31 @@
-# **Vi**sion **M**amba-based **UNet** for Biomedical Image Segmentation **(ViMUNet)**
+# ViM-UNet: Vision Mamba in Biomedical Segmentation
 
-Extending Vision Mamba (Vim) for instance segmentation in microscopic images to effectively capture long-range dependencies with efficiency.
+We introduce **ViM-UNet**. a novel segmentation architecture based on Vision Mamba for instance segmentation in microscopy.
 
-Paper link: TODO
+To get started, make sure to take a look at the [documentation](https://github.com/constantinpape/torch-em/blob/main/vimunet.md).
 
-Notebook link: TODO
+Here are the experiments for instance segmentation on:
+1. LIVECell for cell segmentation in phase-contrast microscopy.
+    - You can run the boundary-based /distance-based experiments. See `run_livecell.py -h` for details.
+    ```python
+    python run_livecell.py -i <PATH_TO_DATA>
+                           -s <PATH_TO_SAVE_CHECKPOINTS>
+                           -m <MODEL_NAME>  # the supported models are 'vim_t', 'vim_s' and 'vim_b'
+                           --train  # for training
+                           --predict  # for inference on trained models
+                           --result_path  <PATH_TO_SAVE_RESULTS>
+                           # below is how you can provide the choice for training for either methods
+                           --boundaries / --distances
+    ```
 
-## Installation:
+2. CREMI for neurites segmentation in electron microscopy.
+    - You can run the boundary-based experiment. See `run_livecell.py -h` for details. Below is an example script:
+    ```python
+    python run_cremi.py -i <PATH_TO_DATA>
+                        -s <PATH_TO_SAVE_CHECKPOINTS>
+                        -m <MODEL_NAME>  # the supported models are 'vim_t', 'vim_s' and 'vim_b'
+                        --train  # for training
+                        --predict  # for inference on trained models
+                        --result_path  <PATH_TO_SAVE_RESULTS>
+    ```
 
-> NOTE: The installation is a bit tricky, but following the steps should do the trick.
-
-- Create a new mamba environment: `mamba create -n vimunet python=3.10.13`
-- Activate the environment: `mamba activate vimunet`
-- Install `torch-em` from source: https://github.com/constantinpape/torch-em#from-source
-- Install PyTorch: `pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118`
-  - Why use `pip`? - For installation consistency
-- Install Vim: `git clone https://github.com/anwai98/Vim.git`
-- Enter the directory: `cd Vim`
-- Install Vim-related dependencies: `pip install -r vim/vim_requirements.txt`
-- Install causal-conv1d: `pip install -e causal_conv1d/`
-- Install mamba: `pip install -e mamba/`
-- Install Vim: `pip install -e .`
-
-### Known Issues:
-1. `GLIBCXX_<VERSION>` related issues
-    - Suggestion: explicity mention your path to the conda environment to `LD_LIBRARY_PATH`. Example: `export LD_LIBRARY_PATH=/scratch/usr/nimanwai/mambaforge/lib/`
-2. `FileNotFoundError: [Errno 2] No such file or directory: 'ldconfig'`
-    - Suggestion: Possible reasons are that path variable isn't set correctly. Provide it as the following example: `export PATH=$PATH:/usr/sbin`
-3. `NameError: name 'bare_metal_version' is not defined` while installing `causal-conv1d`
-    - Suggestion: It's possible that the path to `CUDA_HOME` isn't visible to the installed PyTorch. The quickest way to test this is: `python -c "from torch.utils.cpp_extension import CUDA_HOME; print(CUDA_HOME)"` - if the code returns None, then you'd need to specify the path to `CUDA_HOME`. Often, it's stored at `/usr/local/cuda`, so the script would be `export CUDA_HOME=/usr/loca/cuda`. If you are using your cluster's cuda installation and not sure where is it located, this might do the trick: `module show cuda/$VERSION`.
-
-If you use our work, please cite the following:
-
-1. [Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model](https://arxiv.org/abs/2401.09417): Zhu et al.

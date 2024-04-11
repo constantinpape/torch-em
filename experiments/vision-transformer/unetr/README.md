@@ -29,7 +29,7 @@ unetr = UNETR(
 )
 ```
 
-## File structure description:
+## Description:
 - `for_vimunet_benchmarking/`: (see [ViM-UNet description](https://github.com/constantinpape/torch-em/blob/main/vimunet.md) for details)
     - `run_livecell.py`: Benchmarking UNet and UNETR for cell segmentation in phase contrast microscopy.
     - `run_cremi.py`: Benchmarking UNet and UNETR for neurites segmentation in electron microscopy.
