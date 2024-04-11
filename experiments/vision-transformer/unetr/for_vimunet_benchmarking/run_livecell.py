@@ -1,6 +1,7 @@
 import os
 import argparse
 from glob import glob
+from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
@@ -15,26 +16,12 @@ from torch_em.transform.raw import standardize
 from torch_em.model.unetr import SingleDeconv2DBlock
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.util.prediction import predict_with_padding
-from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask, DiceBasedDistanceLoss
+from torch_em.loss import DiceLoss, DiceBasedDistanceLoss
 
 from elf.evaluation import mean_segmentation_accuracy
 
 
 ROOT = "/scratch/usr/nimanwai"
-
-OFFSETS = [
-    [-1, 0], [0, -1],
-    [-3, 0], [0, -3],
-    [-9, 0], [0, -9],
-    [-27, 0], [0, -27]
-]
-
-MODELS = {
-    "vit_t": "/scratch/usr/nimanwai/models/segment-anything/checkpoints/vit_t_mobile_sam.pth",
-    "vit_b": "/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_b_01ec64.pth",
-    "vit_l": "/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_l_0b3195.pth",
-    "vit_h": "/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_h_4b8939.pth"
-}
 
 
 def get_loaders(args, patch_shape=(512, 512)):
@@ -57,10 +44,9 @@ def get_loaders(args, patch_shape=(512, 512)):
         label_dtype=torch.float32,
         boundaries=args.boundaries,
         label_transform=label_trafo,
-        offsets=OFFSETS if args.affinities else None,
-        num_workers=16
+        num_workers=16,
+        download=True,
     )
-
     val_loader = get_livecell_loader(
         path=args.input,
         split="val",
@@ -69,33 +55,24 @@ def get_loaders(args, patch_shape=(512, 512)):
         label_dtype=torch.float32,
         boundaries=args.boundaries,
         label_transform=label_trafo,
-        offsets=OFFSETS if args.affinities else None,
-        num_workers=16
+        num_workers=16,
+        download=True,
     )
-
     return train_loader, val_loader
 
 
 def get_output_channels(args):
     if args.boundaries:
         output_channels = 2
-    elif args.distances:
+    else:
         output_channels = 3
-    elif args.affinities:
-        output_channels = (len(OFFSETS) + 1)
 
     return output_channels
 
 
 def get_loss_function(args):
-    if args.affinities:
-        loss = LossWrapper(
-            loss=DiceLoss(),
-            transform=ApplyAndRemoveMask(masking_method="multiply")
-        )
-    elif args.distances:
+    if args.distances:
         loss = DiceBasedDistanceLoss(mask_distances_in_bg=True)
-
     else:
         loss = DiceLoss()
 
@@ -106,19 +83,11 @@ def get_save_root(args):
     # experiment_type
     if args.boundaries:
         experiment_type = "boundaries"
-    elif args.affinities:
-        experiment_type = "affinities"
-    elif args.distances:
-        experiment_type = "distances"
     else:
-        raise ValueError
-
-    model_name = args.model_type
+        experiment_type = "distances"
 
     # saving the model checkpoints
-    save_root = os.path.join(
-        args.save_root, "pretrained" if args.pretrained else "scratch", experiment_type, model_name
-    )
+    save_root = os.path.join(args.save_root, "scratch", experiment_type, args.model_type)
     return save_root
 
 
@@ -140,7 +109,6 @@ def get_model(args, device):
             encoder=args.model_type,
             out_channels=output_channels,
             use_sam_stats=args.pretrained,
-            encoder_checkpoint=MODELS[args.model_type] if args.pretrained else None,
             final_activation="Sigmoid"
         )
         model.to(device)
@@ -165,7 +133,7 @@ def run_livecell_unetr_training(args, device):
         train_loader=train_loader,
         val_loader=val_loader,
         device=device,
-        learning_rate=args.lr,
+        learning_rate=1e-4,
         loss=loss,
         metric=loss,
         log_image_interval=50,
@@ -174,7 +142,7 @@ def run_livecell_unetr_training(args, device):
         scheduler_kwargs={"mode": "min", "factor": 0.9, "patience": 10}
     )
 
-    trainer.fit(args.iterations)
+    trainer.fit(int(1e5))
 
 
 def run_livecell_unetr_inference(args, device):
@@ -194,17 +162,14 @@ def run_livecell_unetr_inference(args, device):
     model.to(device)
     model.eval()
 
+    # the splits are provided with the livecell dataset
+    # to reproduce the results:
+    # run the inference on the entire dataset as it is.
     test_image_dir = os.path.join(ROOT, "data", "livecell", "images", "livecell_test_images")
     all_test_labels = glob(os.path.join(ROOT, "data", "livecell", "annotations", "livecell_test_images", "*", "*"))
 
-    res_path = os.path.join(save_root, "results.csv")
-    if os.path.exists(res_path) and not args.force:
-        print(pd.read_csv(res_path))
-        print(f"The result is saved at {res_path}")
-        return
-
     msa_list, sa50_list, sa75_list = [], [], []
-    for i, label_path in enumerate(all_test_labels):
+    for label_path in tqdm(all_test_labels):
         labels = imageio.imread(label_path)
         image_id = os.path.split(label_path)[-1]
 
@@ -212,18 +177,12 @@ def run_livecell_unetr_inference(args, device):
         image = standardize(image)
 
         predictions = predict_with_padding(model, image, min_divisible=(16, 16), device=device)
-
         predictions = predictions.squeeze()
 
         if args.boundaries:
             fg, bd = predictions
             instances = segmentation.watershed_from_components(bd, fg)
-
-        elif args.affinities:
-            fg, affs = predictions[0], predictions[1:]
-            instances = segmentation.mutex_watershed_segmentation(fg, affs, offsets=OFFSETS)
-
-        elif args.distances:
+        else:
             fg, cdist, bdist = predictions
             instances = segmentation.watershed_from_center_and_boundary_distances(
                 cdist, bdist, fg, min_size=50,
@@ -238,11 +197,12 @@ def run_livecell_unetr_inference(args, device):
         sa75_list.append(sa_acc[5])
 
     res = {
-        "LiveCELL": "Metrics",
+        "LIVECell": "Metrics",
         "mSA": np.mean(msa_list),
         "SA50": np.mean(sa50_list),
         "SA75": np.mean(sa75_list)
     }
+    res_path = os.path.join(args.result_path, "results.csv")
     df = pd.DataFrame.from_dict([res])
     df.to_csv(res_path)
     print(df)
@@ -250,7 +210,7 @@ def run_livecell_unetr_inference(args, device):
 
 
 def main(args):
-    assert (args.boundaries + args.affinities + args.distances) == 1
+    assert (args.boundaries + args.distances) == 1
 
     print(torch.cuda.get_device_name() if torch.cuda.is_available() else "GPU not available, hence running on CPU")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -264,22 +224,30 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"))
-    parser.add_argument("--iterations", type=int, default=int(1e5))
-    parser.add_argument("-s", "--save_root", type=str, default=os.path.join(ROOT, "experiments", "vimunet"))
-    parser.add_argument("-m", "--model_type", type=str, required=True)
-    parser.add_argument("--lr", type=float, default=1e-5)
-
-    parser.add_argument("--pretrained", action="store_true")
-
-    parser.add_argument("--force", action="store_true")
-
-    parser.add_argument("--train", action="store_true")
-    parser.add_argument("--predict", action="store_true")
-
-    parser.add_argument("--boundaries", action="store_true")
-    parser.add_argument("--affinities", action="store_true")
-    parser.add_argument("--distances", action="store_true")
-
+    parser.add_argument(
+        "-i", "--input", type=str, default=os.path.join(ROOT, "data", "livecell"), help="Path to LIVECell dataset."
+    )
+    parser.add_argument(
+        "-s", "--save_root", type=str, default="./", help="Path where the model checkpoints will be saved."
+    )
+    parser.add_argument(
+        "-m", "--model_type", type=str, required=True,
+        help="Choice of encoder. Supported models are 'unet', 'vit_b', 'vit_l' and 'vit_h'."
+    )
+    parser.add_argument(
+        "--train", action="store_true", help="Whether to train the model."
+    )
+    parser.add_argument(
+        "--predict", action="store_true", help="WWhether to rn inference on the trained model."
+    )
+    parser.add_argument(
+        "--result_path", type=str, default="./", help="Path to save quantitative results."
+    )
+    parser.add_argument(
+        "--boundaries", action="store_true", help="Runs the boundary-based methods."
+    )
+    parser.add_argument(
+        "--distances", action="store_true", help="Runs the distance-based methods."
+    )
     args = parser.parse_args()
     main(args)

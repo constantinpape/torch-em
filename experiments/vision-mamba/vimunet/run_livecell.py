@@ -45,7 +45,6 @@ def get_loaders(args, patch_shape=(512, 512)):
         num_workers=16,
         download=True,
     )
-
     val_loader = get_livecell_loader(
         path=args.input,
         split="val",
@@ -57,7 +56,6 @@ def get_loaders(args, patch_shape=(512, 512)):
         num_workers=16,
         download=True,
     )
-
     return train_loader, val_loader
 
 
@@ -166,7 +164,6 @@ def run_livecell_inference(args, device):
         if args.boundaries:
             fg, bd = predictions
             instances = segmentation.watershed_from_components(bd, fg)
-
         else:
             fg, cdist, bdist = predictions
             instances = segmentation.watershed_from_center_and_boundary_distances(
@@ -182,7 +179,7 @@ def run_livecell_inference(args, device):
         sa75_list.append(sa_acc[5])
 
     res = {
-        "LiveCELL": "Metrics",
+        "LIVECell": "Metrics",
         "mSA": np.mean(msa_list),
         "SA50": np.mean(sa50_list),
         "SA75": np.mean(sa75_list)
