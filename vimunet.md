@@ -38,7 +38,9 @@ $ mamba activate vimunet
 ```bash
 $ pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118
 ```
-> Q. Why use `pip`? - for installation consistency
+> Q1. Why use `pip`? - for installation consistency
+
+> Q2. Why choose CUDA 11.8? - Vim seems to prefer $\le$ 11.8 ([hint](https://github.com/hustvl/Vim/issues/51))
 
 4. Install `ViM` and related dependencies (`causal-conv1d`\**, `mamba`, `Vim`\***):
 ```bash
