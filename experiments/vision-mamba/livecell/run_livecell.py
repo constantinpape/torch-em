@@ -3,7 +3,6 @@ import argparse
 import numpy as np
 import pandas as pd
 from glob import glob
-from tqdm import tqdm
 
 import imageio.v3 as imageio
 
@@ -16,9 +15,6 @@ from torch_em.transform.raw import standardize
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask, DiceBasedDistanceLoss
 
-import elf.segmentation.multicut as mc
-import elf.segmentation.watershed as ws
-import elf.segmentation.features as feats
 from elf.evaluation import mean_segmentation_accuracy
 
 
@@ -158,65 +154,6 @@ def run_livecell_training(args):
     trainer.fit(iterations=int(args.iterations))
 
 
-def _do_bd_multicut_watershed(bd):
-    ws_seg, max_id = ws.distance_transform_watershed(bd, threshold=0.25, sigma_seeds=2.0)
-
-    # compute the region adjacency graph
-    rag = feats.compute_rag(ws_seg)
-
-    # compute the edge costs
-    costs = feats.compute_boundary_features(rag, bd)[:, 0]
-
-    # transform the edge costs from [0, 1] to  [-inf, inf], which is
-    # necessary for the multicut. This is done by intepreting the values
-    # as probabilities for an edge being 'true' and then taking the negative log-likelihood.
-    edge_sizes = feats.compute_boundary_mean_and_length(rag, bd)[:, 1]
-    costs = mc.transform_probabilities_to_costs(costs, edge_sizes=edge_sizes)
-
-    # run the multicut partitioning, here, we use the kernighan lin
-    # heuristics to solve the problem, introduced in
-    # http://xilinx.asia/_hdl/4/eda.ee.ucla.edu/EE201A-04Spring/kl.pdf
-    node_labels = mc.multicut_kernighan_lin(rag, costs)
-
-    # map the results back to pixels to obtain the final segmentation
-    seg = feats.project_node_labels_to_pixels(rag, node_labels)
-
-    return seg
-
-
-def _do_affs_multicut_watershed(affs, offsets):
-    # first, we have to make a single channel input map for the watershed,
-    # which we obtain by averaging the affinities
-    boundary_input = np.mean(affs, axis=0)
-
-    ws_seg, max_id = ws.distance_transform_watershed(boundary_input, threshold=0.25, sigma_seeds=2.0)
-
-    # compute the region adjacency graph
-    rag = feats.compute_rag(ws_seg)
-
-    # compute the edge costs
-    # the offsets encode the pixel transition encoded by the
-    # individual affinity channels. Here, we only have nearest neighbor transitions
-    costs = feats.compute_affinity_features(rag, affs, offsets)[:, 0]
-
-    # transform the edge costs from [0, 1] to  [-inf, inf], which is
-    # necessary for the multicut. This is done by intepreting the values
-    # as probabilities for an edge being 'true' and then taking the negative log-likelihood.
-    # in addition, we weight the costs by the size of the corresponding edge
-    edge_sizes = feats.compute_boundary_mean_and_length(rag, boundary_input)[:, 1]
-    costs = mc.transform_probabilities_to_costs(costs, edge_sizes=edge_sizes)
-
-    # run the multicut partitioning, here, we use the kernighan lin
-    # heuristics to solve the problem, introduced in
-    # http://xilinx.asia/_hdl/4/eda.ee.ucla.edu/EE201A-04Spring/kl.pdf
-    node_labels = mc.multicut_kernighan_lin(rag, costs)
-
-    # map the results back to pixels to obtain the final segmentation
-    seg = feats.project_node_labels_to_pixels(rag, node_labels)
-
-    return seg
-
-
 def run_livecell_inference(args, device):
     output_channels = get_output_channels(args)
 
@@ -232,6 +169,10 @@ def run_livecell_inference(args, device):
         checkpoint=checkpoint,
     )
 
+    state = torch.load(os.path.join(save_root, "checkpoints", "livecell-vimunet", "latest.pt"))
+    print(state["current_metric"])
+    print(state["iteration"])
+
     test_image_dir = os.path.join(ROOT, "data", "livecell", "images", "livecell_test_images")
     all_test_labels = glob(os.path.join(ROOT, "data", "livecell", "annotations", "livecell_test_images", "*", "*"))
 
@@ -242,7 +183,7 @@ def run_livecell_inference(args, device):
         return
 
     msa_list, sa50_list, sa75_list = [], [], []
-    for label_path in tqdm(all_test_labels):
+    for i, label_path in enumerate(all_test_labels):
         labels = imageio.imread(label_path)
         image_id = os.path.split(label_path)[-1]
 
@@ -256,19 +197,11 @@ def run_livecell_inference(args, device):
 
         if args.boundaries:
             fg, bd = predictions
-
-            if args.multicut:
-                instances = _do_bd_multicut_watershed(bd)
-            else:
-                instances = segmentation.watershed_from_components(bd, fg)
+            instances = segmentation.watershed_from_components(bd, fg)
 
         elif args.affinities:
             fg, affs = predictions[0], predictions[1:]
-
-            if args.multicut:
-                instances = _do_affs_multicut_watershed(affs[:4], OFFSETS[:4])
-            else:
-                instances = segmentation.mutex_watershed_segmentation(fg, affs, offsets=OFFSETS)
+            instances = segmentation.mutex_watershed_segmentation(fg, affs, offsets=OFFSETS)
 
         elif args.distances:
             fg, cdist, bdist = predictions
@@ -321,8 +254,6 @@ if __name__ == "__main__":
     parser.add_argument("--pretrained", action="store_true")
 
     parser.add_argument("--force", action="store_true")
-
-    parser.add_argument("--multicut", action="store_true")
 
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--predict", action="store_true")

@@ -10,9 +10,11 @@ from .unetr import UNETR
 
 try:
     from vim.models_mamba import VisionMamba, rms_norm_fn, RMSNorm, layer_norm_fn
+    _have_vim_installed = True
 except ImportError:
     VisionMamba = object
     rms_norm_fn = RMSNorm = layer_norm_fn = None
+    _have_vim_installed = False
 
 try:
     from timm.models.vision_transformer import _cfg
@@ -25,6 +27,7 @@ class ViM(VisionMamba):
         self,
         **kwargs
     ):
+        assert _have_vim_installed, "Please install Vim."
         super().__init__(**kwargs)
 
     def convert_to_expected_dim(self, inputs_):
