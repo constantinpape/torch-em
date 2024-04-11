@@ -12,6 +12,7 @@ import torch_em
 from torch_em.util import segmentation
 from torch_em.model import UNETR, UNet2d
 from torch_em.transform.raw import standardize
+from torch_em.model.unetr import SingleDeconv2DBlock
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.util.prediction import predict_with_padding
 from torch_em.loss import DiceLoss, LossWrapper, ApplyAndRemoveMask, DiceBasedDistanceLoss
@@ -131,6 +132,7 @@ def get_model(args, device):
             out_channels=output_channels,
             initial_features=64,
             final_activation="Sigmoid",
+            sampler_impl=SingleDeconv2DBlock,
         )
     else:
         # the UNETR model

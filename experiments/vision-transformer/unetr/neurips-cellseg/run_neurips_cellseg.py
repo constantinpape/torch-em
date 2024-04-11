@@ -19,6 +19,7 @@ from torch_em.util import segmentation
 from torch_em.model import UNETR, UNet2d
 from torch_em.data import MinInstanceSampler
 from torch_em.transform.raw import standardize
+from torch_em.model.unetr import SingleDeconv2DBlock
 from torch_em.util.prediction import predict_with_halo
 from torch_em.data.datasets.neurips_cell_seg import to_rgb
 from torch_em.data.datasets import get_neurips_cellseg_supervised_loader
@@ -141,6 +142,7 @@ def get_model(args, device):
             out_channels=output_channels,
             initial_features=64,
             final_activation="Sigmoid",
+            sampler_impl=SingleDeconv2DBlock
         )
     else:
         # the UNETR model
