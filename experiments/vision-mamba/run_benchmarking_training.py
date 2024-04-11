@@ -8,8 +8,6 @@ from datetime import datetime
 SCRIPT_NAMES = {
     "livecell": "livecell/run_livecell.py",
     "cremi": "cremi/run_cremi.py",
-    "neurips-cellseg": "neurips-cellseg/run_neurips_cellseg.py",
-    "lm": "light_microscopy/run_lm.py"
 }
 ALL_MODELS = ["vim_t", "vim_s", "vim_b"]
 ALL_SETTINGS = ["boundaries", "affinities", "distances"]
