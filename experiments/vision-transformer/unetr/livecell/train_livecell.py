@@ -12,10 +12,6 @@ def main(args):
     patch_shape = tuple(args.patch_shape)  # patch size used for training on livecell
 
     _name = args.model_name if not args.use_unet else "unet"
-    if args.use_bilinear:
-        _name += "-bilinear"
-    else:
-        _name += "-conv-transpose"
 
     # directory folder to save different parts of the scheme
     dir_structure = os.path.join(
@@ -27,10 +23,7 @@ def main(args):
     loss = common.get_loss_function(args.experiment_name)
 
     if args.use_unet:
-        model = common.get_unet_model(
-            output_channels=common.get_output_channels(args.experiment_name),
-            use_conv_transpose=not args.use_bilinear
-        )
+        model = common.get_unet_model(output_channels=common.get_output_channels(args.experiment_name))
         _store_model_name = "unet"
     else:
         # get the unetr model for the training and inference on livecell dataset
@@ -40,7 +33,6 @@ def main(args):
             patch_shape=patch_shape,
             sam_initialization=args.do_sam_ini,
             output_channels=common.get_output_channels(args.experiment_name),
-            use_conv_transpose=not args.use_bilinear
         )
         _store_model_name = "unetr"
     model.to(device)
@@ -64,16 +56,27 @@ def main(args):
         )
 
         common.do_unetr_training(
-            train_loader=train_loader, val_loader=val_loader, model=model, loss=loss,
-            device=device, save_root=save_root, iterations=args.iterations, name=f"livecell-{_store_model_name}"
+            train_loader=train_loader,
+            val_loader=val_loader,
+            model=model,
+            loss=loss,
+            device=device,
+            save_root=save_root,
+            iterations=args.iterations,
+            name=f"livecell-{_store_model_name}",
         )
 
     if args.predict:
         print(f"2d {_store_model_name.upper()} inference (with {args.experiment_name}) on LiveCELL...")
         common.do_unetr_inference(
-            input_path=args.input, device=device, model=model, save_root=save_root,
-            root_save_dir=root_save_dir, experiment_name=args.experiment_name,
-            input_norm=not args.do_sam_ini, name_extension=f"livecell-{_store_model_name}"
+            input_path=args.input,
+            device=device,
+            model=model,
+            save_root=save_root,
+            root_save_dir=root_save_dir,
+            experiment_name=args.experiment_name,
+            input_norm=not args.do_sam_ini,
+            name_extension=f"livecell-{_store_model_name}"
         )
         print("Predictions are saved in", root_save_dir)
 
