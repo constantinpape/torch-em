@@ -2,7 +2,7 @@
 
 We introduce **ViM-UNet**, a novel segmentation architecture based on [Vision Mamba](https://github.com/hustvl/Vim) for instance segmentation in microscopy.
 
-This is the documentation for the installation instructions, known issues and linked suggestions, benchmarking scripts, and link to the tutorial notebook.
+This is the documentation for the installation instructions, known issues and linked suggestions and benchmarking scripts.
 
 ## TLDR
 1. Please install [`torch-em`](https://github.com/constantinpape/torch-em) and `ViM` (based on our fork: https://github.com/anwai98/Vim)
@@ -19,7 +19,7 @@ This is the documentation for the installation instructions, known issues and li
 
 ### External methods:
 
-> [Here](https://github.com/anwai98/vimunet-benchmarking) are the scripts to run the benchmarking for the reference methods.
+> [Here](https://github.com/computational-cell-analytics/vimunet-benchmarking) are the scripts to run the benchmarking for the reference methods.
 
 1. nnU-Net (see [here](https://github.com/MIC-DKFZ/nnUNet) for installation instructions)
 2. U-Mamba (see [here](https://github.com/bowang-lab/U-Mamba#installation) for installation instructions, and [issues]() encountered with our suggestions to take care of them)
