@@ -65,7 +65,7 @@ def get_dynamicnuclearnet_dataset(
         _create_dataset(path, zip_path)
     else:
         raise RuntimeError(
-            "We do not support automatic download for the dynamic nuclear net dataset yet."
+            "We do not support automatic download for the dynamic nuclear net dataset yet. "
             f"Please download the dataset from https://datasets.deepcell.org/data and put it here: {zip_path}"
         )
 
@@ -82,7 +82,7 @@ def get_dynamicnuclearnet_dataset(
 
 
 def get_dynamicnuclearnet_loader(
-    path, split, patch_shape, batch_size, download, **kwargs
+    path, split, patch_shape, batch_size, download=False, **kwargs
 ):
     """Dataloader for the segmentation of cell nuclei for 5 different cell lines in fluorescence microscopes.
     See `get_dynamicnuclearnet_dataset` for details.
