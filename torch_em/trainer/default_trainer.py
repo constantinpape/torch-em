@@ -516,7 +516,14 @@ class DefaultTrainer:
 
         return save_dict
 
-    def fit(self, iterations=None, load_from_checkpoint=None, epochs=None, save_every_kth_epoch=None):
+    def fit(
+        self,
+        iterations=None,
+        load_from_checkpoint=None,
+        epochs=None,
+        save_every_kth_epoch=None,
+        progress=None,
+    ):
         """Run neural network training.
 
         Exactly one of 'iterations' or 'epochs' has to be passed.
@@ -527,6 +534,8 @@ class DefaultTrainer:
             epochs [int] - how long to train, specified in epochs (default: None)
             save_every_kth_epoch [int] - save checkpoints after every kth epoch separately.
                 The corresponding checkpoints will be saved with the naming scheme 'epoch-{epoch}.pt'. (default: None)
+            progress [progress_bar] - optional progress bar for integration with external tools.
+                Expected to follow the tqdm interface.
         """
         best_metric = self._initialize(iterations, load_from_checkpoint, epochs)
         print(
@@ -547,12 +556,14 @@ class DefaultTrainer:
             validate = self._validate
             print("Training with single precision")
 
-        progress = tqdm(
-            total=epochs * len(self.train_loader) if iterations is None else iterations,
-            desc=f"Epoch {self._epoch}", leave=True
-        )
-        msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
+        total_iterations = epochs * len(self.train_loader) if iterations is None else iterations
+        if progress is None:
+            progress = tqdm(total=total_iterations, desc=f"Epoch {self._epoch}", leave=True)
+        else:
+            progress.total = total_iterations
+            progress.set_description(f"Epoch {self._epoch}")
 
+        msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
         train_epochs = self.max_epoch - self._epoch
         t_start = time.time()
         for _ in range(train_epochs):
