@@ -1,25 +1,25 @@
-# ViM-UNet: Vision Mamba in Biomedical Segmentation*
+# ViM-UNet: Vision Mamba in Biomedical Segmentation
 
-We introduce **ViM-UNet**. a novel segmentation architecture based on Vision Mamba for instance segmentation in microscopy.
+We introduce **ViM-UNet**, a novel segmentation architecture based on [Vision Mamba](https://github.com/hustvl/Vim) for instance segmentation in microscopy.
 
 This is the documentation for the installation instructions, known issues and linked suggestions, benchmarking scripts, and link to the tutorial notebook.
 
 ## TLDR
 1. Please install [`torch-em`](https://github.com/constantinpape/torch-em) and `ViM` (based on our fork: https://github.com/anwai98/Vim)
 2. Supports `ViM Tiny` and `ViM Small` for 2d segmentation using ViM-UNet.
-3. *More details on the preprint coming soon.
-    - Our observations: "ViM-UNet performs similarly or better that UNet (depending on the task), and outperforms UNETR while being more efficient."
+3. Our preprint on ViMUNet will be available soon.
+    - The key observation: "ViM-UNet performs similarly or better that UNet (depending on the task), and outperforms UNETR while being more efficient. Its main advantages is for segmentation problems that rely on large context."
 
 ## Benchmarking Methods
 
 ### Re-implemented methods in `torch-em`:
-1. [ViM-UNet]()
-2. [UNet]()
-3. [UNETR]()
+1. [ViM-UNet](https://github.com/constantinpape/torch-em/blob/main/torch_em/model/vim.py)
+2. [UNet](https://github.com/constantinpape/torch-em/blob/main/torch_em/model/unet.py)
+3. [UNETR](https://github.com/constantinpape/torch-em/blob/main/torch_em/model/unetr.py)
 
 ### External methods:
 
-> [Here](https://github.com/anwai98/vimunet-benchmarking) are the scripts to run the benchmarking for the aforementioned external methods.
+> [Here](https://github.com/anwai98/vimunet-benchmarking) are the scripts to run the benchmarking for the reference methods.
 
 1. nnU-Net (see [here](https://github.com/MIC-DKFZ/nnUNet) for installation instructions)
 2. U-Mamba (see [here](https://github.com/bowang-lab/U-Mamba#installation) for installation instructions, and [issues]() encountered with our suggestions to take care of them)
@@ -40,7 +40,7 @@ $ pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url htt
 ```
 > Q1. Why use `pip`? - for installation consistency
 
-> Q2. Why choose CUDA 11.8? - Vim seems to prefer $\le$ 11.8 ([hint](https://github.com/hustvl/Vim/issues/51))
+> Q2. Why choose CUDA 11.8? - Vim seems to prefer $\le$ 11.8 ([see here](https://github.com/hustvl/Vim/issues/51))
 
 4. Install `ViM` and related dependencies (`causal-conv1d`\**, `mamba`, `Vim`\***):
 ```bash
@@ -53,6 +53,7 @@ $ pip install -e .
 ```
 
 > NOTE: The installation is sometimes a bit tricky, but following the steps and keeping the footnotes in mind should do the trick.
+> We are working on providing an easier and more stable installation, [see this issue](https://github.com/constantinpape/torch-em/issues/237).
 
 ### For UNet and UNETR
 
