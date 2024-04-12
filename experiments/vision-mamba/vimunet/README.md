@@ -1,8 +1,6 @@
 # ViM-UNet: Vision Mamba in Biomedical Segmentation
 
-We introduce **ViM-UNet**. a novel segmentation architecture based on Vision Mamba for instance segmentation in microscopy.
-
-To get started, make sure to take a look at the [documentation](https://github.com/constantinpape/torch-em/blob/main/vimunet.md).
+Experiments for ViM-UNet. Check the [ViM-UNet documentation](https://github.com/constantinpape/torch-em/blob/main/vimunet.md) for details on the method and installation instructions.
 
 Here are the experiments for instance segmentation on:
 1. LIVECell for cell segmentation in phase-contrast microscopy.
