@@ -4,6 +4,7 @@ Available open-source datasets in `torch-em` (see `scripts/datasets` for a quick
 
 ### Microscopy
 
+- ASEM (`asem.py`): Segmentation of organelles in FIB-SEM cells.
 - AxonDeepSeg (`axondeepseg.py`): Segmentation of myelinated axons in electron microscopy.
 - MitoLab* (`cem.py`):
     - CEM MitoLab: Segmentation of mitochondria in electron microscopy.
@@ -43,11 +44,11 @@ Available open-source datasets in `torch-em` (see `scripts/datasets` for a quick
 
 ### Medical Imaging
 
-- AutoPET (`medical/autopet.py`): Segmentation of lesions in whole-body FDG-PET/CT.
-- BTCV (`medical/btcv.py`): Segmentation of multiple organs in CT.
+- AutoPET* (`medical/autopet.py`): Segmentation of lesions in whole-body FDG-PET/CT.
+- BTCV* (`medical/btcv.py`): Segmentation of multiple organs in CT.
 
 ### NOTE:
-- \* - These datasets cannot be used out of the box (mostly for missing automatic downloading). Please take a look at the scripts and the dataset object for details.
+- \* - These datasets cannot be used out of the box (mostly because of missing automatic downloading). Please take a look at the scripts and the dataset object for details.
 
 ## How to create your own dataloader?
 
