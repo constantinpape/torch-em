@@ -6,8 +6,8 @@ name:
     torch-em
 dependencies:
     - affogato
-    - bioimageio.spec <0.5.0
-    - bioimageio.core >=0.5.0
+    - bioimageio.spec >=0.5.0
+    - bioimageio.core >=0.6.0
     - imagecodecs
     - python-elf
     - pytorch >=2.0
