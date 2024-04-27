@@ -132,3 +132,9 @@ For more details run `<COMMAND> -h` for any of these commands.
 The folder [scripts/cli](https://github.com/constantinpape/torch-em/tree/main/scripts/cli) contains some examples for how to use the CLI.
 
 Note: this functionality was recently added and is not fully tested.
+
+## Research Projects using `torch-em`
+
+- [Probabilistic Domain Adaptation for Biomedical Image Segmentation](https://doi.org/10.48550/arXiv.2303.11790)
+- [Segment Anything for Microscopy](https://doi.org/10.1101/2023.08.21.554208)
+- [ViM-UNet: Vision Mamba for Biomedical Segmentation](https://doi.org/10.48550/arXiv.2404.07705)
