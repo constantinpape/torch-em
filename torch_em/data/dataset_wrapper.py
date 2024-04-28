@@ -5,7 +5,11 @@ from torch.utils.data import Dataset
 
 
 class DatasetWrapper(Dataset):
-    def __init__(self, dataset: Dataset, wrap_item: Callable):
+    def __init__(
+        self,
+        dataset: Dataset,
+        wrap_item: Callable
+    ):
         assert isinstance(dataset, Dataset) and isinstance(dataset, Sized), "iterable datasets not supported"
         self.dataset = dataset
         self.wrap_item = wrap_item

@@ -1,8 +1,14 @@
 import numpy as np
+from typing import List
 
 
 class MinForegroundSampler:
-    def __init__(self, min_fraction, background_id=0, p_reject=1.0):
+    def __init__(
+        self,
+        min_fraction: float,
+        background_id: int = 0,
+        p_reject: float = 1.0
+    ):
         self.min_fraction = min_fraction
         self.background_id = background_id
         self.p_reject = p_reject
@@ -29,7 +35,13 @@ class MinForegroundSampler:
 
 
 class MinSemanticLabelForegroundSampler:
-    def __init__(self, semantic_ids, min_fraction, min_fraction_per_id=False, p_reject=1.0):
+    def __init__(
+        self,
+        semantic_ids: List[int],
+        min_fraction: float,
+        min_fraction_per_id: bool = False,
+        p_reject: float = 1.0
+    ):
         self.semantic_ids = semantic_ids
         self.min_fraction = min_fraction
         self.p_reject = p_reject
@@ -50,7 +62,12 @@ class MinSemanticLabelForegroundSampler:
 
 
 class MinIntensitySampler:
-    def __init__(self, min_intensity, function="median", p_reject=1.0):
+    def __init__(
+        self,
+        min_intensity: int,
+        function="median",
+        p_reject: float = 1.0
+    ):
         self.min_intensity = min_intensity
         self.function = getattr(np, function) if isinstance(function, str) else function
         assert callable(self.function)
@@ -65,7 +82,11 @@ class MinIntensitySampler:
 
 
 class MinInstanceSampler:
-    def __init__(self, min_num_instances=2, p_reject=1.0):
+    def __init__(
+        self,
+        min_num_instances: int = 2,
+        p_reject: float = 1.0
+    ):
         self.min_num_instances = min_num_instances
         self.p_reject = p_reject
 
@@ -80,7 +101,10 @@ class MinInstanceSampler:
 class MinTwoInstanceSampler:
     # for the case of min_num_instances=2 this is roughly 10x faster
     # than using MinInstanceSampler since np.unique is slow
-    def __init__(self, p_reject=1.0):
+    def __init__(
+        self,
+        p_reject: float = 1.0
+    ):
         self.p_reject = p_reject
 
     def __call__(self, x, y):
@@ -98,7 +122,12 @@ class MinNoToBackgroundBoundarySampler:
     # label_transform and the RF only learns one class (Error further downstream).
     # Therefore, this sampler is needed. Unfortunatley, the NoToBackgroundBoundaryTransform
     # is then calculated multiple times.
-    def __init__(self, trafo, min_fraction=0.01, p_reject=1.0):
+    def __init__(
+        self,
+        trafo,
+        min_fraction: float = 0.01,
+        p_reject: float = 1.0
+    ):
         self.trafo = trafo
         self.bg_label = trafo.bg_label
         self.mask_label = trafo.mask_label

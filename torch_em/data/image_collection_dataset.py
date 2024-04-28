@@ -1,5 +1,9 @@
+import os
 import numpy as np
+from typing import List, Optional, Tuple, Union
+
 import torch
+
 from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
                     load_image, supports_memmap)
 
@@ -46,18 +50,18 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        raw_image_paths,
-        label_image_paths,
-        patch_shape,
+        raw_image_paths: List[Union[str, os.PathLike]],
+        label_image_paths: List[Union[str, os.PathLike]],
+        patch_shape: Tuple[int, ...],
         raw_transform=None,
         label_transform=None,
         label_transform2=None,
         transform=None,
-        dtype=torch.float32,
-        label_dtype=torch.float32,
-        n_samples=None,
+        dtype: torch.dtype = torch.float32,
+        label_dtype: torch.dtype = torch.float32,
+        n_samples: Optional[int] = None,
         sampler=None,
-        full_check=False,
+        full_check: bool = False,
     ):
         self._check_inputs(raw_image_paths, label_image_paths, full_check=full_check)
         self.raw_images = raw_image_paths

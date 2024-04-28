@@ -1,7 +1,10 @@
+import os
 import warnings
+import numpy as np
+from typing import List, Union, Tuple, Optional, Any
 
 import torch
-import numpy as np
+
 from elf.wrapper import RoiWrapper
 
 from ..util import ensure_tensor_with_channels, load_data
@@ -19,17 +22,17 @@ class RawDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        raw_path,
-        raw_key,
-        patch_shape,
+        raw_path: Union[List[Any], str, os.PathLike],
+        raw_key: str,
+        patch_shape: Tuple[int, ...],
         raw_transform=None,
         transform=None,
-        roi=None,
-        dtype=torch.float32,
-        n_samples=None,
+        roi: Optional[dict] = None,
+        dtype: torch.dtype = torch.float32,
+        n_samples: Optional[int] = None,
         sampler=None,
-        ndim=None,
-        with_channels=False,
+        ndim: Optional[int] = None,
+        with_channels: bool = False,
         augmentations=None,
     ):
         self.raw_path = raw_path
