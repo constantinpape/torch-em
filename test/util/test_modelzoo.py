@@ -27,12 +27,13 @@ class ExpandChannels:
 
 
 class TestModelzoo(unittest.TestCase):
-    data_path = "./data.h5"
     checkpoint_folder = "./checkpoints"
     save_folder = "./zoo_export"
-    name = "test"
+    name = "test-export"
+    data_path = "./zoo_export/data.h5"
 
     def setUp(self):
+        os.makedirs(self.save_folder, exist_ok=True)
         shape = (8, 128, 128)
         chunks = (1, 128, 128)
         with h5py.File(self.data_path, "w") as f:
@@ -42,8 +43,6 @@ class TestModelzoo(unittest.TestCase):
                              chunks=chunks)
 
     def tearDown(self):
-        if os.path.exists(self.data_path):
-            os.remove(self.data_path)
         rmtree(self.checkpoint_folder, ignore_errors=True)
         rmtree(self.save_folder, ignore_errors=True)
 
@@ -75,16 +74,16 @@ class TestModelzoo(unittest.TestCase):
         from torch_em.util.modelzoo import export_bioimageio_model
         self._create_checkpoint(n_channels)
 
+        output_path = os.path.join(self.save_folder, "exported.zip")
         success = export_bioimageio_model(
             os.path.join(self.checkpoint_folder, self.name),
-            self.save_folder,
+            output_path,
             input_data=np.random.rand(128, 128).astype("float32"),
             input_optional_parameters=False
 
         )
         self.assertTrue(success)
-        self.assertTrue(os.path.exists(self.save_folder))
-        self.assertTrue(os.path.exists(os.path.join(self.save_folder, "rdf.yaml")))
+        self.assertTrue(os.path.exists(output_path))
 
     def test_export_single_channel(self):
         self._test_export(1)

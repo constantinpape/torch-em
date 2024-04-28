@@ -4,9 +4,10 @@ import json
 import os
 import pickle
 import subprocess
+import tempfile
+
 from glob import glob
 from pathlib import Path
-from shutil import copyfile
 from warnings import warn
 from zipfile import ZipFile
 
@@ -16,17 +17,17 @@ import torch
 import torch_em
 
 import bioimageio.core as core
-import bioimageio.core.build_spec as build_spec
-from bioimageio.core.prediction_pipeline._model_adapters._pytorch_model_adapter import PytorchModelAdapter
 import bioimageio.core.weight_converter.torch as weight_converter
-from bioimageio.spec.shared import yaml
+import bioimageio.spec.model.v0_5 as spec
+from bioimageio.core.model_adapters._pytorch_model_adapter import PytorchModelAdapter
+from bioimageio.spec import save_bioimageio_package
 
 from elf.io import open_file
 from .util import get_trainer, get_normalizer
 
 
 #
-# general purpose functionality
+# General Purpose Functionality
 #
 
 
@@ -41,13 +42,13 @@ def normalize_with_batch(data, normalizer):
 
 
 #
-# utility functions for model export
+# Utility Functions for Model Export.
 #
 
 
 def get_default_citations(model=None, model_output=None):
     citations = [
-        {"text": "training library", "doi": "https://doi.org/10.5281/zenodo.5108853"}
+        {"text": "training library", "doi": "10.5281/zenodo.5108853"}
     ]
 
     # try to derive the correct network citation from the model class
@@ -59,11 +60,11 @@ def get_default_citations(model=None, model_output=None):
 
         if model_name.lower() in ("unet2d", "unet_2d", "unet"):
             citations.append(
-                {"text": "architecture", "doi": "https://doi.org/10.1007/978-3-319-24574-4_28"}
+                {"text": "architecture", "doi": "10.1007/978-3-319-24574-4_28"}
             )
         elif model_name.lower() in ("unet3d", "unet_3d", "anisotropicunet"):
             citations.append(
-                {"text": "architecture", "doi": "https://doi.org/10.1007/978-3-319-46723-8_49"}
+                {"text": "architecture", "doi": "10.1007/978-3-319-46723-8_49"}
             )
         else:
             warn("No citation for architecture {model_name} found.")
@@ -73,11 +74,11 @@ def get_default_citations(model=None, model_output=None):
         msg = f"No segmentation algorithm for output {model_output} known. 'affinities' and 'boundaries' are supported."
         if model_output == "affinities":
             citations.append(
-                {"text": "segmentation algorithm", "doi": "https://doi.org/10.1109/TPAMI.2020.2980827"}
+                {"text": "segmentation algorithm", "doi": "10.1109/TPAMI.2020.2980827"}
             )
         elif model_output == "boundaries":
             citations.append(
-                {"text": "segmentation algorithm", "doi": "https://doi.org/10.1038/nmeth.4151"}
+                {"text": "segmentation algorithm", "doi": "10.1038/nmeth.4151"}
             )
         else:
             warn(msg)
@@ -119,35 +120,6 @@ def _pad(input_data, trainer):
     return input_data
 
 
-def _write_depedencies(export_folder, dependencies):
-    dep_path = os.path.join(export_folder, "environment.yaml")
-    if dependencies is None:
-        ver = torch.__version__
-        major, minor = list(map(int, ver.split(".")[:2]))
-        assert major in (1, 2)
-        # the torch zip layout changed for a few versions:
-        torch_min_version = "1.0"
-        if minor > 6 and minor < 10:
-            torch_min_version = "1.6"
-        else:
-            torch_min_version = "1.10"
-        torch_min_version = "1.6" if minor >= 6 else "1.0"
-        dependencies = {
-            "channels": ["pytorch", "conda-forge"],
-            "name": "torch-em-deploy",
-            "dependencies": [f"pytorch>={torch_min_version}"]
-        }
-        with open(dep_path, "w") as f:
-            yaml.dump(dependencies, f)
-    else:
-        assert os.path.exists(dependencies)
-        dep = yaml.load(dependencies)
-        assert "channels" in dep
-        assert "name" in dep
-        assert "dependencies" in dep
-        copyfile(dependencies, dep_path)
-
-
 def _write_data(input_data, model, trainer, export_folder):
     # if input_data is None:
     #     gen = SampleGenerator(trainer, 1, False, 1)
@@ -184,30 +156,41 @@ def _write_data(input_data, model, trainer, export_folder):
     return test_in_paths, test_out_paths
 
 
-def _write_source(model, export_folder):
-    # copy the model source file if it"s a torch_em model
-    # (for now only u-net). otherwise just put the full python class
+def _create_weight_description(model, export_folder, model_kwargs):
     module = str(model.__class__.__module__)
     cls_name = str(model.__class__.__name__)
+
     if module == "torch_em.model.unet":
-        source_path = os.path.join(
-            os.path.split(__file__)[0],
-            "../model/unet.py"
+        source_path = os.path.join(os.path.split(__file__)[0], "../model/unet.py")
+        architecture = spec.ArchitectureFromFileDescr(
+            source=Path(source_path),
+            callable=cls_name,
+            kwargs=model_kwargs,
         )
-        source_target_path = os.path.join(export_folder, "unet.py")
-        copyfile(source_path, source_target_path)
-        source = f"./unet.py::{cls_name}"
     else:
-        source = f"{module}.{cls_name}"
-    return source
+        architecture = spec.ArchitectureFromLibraryDescr(
+            import_from=module,
+            callable=cls_name,
+            kwargs=model_kwargs,
+        )
+
+    checkpoint_path = os.path.join(export_folder, "state_dict.pt")
+    torch.save(model.state_dict(), checkpoint_path)
+
+    weight_description = spec.WeightsDescr(
+        pytorch_state_dict=spec.PytorchStateDictWeightsDescr(
+            source=Path(checkpoint_path),
+            architecture=architecture,
+            pytorch_version=spec.Version(torch.__version__),
+        )
+    )
+    return weight_description
 
 
-def _get_kwargs(trainer, name, description,
-                authors, tags,
-                license, documentation,
-                git_repo, cite,
-                maintainers,
-                export_folder, input_optional_parameters):
+def _get_kwargs(
+    trainer, name, description, authors, tags, license, documentation,
+    git_repo, cite, maintainers, export_folder, input_optional_parameters
+):
     if input_optional_parameters:
         print("Enter values for the optional parameters.")
         print("If the default value in [] is satisfactory, press enter without additional input.")
@@ -227,7 +210,7 @@ def _get_kwargs(trainer, name, description,
             save_path = os.path.join(export_folder, fname)
             with open(save_path, "w") as f:
                 f.write(val)
-            return f"./{fname}"
+            return save_path
 
         if is_list and isinstance(val, str):
             val = val.replace(""", """)  # enable single quotes
@@ -286,22 +269,15 @@ def _get_kwargs(trainer, name, description,
         "authors": _get_kwarg("authors", authors, _default_authors, is_list=True),
         "tags": _get_kwarg("tags", tags, lambda: [trainer.name], is_list=True),
         "license": _get_kwarg("license", license, lambda: "MIT"),
-        "documentation": _get_kwarg("documentation", documentation, lambda: trainer.name,
-                                    fname="documentation.md"),
+        "documentation": _get_kwarg(
+            "documentation", documentation, lambda: trainer.name, fname="documentation.md"
+        ),
         "git_repo": _get_kwarg("git_repo", git_repo, _default_repo),
         "cite": _get_kwarg("cite", cite, get_default_citations),
         "maintainers": _get_kwarg("maintainers", maintainers, _default_maintainers, is_list=True),
     }
 
     return kwargs
-
-
-def _write_weights(model, export_folder):
-    weights = model.state_dict()
-    weight_name = "weights.pt"
-    weight_path = os.path.join(export_folder, weight_name)
-    torch.save(weights, weight_path)
-    return f"./{weight_name}"
 
 
 def _get_preprocessing(trainer):
@@ -329,66 +305,41 @@ def _get_preprocessing(trainer):
         return axes
 
     name = f"{normalizer.__module__}.{normalizer.__name__}"
+    axes = _get_axes(kwargs.get("axis", None))
+
     if name == "torch_em.transform.raw.normalize":
 
         min_, max_ = kwargs.get("minval", None), kwargs.get("maxval", None)
-        axes = _get_axes(kwargs.get("axis", None))
         assert (min_ is None) == (max_ is None)
 
         if min_ is None:
-            preprocessing = [{
-                "name": "scale_range",
-                "kwargs": {"mode": "per_sample", "axes": axes,
-                           "min_percentile": 0.0, "max_percentile": 100.0}
-            }]
+            spec_name = "scale_range",
+            spec_kwargs = {"mode": "per_sample", "axes": axes, "min_percentile": 0.0, "max_percentile": 100.0}
         else:
-            preprocessing = [{
-                "name": "scale_linear",
-                "kwargs": {"gain": 1. / max_, "offset": -min_, "axes": axes}
-            }]
+            spec_name = "scale_linear"
+            spec_kwargs = {"gain": 1.0 / max_, "offset": -min_, "axes": axes}
 
     elif name == "torch_em.transform.raw.standardize":
-
         mean, std = kwargs.get("mean", None), kwargs.get("std", None)
         mode = "per_sample" if mean is None else "fixed"
-        axes = _get_axes(kwargs.get("axis", None))
-        preprocessing = [{
-            "name": "zero_mean_unit_variance",
-            "kwargs": {"mode": mode, "axes": axes}
-        }]
-        if mean is not None:
-            preprocessing[0]["kwargs"]["mean"] = mean
-        if std is not None:
-            preprocessing[0]["kwargs"]["std"] = std
+        spec_name = "zero_mean_unit_variance"
+        spec_kwargs = {"mode": mode, "axes": axes, "mean": mean, "std": std}
 
     elif name == "torch_em.transform.raw.normalize_percentile":
-
         lower, upper = kwargs.get("lower", 1.0), kwargs.get("upper", 99.0)
-        axes = _get_axes(kwargs.get("axis", None))
-        preprocessing = [{
-            "name": "scale_range",
-            "kwargs": {"mode": "per_sample", "axes": axes,
-                       "min_percentile": lower, "max_percentile": upper}
-        }]
+        spec_name = "scale_range"
+        spec_kwargs = {"mode": "per_sample", "axes": axes, "min_percentile": lower, "max_percentile": upper}
 
     else:
-        warn("Could not parse the normalization function, 'preprocessing' field will be empty.")
+        warn(f"Could not parse the normalization function {name}, 'preprocessing' field will be empty.")
         return None
 
+    preprocessing = spec.PreprocessingDescr(name=spec_name, kwargs=spec_kwargs)
     return [preprocessing]
 
 
-def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors, min_shape, halo):
+def _get_inout_descriptions(trainer, model, model_kwargs, input_tensors, output_tensors, min_shape, halo):
 
-    def get_ax(tensor):
-        ndim = np.load(tensor).ndim
-        assert ndim in (4, 5)
-        return "bcyx" if ndim == 4 else "bczyx"
-
-    tensor_kwargs = {
-        "input_axes": [get_ax(tensor) for tensor in input_tensors],
-        "output_axes": [get_ax(tensor) for tensor in output_tensors]
-    }
     notebook_link = None
     module = str(model.__class__.__module__)
     name = str(model.__class__.__name__)
@@ -408,22 +359,24 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors, min_s
 
         if name == "UNet2d":
             depth = model_kwargs["depth"]
-            step = [0, 0] + [2 ** depth] * 2
+            step = [2 ** depth] * 2
             if min_shape is None:
-                min_shape = [1, inc] + [2 ** (depth + 1)] * 2
+                min_shape = [2 ** (depth + 1)] * 2
             else:
                 assert len(min_shape) == 2
-                min_shape = [1, inc] + list(min_shape)
+                min_shape = list(min_shape)
             notebook_link = "ilastik/torch-em-2d-unet-notebook"
+
         elif name == "UNet3d":
             depth = model_kwargs["depth"]
-            step = [0, 0] + [2 ** depth] * 3
+            step = [2 ** depth] * 3
             if min_shape is None:
-                min_shape = [1, inc] + [2 ** (depth + 1)] * 3
+                min_shape = [2 ** (depth + 1)] * 3
             else:
                 assert len(min_shape) == 3
-                min_shape = [1, inc] + list(min_shape)
+                min_shape = list(min_shape)
             notebook_link = "ilastik/torch-em-3d-unet-notebook"
+
         elif name == "AnisotropicUNet":
             scale_factors = model_kwargs["scale_factors"]
             scale_prod = [
@@ -431,13 +384,13 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors, min_s
                 for d in range(3)
             ]
             assert len(scale_prod) == 3
-            step = [0, 0] + scale_prod
+            step = scale_prod
             if min_shape is None:
-                min_shape = [1, inc] + [2 * sp for sp in scale_prod]
+                min_shape = [2 * sp for sp in scale_prod]
             else:
-                min_shape = [1, inc] + list(min_shape)
-            assert len(min_shape) == len(step), f"{len(min_shape), len(step)}"
+                min_shape = list(min_shape)
             notebook_link = "ilastik/torch-em-3d-unet-notebook"
+
         else:
             raise RuntimeError(f"Cannot derive tensor parameters for {module}.{name}")
 
@@ -447,22 +400,59 @@ def _get_tensor_kwargs(model, model_kwargs, input_tensors, output_tensors, min_s
             halo = [0] * (len(step) - len(halo)) + halo
         assert len(halo) == len(step), f"{len(halo)}, {len(step)}"
 
-        ref = "input0"
-        if inc == outc:
-            scale = [1] * len(step)
-            offset = [0] * len(step)
-        else:
-            scale = [1, float(outc) / inc] + ([1] * (len(step) - 2))
-            offset = [0, 0] + ([0] * (len(step) - 2))
-        tensor_kwargs.update({
-            "input_step": [step],
-            "input_min_shape": [min_shape],
-            "output_reference": [ref],
-            "output_scale": [scale],
-            "output_offset": [offset],
-            "halo": [halo]
-        })
-    return tensor_kwargs, notebook_link
+        # Create the input axis description.
+        input_axes = [
+            spec.BatchAxis(),
+            spec.ChannelAxis(channel_names=[spec.Identifier(f"channel_{i}") for i in range(inc)]),
+        ]
+        input_ndim = np.load(input_tensors[0]).ndim
+        assert input_ndim in (4, 5)
+        axis_names = "zyx" if input_ndim == 5 else "yx"
+        assert len(axis_names) == len(min_shape) == len(step)
+        input_axes += [
+            spec.SpaceInputAxis(id=spec.AxisId(ax_name), size=spec.ParameterizedSize(min=ax_min, step=ax_step))
+            for ax_name, ax_min, ax_step in zip(axis_names, min_shape, step)
+        ]
+
+        # Create the rest of the input description.
+        preprocessing = _get_preprocessing(trainer)
+        input_description = [spec.InputTensorDescr(
+            id=spec.TensorId("image"),
+            axes=input_axes,
+            test_tensor=spec.FileDescr(source=Path(input_tensors[0])),
+            preprocessing=preprocessing,
+        )]
+
+        # Create the output axis description.
+        output_axes = [
+            spec.BatchAxis(),
+            spec.ChannelAxis(channel_names=[spec.Identifier(f"out_channel_{i}") for i in range(outc)]),
+        ]
+        output_ndim = np.load(output_tensors[0]).ndim
+        assert output_ndim in (4, 5)
+        axis_names = "zyx" if output_ndim == 5 else "yx"
+        assert len(axis_names) == len(halo)
+        output_axes += [
+            spec.SpaceOutputAxisWithHalo(
+                id=spec.AxisId(ax_name),
+                size=spec.SizeReference(
+                    tensor_id=spec.TensorId("image"), axis_id=spec.AxisId(ax_name)
+                ),
+                halo=halo_val,
+            ) for ax_name, halo_val in zip(axis_names, halo)
+        ]
+
+        # Create the rest of the output description.
+        output_description = [spec.OutputTensorDescr(
+            id=spec.TensorId("prediction"),
+            axes=output_axes,
+            test_tensor=spec.FileDescr(source=Path(output_tensors[0]))
+        )]
+
+    else:
+        raise NotImplementedError("Model export currently only works for torch_em.model.unet.")
+
+    return input_description, output_description, notebook_link
 
 
 def _validate_model(spec_path):
@@ -503,97 +493,89 @@ def _get_input_data(trainer):
 
 
 # TODO config: training details derived from loss and optimizer, custom params, e.g. offsets for mws
-def export_bioimageio_model(checkpoint, export_folder, input_data=None,
-                            dependencies=None, name=None,
-                            description=None, authors=None,
-                            tags=None, license=None,
-                            documentation=None, covers=None,
-                            git_repo=None, cite=None,
-                            input_optional_parameters=True,
-                            model_postprocessing=None,
-                            for_deepimagej=False, links=None,
-                            maintainers=None, min_shape=None, halo=None,
-                            checkpoint_name="best",
-                            training_data=None, config={}):
+def export_bioimageio_model(
+    checkpoint,
+    output_path,
+    input_data=None,
+    name=None,
+    description=None,
+    authors=None,
+    tags=None,
+    license=None,
+    documentation=None,
+    covers=None,
+    git_repo=None,
+    cite=None,
+    input_optional_parameters=True,
+    model_postprocessing=None,
+    for_deepimagej=False,
+    links=None,
+    maintainers=None,
+    min_shape=None,
+    halo=None,
+    checkpoint_name="best",
+    training_data=None,
+    config={}
+):
+    """Export model to bioimage.io model format.
     """
-    """
-    # load trainer and model
+    # Load the trainer and model.
     trainer = get_trainer(checkpoint, name=checkpoint_name, device="cpu")
     model, model_kwargs = _get_model(trainer, model_postprocessing)
 
+    # Get input data from the trainer if it is not given.
     if input_data is None:
         input_data = _get_input_data(trainer)
 
-    # create the weights
-    os.makedirs(export_folder, exist_ok=True)
-    weight_path = _write_weights(model, export_folder)
+    with tempfile.TemporaryDirectory() as export_folder:
 
-    # create the test input/output file and derive the tensor kwargs from the model and its kwargs
-    test_in_paths, test_out_paths = _write_data(input_data, model, trainer, export_folder)
-    tensor_kwargs, notebook_link = _get_tensor_kwargs(
-        model, model_kwargs, test_in_paths, test_out_paths, min_shape, halo
-    )
+        # Create the weight description.
+        weight_description = _create_weight_description(model, export_folder, model_kwargs)
 
-    # create the model source file
-    source = _write_source(model, export_folder)
-
-    # create dependency file
-    _write_depedencies(export_folder, dependencies)
-
-    # get the additional kwargs
-    kwargs = _get_kwargs(trainer, name, description,
-                         authors, tags,
-                         license, documentation,
-                         git_repo, cite,
-                         maintainers,
-                         export_folder, input_optional_parameters)
-    kwargs.update(tensor_kwargs)
-    preprocessing = _get_preprocessing(trainer)
-
-    # the apps to link with this model, by default ilastik
-    if links is None:
-        links = []
-    links.append("ilastik/ilastik")
-    # add the notebook link, if available
-    if notebook_link is not None:
-        links.append(notebook_link)
-    kwargs.update({"links": links, "config": config})
-
-    zip_path = os.path.join(export_folder, f"{name}.zip")
-    # change the working directory to the export_folder to avoid issues with relative paths
-    cwd = os.getcwd()
-    os.chdir(export_folder)
-
-    try:
-        build_spec.build_model(
-            weight_uri=weight_path,
-            weight_type="pytorch_state_dict",
-            test_inputs=[f"./{os.path.split(test_in)[1]}" for test_in in test_in_paths],
-            test_outputs=[f"./{os.path.split(test_out)[1]}" for test_out in test_out_paths],
-            root=".",
-            output_path=f"{name}.zip",
-            dependencies="environment.yaml",
-            preprocessing=preprocessing,
-            architecture=source,
-            model_kwargs=model_kwargs,
-            add_deepimagej_config=for_deepimagej,
-            training_data=training_data,
-            **kwargs
+        # Create the test input/output files.
+        test_in_paths, test_out_paths = _write_data(input_data, model, trainer, export_folder)
+        # Get the descriptions for inputs, outputs and notebook links.
+        input_description, output_description, notebook_link = _get_inout_descriptions(
+            trainer, model, model_kwargs, test_in_paths, test_out_paths, min_shape, halo
         )
-    except Exception as e:
-        raise e
-    finally:
-        os.chdir(cwd)
 
-    # load and validate the model
-    rdf_path = os.path.join(export_folder, "rdf.yaml")
-    _extract_from_zip(zip_path, rdf_path, "rdf.yaml")
-    val_success = _validate_model(rdf_path)
+        # Get the additional kwargs.
+        kwargs = _get_kwargs(
+            trainer, name, description,
+            authors, tags, license, documentation,
+            git_repo, cite, maintainers,
+            export_folder, input_optional_parameters
+        )
 
+        # TODO double check the current link policy
+        # The apps to link with this model, by default ilastik.
+        if links is None:
+            links = []
+        links.append("ilastik/ilastik")
+        # add the notebook link, if available
+        if notebook_link is not None:
+            links.append(notebook_link)
+        kwargs.update({"links": links})
+
+        if covers is not None:
+            kwargs["covers"] = covers
+
+        model_description = spec.ModelDescr(
+            inputs=input_description,
+            outputs=output_description,
+            weights=weight_description,
+            config=config,
+            **kwargs,
+        )
+
+        save_bioimageio_package(model_description, output_path=output_path)
+
+    # Validate the model.
+    val_success = _validate_model(output_path)
     if val_success:
-        print(f"The model was successfully exported to '{export_folder}'.")
+        print(f"The model was successfully exported to '{output_path}'.")
     else:
-        warn(f"Validation of the bioimageio model exported to '{export_folder}' has failed. " +
+        warn(f"Validation of the bioimageio model exported to '{output_path}' has failed. " +
              "You can use this model, but it will probably yield incorrect results.")
     return val_success
 
@@ -637,9 +619,13 @@ def main():
 #
 
 def _load_model(model_spec, device):
-    model = PytorchModelAdapter.get_nn_instance(model_spec)
-    weights = model_spec.weights["pytorch_state_dict"]
-    state = torch.load(weights.source, map_location=device)
+    weight_spec = model_spec.weights.pytorch_state_dict
+    model = PytorchModelAdapter.get_network(weight_spec)
+    weight_file = weight_spec.source.path
+    if not os.path.exists(weight_file):
+        weight_file = os.path.join(model_spec.root, weight_file)
+    assert os.path.exists(weight_file), weight_file
+    state = torch.load(weight_file, map_location=device)
     model.load_state_dict(state)
     model.eval()
     return model
@@ -721,9 +707,10 @@ def _load_normalizer(model_spec):
 
 
 def import_bioimageio_model(spec_path, return_spec=False, device="cpu"):
-    model_spec = core.load_resource_description(spec_path)
+    model_spec = core.load_description(spec_path)
 
     model = _load_model(model_spec, device=device)
+    # TODO
     normalizer = _load_normalizer(model_spec)
 
     if return_spec:
