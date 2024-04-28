@@ -334,7 +334,13 @@ def _get_preprocessing(trainer):
         warn(f"Could not parse the normalization function {name}, 'preprocessing' field will be empty.")
         return None
 
-    preprocessing = spec.PreprocessingDescr(name=spec_name, kwargs=spec_kwargs)
+    name_to_cls = {
+        "scale_linear": spec.ScaleLinearDescr,
+        "scale_rage": spec.ScaleRangeDescr,
+        "zero_mean_unit_variance": spec.ZeroMeanUnitVarianceDescr,
+    }
+    preprocessing = name_to_cls[spec_name](kwargs=spec_kwargs)
+
     return [preprocessing]
 
 
