@@ -2,9 +2,9 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5108853.svg)](https://doi.org/10.5281/zenodo.5108853)
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/torch_em/badges/version.svg)](https://anaconda.org/conda-forge/torch_em)
 
-# Torch'em
+# torch-em
 
-Deep-learning based semantic and instance segmentation for 3D Electron Microscopy and other bioimage analysis problems based on pytorch.
+Deep-learning based semantic and instance segmentation for 3D Electron Microscopy and other bioimage analysis problems based on PyTorch.
 Any feedback is highly appreciated, just open an issue!
 
 Highlights:
@@ -85,27 +85,29 @@ For a more in-depth example, check out one of the example notebooks:
 
 ## Installation
 
-### From conda
+### From mamba
+
+[mamba](https://mamba.readthedocs.io/en/latest/) is a drop-in replacement for conda, but much faster. While the steps below may also work with `conda`, it's highly recommended using `mamba`. You can follow the instructions [here](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html) to install `mamba`.
 
 You can install `torch_em` from conda-forge:
 ```
-conda install -c conda-forge torch_em
+mamba install -c conda-forge torch_em
 ```
-Please check out [pytorch.org](https://pytorch.org/) for more information on how to install a pytorch version compatible with your system.
+Please check out [pytorch.org](https://pytorch.org/) for more information on how to install a PyTorch version compatible with your system.
 
 ### From source
 
 It's recommmended to set up a conda environment for using `torch_em`.
-Two conda environment files are provided: `environment_cpu.yaml` for a pure cpu set-up and `environment_gpu.yaml` for a gpu set-up.
-If you want to use the gpu version, make sure to set the correct cuda version for your system in the environment file, by modifiying [this-line](https://github.com/constantinpape/torch-em/blob/main/environment_gpu.yaml#L9).
+Two conda environment files are provided: `environment_cpu.yaml` for a pure CPU set-up and `environment_gpu.yaml` for a GPU set-up.
+If you want to use the GPU version, make sure to set the correct CUDA version for your system in the environment file, by modifiying [this-line](https://github.com/constantinpape/torch-em/blob/main/environment_gpu.yaml#L9).
 
 You can set up a conda environment using one of these files like this:
-```sh
-conda env create -f <ENV>.yaml -n <ENV_NAME>
-conda activate <ENV_NAME>
+```bash
+mamba create -f <ENV>.yaml -n <ENV_NAME>
+mamba activate <ENV_NAME>
 pip install -e .
 ```
-where <ENV>.yaml is either `environment_cpu.yaml` or `environment_gpu.yaml`.
+where `<ENV>.yaml` is either `environment_cpu.yaml` or `environment_gpu.yaml`.
 
 
 ## Features
@@ -113,6 +115,8 @@ where <ENV>.yaml is either `environment_cpu.yaml` or `environment_gpu.yaml`.
 - Training of [2d U-Nets](https://doi.org/10.1007/978-3-319-24574-4_28) and [3d U-Nets](https://doi.org/10.1007/978-3-319-46723-8_49) for various segmentation tasks.
 - Random forest based domain adaptation from [Shallow2Deep](https://doi.org/10.1101/2021.11.09.467925)
 - Training models for embedding prediction with sparse instance labels from [SPOCO](https://arxiv.org/abs/2103.14572)
+- Training of [UNETR](https://doi.org/10.48550/arXiv.2103.10504) for various 2d segmentation tasks, with a flexible choice of vision transformer backbone from [Segment Anything](https://doi.org/10.48550/arXiv.2304.02643) or [Masked Autoencoder](https://doi.org/10.48550/arXiv.2111.06377).
+- Training of [ViM-UNet](https://doi.org/10.48550/arXiv.2404.07705) for various 2d segmentation tasks.
 
 
 ## Command Line Scripts
@@ -128,3 +132,9 @@ For more details run `<COMMAND> -h` for any of these commands.
 The folder [scripts/cli](https://github.com/constantinpape/torch-em/tree/main/scripts/cli) contains some examples for how to use the CLI.
 
 Note: this functionality was recently added and is not fully tested.
+
+## Research Projects using `torch-em`
+
+- [Probabilistic Domain Adaptation for Biomedical Image Segmentation](https://doi.org/10.48550/arXiv.2303.11790)
+- [Segment Anything for Microscopy](https://doi.org/10.1101/2023.08.21.554208)
+- [ViM-UNet: Vision Mamba for Biomedical Segmentation](https://doi.org/10.48550/arXiv.2404.07705)
