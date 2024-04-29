@@ -81,8 +81,8 @@ class TestModelzoo(unittest.TestCase):
             os.path.join(self.checkpoint_folder, self.name),
             output_path,
             input_data=np.random.rand(128, 128).astype("float32"),
+            maintainers=[{"github_user": "constantinpape"}],
             input_optional_parameters=False
-
         )
         self.assertTrue(success)
         self.assertTrue(os.path.exists(output_path))
