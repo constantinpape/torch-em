@@ -9,7 +9,6 @@ import tempfile
 from glob import glob
 from pathlib import Path
 from warnings import warn
-from zipfile import ZipFile
 
 import imageio
 import numpy as np
@@ -17,7 +16,6 @@ import torch
 import torch_em
 
 import bioimageio.core as core
-import bioimageio.core.weight_converter.torch as weight_converter
 import bioimageio.spec.model.v0_5 as spec
 from bioimageio.core.model_adapters._pytorch_model_adapter import PytorchModelAdapter
 from bioimageio.spec import save_bioimageio_package
@@ -297,11 +295,11 @@ def _get_preprocessing(trainer):
         kwargs = {}
 
     def _get_axes(axis):
+        all_axes = ["channel", "y", "x"] if ndim == 2 else ["channel", "z", "y", "x"]
         if axis is None:
-            axes = "cyx" if ndim == 2 else "czyx"
+            axes = all_axes
         else:
-            axes_labels = ["c", "y", "x"] if ndim == 2 else ["c", "z", "y", "x"]
-            axes = "".join(axes_labels[i] for i in axis)
+            axes = [all_axes[i] for i in axes]
         return axes
 
     name = f"{normalizer.__module__}.{normalizer.__name__}"
@@ -320,10 +318,13 @@ def _get_preprocessing(trainer):
             spec_kwargs = {"gain": 1.0 / max_, "offset": -min_, "axes": axes}
 
     elif name == "torch_em.transform.raw.standardize":
+        spec_kwargs = {"axes": axes}
         mean, std = kwargs.get("mean", None), kwargs.get("std", None)
-        mode = "per_sample" if mean is None else "fixed"
-        spec_name = "zero_mean_unit_variance"
-        spec_kwargs = {"mode": mode, "axes": axes, "mean": mean, "std": std}
+        if (mean is None) and (std is None):
+            spec_name = "zero_mean_unit_variance"
+        else:
+            spec_name = "fixed_zero_mean_unit_varaince"
+            spec_kwargs.update({"mean": mean, "std": std})
 
     elif name == "torch_em.transform.raw.normalize_percentile":
         lower, upper = kwargs.get("lower", 1.0), kwargs.get("upper", 99.0)
@@ -338,6 +339,7 @@ def _get_preprocessing(trainer):
         "scale_linear": spec.ScaleLinearDescr,
         "scale_rage": spec.ScaleRangeDescr,
         "zero_mean_unit_variance": spec.ZeroMeanUnitVarianceDescr,
+        "fixed_zero_mean_unit_variance": spec.FixedZeroMeanUnitVarianceDescr,
     }
     preprocessing = name_to_cls[spec_name](kwargs=spec_kwargs)
 
@@ -466,8 +468,13 @@ def _validate_model(spec_path):
         return False
 
     model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True)
-    inputs = [normalize_with_batch(np.load(test_in), normalizer) for test_in in model_spec.test_inputs]
-    expected = [np.load(test_out) for test_out in model_spec.test_outputs]
+    root = model_spec.root
+
+    input_paths = [os.path.join(root, ipt.test_tensor.source.path) for ipt in model_spec.inputs]
+    inputs = [normalize_with_batch(np.load(ipt), normalizer) for ipt in input_paths]
+
+    expected_paths = [os.path.join(root, opt.test_tensor.source.path) for opt in model_spec.outputs]
+    expected = [np.load(opt) for opt in expected_paths]
 
     with torch.no_grad():
         inputs = [torch.from_numpy(input_) for input_ in inputs]
@@ -482,14 +489,8 @@ def _validate_model(spec_path):
     return True
 
 
-def _extract_from_zip(zip_path, out_path, name):
-    with ZipFile(zip_path) as z:
-        with open(out_path, "w") as f:
-            f.write(z.read(name).decode("utf-8"))
-
-
 #
-# model export functionality
+# Model Export Functionality
 #
 
 def _get_input_data(trainer):
@@ -640,6 +641,9 @@ def _load_model(model_spec, device):
 def _load_normalizer(model_spec):
     inputs = model_spec.inputs[0]
     preprocessing = inputs.preprocessing
+
+    # Filter out ensure dtype.
+    preprocessing = [preproc for preproc in preprocessing if preproc.id != "ensure_dtype"]
     if len(preprocessing) == 0:
         return None
 
@@ -649,64 +653,50 @@ def _load_normalizer(model_spec):
         shape = shape.min
 
     conf = preprocessing[0]
-    name = conf.name
+    name = conf.id
     spec_kwargs = conf.kwargs
 
     def _get_axis(axes):
-        label_to_id = {"c": 0, "z": 1, "y": 2, "x": 3} if ndim == 3 else\
-            {"c": 0, "y": 1, "x": 2}
+        label_to_id = {"channel": 0, "z": 1, "y": 2, "x": 3} if ndim == 3 else\
+            {"channel": 0, "y": 1, "x": 2}
         axis = tuple(label_to_id[ax] for ax in axes)
 
-        # is the axis full? Then we don"t need to specify it.
+        # Is the axis full? Then we don't need to specify it.
         if len(axis) == ndim + 1:
             return None
 
-        # drop the channel axis if we have only a single channel
-        # (because torch_em squeezes the channel axis in this case)
+        # Drop the channel axis if we have only a single channel.
+        # Because torch_em squeezes the channel axis in this case.
         if shape[1] == 1:
             axis = tuple(ax - 1 for ax in axis if ax > 0)
         return axis
 
+    axis = _get_axis(spec_kwargs.get("axes", None))
     if name == "zero_mean_unit_variance":
-        mode = spec_kwargs["mode"]
-        if mode == "fixed":
-            kwargs = {"mean": spec_kwargs["mean"], "std": spec_kwargs["std"]}
-        else:
-            axis = _get_axis(spec_kwargs["axes"])
-            kwargs = {"axis": axis}
-        normalizer = functools.partial(
-            torch_em.transform.raw.standardize,
-            **kwargs
-        )
+        kwargs = {"axis": axis}
+        normalizer = functools.partial(torch_em.transform.raw.standardize, **kwargs)
+
+    elif name == "fixed_zero_mean_unit_variance":
+        kwargs = {"axis": axis, "mean": spec_kwargs["mean"], "std": spec_kwargs["std"]}
+        normalizer = functools.partial(torch_em.transform.raw.standardize, **kwargs)
 
     elif name == "scale_linear":
-        axis = _get_axis(spec_kwargs["axes"])
         min_ = -spec_kwargs["offset"]
         max_ = 1. / spec_kwargs["gain"]
         kwargs = {"axis": axis, "minval": min_, "maxval": max_}
-        normalizer = functools.partial(
-            torch_em.transform.raw.normalize,
-            **kwargs
-        )
+        normalizer = functools.partial(torch_em.transform.raw.normalize, **kwargs)
 
     elif name == "scale_range":
-        assert spec_kwargs["mode"] == "per_sample"  # can"t parse the other modes right now
-        axis = _get_axis(spec_kwargs["axes"])
+        assert spec_kwargs["mode"] == "per_sample"  # Can't parse the other modes right now.
         lower, upper = spec_kwargs["min_percentile"], spec_kwargs["max_percentile"]
         if np.isclose(lower, 0.0) and np.isclose(upper, 100.0):
-            normalizer = functools.partial(
-                torch_em.transform.raw.normalize,
-                axis=axis
-            )
+            normalizer = functools.partial(torch_em.transform.raw.normalize, axis=axis)
         else:
             kwargs = {"axis": axis, "lower": lower, "upper": upper}
-            normalizer = functools.partial(
-                torch_em.transform.raw.normalize_percentile,
-                **kwargs
-            )
+            normalizer = functools.partial(torch_em.transform.raw.normalize_percentile, **kwargs)
 
     else:
-        msg = f"torch_em does not support the use of the biomageio preprocessing function {name}"
+        msg = f"torch_em does not support the use of the biomageio preprocessing function {name}."
         raise RuntimeError(msg)
 
     return normalizer
@@ -716,7 +706,6 @@ def import_bioimageio_model(spec_path, return_spec=False, device="cpu"):
     model_spec = core.load_description(spec_path)
 
     model = _load_model(model_spec, device=device)
-    # TODO
     normalizer = _load_normalizer(model_spec)
 
     if return_spec:
@@ -730,61 +719,55 @@ def import_trainer_from_bioimageio_model(spec_path):
     pass
 
 
+# TODO: the weight conversion needs to be updated once the
+# corresponding functionality in bioimageio.core is updated
 #
-# weight conversion
+# Weight Conversion
 #
 
 
 def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
-    root = Path(os.path.split(spec_path)[0])
-    if isinstance(spec_path, str):
-        spec_path = Path(spec_path)
-    weight_path = os.path.join(root, weight_name)
-
-    # here, we need the model with resolved nodes
-    model_spec = core.load_resource_description(spec_path)
-    converter(model_spec, weight_path, **kwargs)
-
-    # now, we need the model with raw nodes
-    model_spec = core.load_raw_resource_description(spec_path)
-    zip_path = os.path.join(root, f"{model_spec.name}.zip")
-    model_spec = build_spec.add_weights(
-        model_spec, weight_path, weight_type=weight_type, output_path=zip_path, **kwargs
-    )
-    rdf_path = os.path.join(root, "rdf.yaml")
-    _extract_from_zip(zip_path, rdf_path, "rdf.yaml")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        weight_path = os.path.join(tmp_dir, weight_name)
+        model_spec = core.load_description(spec_path)
+        weight_descr = converter(model_spec, weight_path, **kwargs)
+        # TODO double check
+        setattr(model_spec.weights, weight_type, weight_descr)
+        save_bioimageio_package(model_spec, output_path=spec_path)
 
 
 def convert_to_onnx(spec_path, opset_version=12):
-    converter = weight_converter.convert_weights_to_onnx
-    _convert_impl(spec_path, "weights.onnx", converter, "onnx", opset_version=opset_version)
-    # TODO check the exported model and return exception if it fails
-    return None
+    raise NotImplementedError
+    # converter = weight_converter.convert_weights_to_onnx
+    # _convert_impl(spec_path, "weights.onnx", converter, "onnx", opset_version=opset_version)
+    # return None
 
 
-def convert_to_torchscript(spec_path):
-    converter = weight_converter.convert_weights_to_torchscript
-    weight_name = "weights-torchscript.pt"
-    _convert_impl(spec_path, weight_name, converter, "torchscript")
+def convert_to_torchscript(model_path):
+    raise NotImplementedError
+    # from bioimageio.core.weight_converter.torch._torchscript import convert_weights_to_torchscript
 
-    # check that we can actually load it again
-    root = os.path.split(spec_path)[0]
-    weight_path = os.path.join(root, weight_name)
-    try:
-        torch.jit.load(weight_path)
-        return None
-    except Exception as e:
-        return e
+    # weight_name = "weights-torchscript.pt"
+    # breakpoint()
+    # _convert_impl(model_path, weight_name, convert_weights_to_torchscript, "torchscript")
+
+    # # Check that we can load the converted weights.
+    # model_spec = core.load_description(model_path)
+    # weight_path = model_spec.weights.torchscript.weights
+    # try:
+    #     torch.jit.load(weight_path)
+    #     return None
+    # except Exception as e:
+    #     return e
 
 
-def add_weight_formats(export_folder, additional_formats):
-    spec_path = os.path.join(export_folder, "rdf.yaml")
+def add_weight_formats(model_path, additional_formats):
     for add_format in additional_formats:
 
         if add_format == "onnx":
-            ret = convert_to_onnx(spec_path)
+            ret = convert_to_onnx(model_path)
         elif add_format == "torchscript":
-            ret = convert_to_torchscript(spec_path)
+            ret = convert_to_torchscript(model_path)
 
         if ret is None:
             print("Successfully added", add_format, "weights")
@@ -811,7 +794,7 @@ def convert_main():
 
 
 #
-# misc functionality
+# Misc Functionality
 #
 
 def export_parser_helper():
