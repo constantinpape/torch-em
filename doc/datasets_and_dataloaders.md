@@ -1,6 +1,6 @@
 # Datasets in `torch-em`
 
-Available open-source datasets in `torch-em` (see `scripts/datasets` for a quick guide on how to use the dataloaders out-of-the-box):
+Available open-source datasets in `torch-em` located at `torch_em/data/datasets/` (see `scripts/datasets` for a quick guide on how to use the dataloaders out-of-the-box):
 
 ### Microscopy
 
