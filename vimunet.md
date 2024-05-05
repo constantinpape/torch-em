@@ -7,7 +7,7 @@ This is the documentation for the installation instructions, known issues and li
 ## TLDR
 1. Please install [`torch-em`](https://github.com/constantinpape/torch-em) and `ViM` (based on our fork: https://github.com/anwai98/Vim)
 2. Supports `ViM Tiny` and `ViM Small` for 2d segmentation using ViM-UNet.
-3. Check out [our preprint](https://arxiv.org/abs/2404.07705) for more details.
+3. Check out [our preprint](https://arxiv.org/abs/2404.07705) (accepted at [MIDL 2024 - Short Paper](https://openreview.net/forum?id=PYNwysgFeP)) for more details.
     - The key observation: "ViM-UNet performs similarly or better that UNet (depending on the task), and outperforms UNETR while being more efficient." Its main advantage is for segmentation problems that rely on larger context.
 
 ## Benchmarking Methods
