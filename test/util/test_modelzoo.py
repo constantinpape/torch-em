@@ -29,9 +29,9 @@ class ExpandChannels:
 class TestModelzoo(unittest.TestCase):
     checkpoint_folder = "./checkpoints"
     log_folder = "./logs"
-    save_folder = "./zoo_export"
+    save_folder = "./tmp_zoo_export"
     name = "test-export"
-    data_path = "./zoo_export/data.h5"
+    data_path = "./tmp_zoo_export/data.h5"
 
     def setUp(self):
         os.makedirs(self.save_folder, exist_ok=True)
@@ -72,11 +72,11 @@ class TestModelzoo(unittest.TestCase):
         )
         trainer.fit(10)
 
-    def _test_export(self, n_channels):
+    def _test_export(self, n_channels, name):
         from torch_em.util.modelzoo import export_bioimageio_model
 
         self._create_checkpoint(n_channels)
-        output_path = os.path.join(self.save_folder, "exported.zip")
+        output_path = os.path.join(self.save_folder, f"exported-{name}.zip")
         success = export_bioimageio_model(
             os.path.join(self.checkpoint_folder, self.name),
             output_path,
@@ -90,16 +90,16 @@ class TestModelzoo(unittest.TestCase):
         return output_path
 
     def test_export_single_channel(self):
-        self._test_export(1)
+        self._test_export(1, "single-chan")
 
     def test_export_multi_channel(self):
-        self._test_export(4)
+        self._test_export(4, "multi-chan")
 
     @unittest.expectedFailure
     def test_add_weights_torchscript(self):
         from torch_em.util.modelzoo import add_weight_formats
 
-        model_path = self._test_export(1)
+        model_path = self._test_export(1, "torchscript")
         add_weight_formats(model_path, ["torchscript"])
         self.assertTrue(os.path.join(self.save_folder, "weigths-torchscript.pt"))
 
@@ -108,7 +108,7 @@ class TestModelzoo(unittest.TestCase):
     def test_add_weights_onnx(self):
         from torch_em.util.modelzoo import add_weight_formats
 
-        self._test_export(1)
+        self._test_export(1, "onnx")
         add_weight_formats(self.save_folder, ["onnx"])
         self.assertTrue(os.path.join(self.save_folder, "weigths.onnx"))
 
