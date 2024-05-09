@@ -126,7 +126,8 @@ class UNETR(nn.Module):
                 features=features_decoder,
                 scale_factors=scale_factors[::-1],
                 conv_block_impl=ConvBlock2d,
-                sampler_impl=_upsampler
+                sampler_impl=_upsampler,
+                norm="OldDefault",
             )
         else:
             self.decoder = decoder
@@ -142,14 +143,14 @@ class UNETR(nn.Module):
                 Deconv2DBlock(features_decoder[0], features_decoder[1]),
                 Deconv2DBlock(features_decoder[1], features_decoder[2])
             )
-            self.deconv4 = ConvBlock2d(in_chans, features_decoder[-1])
+            self.deconv4 = ConvBlock2d(in_chans, features_decoder[-1], norm="OldDefault")
         else:
             self.deconv1 = Deconv2DBlock(embed_dim, features_decoder[0])
             self.deconv2 = Deconv2DBlock(features_decoder[0], features_decoder[1])
             self.deconv3 = Deconv2DBlock(features_decoder[1], features_decoder[2])
             self.deconv4 = Deconv2DBlock(features_decoder[2], features_decoder[3])
 
-        self.base = ConvBlock2d(embed_dim, features_decoder[0])
+        self.base = ConvBlock2d(embed_dim, features_decoder[0], norm="OldDefault")
 
         self.out_conv = nn.Conv2d(features_decoder[-1], out_channels, 1)
 
@@ -157,7 +158,7 @@ class UNETR(nn.Module):
             scale_factor=2, in_channels=features_decoder[-1], out_channels=features_decoder[-1]
         )
 
-        self.decoder_head = ConvBlock2d(2 * features_decoder[-1], features_decoder[-1])
+        self.decoder_head = ConvBlock2d(2 * features_decoder[-1], features_decoder[-1], norm="OldDefault")
 
         self.final_activation = self._get_activation(final_activation)
 
