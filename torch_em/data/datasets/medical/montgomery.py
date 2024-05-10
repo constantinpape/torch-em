@@ -116,6 +116,8 @@ def get_montgomery_dataset(
     dataset = ImageCollectionDataset(
         raw_image_paths=image_paths,
         label_image_paths=gt_paths,
+        # this is done to load entire image first, later get the desired (resized) patch shape (specified in args above)
+        # another reason for this number: images are of two diff. shapes - (4020, 4892); (4892, 4020)
         patch_shape=(5000, 5000),
         raw_transform=raw_transform,
         label_transform=label_transform,
