@@ -1,16 +1,14 @@
 import os
-import shutil
 from glob import glob
-from tqdm import tqdm
 from pathlib import Path
-from typing import Union, Tuple
-from natsort import natsorted
+from typing import Union, Tuple, Optional, Any
 
-import imageio.v3 as imageio
+from skimage.transform import resize
 
 import torch_em
 
 from .. import util
+from ..neurips_cell_seg import to_rgb
 from ... import ImageCollectionDataset
 
 
@@ -72,47 +70,36 @@ def _download_isic_dataset(path, split, download):
     return imdir, gtdir
 
 
-def _get_isic_paths(path, split, download, with_channels):
+def _get_isic_paths(path, split, download):
     image_dir, gt_dir = _download_isic_dataset(path=path, split=split, download=download)
 
-    image_paths = natsorted(glob(os.path.join(image_dir, "*.jpg")))
-    gt_paths = natsorted(glob(os.path.join(gt_dir, "*.png")))
-
-    if with_channels:
-        pp_imgdir = os.path.join(path, "preprocessed", "images", split)
-        pp_gtdir = os.path.join(path, "preprocessed", "gt", split)
-
-        if os.path.exists(pp_imgdir) and os.path.exists(pp_gtdir):
-            return natsorted(glob(os.path.join(pp_imgdir, "*.tif"))), natsorted(glob(os.path.join(pp_gtdir, "*.png")))
-
-        os.makedirs(pp_imgdir, exist_ok=True)
-        os.makedirs(pp_gtdir, exist_ok=True)
-
-        neu_image_paths, neu_gt_paths = [], []
-        for image_path, gt_path in tqdm(
-            zip(image_paths, gt_paths), total=len(image_paths), desc="Converting the inputs"
-        ):
-            image = imageio.imread(image_path)
-            # let's make channels first
-            if image.shape[-1] == 3:
-                image = image.transpose(2, 0, 1)
-            else:
-                raise ValueError("The last axis does not have 3 channels. It is not an RGB image, as expected.")
-
-            image_id = os.path.split(image_path)[-1]
-            dst_image_path = os.path.join(pp_imgdir, Path(image_id).with_suffix(".tif"))
-            imageio.imwrite(dst_image_path, image)
-
-            gt_id = os.path.split(gt_path)[-1]
-            dst_gt_path = os.path.join(pp_gtdir, gt_id)
-            shutil.copy(src=gt_path, dst=dst_gt_path)
-
-            neu_image_paths.append(dst_image_path)
-            neu_gt_paths.append(dst_gt_path)
-
-        image_paths, gt_paths = neu_image_paths, neu_gt_paths
+    image_paths = sorted(glob(os.path.join(image_dir, "*.jpg")))
+    gt_paths = sorted(glob(os.path.join(gt_dir, "*.png")))
 
     return image_paths, gt_paths
+
+
+class _DownSizeInputs:
+    def __init__(self, target_shape, is_label=False):
+        self.target_shape = target_shape
+        self.is_label = is_label
+
+    def __call__(self, inputs):
+        print(inputs.shape)
+        if self.is_label:
+            anti_aliasing = True
+        else:
+            anti_aliasing = False
+
+        inputs = resize(
+            image=inputs,
+            output_shape=self.target_shape,
+            order=3,
+            anti_aliasing=anti_aliasing,
+            preserve_range=True,
+        )
+
+        return inputs
 
 
 def get_isic_dataset(
@@ -120,7 +107,9 @@ def get_isic_dataset(
     patch_shape: Tuple[int, int],
     split: str,
     download: bool = False,
-    with_channels: bool = True,
+    make_rgb: bool = True,
+    raw_transform: Optional[Any] = None,
+    transform: Optional[Any] = None,
     **kwargs
 ):
     """Dataset for the segmentation of skin lesion in dermoscopy images.
@@ -136,10 +125,24 @@ def get_isic_dataset(
     """
     assert split in list(URL["images"].keys()), f"{split} is not a valid split."
 
-    image_paths, gt_paths = _get_isic_paths(path=path, split=split, download=download, with_channels=with_channels)
+    image_paths, gt_paths = _get_isic_paths(path=path, split=split, download=download)
+
+    if raw_transform is None:
+        trafo = to_rgb if make_rgb else None
+        raw_transform = torch_em.transform.get_raw_transform(
+            augmentation1=_DownSizeInputs(target_shape=patch_shape),
+            augmentation2=trafo
+        )
+    if transform is None:
+        transform = torch_em.transform.get_augmentations(ndim=2)
 
     dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths, label_image_paths=gt_paths, patch_shape=patch_shape, **kwargs
+        raw_image_paths=image_paths,
+        label_image_paths=gt_paths,
+        patch_shape=patch_shape,
+        raw_transform=raw_transform,
+        transform=transform,
+        **kwargs
     )
     return dataset
 
@@ -150,14 +153,23 @@ def get_isic_loader(
     batch_size: int,
     split: str,
     download: bool = False,
-    with_channels: bool = True,
+    make_rgb: bool = True,
+    raw_transform: Optional[Any] = None,
+    transform: Optional[Any] = None,
     **kwargs
 ):
     """Dataloader for the segmentation of skin lesion in dermoscopy images. See `get_isic_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_isic_dataset(
-        path=path, patch_shape=patch_shape, split=split, download=download, with_channels=with_channels, **ds_kwargs
+        path=path,
+        patch_shape=patch_shape,
+        split=split,
+        download=download,
+        make_rgb=make_rgb,
+        raw_transform=raw_transform,
+        transform=transform,
+        **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
