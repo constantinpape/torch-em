@@ -111,6 +111,7 @@ def get_montgomery_dataset(
         raw_transform = get_raw_transform(augmentation1=_ResizeInputs(target_shape=patch_shape))
         label_transform = _ResizeInputs(target_shape=patch_shape, is_label=True)
     else:
+        print("You chose to not resize the inputs. The inputs will be returned in original (high) resolution.")
         raw_transform, label_transform = None, None
 
     dataset = ImageCollectionDataset(
