@@ -6,6 +6,7 @@ from typing import Union, Tuple
 import torch_em
 
 from .. import util
+from ... import ConcatDataset
 
 
 URL = "https://humanheart-project.creatis.insa-lyon.fr/database/api/v1/collection/637218c173e9f0047faa00fb/download"
@@ -73,8 +74,9 @@ def get_acdc_dataset(
 
     image_paths, gt_paths = _get_acdc_paths(path=path, split=split, download=download)
 
+    all_datasets = []
     for image_path, gt_path in zip(image_paths, gt_paths):
-        dataset = torch_em.default_segmentation_dataset(
+        per_vol_ds = torch_em.default_segmentation_dataset(
             raw_paths=image_path,
             raw_key="data",
             label_paths=gt_path,
@@ -83,9 +85,9 @@ def get_acdc_dataset(
             is_seg_dataset=True,
             **kwargs
         )
-        print("Done")
+        all_datasets.append(per_vol_ds)
 
-    return dataset
+    return ConcatDataset(*all_datasets)
 
 
 def get_acdc_loader(
