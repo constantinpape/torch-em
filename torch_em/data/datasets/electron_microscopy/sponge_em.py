@@ -2,7 +2,7 @@ import os
 from glob import glob
 
 import torch_em
-from . import util
+from .. import util
 
 URL = "https://zenodo.org/record/8150818/files/sponge_em_train_data.zip?download=1"
 CHECKSUM = "f1df616cd60f81b91d7642933e9edd74dc6c486b2e546186a7c1e54c67dd32a5"

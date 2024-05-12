@@ -7,7 +7,7 @@ import h5py
 import numpy as np
 import torch_em
 
-from . import util
+from .. import util
 
 URLS = {
     "sem": "https://github.com/axondeepseg/data_axondeepseg_sem/archive/refs/heads/master.zip",
@@ -103,7 +103,9 @@ def _preprocess_tem_data(out_path):
     rmtree(data_root)
 
 
-def _require_axondeepseg_data(path, name, download):
+def get_axondeepseg_data(path, name, download):
+    """Download the axondeepseg data. See `get_axondeepseg_dataset` for details on the data.
+    """
 
     # download and unzip the data
     url, checksum = URLS[name], CHECKSUMS[name]
@@ -138,7 +140,7 @@ def get_axondeepseg_dataset(
 
     all_paths = []
     for nn in name:
-        data_root = _require_axondeepseg_data(path, nn, download)
+        data_root = get_axondeepseg_data(path, nn, download)
         paths = glob(os.path.join(data_root, "*.h5"))
         paths.sort()
         if val_fraction is not None:

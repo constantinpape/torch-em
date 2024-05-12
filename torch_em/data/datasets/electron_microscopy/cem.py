@@ -31,7 +31,7 @@ import numpy as np
 import torch_em
 from sklearn.model_selection import train_test_split
 
-from . import util
+from .. import util
 
 BENCHMARK_DATASETS = {
     1: "mito_benchmarks/c_elegans",

@@ -3,7 +3,7 @@ from glob import glob
 
 import numpy as np
 import torch_em
-from . import util
+from .. import util
 
 URLS = {
     "cells": "https://zenodo.org/record/3675220/files/membrane.zip",

@@ -8,7 +8,7 @@ import pandas as pd
 
 import torch_em
 
-from . import util
+from .. import util
 
 
 # Automatic download is currently not possible, because of authentication

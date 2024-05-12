@@ -4,7 +4,7 @@ from glob import glob
 import h5py
 import torch_em
 
-from . import util
+from .. import util
 
 URL = "https://drive.google.com/drive/folders/1_4CrlYvzx0ITnGlJOHdgcTRgeSkm9wT8"
 

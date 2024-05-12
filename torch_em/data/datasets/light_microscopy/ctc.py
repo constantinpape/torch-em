@@ -3,7 +3,7 @@ from glob import glob
 from shutil import copyfile
 
 import torch_em
-from . import util
+from .. import util
 
 
 CTC_CHECKSUMS = {

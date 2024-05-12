@@ -2,7 +2,7 @@ import os
 from glob import glob
 
 import torch_em
-from . import util
+from .. import util
 
 URL = "https://zenodo.org/record/6546550/files/MouseEmbryos.zip?download=1"
 CHECKSUM = "bf24df25e5f919489ce9e674876ff27e06af84445c48cf2900f1ab590a042622"

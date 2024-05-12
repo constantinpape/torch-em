@@ -1,7 +1,7 @@
 import os
 
 import torch_em
-from . import util
+from .. import util
 
 SNEMI_URLS = {
     "train": "https://oc.embl.de/index.php/s/43iMotlXPyAB39z/download",

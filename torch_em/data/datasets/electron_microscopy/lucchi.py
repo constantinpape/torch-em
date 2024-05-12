@@ -9,7 +9,7 @@ import numpy as np
 import torch_em
 
 from tqdm import tqdm
-from . import util
+from .. import util
 
 URL = "http://www.casser.io/files/lucchi_pp.zip"
 CHECKSUM = "770ce9e98fc6f29c1b1a250c637e6c5125f2b5f1260e5a7687b55a79e2e8844d"
@@ -55,8 +55,9 @@ def _create_data(root, inputs, out_path):
         f.create_dataset("labels", data=labels.astype("uint8"), compression="gzip")
 
 
-def _require_lucchi_data(path, download):
-    # download and unzip the data
+def get_lucchi_data(path, download):
+    """Download the lucchi daaset. See `get_lucchi_dataset` for details.
+    """
     if os.path.exists(path):
         return path
 
@@ -84,7 +85,7 @@ def get_lucchi_dataset(path, split, patch_shape, download=False, **kwargs):
     Please cite it if you use this dataset for a publication.
     """
     assert split in ("train", "test")
-    _require_lucchi_data(path, download)
+    get_lucchi_data(path, download)
     data_path = os.path.join(path, f"lucchi_{split}.h5")
     assert os.path.exists(data_path), data_path
     raw_key, label_key = "raw", "labels"

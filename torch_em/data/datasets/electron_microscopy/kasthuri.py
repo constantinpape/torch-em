@@ -9,7 +9,7 @@ import numpy as np
 import torch_em
 
 from tqdm import tqdm
-from . import util
+from .. import util
 
 URL = "http://www.casser.io/files/kasthuri_pp.zip "
 CHECKSUM = "bbb78fd205ec9b57feb8f93ebbdf1666261cbc3e0305e7f11583ab5157a3d792"
@@ -58,8 +58,9 @@ def _create_data(root, inputs, out_path):
         f.create_dataset("labels", data=labels, compression="gzip")
 
 
-def _require_kasthuri_data(path, download):
-    # download and unzip the data
+def get_kasthuri_data(path, download):
+    """Download the kasthuri dataset. See `get_kasthuri_dataset` for details.
+    """
     if os.path.exists(path):
         return path
 
@@ -87,7 +88,7 @@ def get_kasthuri_dataset(path, split, patch_shape, download=False, **kwargs):
     Please cite it if you use this dataset for a publication.
     """
     assert split in ("train", "test")
-    _require_kasthuri_data(path, download)
+    get_kasthuri_data(path, download)
     data_path = os.path.join(path, f"kasthuri_{split}.h5")
     assert os.path.exists(data_path), data_path
     raw_key, label_key = "raw", "labels"

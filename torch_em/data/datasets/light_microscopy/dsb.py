@@ -2,7 +2,7 @@ import os
 from shutil import move
 
 import torch_em
-from . import util
+from .. import util
 
 DSB_URLS = {
     "full": "",  # TODO

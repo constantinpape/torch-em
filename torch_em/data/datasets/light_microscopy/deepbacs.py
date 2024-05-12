@@ -4,7 +4,7 @@ import numpy as np
 from glob import glob
 
 import torch_em
-from . import util
+from .. import util
 
 URLS = {
     "s_aureus": "https://zenodo.org/record/5550933/files/DeepBacs_Data_Segmentation_Staph_Aureus_dataset.zip?download=1",

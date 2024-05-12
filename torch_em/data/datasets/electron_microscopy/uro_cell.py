@@ -5,7 +5,7 @@ from shutil import rmtree
 
 import h5py
 import torch_em
-from . import util
+from .. import util
 
 
 URL = "https://github.com/MancaZerovnikMekuc/UroCell/archive/refs/heads/master.zip"

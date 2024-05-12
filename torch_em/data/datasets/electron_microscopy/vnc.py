@@ -8,7 +8,7 @@ import numpy as np
 import torch_em
 from skimage.measure import label
 
-from . import util
+from .. import util
 
 URL = "https://github.com/unidesigner/groundtruth-drosophila-vnc/archive/refs/heads/master.zip"
 CHECKSUM = "f7bd0db03c86b64440a16b60360ad60c0a4411f89e2c021c7ee2c8d6af3d7e86"

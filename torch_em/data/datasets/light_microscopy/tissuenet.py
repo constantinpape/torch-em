@@ -7,7 +7,7 @@ import torch_em
 import z5py
 
 from tqdm import tqdm
-from . import util
+from .. import util
 
 
 # Automated download is currently not possible, because of authentication

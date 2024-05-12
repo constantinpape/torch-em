@@ -2,7 +2,7 @@ import os
 from glob import glob
 
 import torch_em
-from . import util
+from .. import util
 
 COVID_IF_URL = "https://zenodo.org/record/5092850/files/covid-if-groundtruth.zip?download=1"
 CHECKSUM = "d9cd6c85a19b802c771fb4ff928894b19a8fab0e0af269c49235fdac3f7a60e1"

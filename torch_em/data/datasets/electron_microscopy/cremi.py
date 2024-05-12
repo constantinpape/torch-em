@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 import torch_em
-from . import util
+from .. import util
 
 CREMI_URLS = {
     "original": {
@@ -24,7 +24,6 @@ CHECKSUMS = {
 }
 
 
-# TODO
 def get_cremi_data(path):
     pass
 

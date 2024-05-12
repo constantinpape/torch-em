@@ -19,14 +19,14 @@ CHECKSUM = None
 
 
 TEST_LIST = [
-    'TCGA-A2-A0SX-DX1_xmin53791_ymin56683_MPP-0.2500', 'TCGA-BH-A0BG-DX1_xmin64019_ymin24975_MPP-0.2500',
-    'TCGA-AR-A1AI-DX1_xmin38671_ymin10616_MPP-0.2500', 'TCGA-E2-A574-DX1_xmin54962_ymin47475_MPP-0.2500',
-    'TCGA-GM-A3XL-DX1_xmin29910_ymin15820_MPP-0.2500', 'TCGA-E2-A14X-DX1_xmin88836_ymin66393_MPP-0.2500',
-    'TCGA-A2-A04P-DX1_xmin104246_ymin48517_MPP-0.2500', 'TCGA-E2-A14N-DX1_xmin21383_ymin66838_MPP-0.2500',
-    'TCGA-EW-A1OV-DX1_xmin126026_ymin65132_MPP-0.2500', 'TCGA-S3-AA15-DX1_xmin55486_ymin28926_MPP-0.2500',
-    'TCGA-LL-A5YO-DX1_xmin36631_ymin44396_MPP-0.2500', 'TCGA-GI-A2C9-DX1_xmin20882_ymin11843_MPP-0.2500',
-    'TCGA-BH-A0BW-DX1_xmin42346_ymin30843_MPP-0.2500', 'TCGA-E2-A1B6-DX1_xmin16266_ymin50634_MPP-0.2500',
-    'TCGA-AO-A0J2-DX1_xmin33561_ymin14515_MPP-0.2500'
+    "TCGA-A2-A0SX-DX1_xmin53791_ymin56683_MPP-0.2500", "TCGA-BH-A0BG-DX1_xmin64019_ymin24975_MPP-0.2500",
+    "TCGA-AR-A1AI-DX1_xmin38671_ymin10616_MPP-0.2500", "TCGA-E2-A574-DX1_xmin54962_ymin47475_MPP-0.2500",
+    "TCGA-GM-A3XL-DX1_xmin29910_ymin15820_MPP-0.2500", "TCGA-E2-A14X-DX1_xmin88836_ymin66393_MPP-0.2500",
+    "TCGA-A2-A04P-DX1_xmin104246_ymin48517_MPP-0.2500", "TCGA-E2-A14N-DX1_xmin21383_ymin66838_MPP-0.2500",
+    "TCGA-EW-A1OV-DX1_xmin126026_ymin65132_MPP-0.2500", "TCGA-S3-AA15-DX1_xmin55486_ymin28926_MPP-0.2500",
+    "TCGA-LL-A5YO-DX1_xmin36631_ymin44396_MPP-0.2500", "TCGA-GI-A2C9-DX1_xmin20882_ymin11843_MPP-0.2500",
+    "TCGA-BH-A0BW-DX1_xmin42346_ymin30843_MPP-0.2500", "TCGA-E2-A1B6-DX1_xmin16266_ymin50634_MPP-0.2500",
+    "TCGA-AO-A0J2-DX1_xmin33561_ymin14515_MPP-0.2500"
 ]
 
 
@@ -53,7 +53,10 @@ def _get_image_and_label_paths(path):
         image_paths = sorted(glob(os.path.join(path, "0_Public-data-Amgad2019_0.25MPP", "rgbs_colorNormalized", "*")))
         label_paths = sorted(glob(os.path.join(path, "0_Public-data-Amgad2019_0.25MPP", "masks", "*")))
     else:
-        raise ValueError("Please check the image directory. If downloaded from gdrive, it's named \"rgbs_colorNormalized\", if from github it's named \"images\"")
+        raise ValueError(
+            "Please check the image directory. "
+            "If downloaded from gdrive, it's named \"rgbs_colorNormalized\", if from github it's named \"images\""
+        )
 
     return image_paths, label_paths
 
@@ -88,7 +91,9 @@ def _assort_bcss_data(path, download):
             shutil.copy(src=label_path, dst=dst_lab_path)
 
 
-def get_bcss_dataset(path, patch_shape, split=None, val_fraction=0.2, download=False, label_dtype=torch.int64, **kwargs):
+def get_bcss_dataset(
+    path, patch_shape, split=None, val_fraction=0.2, download=False, label_dtype=torch.int64, **kwargs
+):
     """Dataset for breast cancer tissue segmentation in histopathology.
 
     This dataset is from https://bcsegmentation.grand-challenge.org/BCSS/.

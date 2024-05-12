@@ -9,7 +9,7 @@ import torch_em
 import z5py
 
 from tqdm import tqdm
-from . import util
+from .. import util
 
 # TODO: update the links to the new host location at huggingface.
 # - https://mitoem.grand-challenge.org/ (see `Dataset` for the links)

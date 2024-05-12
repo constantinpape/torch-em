@@ -6,8 +6,8 @@ from typing import Union, Tuple, Any, Optional
 import torch
 
 import torch_em
-from . import util
-from .. import ImageCollectionDataset, RawImageCollectionDataset, ConcatDataset
+from .. import util
+from ... import ImageCollectionDataset, RawImageCollectionDataset, ConcatDataset
 
 
 URL = {

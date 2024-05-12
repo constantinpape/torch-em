@@ -2,7 +2,7 @@ import os
 from glob import glob
 
 import torch_em
-from . import util
+from .. import util
 
 URLS = {
     "root": {

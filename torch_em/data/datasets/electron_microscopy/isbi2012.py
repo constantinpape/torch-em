@@ -1,7 +1,7 @@
 import os
 
 import torch_em
-from . import util
+from .. import util
 
 ISBI_URL = "https://oc.embl.de/index.php/s/h0TkwqxU0PJDdMd/download"
 CHECKSUM = "0e10fe909a1243084d91773470856993b7d40126a12e85f0f1345a7a9e512f29"

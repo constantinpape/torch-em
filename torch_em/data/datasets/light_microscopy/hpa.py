@@ -14,7 +14,7 @@ from skimage import morphology
 from tqdm import tqdm
 
 import torch_em
-from . import util
+from .. import util
 
 
 URLS = {

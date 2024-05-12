@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 import torch_em
 import torch.utils.data
-from . import util
+from .. import util
 
 try:
     from pycocotools.coco import COCO
@@ -123,7 +123,7 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
         imageio.imwrite(seg_path, seg)
 
     assert len(image_paths) == len(seg_paths)
-    assert len(image_paths) > 0,\
+    assert len(image_paths) > 0, \
         f"No matching image paths were found. Did you pass invalid cell type naems ({cell_types})?"
     return image_paths, seg_paths
 
@@ -156,7 +156,7 @@ def get_livecell_dataset(
     """
     assert split in ("train", "val", "test")
     if cell_types is not None:
-        assert isinstance(cell_types, (list, tuple)),\
+        assert isinstance(cell_types, (list, tuple)), \
             f"cell_types must be passed as a list or tuple instead of {cell_types}"
 
     _download_livecell_images(path, download)
