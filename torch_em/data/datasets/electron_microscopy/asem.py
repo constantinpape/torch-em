@@ -5,8 +5,8 @@ import zarr
 
 import torch_em
 
-from . import util
-from .. import ConcatDataset
+from .. import util
+from ... import ConcatDataset
 
 try:
     import quilt3 as q3
@@ -138,6 +138,11 @@ def _check_input_args(input_arg, default_values):
             input_arg = [input_arg]
 
     return input_arg
+
+
+# TODO download the asem data and re-use this function in get_asem_data
+def get_asem_data(path):
+    pass
 
 
 def get_asem_dataset(
