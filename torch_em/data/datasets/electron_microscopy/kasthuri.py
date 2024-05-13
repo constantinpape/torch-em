@@ -1,22 +1,29 @@
+"""The Kasthuri dataset is a segmentation dataset for mitochondrion segmentation in
+electron microscopy. The dataset was published in https://doi.org/10.48550/arXiv.1812.06024.
+Please cite this publication if you use the dataset in your research.
+We use the version of the dataset from https://sites.google.com/view/connectomics/.
+"""
+
 import os
 from concurrent import futures
 from glob import glob
 from shutil import rmtree
+from typing import Tuple, Union
 
 import imageio
 import h5py
 import numpy as np
 import torch_em
 
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from .. import util
 
 URL = "http://www.casser.io/files/kasthuri_pp.zip "
 CHECKSUM = "bbb78fd205ec9b57feb8f93ebbdf1666261cbc3e0305e7f11583ab5157a3d792"
 
-# data from: https://sites.google.com/view/connectomics/
 # TODO: add sampler for foreground (-1 is empty area)
-# TODO and masking for the empty space
+# TODO: and masking for the empty space
 
 
 def _load_volume(path):
@@ -58,8 +65,15 @@ def _create_data(root, inputs, out_path):
         f.create_dataset("labels", data=labels, compression="gzip")
 
 
-def get_kasthuri_data(path, download):
-    """Download the kasthuri dataset. See `get_kasthuri_dataset` for details.
+def get_kasthuri_data(path: Union[os.PathLike, str], download: bool) -> str:
+    """Download the kasthuri dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath for the downloaded data.
     """
     if os.path.exists(path):
         return path
@@ -79,13 +93,27 @@ def get_kasthuri_data(path, download):
         _create_data(root, inp, out_path)
 
     rmtree(root)
+    return path
 
 
-def get_kasthuri_dataset(path, split, patch_shape, download=False, **kwargs):
-    """Dataset for the segmentation of mitochondria in EM.
+def get_kasthuri_dataset(
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int, int],
+    download: bool = False,
+    **kwargs
+) -> Dataset:
+    """Get dataset for the segmentation of mitochondria in EM.
 
-    This dataset is from the publication https://doi.org/10.48550/arXiv.1812.06024.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split. Either 'train' or 'test'.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     assert split in ("train", "test")
     get_kasthuri_data(path, download)
@@ -95,8 +123,27 @@ def get_kasthuri_dataset(path, split, patch_shape, download=False, **kwargs):
     return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
 
 
-def get_kasthuri_loader(path, split, patch_shape, batch_size, download=False, **kwargs):
-    """Dataloader for the segmentation of mitochondria in EM. See 'get_kasthuri_dataset' for details."""
+def get_kasthuri_loader(
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    download: bool = False,
+    **kwargs
+) -> DataLoader:
+    """Get dataloader for the segmentation of mitochondria in EM
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split. Either 'train' or 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The PyTorch DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

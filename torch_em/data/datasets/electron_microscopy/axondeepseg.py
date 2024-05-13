@@ -1,12 +1,20 @@
+"""AxonDeepSeg is a dataset for the segmentation of myelinated axons in EM.
+It contains two different data types: TEM and SEM.
+The dataset was published in https://doi.org/10.1038/s41598-018-22181-4.
+Please cite this publication if you use the dataset in your research.
+"""
+
 import os
 from glob import glob
 from shutil import rmtree
+from typing import Optional, Tuple, Union
 
 import imageio
 import h5py
 import numpy as np
 import torch_em
 
+from torch.utils.data import Dataset, DataLoader
 from .. import util
 
 URLS = {
@@ -103,8 +111,16 @@ def _preprocess_tem_data(out_path):
     rmtree(data_root)
 
 
-def get_axondeepseg_data(path, name, download):
-    """Download the axondeepseg data. See `get_axondeepseg_dataset` for details on the data.
+def get_axondeepseg_data(path: Union[str, os.PathLike], name: str, download: bool) -> str:
+    """Download the axondeepseg data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: The name of the dataset to download. Can be either 'sem' or 'tem'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath for the downloaded data.
     """
 
     # download and unzip the data
@@ -122,17 +138,36 @@ def get_axondeepseg_data(path, name, download):
         _preprocess_sem_data(out_path)
     elif name == "tem":
         _preprocess_tem_data(out_path)
+    else:
+        raise ValueError(f"Invalid dataset name for axondeepseg, expected 'sem' or 'tem', got {name}.")
 
     return out_path
 
 
 def get_axondeepseg_dataset(
-    path, name, patch_shape, download=False, one_hot_encoding=False, val_fraction=None, split=None, **kwargs
-):
-    """Dataset for the segmentation of myelinated axons in EM.
+    path: Union[str, os.PathLike],
+    name: str,
+    patch_shape: Tuple[int, int],
+    download: bool = False,
+    one_hot_encoding: bool = False,
+    val_fraction: Optional[float] = None,
+    split: Optional[str] = None,
+    **kwargs,
+) -> Dataset:
+    """Get dataset for segmnetation of myelinated axons.
 
-    This dataset is from the publication https://doi.org/10.1038/s41598-018-22181-4.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: The name of the dataset to download. Can be either 'sem' or 'tem'.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        one_hot_encoding: Whether to return the labels as one hot encoding.
+        val_fraction: The fraction of the data to use for validation.
+        split: The data split. Either 'train' or 'val'.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     if isinstance(name, str):
         name = [name]
@@ -169,13 +204,32 @@ def get_axondeepseg_dataset(
     return torch_em.default_segmentation_dataset(all_paths, raw_key, all_paths, label_key, patch_shape, **kwargs)
 
 
-# add instance segmentation representations?
 def get_axondeepseg_loader(
-    path, name, patch_shape, batch_size,
-    download=False, one_hot_encoding=False,
-    val_fraction=None, split=None, **kwargs
-):
-    """Dataloader for the segmentation of myelinated axons. See 'get_axondeepseg_dataset' for details.
+    path: Union[str, os.PathLike],
+    name: str,
+    patch_shape: Tuple[int, int],
+    batch_size: int,
+    download: bool = False,
+    one_hot_encoding: bool = False,
+    val_fraction: Optional[float] = None,
+    split: Optional[str] = None,
+    **kwargs
+) -> DataLoader:
+    """Get dataloader for the segmentation of myelinated axons.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: The name of the dataset to download. Can be either 'sem' or 'tem'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        download: Whether to download the data if it is not present.
+        one_hot_encoding: Whether to return the labels as one hot encoding.
+        val_fraction: The fraction of the data to use for validation.
+        split: The data split. Either 'train' or 'val'.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The PyTorch DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_axondeepseg_dataset(
