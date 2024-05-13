@@ -64,9 +64,12 @@ def get_covid19_seg_dataset(
     download: bool = False,
     **kwargs
 ):
-    """
-    labels:
-    0: background, 1 and 2: left and right lungs, 3: covid infection
+    """Dataset for lung and covid infection segmentation in CT scans.
+
+    The database is located at https://doi.org/10.5281/zenodo.3757476.
+
+    This dataset is from Ma et al. - https://doi.org/10.1002/mp.14676.
+    Please cite it if you use this dataset for a publication.
     """
     if task is None:
         task = "lung_and_infection"
@@ -98,6 +101,8 @@ def get_covid19_seg_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for lung and covid infection segmentation in CT scans. See `get_covid19_seg_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_covid19_seg_dataset(
         path=path, patch_shape=patch_shape, task=task, download=download, **ds_kwargs
