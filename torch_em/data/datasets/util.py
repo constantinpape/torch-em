@@ -146,6 +146,23 @@ def download_source_empiar(path, access_id, download):
     return download_path
 
 
+def download_source_kaggle(path, dataset_name, download):
+    if not download:
+        raise RuntimeError(f"Cannot fine the data at {path}, but download was set to False.")
+
+    try:
+        from kaggle.api.kaggle_api_extended import KaggleApi
+    except ModuleNotFoundError:
+        msg = "Please install the Kaggle API. You can do this using 'pip install kaggle'. "
+        msg += "After you have installed kaggle, you would need an API token. "
+        msg += "Follow the instructions at https://www.kaggle.com/docs/api."
+        raise ModuleNotFoundError(msg)
+
+    api = KaggleApi()
+    api.authenticate()
+    api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
+
+
 def update_kwargs(kwargs, key, value, msg=None):
     if key in kwargs:
         msg = f"{key} will be over-ridden in loader kwargs." if msg is None else msg
