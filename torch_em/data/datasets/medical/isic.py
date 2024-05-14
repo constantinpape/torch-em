@@ -39,7 +39,7 @@ CHECKSUM = {
 }
 
 
-def _download_isic_dataset(path, split, download):
+def get_isic_data(path, split, download):
     os.makedirs(path, exist_ok=True)
 
     im_url = URL["images"][split]
@@ -71,7 +71,7 @@ def _download_isic_dataset(path, split, download):
 
 
 def _get_isic_paths(path, split, download):
-    image_dir, gt_dir = _download_isic_dataset(path=path, split=split, download=download)
+    image_dir, gt_dir = get_isic_data(path=path, split=split, download=download)
 
     image_paths = sorted(glob(os.path.join(image_dir, "*.jpg")))
     gt_paths = sorted(glob(os.path.join(gt_dir, "*.png")))
