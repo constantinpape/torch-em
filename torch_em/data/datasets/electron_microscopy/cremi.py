@@ -1,7 +1,17 @@
-import os
-import numpy as np
+"""CREMI is a dataset for neuron segmentation in EM.
 
+It contains three annotated volumes from the adult fruit-fly brain.
+It was held as a challenge at MICCAI 2016. For details on the dataset check out https://cremi.org/.
+"""
+# TODO add support for realigned volumes
+
+import os
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
 import torch_em
+from torch.utils.data import Dataset, DataLoader
+
 from .. import util
 
 CREMI_URLS = {
@@ -24,37 +34,23 @@ CHECKSUMS = {
 }
 
 
-def get_cremi_data(path):
-    pass
+def get_cremi_data(
+    path: Union[os.PathLike, str],
+    samples: Tuple[str],
+    download: bool,
+    use_realigned: bool = False,
+) -> List[str]:
+    """Download the CREMI training data.
 
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        download: Whether to download the data if it is not present.
+        use_realigned: Use the realigned instead of the original training data.
 
-# TODO add support for realigned volumes
-def get_cremi_dataset(
-    path,
-    patch_shape,
-    samples=("A", "B", "C"),
-    use_realigned=False,
-    download=False,
-    offsets=None,
-    boundaries=False,
-    rois={},
-    defect_augmentation_kwargs={
-        "p_drop_slice": 0.025,
-        "p_low_contrast": 0.025,
-        "p_deform_slice": 0.0,
-        "deformation_mode": "compress",
-    },
-    **kwargs,
-):
-    """Dataset for the segmentation of neurons in EM.
-
-    This dataset is from the CREMI challenge: https://cremi.org/.
+    Returns:
+        The filepaths to the training data.
     """
-    assert len(patch_shape) == 3
-    if rois is not None:
-        assert isinstance(rois, dict)
-    os.makedirs(path, exist_ok=True)
-
     if use_realigned:
         # we need to sample batches in this case
         # sampler = torch_em.data.MinForegroundSampler(min_fraction=0.05, p_reject=.75)
@@ -63,8 +59,8 @@ def get_cremi_dataset(
         urls = CREMI_URLS["original"]
         checksums = CHECKSUMS["original"]
 
+    os.makedirs(path, exist_ok=True)
     data_paths = []
-    data_rois = []
     for name in samples:
         url = urls[name]
         checksum = checksums[name]
@@ -72,7 +68,49 @@ def get_cremi_dataset(
         # CREMI SSL certificates expired, so we need to disable verification
         util.download_source(data_path, url, download, checksum, verify=False)
         data_paths.append(data_path)
-        data_rois.append(rois.get(name, np.s_[:, :, :]))
+    return data_paths
+
+
+def get_cremi_dataset(
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    samples: Tuple[str, ...] = ("A", "B", "C"),
+    use_realigned: bool = False,
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    rois: Dict[str, Any] = {},
+    defect_augmentation_kwargs: Dict[str, Any] = {
+        "p_drop_slice": 0.025,
+        "p_low_contrast": 0.025,
+        "p_deform_slice": 0.0,
+        "deformation_mode": "compress",
+    },
+    **kwargs,
+) -> Dataset:
+    """Get the CREMI dataset for the segmentation of neurons in EM.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        use_realigned: Use the realigned instead of the original training data.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        rois: The region of interests to use for the samples.
+        defect_augmentation_kwargs: Keyword arguments for defect augmentations.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
+    """
+    assert len(patch_shape) == 3
+    if rois is not None:
+        assert isinstance(rois, dict)
+
+    data_paths = get_cremi_data(path, samples, download, use_realigned)
+    data_rois = [rois.get(name, np.s_[:, :, :]) for name in samples]
 
     if defect_augmentation_kwargs is not None and "artifact_source" not in defect_augmentation_kwargs:
         # download the defect volume
@@ -107,24 +145,40 @@ def get_cremi_dataset(
 
 
 def get_cremi_loader(
-    path,
-    patch_shape,
-    batch_size,
-    samples=("A", "B", "C"),
-    use_realigned=False,
-    download=False,
-    offsets=None,
-    boundaries=False,
-    rois={},
-    defect_augmentation_kwargs={
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    samples: Tuple[str, ...] = ("A", "B", "C"),
+    use_realigned: bool = False,
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    rois: Dict[str, Any] = {},
+    defect_augmentation_kwargs: Dict[str, Any] = {
         "p_drop_slice": 0.025,
         "p_low_contrast": 0.025,
         "p_deform_slice": 0.0,
         "deformation_mode": "compress",
     },
     **kwargs,
-):
-    """Dataset for the segmentation of neurons in EM. See 'get_cremi_dataset' for details.
+) -> DataLoader:
+    """Get the DataLoader for EM neuron segmentation in the cremi dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        use_realigned: Use the realigned instead of the original training data.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        rois: The region of interests to use for the samples.
+        defect_augmentation_kwargs: Keyword arguments for defect augmentations.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     dataset_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs

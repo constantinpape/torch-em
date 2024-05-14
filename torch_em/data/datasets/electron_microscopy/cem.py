@@ -1,4 +1,5 @@
-"""Contains datasets and dataloader for the CEM data:
+"""The CEM, or MitoLab, dataset is a collection of data for
+training mitochondria generalist models. It consists of:
 - CEM-MitoLab: annotated 2d data for training mitochondria segmentation models
   - https://www.ebi.ac.uk/empiar/EMPIAR-11037/
 - CEM-Mito-Benchmark: 7 Benchmark datasets for mitochondria segmentation
@@ -333,6 +334,7 @@ def get_benchmark_loader(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         dataset_id: The id of the benchmark dataset to download.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.

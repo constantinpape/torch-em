@@ -1,5 +1,6 @@
-"""The Kasthuri dataset is a segmentation dataset for mitochondrion segmentation in
-electron microscopy. The dataset was published in https://doi.org/10.48550/arXiv.1812.06024.
+"""The Kasthuri dataset is a segmentation dataset for mitochondrion segmentation in electron microscopy.
+
+The dataset was published in https://doi.org/10.48550/arXiv.1812.06024.
 Please cite this publication if you use the dataset in your research.
 We use the version of the dataset from https://sites.google.com/view/connectomics/.
 """
@@ -103,7 +104,7 @@ def get_kasthuri_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get dataset for the segmentation of mitochondria in EM.
+    """Get dataset for EM mitochondrion segmentation in the kasthuri dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -131,7 +132,7 @@ def get_kasthuri_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get dataloader for the segmentation of mitochondria in EM
+    """Get dataloader for EM mitochondrion segmentation in the kasthuri dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
