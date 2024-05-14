@@ -13,7 +13,7 @@ URL = "https://humanheart-project.creatis.insa-lyon.fr/database/api/v1/collectio
 CHECKSUM = "2787e08b0d3525cbac710fc3bdf69ee7c5fd7446472e49db8bc78548802f6b5e"
 
 
-def _download_acdc_dataset(path, download):
+def get_acdc_data(path, download):
     os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "ACDC.zip")
@@ -27,7 +27,7 @@ def _download_acdc_dataset(path, download):
 
 
 def _get_acdc_paths(path, split, download):
-    root_dir = _download_acdc_dataset(path=path, download=download)
+    root_dir = get_acdc_data(path=path, download=download)
 
     if split == "train":
         input_dir = os.path.join(root_dir, "database", "training")
