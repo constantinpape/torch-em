@@ -1,14 +1,15 @@
 import os
-import imageio.v3 as imageio
+import sys
 from glob import glob
 
+import imageio.v3 as imageio
 import numpy as np
 import torch_em
 from torch_em.data.datasets import cem
 from torch_em.util.debug import check_loader
 
-# ROOT = "./data"
-ROOT = "/scratch-grete/projects/nim00007/data/mitolab"
+sys.path.append("..")
+from util import ROOT
 
 
 def get_all_shapes():
