@@ -17,7 +17,7 @@ URL = "http://openi.nlm.nih.gov/imgs/collections/NLM-MontgomeryCXRSet.zip"
 CHECKSUM = "54601e952315d8f67383e9202a6e145997ade429f54f7e0af44b4e158714f424"
 
 
-def _download_montgomery_data(path, download):
+def get_montgomery_data(path, download):
     os.makedirs(path, exist_ok=True)
 
     data_dir = os.path.join(path, "MontgomerySet")
@@ -55,7 +55,7 @@ class _ResizeInputs:
 
 
 def _get_montgomery_paths(path, download):
-    data_dir = _download_montgomery_data(path=path, download=download)
+    data_dir = get_montgomery_data(path=path, download=download)
     gt_dir = os.path.join(data_dir, "ManualMask", "gt")
 
     image_paths = sorted(glob(os.path.join(data_dir, "CXR_png", "*.png")))
