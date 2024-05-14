@@ -30,7 +30,7 @@ DATA_DIR = {
 }
 
 
-def _download_jsrt_data(path, download, choice):
+def get_jsrt_data(path, download, choice):
     os.makedirs(path, exist_ok=True)
 
     data_dir = os.path.join(path, DATA_DIR[choice])
@@ -52,7 +52,7 @@ def _get_jsrt_paths(path, split, download, choice=None):
 
     image_paths, gt_paths = [], []
     for per_choice in choice:
-        _download_jsrt_data(path=path, download=download, choice=per_choice)
+        get_jsrt_data(path=path, download=download, choice=per_choice)
 
         if per_choice == "Segmentation01":
             root_dir = os.path.join(path, Path(ZIP_PATH[per_choice]).stem, split)
