@@ -36,18 +36,18 @@ def test_isles_images():
         gt = gt.get_fdata()
         print(gt.shape)
 
-        # v = napari.Viewer()
-        # v.add_labels(gt.transpose(2, 0, 1).astype("uint8"))
+        v = napari.Viewer()
+        v.add_labels(gt.transpose(2, 0, 1).astype("uint8"))
 
         all_volume_paths = glob(os.path.join(patient_dir, "**", "dwi", "*.nii.gz"), recursive=True)
         for vol_path in all_volume_paths:
-            # print(vol_path)
+            print(vol_path)
             vol = nib.load(vol_path)
             vol = vol.get_fdata()
-            # v.add_image(vol.transpose(2, 0, 1))
+            v.add_image(vol.transpose(2, 0, 1))
             print(vol.shape)
 
-        # napari.run()
+        napari.run()
 
         print()
 

@@ -53,6 +53,12 @@ def get_isles_dataset(
     download: bool = False,
     **kwargs
 ):
+    """Dataset for ischemic stroke lesion segmentation in multimodal brain MRIs.
+
+    The database is located at https://doi.org/10.5281/zenodo.7960856.
+    This dataset is from the ISLES 2022 Challenge - https://doi.org/10.1038/s41597-022-01875-5.
+    Please cite it if you use this dataset for a publication.
+    """
     image_paths, gt_paths = _get_isles_paths(path=path, modality=modality, download=download)
 
     dataset = torch_em.default_segmentation_dataset(
@@ -79,6 +85,8 @@ def get_isles_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for ischemic stroke lesion segmentation in multimodal brain MRIs. See `get_isles_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_isles_dataset(path=path, patch_shape=patch_shape, modality=modality, download=download, **ds_kwargs)
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
