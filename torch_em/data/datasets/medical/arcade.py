@@ -134,7 +134,12 @@ def get_arcade_dataset(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataset for coronary vessel segmentation in x-ray coronary angiography.
+
+    The database is located at https://doi.org/10.5281/zenodo.10390295.
+
+    This dataset is from the "ARCADE" challenge - https://doi.org/10.1038/s41597-023-02871-z.
+    Please cite it if you use this dataset for a publication.
     """
     # TODO: the "stenosis" data has 3 channels, the "syntax" data has 1 channel
     # for us, the relevant one is the "syntax" task, as we are interest in segmenting vessels for our workflows.
@@ -172,6 +177,8 @@ def get_arcade_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for coronary vessel segmentation in x-ray coronary angiography. See `get_arcade_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_arcade_dataset(
         path=path,
