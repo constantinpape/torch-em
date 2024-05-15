@@ -49,7 +49,13 @@ def get_camus_dataset(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataset for segmenting cardiac structures in 2d echocardiography images.
+
+    The database is located at:
+    https://humanheart-project.creatis.insa-lyon.fr/database/#collection/6373703d73e9f0047faa1bc8
+
+    This dataset is from the CAMUS challenge - https://doi.org/10.1109/TMI.2019.2900516.
+    Please cite it if you use this dataset for a publication.
     """
     image_paths, gt_paths = _get_camus_paths(path=path, chamber=chamber, download=download)
 
@@ -84,7 +90,7 @@ def get_camus_loader(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataloader for segmenting cardiac structures in 2d echocardiography images. See `get_camus_dataset` for details
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_camus_dataset(
