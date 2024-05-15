@@ -162,7 +162,7 @@ def get_cremi_loader(
     },
     **kwargs,
 ) -> DataLoader:
-    """Get the DataLoader for EM neuron segmentation in the cremi dataset.
+    """Get the DataLoader for EM neuron segmentation in the CREMI dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
