@@ -87,7 +87,7 @@ def get_drive_dataset(
     image_paths, gt_paths = _get_drive_paths(path=path, download=download)
 
     if resize_inputs:
-        raw_trafo = ResizeInputs(target_shape=patch_shape, is_label=False)
+        raw_trafo = ResizeInputs(target_shape=patch_shape, is_rgb=True)
         label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
         patch_shape = None
     else:

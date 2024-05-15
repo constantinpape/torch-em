@@ -73,9 +73,10 @@ class Rescale:
 
 
 class ResizeInputs:
-    def __init__(self, target_shape, is_label=False):
+    def __init__(self, target_shape, is_label=False, is_rgb=False):
         self.target_shape = target_shape
         self.is_label = is_label
+        self.is_rgb = is_rgb
 
     def __call__(self, inputs):
         if self.is_label:  # kwargs needed for int data
@@ -83,9 +84,15 @@ class ResizeInputs:
         else:  # we use the default settings for float data
             kwargs = {}
 
+        if self.is_rgb:
+            assert inputs.ndim == 3 and inputs.shape[0] == 3
+            patch_shape = (3, *self.target_shape)
+        else:
+            patch_shape = self.target_shape
+
         inputs = resize(
             image=inputs,
-            output_shape=self.target_shape,
+            output_shape=patch_shape,
             preserve_range=True,
             **kwargs
         ).astype(inputs.dtype)
