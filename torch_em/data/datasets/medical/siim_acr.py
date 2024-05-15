@@ -46,6 +46,15 @@ def get_siim_acr_dataset(
     download: bool = False,
     **kwargs
 ):
+    """Dataset for pneumothorax segmentation in CXR.
+
+    The database is located at https://www.kaggle.com/datasets/vbookshelf/pneumothorax-chest-xray-images-and-masks/data
+
+    This dataset is from the "SIIM-ACR Pneumothorax Segmentation" competition:
+    https://kaggle.com/competitions/siim-acr-pneumothorax-segmentation
+
+    Please cite it if you use this dataset for a publication.
+    """
     image_paths, gt_paths = _get_siim_acr_paths(path=path, split=split, download=download)
 
     dataset = ImageCollectionDataset(
@@ -63,6 +72,8 @@ def get_siim_acr_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for pneumothorax segmentation in CXR. See `get_siim_acr_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_siim_acr_dataset(
         path=path, split=split, patch_shape=patch_shape, download=download, **ds_kwargs
