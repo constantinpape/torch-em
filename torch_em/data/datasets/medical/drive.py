@@ -17,7 +17,6 @@ URL = {
     "test": "https://www.dropbox.com/sh/z4hbbzqai0ilqht/AABuUJQJ5yG5oCuziYzYu8jWa/test.zip?dl=1"
 }
 
-# something is wrong. there is a consistent mismatch of the checksums.
 CHECKSUM = {
     "train": "7101e19598e2b7aacdbd5e6e7575057b9154a4aaec043e0f4e28902bf4e2e209",
     "test": "d76c95c98a0353487ffb63b3bb2663c00ed1fde7d8fdfd8c3282c6e310a02731"
@@ -55,8 +54,8 @@ def _get_drive_ground_truth(data_dir):
         neu_gt_path = os.path.join(
             neu_gt_dir, Path(os.path.split(gt_path)[-1]).with_suffix(".tif")
         )
-        breakpoint()
-        imageio.imwrite(neu_gt_path, gt)
+        imageio.imwrite(neu_gt_path, (gt > 0).astype("uint8"))
+        neu_gt_paths.append(neu_gt_path)
 
     return neu_gt_paths
 
@@ -66,8 +65,6 @@ def _get_drive_paths(path, download):
 
     image_paths = sorted(glob(os.path.join(data_dir, "images", "*.tif")))
     gt_paths = _get_drive_ground_truth(data_dir)
-
-    breakpoint()
 
     return image_paths, gt_paths
 
@@ -96,6 +93,8 @@ def get_drive_dataset(
     else:
         patch_shape = patch_shape
         raw_trafo, label_trafo = None, None
+
+    # TODO: the resize for rgb images seems to be creating some issues. need to check this out
 
     dataset = ImageCollectionDataset(
         raw_image_paths=image_paths,
