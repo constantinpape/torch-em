@@ -17,6 +17,9 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
     @staticmethod
     def compute_len(shape, patch_shape):
+        if patch_shape is None:
+            patch_shape = shape
+
         n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
         return n_samples
 
@@ -67,7 +70,10 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         self._ndim = len(shape_raw) if ndim is None else ndim
         assert self._ndim in (2, 3, 4), f"Invalid data dimensions: {self._ndim}. Only 2d, 3d or 4d data is supported"
-        assert len(patch_shape) in (self._ndim, self._ndim + 1), f"{patch_shape}, {self._ndim}"
+
+        if patch_shape is not None:
+            assert len(patch_shape) in (self._ndim, self._ndim + 1), f"{patch_shape}, {self._ndim}"
+
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform
@@ -102,11 +108,17 @@ class SegmentationDataset(torch.utils.data.Dataset):
         return self._ndim
 
     def _sample_bounding_box(self):
-        bb_start = [
-            np.random.randint(0, sh - psh) if sh - psh > 0 else 0
-            for sh, psh in zip(self.shape, self.sample_shape)
-        ]
-        return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.sample_shape))
+        if self.sample_shape is None:
+            bb_start = [0] * len(self.shape)
+            patch_shape_for_bb = self.shape
+        else:
+            bb_start = [
+                np.random.randint(0, sh - psh) if sh - psh > 0 else 0
+                for sh, psh in zip(self.shape, self.sample_shape)
+            ]
+            patch_shape_for_bb = self.sample_shape
+
+        return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
 
     def _get_sample(self, index):
         if self.raw is None or self.labels is None:
@@ -127,10 +139,11 @@ class SegmentationDataset(torch.utils.data.Dataset):
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
-        # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
-        if len(self.patch_shape) == self._ndim + 1:
-            raw = raw.squeeze(1 if self._with_channels else 0)
-            labels = labels.squeeze(1 if self._with_label_channels else 0)
+        if self.patch_shape is not None:
+            # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
+            if len(self.patch_shape) == self._ndim + 1:
+                raw = raw.squeeze(1 if self._with_channels else 0)
+                labels = labels.squeeze(1 if self._with_label_channels else 0)
 
         return raw, labels
 
