@@ -1,7 +1,7 @@
 import os
 from glob import glob
 from tqdm import tqdm
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple
 from collections import defaultdict
 
 import cv2
@@ -129,11 +129,17 @@ def get_arcade_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     split: str,
-    task: Optional[str] = None,
+    task: str = "syntax",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
+    """
+    """
+    # TODO: the "stenosis" data has 3 channels, the "syntax" data has 1 channel
+    # for us, the relevant one is the "syntax" task, as we are interest in segmenting vessels for our workflows.
+    # for the "stenosis" task, the segmentations are only for the
+    # "stenotic valves" (i.e. abnormal narrowing of a certain region of the arteries)
     image_paths, gt_paths = _get_arcade_paths(path=path, split=split, task=task, download=download)
 
     if resize_inputs:
@@ -161,7 +167,7 @@ def get_arcade_loader(
     patch_shape: Tuple[int, int],
     batch_size: int,
     split: str,
-    task: Optional[str] = None,
+    task: str = "syntax",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
