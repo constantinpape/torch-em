@@ -3,6 +3,7 @@ from glob import glob
 from typing import Union, Tuple
 
 import torch_em
+from torch_em.transform.generic import ResizeInputs
 
 from .. import util
 from ... import ImageCollectionDataset
@@ -44,6 +45,7 @@ def get_siim_acr_dataset(
     split: str,
     patch_shape: Tuple[int, int],
     download: bool = False,
+    resize_inputs: bool = False,
     **kwargs
 ):
     """Dataset for pneumothorax segmentation in CXR.
@@ -57,8 +59,21 @@ def get_siim_acr_dataset(
     """
     image_paths, gt_paths = _get_siim_acr_paths(path=path, split=split, download=download)
 
+    if resize_inputs:
+        raw_trafo = ResizeInputs(target_shape=patch_shape, is_label=False)
+        label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
+        patch_shape = None
+    else:
+        patch_shape = patch_shape
+        raw_trafo, label_trafo = None, None
+
     dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths, label_image_paths=gt_paths, patch_shape=patch_shape, **kwargs
+        raw_image_paths=image_paths,
+        label_image_paths=gt_paths,
+        patch_shape=patch_shape,
+        raw_transform=raw_trafo,
+        label_transform=label_trafo,
+        **kwargs
     )
 
     return dataset
@@ -70,13 +85,14 @@ def get_siim_acr_loader(
     patch_shape: Tuple[int, int],
     batch_size: int,
     download: bool = False,
+    resize_inputs: bool = False,
     **kwargs
 ):
     """Dataloader for pneumothorax segmentation in CXR. See `get_siim_acr_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_siim_acr_dataset(
-        path=path, split=split, patch_shape=patch_shape, download=download, **ds_kwargs
+        path=path, split=split, patch_shape=patch_shape, download=download, resize_inputs=resize_inputs, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader

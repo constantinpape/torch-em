@@ -10,10 +10,11 @@ def check_siim_acr():
     loader = get_siim_acr_loader(
         path=ROOT,
         split="train",
-        patch_shape=(1024, 1024),
+        patch_shape=(512, 512),
         batch_size=2,
         download=True,
-        sampler=MinForegroundSampler(min_fraction=0.001)
+        resize_inputs=False,
+        sampler=MinForegroundSampler(min_fraction=0.001),
     )
     check_loader(loader, 8)
 

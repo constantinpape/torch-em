@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Sequence, Union
 import numpy as np
 import torch
 
-from skimage.transform import rescale
+from skimage.transform import rescale, resize
 
 
 class Tile(torch.nn.Module):
@@ -70,6 +70,28 @@ class Rescale:
         if len(outputs) == 1:
             return outputs[0]
         return outputs
+
+
+class ResizeInputs:
+    def __init__(self, target_shape, is_label=False):
+        self.target_shape = target_shape
+        self.is_label = is_label
+
+    def __call__(self, inputs):
+        if self.is_label:
+            anti_aliasing = True
+        else:
+            anti_aliasing = False
+
+        inputs = resize(
+            image=inputs,
+            output_shape=self.target_shape,
+            order=3,
+            anti_aliasing=anti_aliasing,
+            preserve_range=True,
+        )
+
+        return inputs
 
 
 class PadIfNecessary:
