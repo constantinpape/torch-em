@@ -98,13 +98,14 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
     def _sample_bounding_box(self, shape):
         if self.patch_shape is None:
             patch_shape_for_bb = shape
+            bb_start = [0] * len(shape)
         else:
             patch_shape_for_bb = self.patch_shape
+            bb_start = [
+                np.random.randint(0, sh - psh) if sh - psh > 0 else 0
+                for sh, psh in zip(shape, patch_shape_for_bb)
+            ]
 
-        bb_start = [
-            np.random.randint(0, sh - psh) if sh - psh > 0 else 0
-            for sh, psh in zip(shape, patch_shape_for_bb)
-        ]
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
 
     def _ensure_patch_shape(self, raw, labels, have_raw_channels, have_label_channels, channel_first):
