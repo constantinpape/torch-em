@@ -18,10 +18,10 @@ class SegmentationDataset(torch.utils.data.Dataset):
     @staticmethod
     def compute_len(shape, patch_shape):
         if patch_shape is None:
-            patch_shape = shape
-
-        n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
-        return n_samples
+            return 1
+        else:
+            n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
+            return n_samples
 
     def __init__(
         self,
@@ -139,11 +139,10 @@ class SegmentationDataset(torch.utils.data.Dataset):
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
-        if self.patch_shape is not None:
-            # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
-            if len(self.patch_shape) == self._ndim + 1:
-                raw = raw.squeeze(1 if self._with_channels else 0)
-                labels = labels.squeeze(1 if self._with_label_channels else 0)
+        # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
+        if self.patch_shape is not None and len(self.patch_shape) == self._ndim + 1:
+            raw = raw.squeeze(1 if self._with_channels else 0)
+            labels = labels.squeeze(1 if self._with_label_channels else 0)
 
         return raw, labels
 
