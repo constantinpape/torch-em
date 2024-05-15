@@ -10,7 +10,7 @@ def check_camus():
         path=ROOT,
         patch_shape=(1, 256, 256),
         batch_size=2,
-        chamber=None,
+        chamber=2,
         resize_inputs=True,
         download=False,
     )

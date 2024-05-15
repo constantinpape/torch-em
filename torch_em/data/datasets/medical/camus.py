@@ -33,6 +33,7 @@ def _get_camus_paths(path, chamber, download):
         chamber = "*"  # 2CH / 4CH
     else:
         assert chamber in [2, 4], f"{chamber} is  not a valid chamber choice for the acquisitions."
+        chamber = f"{chamber}CH"
 
     image_paths = sorted(glob(os.path.join(data_dir, "patient*", f"patient*_{chamber}_half_sequence.nii.gz")))
     gt_paths = sorted(glob(os.path.join(data_dir, "patient*", f"patient*_{chamber}_half_sequence_gt.nii.gz")))
