@@ -1,9 +1,9 @@
 from typing import Any, Dict, Optional, Sequence, Union
 
 import numpy as np
-import torch
-
 from skimage.transform import rescale, resize
+
+import torch
 
 
 class Tile(torch.nn.Module):
@@ -78,18 +78,17 @@ class ResizeInputs:
         self.is_label = is_label
 
     def __call__(self, inputs):
-        if self.is_label:
-            anti_aliasing = True
-        else:
-            anti_aliasing = False
+        if self.is_label:  # kwargs needed for int data
+            kwargs = {"order": 0,  "anti_aliasing": False}
+        else:  # we use the default settings for float data
+            kwargs = {}
 
         inputs = resize(
             image=inputs,
             output_shape=self.target_shape,
-            order=3,
-            anti_aliasing=anti_aliasing,
             preserve_range=True,
-        )
+            **kwargs
+        ).astype(inputs.dtype)
 
         return inputs
 

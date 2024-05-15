@@ -13,7 +13,7 @@ def check_siim_acr():
         patch_shape=(512, 512),
         batch_size=2,
         download=True,
-        resize_inputs=True,
+        resize_inputs=False,
         sampler=MinInstanceSampler()
     )
     check_loader(loader, 8)
