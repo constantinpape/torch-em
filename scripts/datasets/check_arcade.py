@@ -1,4 +1,5 @@
 from torch_em.util.debug import check_loader
+from torch_em.data import MinInstanceSampler
 from torch_em.data.datasets.medical import get_arcade_loader
 
 
@@ -13,6 +14,8 @@ def check_arcade():
         batch_size=2,
         download=True,
         task="syntax",
+        resize_inputs=False,
+        sampler=MinInstanceSampler(),
     )
     check_loader(loader, 8)
 
