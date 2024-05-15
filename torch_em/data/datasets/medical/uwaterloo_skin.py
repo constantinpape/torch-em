@@ -76,7 +76,10 @@ def get_uwaterloo_skin_dataset(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataset for skin lesion segmentation in dermoscopy images.
+
+    The database is located at https://uwaterloo.ca/vision-image-processing-lab/research-demos/skin-cancer-detection.
+    Please cite it if you use this dataset for a publication.
     """
     image_paths, gt_paths = _get_uwaterloo_skin_paths(path=path, download=download)
 
@@ -108,7 +111,7 @@ def get_uwaterloo_skin_loader(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataset for skin lesion segmentation in dermoscopy images. See `get_uwaterloo_skin_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_uwaterloo_skin_dataset(
