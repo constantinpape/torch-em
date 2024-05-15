@@ -1,5 +1,5 @@
 from torch_em.util.debug import check_loader
-from torch_em.data import MinForegroundSampler
+from torch_em.data import MinInstanceSampler
 from torch_em.data.datasets.medical import get_siim_acr_loader
 
 
@@ -13,8 +13,8 @@ def check_siim_acr():
         patch_shape=(512, 512),
         batch_size=2,
         download=True,
-        resize_inputs=False,
-        sampler=MinForegroundSampler(min_fraction=0.001),
+        resize_inputs=True,
+        sampler=MinInstanceSampler()
     )
     check_loader(loader, 8)
 

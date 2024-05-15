@@ -75,6 +75,7 @@ def get_siim_acr_dataset(
         label_transform=label_trafo,
         **kwargs
     )
+    dataset.max_sampling_attempts = 5000
 
     return dataset
 
