@@ -94,8 +94,6 @@ def get_drive_dataset(
         patch_shape = patch_shape
         raw_trafo, label_trafo = None, None
 
-    # TODO: the resize for rgb images seems to be creating some issues. need to check this out
-
     dataset = ImageCollectionDataset(
         raw_image_paths=image_paths,
         label_image_paths=gt_paths,
