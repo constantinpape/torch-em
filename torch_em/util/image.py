@@ -31,7 +31,6 @@ def supports_memmap(image_path):
 
 
 def load_image(image_path, memmap=True):
-    # if image_path.endswith(".dcm"): ...
     if supports_memmap(image_path) and memmap:
         return tifffile.memmap(image_path, mode="r")
     elif tifffile is not None and os.path.splitext(image_path)[1].lower() in (".tiff", ".tif"):
