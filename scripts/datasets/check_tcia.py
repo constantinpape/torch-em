@@ -4,6 +4,8 @@ from glob import glob
 from natsort import natsorted
 
 import numpy as np
+import pandas as pd
+import nibabel as nib
 import pydicom as dicom
 
 from tcia_utils import nbia
@@ -24,14 +26,26 @@ def check_tcia(download):
         with open(trg_path, 'wb') as f:
             f.write(manifest.content)
 
-        df = nbia.downloadSeries(trg_path, input_type="manifest", number=3, format="df", path=ROOT)
+        nbia.downloadSeries(
+            series_data=trg_path, input_type="manifest", number=3, path=ROOT, csv_filename="save"
+        )
 
-    breakpoint()
+    df = pd.read_csv("save.csv")
 
     all_patient_dirs = glob(os.path.join(ROOT, "*"))
     for patient_dir in all_patient_dirs:
-        if not os.path.split(patient_dir)[-1].startswith("1.3"):
+        patient_id = os.path.split(patient_dir)[-1]
+        if not patient_id.startswith("1.3"):
             continue
+
+        breakpoint()
+
+        subject_id = pd.Series.to_string(df.loc[df["Series UID"] == patient_id]["Subject ID"])[-9:]
+        seg_path = glob(os.path.join(ROOT, "Thoracic_Cavities", subject_id, "*.nii.gz"))[0]
+        gt = nib.load(seg_path)
+        gt = gt.get_fdata()
+        gt = gt.transpose(2, 1, 0)
+        gt = np.flip(gt, axis=1)
 
         all_dicom_files = natsorted(glob(os.path.join(patient_dir, "*.dcm")))
         samples = []
@@ -40,12 +54,13 @@ def check_tcia(download):
             img = file.pixel_array
             samples.append(img)
 
-        samples = np.stack(samples)
+        samples = np.stack(samples[::-1])
 
         import napari
 
         v = napari.Viewer()
         v.add_image(samples)
+        v.add_labels(gt.astype("uint64"))
         napari.run()
 
 
