@@ -10,7 +10,9 @@ def check_papila():
         path=ROOT,
         patch_shape=(256, 256),
         batch_size=2,
-        resize_inputs=False,
+        resize_inputs=True,
+        task="cup",
+        expert_choice="exp1",
         download=True,
     )
 

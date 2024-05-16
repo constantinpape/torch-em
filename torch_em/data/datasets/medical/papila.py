@@ -1,6 +1,12 @@
 import os
 from glob import glob
+from tqdm import tqdm
+from pathlib import Path
 from typing import Union, Tuple
+
+import numpy as np
+from skimage import draw
+import imageio.v3 as imageio
 
 import torch_em
 from torch_em.transform.generic import ResizeInputs
@@ -27,11 +33,52 @@ def get_papila_data(path, download):
     return data_dir
 
 
-def _get_papila_paths(path, download):
+# contour_to_mask() functions taken from https://github.com/matterport/Mask_RCNN
+def contour_to_mask(cont, img_shape):
+    """Return mask given a contour and the shape of image
+    """
+    c = np.loadtxt(cont)
+    mask = np.zeros(img_shape[:-1], dtype=np.uint8)
+    rr, cc = draw.polygon(c[:, 1], c[:, 0])
+    mask[rr, cc] = 1
+    return mask
+
+
+def _get_papila_paths(path, task, expert_choice, download):
     data_dir = get_papila_data(path=path, download=download)
 
     image_paths = sorted(glob(os.path.join(data_dir, "FundusImages", "*.jpg")))
-    gt_paths = sorted(glob(os.path.join(data_dir, "ExpertsSegmentations", "ImagesWithContours", "*.jpg")))
+
+    gt_dir = os.path.join(data_dir, "ground_truth")
+    if os.path.exists(gt_dir):
+        gt_paths = sorted(glob(os.path.join(gt_dir, f"*_{task}.tif")))
+        return image_paths, gt_paths
+
+    os.makedirs(gt_dir, exist_ok=True)
+
+    if task is None:  # we get the binary segmentations for both disc and cup
+        task = "*"
+
+    patient_ids = [Path(image_path).stem for image_path in image_paths]
+
+    input_shape = (1934, 2576, 3)  # shape of the input images
+    gt_paths = []
+    for patient_id in tqdm(patient_ids, desc=f"Converting contours to segmentations for '{expert_choice}'"):
+        gt_contours = sorted(
+            glob(os.path.join(data_dir, "ExpertsSegmentations", "Contours", f"{patient_id}_{task}_{expert_choice}.txt"))
+        )
+
+        assert len(gt_contours) == (4 if task is None else 2)
+
+        for gt_contour in gt_contours:
+            tmp_task = Path(gt_contour).stem.split("_")[1]
+            gt_path = os.path.join(gt_dir, f"{patient_id}_{tmp_task}.tif")
+            gt_paths.append(gt_path)
+            if os.path.exists(gt_path):
+                continue
+
+            semantic_labels = contour_to_mask(cont=gt_contour, img_shape=input_shape)
+            imageio.imwrite(gt_path, semantic_labels)
 
     return image_paths, gt_paths
 
@@ -39,6 +86,8 @@ def _get_papila_paths(path, download):
 def get_papila_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    task: str = "disc",
+    expert_choice: str = "exp1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -50,10 +99,15 @@ def get_papila_dataset(
     The dataset is from Kovalyk et al. - https://doi.org/10.1038/s41597-022-01388-1.
     Please cite it if you use this dataset for a publication.
     """
-    image_paths, gt_paths = _get_papila_paths(path=path, download=download)
+    assert expert_choice in ["exp1", "exp2"], f"'{expert_choice}' is not a valid expert choice."
+
+    if task is not None:
+        assert task in ["cup", "disc"], f"'{task}' is not a valid task."
+
+    image_paths, gt_paths = _get_papila_paths(path=path, task=task, expert_choice=expert_choice, download=download)
 
     if resize_inputs:
-        raw_trafo = ResizeInputs(target_shape=patch_shape, is_label=False)
+        raw_trafo = ResizeInputs(target_shape=patch_shape, is_rgb=True)
         label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
         patch_shape = None
     else:
@@ -76,6 +130,8 @@ def get_papila_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     batch_size: int,
+    task: str = "disc",
+    expert_choice: str = "exp1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -84,7 +140,13 @@ def get_papila_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_papila_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
+        path=path,
+        patch_shape=patch_shape,
+        task=task,
+        expert_choice=expert_choice,
+        resize_inputs=resize_inputs,
+        download=download,
+        **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
