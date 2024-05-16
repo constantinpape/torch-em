@@ -63,6 +63,7 @@ def get_dataloaders(dataset, task):
             batch_size=2,
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
+            num_workers=16,
         )
         val_loader = get_livecell_loader(
             path=os.path.join(ROOT, "livecell"),
@@ -71,6 +72,7 @@ def get_dataloaders(dataset, task):
             batch_size=1,
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
+            num_workers=16,
         )
 
     elif dataset == "plantseg":
@@ -78,39 +80,43 @@ def get_dataloaders(dataset, task):
             path=os.path.join(ROOT, "plantseg"),
             name="root",
             split="train",
-            patch_shape=(32, 512, 512),
+            patch_shape=(32, 256, 256),
             batch_size=2,
-            binary=True if task == "binary" else False,
+            binary=True,
             boundaries=True if task == "boundaries" else False,
+            num_workers=16,
         )
 
         val_loader = get_plantseg_loader(
             path=os.path.join(ROOT, "plantseg"),
             name="root",
             split="val",
-            patch_shape=(32, 512, 512),
+            patch_shape=(32, 256, 256),
             batch_size=1,
-            binary=True if task == "binary" else False,
+            binary=True,
             boundaries=True if task == "boundaries" else False,
+            num_workers=16,
         )
 
     elif dataset == "mitoem":
         train_loader = get_mitoem_loader(
             path=os.path.join(ROOT, "mitoem"),
             splits="train",
-            patch_shape=(32, 512, 512),
+            patch_shape=(32, 256, 256),
             batch_size=2,
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
+            num_workers=16,
         )
 
         val_loader = get_mitoem_loader(
             path=os.path.join(ROOT, "mitoem"),
             splits="val",
-            patch_shape=(32, 512, 512),
+            patch_shape=(32, 256, 256),
             batch_size=1,
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
+            num_workers=16,
         )
 
     else:

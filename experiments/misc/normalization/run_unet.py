@@ -14,6 +14,14 @@ SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"
 def run_training(name, model, dataset, task, save_root, device):
     train_loader, val_loader = get_dataloaders(dataset=dataset, task=task)
 
+    from torch_em.util.debug import check_loader
+    check_loader(train_loader, 8, plt=True, save_path="./test.png")
+
+    for x, y in train_loader:
+        breakpoint()
+
+    breakpoint()
+
     loss = DiceLoss()
 
     trainer = torch_em.default_segmentation_trainer(
