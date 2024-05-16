@@ -1,18 +1,24 @@
+"""MitoEM is a dataset for segmenting mitochondria in electron microscopy.
+
+It contains two large annotated volumes, one from rat cortex, the other from human cortex.
+This dataset was used for a segmentation challenge at ISBI 2022.
+If you use it in your research then please cite https://doi.org/10.1007/978-3-030-59722-1_7.
+"""
+
 import os
 import multiprocessing
 from concurrent import futures
 from shutil import rmtree
+from typing import List, Optional, Sequence, Tuple, Union
 
 import imageio
 import numpy as np
 import torch_em
 import z5py
 
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from .. import util
-
-# TODO: update the links to the new host location at huggingface.
-# - https://mitoem.grand-challenge.org/ (see `Dataset` for the links)
 
 URLS = {
     "raw": {
@@ -21,7 +27,7 @@ URLS = {
     },
     "labels": {
         "human": "https://www.dropbox.com/s/dhf89bc14kemw4e/EM30-H-mito-train-val-v2.zip?dl=1",
-        "rat": "https://www.dropbox.com/s/stncdytayhr8ggz/EM30-R-mito-train-val-v2.zip?dl=1"
+        "rat": "https://huggingface.co/datasets/pytc/MitoEM/blob/main/EM30-R-mito-train-val-v2.zip"
     }
 }
 CHECKSUMS = {
@@ -127,23 +133,20 @@ def _require_mitoem_sample(path, sample, download):
     rmtree(val_folder)
 
 
-def get_mitoem_dataset(
-    path,
-    splits,
-    patch_shape,
-    samples=("human", "rat"),
-    download=False,
-    offsets=None,
-    boundaries=False,
-    binary=False,
-    **kwargs,
-):
-    """Dataset for the segmentation of mitochondria in EM.
+def get_mitoem_data(
+    path: Union[os.PathLike, str], samples: Sequence[str], splits: Sequence[str], download: bool
+) -> List[str]:
+    """Download the MitoEM training data.
 
-    This dataset is from the publication https://doi.org/10.1007/978-3-030-59722-1_7.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        samples: The samples to download. The available samples are 'human' and 'rat'.
+        splits: The data splits to download. The available splits are 'train', 'val' and 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The paths to the downloaded and converted files.
     """
-    assert len(patch_shape) == 3
     if isinstance(splits, str):
         splits = [splits]
     assert len(set(splits) - {"train", "val"}) == 0, f"{splits}"
@@ -162,6 +165,39 @@ def get_mitoem_dataset(
             split_path = os.path.join(path, f"{sample}_{split}.n5")
             assert os.path.exists(split_path), split_path
             data_paths.append(split_path)
+    return data_paths
+
+
+def get_mitoem_dataset(
+    path: Union[os.PathLike, str],
+    splits: Sequence[str],
+    patch_shape: Tuple[int, int, int],
+    samples: Sequence[str] = ("human", "rat"),
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    **kwargs,
+) -> Dataset:
+    """Get the MitoEM dataset for the segmentation of mitochondria in EM.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        splits: The splits to use for the dataset. Available values are 'train', 'val' and 'test'.
+        patch_shape: The patch shape to use for training.
+        samples: The samples to use for the dataset. The available samples are 'human' and 'rat'.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
+    """
+    assert len(patch_shape) == 3
+
+    data_paths = get_mitoem_data(path, samples, splits, download)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
@@ -172,18 +208,34 @@ def get_mitoem_dataset(
 
 
 def get_mitoem_loader(
-    path,
-    splits,
-    patch_shape,
-    batch_size,
-    samples=("human", "rat"),
-    download=False,
-    offsets=None,
-    boundaries=False,
-    binary=False,
+    path: Union[os.PathLike, str],
+    splits: Sequence[str],
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    samples: Sequence[str] = ("human", "rat"),
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     **kwargs,
-):
-    """Dataloader for the segmentation of mitochondria in EM. See 'get_mitoem_dataset' for details."""
+) -> DataLoader:
+    """Get the MitoEM dataload for the segmentation of mitochondria in EM.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        splits: The splits to use for the dataset. Available values are 'train', 'val' and 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        samples: The samples to use for the dataset. The available samples are 'human' and 'rat'.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+       The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

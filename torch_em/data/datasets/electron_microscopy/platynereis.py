@@ -1,8 +1,21 @@
+"""Dataset for the segmentation of different structures in EM volume of a
+platynereis larve. Contains annotations for the segmentation of:
+- Cuticle
+- Cilia
+- Cells
+- Nuclei
+
+This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
+Please cite it if you use this dataset for a publication.
+"""
+
 import os
 from glob import glob
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch_em
+from torch.utils.data import Dataset, DataLoader
 from .. import util
 
 URLS = {
@@ -26,16 +39,6 @@ CHECKSUMS = {
 #
 
 
-def _require_platy_data(path, name, download):
-    os.makedirs(path, exist_ok=True)
-    url = URLS[name]
-    checksum = CHECKSUMS[name]
-
-    zip_path = os.path.join(path, f"data-{name}.zip")
-    util.download_source(zip_path, url, download=download, checksum=checksum)
-    util.unzip(zip_path, path, remove=True)
-
-
 def _check_data(path, prefix, extension, n_files):
     if not os.path.exists(path):
         return False
@@ -54,19 +57,69 @@ def _get_paths_and_rois(sample_ids, n_files, template, rois):
     return paths, data_rois
 
 
-def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download=False, rois={}, **kwargs):
-    """Dataset for the segmentation of cuticle in EM.
+def get_platy_data(path: Union[os.PathLike, str], name: str, download: bool) -> Tuple[str, int]:
+    """Download the platynereis dataset.
 
-    This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: Name of the segmentation task. Available tasks: 'cuticle', 'cilia', 'cells' or 'nuclei'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The path to the folder where the data has been downloaded.
+        The number of files downloaded.
     """
-    cuticle_root = os.path.join(path, "cuticle")
+    data_root = os.path.join(path, name)
 
-    ext = ".n5"
-    prefix, n_files = "train_data_", 5
-    data_is_complete = _check_data(cuticle_root, prefix, ext, n_files)
-    if not data_is_complete:
-        _require_platy_data(path, "cuticle", download)
+    if name == "cuticle":
+        ext, prefix, n_files = ".n5", "train_data_", 5
+    elif name == "cilia":
+        ext, prefix, n_files = ".h5", "train_data_cilia_", 3
+    elif name == "cells":
+        data_root = os.path.join(path, "membrane")
+        ext, prefix, n_files = ".n5", "train_data_membrane_", 9
+    elif name == "nuclei":
+        ext, prefix, n_files = ".h5", "train_data_nuclei_", 12
+    else:
+        raise ValueError(f"Invalid name {name}. Expect one of 'cuticle', 'cilia', 'cell' or 'nuclei'.")
+
+    data_is_complete = _check_data(data_root, prefix, ext, n_files)
+    if data_is_complete:
+        return data_root, n_files
+
+    os.makedirs(path, exist_ok=True)
+    url = URLS[name]
+    checksum = CHECKSUMS[name]
+
+    zip_path = os.path.join(path, f"data-{name}.zip")
+    util.download_source(zip_path, url, download=download, checksum=checksum)
+    util.unzip(zip_path, path, remove=True)
+
+    return data_root, n_files
+
+
+def get_platynereis_cuticle_dataset(
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    sample_ids: Optional[Sequence[int]] = None,
+    download: bool = False,
+    rois: Dict[int, Any] = {},
+    **kwargs
+) -> Dataset:
+    """Get the dataset for cuticle segmentation in platynereis.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        sample_ids: The sample ids to use for the dataset
+        download: Whether to download the data if it is not present.
+        rois: The region of interests to use for the data blocks.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
+    """
+    cuticle_root, n_files = get_platy_data(path, "cuticle", download)
 
     paths, data_rois = _get_paths_and_rois(sample_ids, n_files, os.path.join(cuticle_root, "train_data_%02i.n5"), rois)
     raw_key, label_key = "volumes/raw", "volumes/labels/segmentation"
@@ -76,9 +129,28 @@ def get_platynereis_cuticle_dataset(path, patch_shape, sample_ids=None, download
 
 
 def get_platynereis_cuticle_loader(
-    path, patch_shape, batch_size, sample_ids=None, download=False, rois={}, **kwargs
-):
-    """Dataloader for the segmentation of cuticle in EM. See 'get_platynereis_cuticle_loader'."""
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    sample_ids: Optional[Sequence[int]] = None,
+    download: bool = False,
+    rois: Dict[int, Any] = {},
+    **kwargs
+) -> DataLoader:
+    """Get the dataloader for cuticle segmentation in platynereis.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        sample_ids: The sample ids to use for the dataset
+        download: Whether to download the data if it is not present.
+        rois: The region of interests to use for the data blocks.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
@@ -89,22 +161,33 @@ def get_platynereis_cuticle_loader(
 
 
 def get_platynereis_cilia_dataset(
-    path, patch_shape, sample_ids=None,
-    offsets=None, boundaries=False, binary=False,
-    rois={}, download=False, **kwargs
-):
-    """Dataset for the segmentation of cilia in EM.
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    sample_ids: Optional[Sequence[int]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    rois: Dict[int, Any] = {},
+    download: bool = False,
+    **kwargs
+) -> Dataset:
+    """Get the dataset for cilia segmentation in platynereis.
 
-    This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        sample_ids: The sample ids to use for the dataset
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        rois: The region of interests to use for the data blocks.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    cilia_root = os.path.join(path, "cilia")
-
-    ext = ".h5"
-    prefix, n_files = "train_data_cilia_", 3
-    data_is_complete = _check_data(cilia_root, prefix, ext, n_files)
-    if not data_is_complete:
-        _require_platy_data(path, "cilia", download)
+    cilia_root, n_files = get_platy_data(path, "cilia", download)
 
     paths, rois = _get_paths_and_rois(sample_ids, n_files, os.path.join(cilia_root, "train_data_cilia_%02i.h5"), rois)
     raw_key = "volumes/raw"
@@ -117,11 +200,34 @@ def get_platynereis_cilia_dataset(
 
 
 def get_platynereis_cilia_loader(
-    path, patch_shape, batch_size, sample_ids=None,
-    offsets=None, boundaries=False, binary=False,
-    rois={}, download=False, **kwargs
-):
-    """Dataloader for the segmentation of cilia in EM. See 'get_platynereis_cilia_dataset'."""
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    sample_ids: Optional[Sequence[int]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    rois: Dict[int, Any] = {},
+    download: bool = False,
+    **kwargs
+) -> DataLoader:
+    """Get the dataloader for cilia segmentation in platynereis.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        sample_ids: The sample ids to use for the dataset
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        rois: The region of interests to use for the data blocks.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
@@ -134,24 +240,31 @@ def get_platynereis_cilia_loader(
 
 
 def get_platynereis_cell_dataset(
-    path, patch_shape,
-    sample_ids=None, rois={},
-    offsets=None, boundaries=False,
-    download=False, **kwargs
-):
-    """Dataset for the segmentation of cells in EM.
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    sample_ids: Optional[Sequence[int]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    rois: Dict[int, Any] = {},
+    download: bool = False,
+    **kwargs
+) -> Dataset:
+    """Get the dataset for cell segmentation in platynereis.
 
-    This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        sample_ids: The sample ids to use for the dataset
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        rois: The region of interests to use for the data blocks.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    cell_root = os.path.join(path, "membrane")
-
-    prefix = "train_data_membrane_"
-    ext = ".n5"
-    n_files = 9
-    data_is_complete = _check_data(cell_root, prefix, ext, n_files)
-    if not data_is_complete:
-        _require_platy_data(path, "cells", download)
+    cell_root, n_files = get_platy_data(path, "cells", download)
 
     template = os.path.join(cell_root, "train_data_membrane_%02i.n5")
     data_paths, data_rois = _get_paths_and_rois(sample_ids, n_files, template, rois)
@@ -167,12 +280,32 @@ def get_platynereis_cell_dataset(
 
 
 def get_platynereis_cell_loader(
-    path, patch_shape, batch_size,
-    sample_ids=None, rois={},
-    offsets=None, boundaries=False,
-    download=False, **kwargs
-):
-    """Dataloader for the segmentation of cells in EM. See 'get_platynereis_cell_dataset'."""
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    sample_ids: Optional[Sequence[int]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    rois: Dict[int, Any] = {},
+    download: bool = False,
+    **kwargs
+) -> DataLoader:
+    """Get the dataloader for cell segmentation in platynereis.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        sample_ids: The sample ids to use for the dataset
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        rois: The region of interests to use for the data blocks.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
@@ -185,21 +318,33 @@ def get_platynereis_cell_loader(
 
 
 def get_platynereis_nuclei_dataset(
-    path, patch_shape, sample_ids=None, rois={},
-    offsets=None, boundaries=False, binary=False,
-    download=False, **kwargs,
-):
-    """Dataset for the segmentation of nuclei in EM.
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    sample_ids: Optional[Sequence[int]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    rois: Dict[int, Any] = {},
+    download: bool = False,
+    **kwargs
+) -> Dataset:
+    """Get the dataset for nucleus segmentation in platynereis.
 
-    This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        sample_ids: The sample ids to use for the dataset
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        rois: The region of interests to use for the data blocks.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    nuc_root = os.path.join(path, "nuclei")
-    prefix, ext = "train_data_nuclei_", ".h5"
-    n_files = 12
-    data_is_complete = _check_data(nuc_root, prefix, ext, n_files)
-    if not data_is_complete:
-        _require_platy_data(path, "nuclei", download)
+    nuc_root, n_files = get_platy_data(path, "nuclei", download)
 
     if sample_ids is None:
         sample_ids = list(range(1, n_files + 1))
@@ -221,12 +366,34 @@ def get_platynereis_nuclei_dataset(
 
 
 def get_platynereis_nuclei_loader(
-    path, patch_shape, batch_size,
-    sample_ids=None, rois={},
-    offsets=None, boundaries=False, binary=False,
-    download=False, **kwargs
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    sample_ids: Optional[Sequence[int]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    rois: Dict[int, Any] = {},
+    download: bool = False,
+    **kwargs
 ):
-    """Dataloader for the segmentation of nuclei in EM. See 'get_platynereis_nuclei_dataset'."""
+    """Get the dataloader for nucleus segmentation in platynereis.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        sample_ids: The sample ids to use for the dataset
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        rois: The region of interests to use for the data blocks.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
