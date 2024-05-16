@@ -9,14 +9,14 @@ from .. import util
 from ... import ImageCollectionDataset
 
 
-URL = "https://figshare.com/ndownloader/files/28454352"
-CHECKSUM = "f72ed286a63e40c13fb70802d4e600cc0c74110c01da1ec33201f0389d058c98"
+URL = "https://figshare.com/ndownloader/files/35013982"
+CHECKSUM = "15b053dff496bc8e53eb8a8d0707ef73ba3d56c988eea92b65832c9c82852a7d"
 
 
 def get_papila_data(path, download):
     os.makedirs(path, exist_ok=True)
 
-    data_dir = os.path.join(path, "PapilaDB-PAPILA-9c67b80983805f0f886b068af800ef2b507e7dc0")
+    data_dir = os.path.join(path, "PapilaDB-PAPILA-17f8fa7746adb20275b5b6a0d99dc9dfe3007e9f")
     if os.path.exists(data_dir):
         return data_dir
 
@@ -43,7 +43,12 @@ def get_papila_dataset(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataset for segmentation of optic cup and optic disc in fundus images.
+
+    The database is located at https://figshare.com/articles/dataset/PAPILA/14798004/2
+
+    The dataset is from Kovalyk et al. - https://doi.org/10.1038/s41597-022-01388-1.
+    Please cite it if you use this dataset for a publication.
     """
     image_paths, gt_paths = _get_papila_paths(path=path, download=download)
 
@@ -75,7 +80,7 @@ def get_papila_loader(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataloader for segmentation of optic cup and optic disc in fundus images. See `get_papila_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_papila_dataset(
