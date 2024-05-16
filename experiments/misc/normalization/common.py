@@ -1,6 +1,7 @@
 import os
 
 from torch_em.model import UNet2d, UNet3d
+from torch_em.data import MinTwoInstanceSampler
 from torch_em.data.datasets import get_livecell_loader, get_plantseg_loader, get_mitoem_loader
 
 
@@ -55,6 +56,8 @@ def get_experiment_name(dataset, task, norm, model_choice):
 def get_dataloaders(dataset, task):
     assert task in ["binary", "boundaries"]
 
+    sampler = MinTwoInstanceSampler()
+
     if dataset == "livecell":
         train_loader = get_livecell_loader(
             path=os.path.join(ROOT, "livecell"),
@@ -64,6 +67,7 @@ def get_dataloaders(dataset, task):
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
+            sampler=sampler,
         )
         val_loader = get_livecell_loader(
             path=os.path.join(ROOT, "livecell"),
@@ -73,6 +77,7 @@ def get_dataloaders(dataset, task):
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
+            sampler=sampler,
         )
 
     elif dataset == "plantseg":
@@ -85,6 +90,7 @@ def get_dataloaders(dataset, task):
             binary=True,
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
+            sampler=sampler,
         )
 
         val_loader = get_plantseg_loader(
@@ -96,6 +102,7 @@ def get_dataloaders(dataset, task):
             binary=True,
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
+            sampler=sampler,
         )
 
     elif dataset == "mitoem":
@@ -107,6 +114,7 @@ def get_dataloaders(dataset, task):
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
+            sampler=sampler,
         )
 
         val_loader = get_mitoem_loader(
@@ -117,6 +125,7 @@ def get_dataloaders(dataset, task):
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
+            sampler=sampler,
         )
 
     else:
