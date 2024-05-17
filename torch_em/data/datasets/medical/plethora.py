@@ -57,7 +57,9 @@ def get_plethora_data(path, task, download):
 
     # let's download dicom files from the tcia manifest
     tcia_path = os.path.join(path, "NSCLC-Radiomics-OriginalCTs.tcia")
-    util.download_source_tcia(path=tcia_path, url=URL, dst=image_dir, csv_filename=csv_path)
+    util.download_source_tcia(path=tcia_path, url=URL["image"], dst=image_dir, csv_filename=csv_path, download=download)
+
+    breakpoint()
 
     # let's download the segmentations from zipfiles
     zip_path = os.path.join(path, ZIPFILES[task])

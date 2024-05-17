@@ -74,4 +74,4 @@ def _test_me():
 
 if __name__ == "__main__":
     # _test_me()
-    check_tcia(download=False)
+    check_tcia(download=True)

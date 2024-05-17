@@ -10,7 +10,6 @@ from packaging import version
 from shutil import copyfileobj, which
 
 import zipfile
-import pandas as pd
 from xml.dom import minidom
 from skimage.draw import polygon
 
@@ -180,14 +179,10 @@ def download_source_tcia(path, url, dst, csv_filename, download):
     with open(path, "wb") as f:
         f.write(manifest.content)
 
-    if os.path.exists(csv_filename):
-        prev_df = pd.read_csv(csv_filename)
-
     # this part extracts the UIDs from the manigests and downloads them.
-    df = nbia.downloadSeries(series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename)
-
-    neu_df = pd.concat(prev_df, df)
-    neu_df.to_csv(csv_filename)
+    nbia.downloadSeries(
+        series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename,
+    )
 
 
 def update_kwargs(kwargs, key, value, msg=None):
