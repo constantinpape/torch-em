@@ -1,14 +1,26 @@
 import os
+from tqdm import tqdm
+
+import numpy as np
+import imageio.v3 as imageio
 
 import torch
 
 import torch_em
 from torch_em.loss import DiceLoss
+from torch_em.util.prediction import predict_with_halo
 
-from common import get_dataloaders, get_model, get_experiment_name
+from common import get_dataloaders, get_model, get_experiment_name, get_test_images
 
 
 SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"
+
+
+def dice_score(gt, seg, eps=1e-7):
+    nom = 2 * np.sum(gt * seg)
+    denom = np.sum(gt) + np.sum(seg)
+    score = float(nom) / float(denom + eps)
+    return score
 
 
 def run_training(name, model, dataset, task, save_root, device):
@@ -33,12 +45,35 @@ def run_training(name, model, dataset, task, save_root, device):
     trainer.fit(iterations=int(1e5))
 
 
-def run_inference():
-    pass
+def run_inference(name, model, dataset, task, save_root, device):
+    checkpoint = os.path.join(save_root, "checkpoints", name, "best.pt")
+    assert os.path.exists(checkpoint)
 
+    model.load_state_dict(torch.load(checkpoint, map_location=torch.device("cpu"))["model_state"])
+    model.to(device)
+    model.eval()
 
-def run_evaluation():
-    pass
+    image_paths, gt_paths = get_test_images(dataset=dataset)
+
+    scores = []
+    for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting"):
+        image = imageio.imread(image_path)
+        gt = imageio.imread(gt_path)
+
+        # HACK: values hard coded for livecell
+        prediction = predict_with_halo(
+            input_=image, model=model, gpu_ids=[device], block_shape=(512, 512), halo=(64, 64),
+        )
+
+        prediction = prediction.squeeze()
+        prediction = (prediction > 0.5)
+
+        score = dice_score(gt=gt, seg=prediction)
+        print(score)
+        scores.append(score)
+
+    mean_dice = np.mean(scores)
+    print(mean_dice)
 
 
 def main(args):
@@ -61,13 +96,12 @@ def main(args):
         )
 
     elif phase == "predict":
-        run_inference(device=device)
-
-    elif phase == "evaluate":
-        run_evaluation()
+        run_inference(
+            name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device
+        )
 
     else:
-        print(f"'{phase}' is not a valid mode. Choose from 'train' / 'predict' / 'evaluate'.")
+        print(f"'{phase}' is not a valid mode. Choose from 'train' / 'predict'.")
 
 
 if __name__ == "__main__":

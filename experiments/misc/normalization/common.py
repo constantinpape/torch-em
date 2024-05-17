@@ -4,6 +4,8 @@ from torch_em.model import UNet2d, UNet3d
 from torch_em.data import MinTwoInstanceSampler
 from torch_em.data.datasets import get_livecell_loader, get_plantseg_loader, get_mitoem_loader
 
+from micro_sam.evaluation.livecell import _get_livecell_paths
+
 
 ROOT = "/scratch/projects/nim00007/sam/data"
 
@@ -132,3 +134,12 @@ def get_dataloaders(dataset, task):
         raise ValueError(f"{dataset} is not a valid dataset choice for this experiment.")
 
     return train_loader, val_loader
+
+
+def get_test_images(dataset):
+    if dataset == "livecell":
+        image_paths, gt_paths = _get_livecell_paths(input_folder=os.path.join(ROOT, "livecell"), split="test")
+        return image_paths, gt_paths
+
+    else:
+        raise NotImplementedError
