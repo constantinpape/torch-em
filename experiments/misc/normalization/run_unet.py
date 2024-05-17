@@ -65,7 +65,7 @@ def run_inference(name, model, dataset, task, save_root, device):
 
         if task == "boundaries":
             bd = find_boundaries(gt)
-            gt = np.stack([bd, gt])
+            gt = np.stack([gt, bd])
 
         # HACK: values hard coded for livecell
         prediction = predict_with_halo(
@@ -75,13 +75,14 @@ def run_inference(name, model, dataset, task, save_root, device):
         prediction = prediction.squeeze()
         prediction = (prediction > 0.5)
 
-        # import napari
-
-        # v = napari.Viewer()
-        # v.add_image(image)
-        # v.add_labels(gt)
-        # v.add_labels(prediction)
-        # napari.run()
+        visualize = False
+        if visualize:
+            import napari
+            v = napari.Viewer()
+            v.add_image(image)
+            v.add_labels(gt)
+            v.add_labels(prediction)
+            napari.run()
 
         score = dice_score(gt=gt, seg=prediction)
         assert score > 0 and score <= 1
