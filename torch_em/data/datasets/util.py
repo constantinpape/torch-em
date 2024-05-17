@@ -1,25 +1,31 @@
-import inspect
 import os
 import hashlib
-import zipfile
+import inspect
+import requests
 import numpy as np
 from tqdm import tqdm
 from warnings import warn
-from xml.dom import minidom
-from shutil import copyfileobj, which
 from subprocess import run
 from packaging import version
+from shutil import copyfileobj, which
 
+import zipfile
+import pandas as pd
+from xml.dom import minidom
 from skimage.draw import polygon
 
 import torch
 import torch_em
-import requests
 
 try:
     import gdown
 except ImportError:
     gdown = None
+
+try:
+    from tcia_utils import nbia
+except ModuleNotFoundError:
+    nbia = None
 
 
 BIOIMAGEIO_IDS = {
@@ -161,6 +167,27 @@ def download_source_kaggle(path, dataset_name, download):
     api = KaggleApi()
     api.authenticate()
     api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
+
+
+def download_source_tcia(path, url, dst, csv_filename, download):
+    if not download:
+        raise RuntimeError(f"Cannot fine the data at {path}, but download was set to False.")
+
+    assert url.endswith(".tcia"), f"{path} is not a TCIA Manifest."
+
+    # downloads the manifest file from the collection page
+    manifest = requests.get(url=url)
+    with open(path, "wb") as f:
+        f.write(manifest.content)
+
+    if os.path.exists(csv_filename):
+        prev_df = pd.read_csv(csv_filename)
+
+    # this part extracts the UIDs from the manigests and downloads them.
+    df = nbia.downloadSeries(series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename)
+
+    neu_df = pd.concat(prev_df, df)
+    neu_df.to_csv(csv_filename)
 
 
 def update_kwargs(kwargs, key, value, msg=None):

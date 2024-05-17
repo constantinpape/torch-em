@@ -1,5 +1,4 @@
 import os
-import requests
 from glob import glob
 from pathlib import Path
 from natsort import natsorted
@@ -14,8 +13,6 @@ import pydicom as dicom
 import torch_em
 
 from .. import util
-
-from tcia_utils import nbia
 
 
 BASE_URL = "https://wiki.cancerimagingarchive.net/download/attachments/68551327/"
@@ -49,24 +46,6 @@ ZIPFILES = {
 }
 
 
-def download_source_tcia(path, url, dst, csv_filename):
-    assert url.endswith(".tcia")
-
-    manifest = requests.get(url=url)
-    with open(path, "wb") as f:
-        f.write(manifest.content)
-
-    if os.path.exists(csv_filename):
-        prev_df = pd.read_csv(csv_filename)
-
-    df = nbia.downloadSeries(
-        series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename
-    )
-
-    neu_df = pd.concat(prev_df, df)
-    neu_df.to_csv(csv_filename)
-
-
 def get_plethora_data(path, task, download):
     os.makedirs(path, exist_ok=True)
 
@@ -78,7 +57,7 @@ def get_plethora_data(path, task, download):
 
     # let's download dicom files from the tcia manifest
     tcia_path = os.path.join(path, "NSCLC-Radiomics-OriginalCTs.tcia")
-    download_source_tcia(path=tcia_path, url=URL, dst=image_dir, csv_filename=csv_path)
+    util.download_source_tcia(path=tcia_path, url=URL, dst=image_dir, csv_filename=csv_path)
 
     # let's download the segmentations from zipfiles
     zip_path = os.path.join(path, ZIPFILES[task])
