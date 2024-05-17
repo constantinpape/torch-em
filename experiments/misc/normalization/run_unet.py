@@ -13,7 +13,8 @@ from torch_em.util.prediction import predict_with_halo
 from common import get_dataloaders, get_model, get_experiment_name, get_test_images
 
 
-SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"
+# SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"  # fpr HLRN
+SAVE_DIR = "/media/anwai/ANWAI/models/torch-em/verify_normalization"
 
 
 def dice_score(gt, seg, eps=1e-7):
@@ -59,6 +60,7 @@ def run_inference(name, model, dataset, task, save_root, device):
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting"):
         image = imageio.imread(image_path)
         gt = imageio.imread(gt_path)
+        gt = (gt > 0)
 
         # HACK: values hard coded for livecell
         prediction = predict_with_halo(
@@ -67,6 +69,14 @@ def run_inference(name, model, dataset, task, save_root, device):
 
         prediction = prediction.squeeze()
         prediction = (prediction > 0.5)
+
+        # import napari
+
+        # v = napari.Viewer()
+        # v.add_image(image)
+        # v.add_labels(gt)
+        # v.add_labels(prediction)
+        # napari.run()
 
         score = dice_score(gt=gt, seg=prediction)
         print(score)
