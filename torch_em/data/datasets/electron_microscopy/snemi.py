@@ -91,6 +91,7 @@ def get_snemi_loader(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
         sample: The sample to download, either 'train' or 'test'.
         download: Whether to download the data if it is not present.
         offsets: Offset values for affinity computation used as target.

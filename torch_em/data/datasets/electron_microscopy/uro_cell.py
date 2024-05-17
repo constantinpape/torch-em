@@ -1,10 +1,23 @@
+"""The UroCell dataset contains segmentation annotations for the following organelles:
+- Food Vacuoles
+- Golgi Apparatus
+- Lysosomes
+- Mitochondria
+
+It contains several FIB-SEM volumes with annotations.
+This dataset is from the publication https://doi.org/10.1016/j.compbiomed.2020.103693.
+Please cite it if you use this dataset for a publication.
+"""
+
 import os
 import warnings
 from glob import glob
 from shutil import rmtree
+from typing import List, Optional, Union, Tuple
 
 import h5py
 import torch_em
+from torch.utils.data import Dataset, DataLoader
 from .. import util
 
 
@@ -12,14 +25,25 @@ URL = "https://github.com/MancaZerovnikMekuc/UroCell/archive/refs/heads/master.z
 CHECKSUM = "a48cf31b06114d7def642742b4fcbe76103483c069122abe10f377d71a1acabc"
 
 
-def _require_urocell_data(path, download):
+def get_urocell_data(path: Union[os.PathLike, str], download: bool) -> str:
+    """Download the UroCell training data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The path to the downloaded data.
+    """
     if os.path.exists(path):
         return path
 
-    # add nifti file format support in elf by wrapping nibabel?
-    import nibabel as nib
+    try:
+        import nibabel as nib
+    except ImportError:
+        raise RuntimeError("Please install the nibabel package.")
 
-    # download and unzip the data
+    # Download and unzip the data.
     os.makedirs(path)
     tmp_path = os.path.join(path, "uro_cell.zip")
     util.download_source(tmp_path, URL, download, checksum=CHECKSUM)
@@ -37,8 +61,8 @@ def _require_urocell_data(path, download):
         with h5py.File(out_path, "w") as f:
             f.create_dataset("raw", data=data, compression="gzip")
 
-            # check if we have any of the organelle labels for this volume
-            # and also copy them if yes
+            # Check if we have any of the organelle labels for this volume
+            # and also copy them if yes.
             fv_path = os.path.join(root, "fv", "instance", fname)
             if os.path.exists(fv_path):
                 fv = nib.load(fv_path).get_fdata().astype("uint32")
@@ -63,8 +87,9 @@ def _require_urocell_data(path, download):
                 assert mito.shape == data.shape
                 f.create_dataset("labels/mito", data=mito, compression="gzip")
 
-    # clean up
+    # Clean Up.
     rmtree(root)
+    return path
 
 
 def _get_paths(path, target):
@@ -76,22 +101,33 @@ def _get_paths(path, target):
 
 
 def get_uro_cell_dataset(
-    path,
-    target,
-    patch_shape,
-    download=False,
-    offsets=None,
-    boundaries=False,
-    binary=False,
+    path: Union[os.PathLike, str],
+    target: str,
+    patch_shape: Tuple[int, int, int],
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     **kwargs
-):
-    """Dataset for the segmentation of mitochondria and other organelles in EM.
+) -> Dataset:
+    """Get the UroCell dataset for organelle segmentation in FIB-SEM.
 
-    This dataset is from the publication https://doi.org/10.1016/j.compbiomed.2020.103693.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        target: The segmentation target, corresponding to the organelle to segment.
+            Available organelles are 'fv', 'golgi', 'lyso' and 'mito'.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
     """
     assert target in ("fv", "golgi", "lyso", "mito")
-    _require_urocell_data(path, download)
+    get_urocell_data(path, download)
     paths, label_key = _get_paths(path, target)
 
     assert sum((offsets is not None, boundaries, binary)) <= 1, f"{offsets}, {boundaries}, {binary}"
@@ -127,17 +163,33 @@ def get_uro_cell_dataset(
 
 
 def get_uro_cell_loader(
-    path,
-    target,
-    patch_shape,
-    batch_size,
-    download=False,
-    offsets=None,
-    boundaries=False,
-    binary=False,
+    path: Union[os.PathLike, str],
+    target: str,
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     **kwargs
-):
-    """Dataloader for the segmentation of mitochondria and other organelles in EM. See 'get_uro_cell_dataset'."""
+) -> DataLoader:
+    """Get the UroCell dataloader for organelle segmentation in FIB-SEM.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        target: The segmentation target, corresponding to the organelle to segment.
+            Available organelles are 'fv', 'golgi', 'lyso' and 'mito'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+       The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

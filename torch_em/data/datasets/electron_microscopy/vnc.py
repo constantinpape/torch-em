@@ -1,12 +1,20 @@
+"""The VNC dataset contains segmentation annotations for mitochondria in EM.
+
+It contains two volumes from TEM of the drosophila brain.
+Please cite https://doi.org/10.6084/m9.figshare.856713.v1 if you use this dataset in your publication.
+"""
+
 import os
 from glob import glob
 from shutil import rmtree
+from typing import List, Optional, Union, Tuple
 
 import imageio
 import h5py
 import numpy as np
 import torch_em
 from skimage.measure import label
+from torch.utils.data import Dataset, DataLoader
 
 from .. import util
 
@@ -23,11 +31,21 @@ def _create_volume(f, key, pattern, process=None):
     f.create_dataset(key, data=data, compression="gzip")
 
 
-def _get_vnc_data(path, download):
+def get_vnc_data(path: Union[os.PathLike, str], download: bool) -> str:
+    """Download the VNC training data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The path to the downloaded data.
+    """
+
     train_path = os.path.join(path, "vnc_train.h5")
     test_path = os.path.join(path, "vnc_test.h5")
     if os.path.exists(train_path) and os.path.exists(test_path):
-        return
+        return path
 
     os.makedirs(path, exist_ok=True)
     zip_path = os.path.join(path, "vnc.zip")
@@ -48,23 +66,33 @@ def _get_vnc_data(path, download):
         _create_volume(f, "raw", os.path.join(root, "stack2", "raw", "*.tif"))
 
     rmtree(root)
+    return path
 
 
 def get_vnc_mito_dataset(
-    path,
-    patch_shape,
-    offsets=None,
-    boundaries=False,
-    binary=False,
-    download=False,
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    download: bool = False,
     **kwargs
-):
-    """Dataset for the segmentation of mitochondria in EM.
+) -> Dataset:
+    """Get the VNC dataset for segmentating mitochondria in EM.
 
-    This dataset is from https://doi.org/10.6084/m9.figshare.856713.v1.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
     """
-    _get_vnc_data(path, download)
+    get_vnc_data(path, download)
     data_path = os.path.join(path, "vnc_train.h5")
 
     kwargs, _ = util.add_instance_label_transform(
@@ -77,16 +105,30 @@ def get_vnc_mito_dataset(
 
 
 def get_vnc_mito_loader(
-    path,
-    patch_shape,
-    batch_size,
-    offsets=None,
-    boundaries=False,
-    binary=False,
-    download=False,
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    download: bool = False,
     **kwargs
-):
-    """Dataloader for the segmentation of mitochondria in EM. See 'get_vnc_mito_loader'."""
+) -> DataLoader:
+    """Get the VNC dataloader for segmentating mitochondria in EM.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to return a binary segmentation target.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+       The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
@@ -97,6 +139,5 @@ def get_vnc_mito_loader(
 
 
 # TODO implement
-# TODO extra kwargs for binary / boundaries / affinities
 def get_vnc_neuron_loader(path, patch_shape, download=False, **kwargs):
     raise NotImplementedError
