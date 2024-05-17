@@ -3,6 +3,7 @@ from tqdm import tqdm
 
 import numpy as np
 import imageio.v3 as imageio
+from skimage.segmentation import find_boundaries
 
 import torch
 
@@ -57,14 +58,18 @@ def run_inference(name, model, dataset, task, save_root, device):
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
     scores = []
-    for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting"):
+    for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting", total=len(image_paths)):
         image = imageio.imread(image_path)
         gt = imageio.imread(gt_path)
-        gt = (gt > 0)
+        gt = (gt > 0)   # binarise the instances
+
+        if task == "boundaries":
+            bd = find_boundaries(gt)
+            gt = np.stack([bd, gt])
 
         # HACK: values hard coded for livecell
         prediction = predict_with_halo(
-            input_=image, model=model, gpu_ids=[device], block_shape=(512, 512), halo=(64, 64),
+            input_=image, model=model, gpu_ids=[device], block_shape=(512, 512), halo=(64, 64), disable_tqdm=True,
         )
 
         prediction = prediction.squeeze()
@@ -79,6 +84,7 @@ def run_inference(name, model, dataset, task, save_root, device):
         # napari.run()
 
         score = dice_score(gt=gt, seg=prediction)
+        assert score > 0 and score <= 1
         print(score)
         scores.append(score)
 
