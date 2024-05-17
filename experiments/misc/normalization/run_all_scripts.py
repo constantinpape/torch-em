@@ -26,7 +26,7 @@ source activate sam \n"""
     # dataset choice (livecell / plantseg / mitoem)
     python_script += f"-d {dataset} "
 
-    # phase of code execution (train / predict / evaluate)
+    # phase of code execution (train / predict)
     python_script += f"-p {phase} "
 
     # nature of task (binary / boundaries)
@@ -63,7 +63,7 @@ def submit_slurm(args):
     "Submit python script that needs gpus with given inputs on a slurm node."
     tmp_folder = "./gpu_jobs"
 
-    datasets = ["livecell", "plantseg", "mitoem"]
+    datasets = ["livecell", "plantseg", "mitoem", "mouse_embryo"]
     tasks = ["binary", "boundaries"]
     norms = ["OldDefault", "InstanceNorm"]
     phase = args.phase

@@ -15,7 +15,7 @@
     - `InstanceNorm`: 0.834
 
 
-### Mouse Embryo:
+### Mouse Embryo (Nuclei):
 - TODO
 
 

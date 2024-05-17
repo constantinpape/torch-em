@@ -11,18 +11,11 @@ import torch_em
 from torch_em.loss import DiceLoss
 from torch_em.util.prediction import predict_with_halo
 
-from common import get_dataloaders, get_model, get_experiment_name, get_test_images
+from common import get_dataloaders, get_model, get_experiment_name, get_test_images, dice_score
 
 
 SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"  # for HLRN
 # SAVE_DIR = "/media/anwai/ANWAI/models/torch-em/verify_normalization"
-
-
-def dice_score(gt, seg, eps=1e-7):
-    nom = 2 * np.sum(gt * seg)
-    denom = np.sum(gt) + np.sum(seg)
-    score = float(nom) / float(denom + eps)
-    return score
 
 
 def run_training(name, model, dataset, task, save_root, device):

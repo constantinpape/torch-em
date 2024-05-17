@@ -1,8 +1,9 @@
 import os
 
+import numpy as np
+
 from torch_em.model import UNet2d, UNet3d
-from torch_em.data import MinTwoInstanceSampler
-from torch_em.data.datasets import get_livecell_loader, get_plantseg_loader, get_mitoem_loader
+from torch_em.data import MinTwoInstanceSampler, datasets
 
 from micro_sam.evaluation.livecell import _get_livecell_paths
 
@@ -16,7 +17,7 @@ def get_model(dataset, task, norm):
 
     if dataset == "livecell":
         model_choice = "unet2d"
-    elif dataset in ["mitoem", "plantseg"]:
+    elif dataset in ["mouse_embryo", "mitoem", "plantseg"]:
         model_choice = "unet3d"
     else:
         raise ValueError
@@ -62,7 +63,7 @@ def get_dataloaders(dataset, task):
     sampler = MinTwoInstanceSampler()
 
     if dataset == "livecell":
-        train_loader = get_livecell_loader(
+        train_loader = datasets.get_livecell_loader(
             path=os.path.join(ROOT, "livecell"),
             split="train",
             patch_shape=(512, 512),
@@ -72,7 +73,7 @@ def get_dataloaders(dataset, task):
             num_workers=16,
             sampler=sampler,
         )
-        val_loader = get_livecell_loader(
+        val_loader = datasets.get_livecell_loader(
             path=os.path.join(ROOT, "livecell"),
             split="val",
             patch_shape=(512, 512),
@@ -84,7 +85,7 @@ def get_dataloaders(dataset, task):
         )
 
     elif dataset == "plantseg":
-        train_loader = get_plantseg_loader(
+        train_loader = datasets.get_plantseg_loader(
             path=os.path.join(ROOT, "plantseg"),
             name="root",
             split="train",
@@ -96,7 +97,7 @@ def get_dataloaders(dataset, task):
             sampler=sampler,
         )
 
-        val_loader = get_plantseg_loader(
+        val_loader = datasets.get_plantseg_loader(
             path=os.path.join(ROOT, "plantseg"),
             name="root",
             split="val",
@@ -109,7 +110,7 @@ def get_dataloaders(dataset, task):
         )
 
     elif dataset == "mitoem":
-        train_loader = get_mitoem_loader(
+        train_loader = datasets.get_mitoem_loader(
             path=os.path.join(ROOT, "mitoem"),
             splits="train",
             patch_shape=(32, 256, 256),
@@ -120,7 +121,7 @@ def get_dataloaders(dataset, task):
             sampler=sampler,
         )
 
-        val_loader = get_mitoem_loader(
+        val_loader = datasets.get_mitoem_loader(
             path=os.path.join(ROOT, "mitoem"),
             splits="val",
             patch_shape=(32, 256, 256),
@@ -131,8 +132,30 @@ def get_dataloaders(dataset, task):
             sampler=sampler,
         )
 
-    # TODO
-    # LM: mouse embryo
+    elif dataset == "mouse_embryo":
+        train_loader = datasets.get_mouse_embryo_loader(
+            path=os.path.join(ROOT, "mouse-embryo"),
+            name="nuclei",
+            split="train",
+            patch_shape=(32, 256, 256),
+            batch_size=2,
+            binary=True,
+            boundaries=True if task == "boundaries" else False,
+            num_workers=16,
+            sampler=sampler,
+        )
+
+        val_loader = datasets.get_mouse_embryo_loader(
+            path=os.path.join(ROOT, "mouse-embryo"),
+            name="nuclei",
+            split="val",
+            patch_shape=(32, 256, 256),
+            batch_size=1,
+            binary=True,
+            boundaries=True if task == "boundaries" else False,
+            num_workers=16,
+            sampler=sampler,
+        )
 
     else:
         raise ValueError(f"{dataset} is not a valid dataset choice for this experiment.")
@@ -147,3 +170,10 @@ def get_test_images(dataset):
 
     else:
         raise NotImplementedError
+
+
+def dice_score(gt, seg, eps=1e-7):
+    nom = 2 * np.sum(gt * seg)
+    denom = np.sum(gt) + np.sum(seg)
+    score = float(nom) / float(denom + eps)
+    return score
