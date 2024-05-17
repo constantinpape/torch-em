@@ -11,8 +11,8 @@
     - `OldDefault`: 0.928
     - `InstanceNorm`: 0.909
 - Boundary Segmentation 
-    - `OldDefault`: TODO
-    - `InstanceNorm`: TODO
+    - `OldDefault`: 0.855
+    - `InstanceNorm`: 0.834
 
 
 ### Mouse Embryo:

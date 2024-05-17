@@ -7,8 +7,8 @@ from torch_em.data.datasets import get_livecell_loader, get_plantseg_loader, get
 from micro_sam.evaluation.livecell import _get_livecell_paths
 
 
-# ROOT = "/scratch/projects/nim00007/sam/data"  # for HLRN
-ROOT = "/media/anwai/ANWAI/data/"
+ROOT = "/scratch/projects/nim00007/sam/data"  # for HLRN
+# ROOT = "/media/anwai/ANWAI/data/"
 
 
 def get_model(dataset, task, norm):
