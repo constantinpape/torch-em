@@ -2,7 +2,6 @@ import os
 import hashlib
 import inspect
 import requests
-import numpy as np
 from tqdm import tqdm
 from warnings import warn
 from subprocess import run
@@ -10,6 +9,7 @@ from packaging import version
 from shutil import copyfileobj, which
 
 import zipfile
+import numpy as np
 from xml.dom import minidom
 from skimage.draw import polygon
 
