@@ -64,6 +64,17 @@ def get_idrid_dataset(
     download: bool = False,
     **kwargs
 ):
+    """Dataset for segmentation of retinal lesions and optic disc in fundus images.
+
+    The database is located at https://ieee-dataport.org/open-access/indian-diabetic-retinopathy-image-dataset-idrid
+    The dataloader makes use of an open-source version of the original dataset hosted on Kaggle.
+
+    The dataset is from the IDRiD challenge:
+    - https://idrid.grand-challenge.org/
+    - Porwal et al. - https://doi.org/10.1016/j.media.2019.101561
+
+    Please cite it if you use this dataset for a publication.
+    """
     assert split in ["train", "test"]
     assert task in list(TASKS.keys())
 
@@ -99,6 +110,9 @@ def get_idrid_loader(
     download: bool = False,
     **kwargs
 ):
+    """
+    Dataloader for segmentation of retinal lesions and optic disc in fundus images. See `get_idrid_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_idrid_dataset(
         path=path,
