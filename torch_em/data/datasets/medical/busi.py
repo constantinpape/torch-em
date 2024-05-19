@@ -10,7 +10,7 @@ from ... import ImageCollectionDataset
 
 
 URL = "https://scholar.cu.edu.eg/Dataset_BUSI.zip"
-CHECKSUM = None
+CHECKSUM = "b2ce09f6063a31a73f628b6a6ee1245187cbaec225e93e563735691d68654de7"
 
 
 def get_busi_data(path, download):
