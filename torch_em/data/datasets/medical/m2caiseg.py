@@ -1,5 +1,6 @@
 import os
 from glob import glob
+from natsort import natsorted
 from typing import Union, Tuple
 
 import torch_em
@@ -29,8 +30,22 @@ def _get_m2caiseg_paths(path, split, download):
     if split == "val":
         split = "trainval"
 
-    image_paths = sorted(glob(os.path.join(data_dir, split, "images", "*.jpg")))
-    gt_paths = sorted(glob(os.path.join(data_dir, split, "groundtruth", "*.png")))
+    image_paths = natsorted(glob(os.path.join(data_dir, split, "images", "*.jpg")))
+    gt_paths = natsorted(glob(os.path.join(data_dir, split, "groundtruth", "*.png")))
+
+    import imageio.v3 as imageio
+
+    for gt_path in gt_paths:
+        image = imageio.imread(image_paths[0])
+        gt = imageio.imread(gt_path)
+
+        import napari
+        v = napari.Viewer()
+        v.add_image(image.transpose(2, 0, 1))
+        v.add_labels(gt.transpose(2, 0, 1))
+        napari.run()
+
+        breakpoint()
 
     return image_paths, gt_paths
 
