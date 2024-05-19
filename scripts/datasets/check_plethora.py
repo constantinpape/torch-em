@@ -8,7 +8,7 @@ ROOT = "/media/anwai/ANWAI/data/plethora"
 def check_plethora():
     loader = get_plethora_loader(
         path=ROOT,
-        task="thoracic",
+        task="pleural_effusion",
         patch_shape=(1, 512, 512),
         batch_size=2,
         resize_inputs=False,

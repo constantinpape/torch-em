@@ -52,7 +52,7 @@ def get_plethora_data(path, task, download):
     os.makedirs(path, exist_ok=True)
 
     image_dir = os.path.join(path, "data", "images")
-    gt_dir = os.path.join(path, "data", "gt")
+    gt_dir = os.path.join(path, "data", "gt", "Thoracic_Cavities" if task == "thoracic" else "Effusions")
     csv_path = os.path.join(path, "plethora_images")
     if os.path.exists(image_dir) and os.path.exists(gt_dir):
         return image_dir, gt_dir, Path(csv_path).with_suffix(".csv")
@@ -66,7 +66,7 @@ def get_plethora_data(path, task, download):
     util.download_source(
         path=zip_path, url=URL["gt"][task], download=download, checksum=CHECKSUMS["gt"][task]
     )
-    util.unzip(zip_path=zip_path, dst=gt_dir)
+    util.unzip(zip_path=zip_path, dst=os.path.join(path, "data", "gt"))
 
     return image_dir, gt_dir, Path(csv_path).with_suffix(".csv")
 
@@ -74,7 +74,7 @@ def get_plethora_data(path, task, download):
 def _assort_plethora_inputs(image_dir, gt_dir, task, csv_path):
     df = pd.read_csv(csv_path)
 
-    task_gt_dir = os.path.join(gt_dir, "Thoracic_Cavities" if task == "thoracic" else "Pleural_Effusion")
+    task_gt_dir = os.path.join(gt_dir, )
 
     os.makedirs(os.path.join(image_dir, "preprocessed"), exist_ok=True)
     os.makedirs(os.path.join(task_gt_dir, "preprocessed"), exist_ok=True)
@@ -86,7 +86,13 @@ def _assort_plethora_inputs(image_dir, gt_dir, task, csv_path):
         series_uid = os.path.split(series_uid_dir)[-1]
         subject_id = pd.Series.to_string(df.loc[df["Series UID"] == series_uid]["Subject ID"])[-9:]
 
-        gt_path = glob(os.path.join(task_gt_dir, subject_id, "*_primary_reviewer.nii.gz"))[0]
+        try:
+            gt_path = glob(os.path.join(task_gt_dir, subject_id, "*.nii.gz"))[0]
+        except IndexError:
+            # - some patients do not have "Thoracic_Cavities" segmentation
+            print(f"The ground truth is missing for subject '{subject_id}'")
+            continue
+
         assert os.path.exists(gt_path)
 
         vol_path = os.path.join(image_dir, "preprocessed", f"{subject_id}.nii.gz")
@@ -98,17 +104,19 @@ def _assort_plethora_inputs(image_dir, gt_dir, task, csv_path):
             continue
 
         # the individual slices for the inputs need to be merged into one volume.
-        all_dcm_slices = natsorted(glob(os.path.join(series_uid_dir, "*.dcm")))
-        all_slices = []
-        for dcm_path in all_dcm_slices:
-            dcmfile = dicom.dcmread(dcm_path)
-            img = dcmfile.pixel_array
-            all_slices.append(img)
+        if not os.path.exists(vol_path):
+            all_dcm_slices = natsorted(glob(os.path.join(series_uid_dir, "*.dcm")))
+            all_slices = []
+            for dcm_path in all_dcm_slices:
+                dcmfile = dicom.dcmread(dcm_path)
+                img = dcmfile.pixel_array
+                all_slices.append(img)
 
-        volume = np.stack(all_slices)
-        nii_vol = nib.Nifti1Image(volume, np.eye(4))
-        nii_vol.header.get_xyzt_units()
-        nii_vol.to_filename(vol_path)
+            volume = np.stack(all_slices)
+            volume = volume.transpose(1, 2, 0)
+            nii_vol = nib.Nifti1Image(volume, np.eye(4))
+            nii_vol.header.get_xyzt_units()
+            nii_vol.to_filename(vol_path)
 
         # the ground truth needs to be aligned as the inputs, let's take care of that.
         gt = nib.load(gt_path)
@@ -116,6 +124,7 @@ def _assort_plethora_inputs(image_dir, gt_dir, task, csv_path):
         gt = gt.transpose(2, 1, 0)  # aligning w.r.t the inputs
         gt = np.flip(gt, axis=(0, 1))
 
+        gt = gt.transpose(1, 2, 0)
         gt_nii_vol = nib.Nifti1Image(gt, np.eye(4))
         gt_nii_vol.header.get_xyzt_units()
         gt_nii_vol.to_filename(neu_gt_path)
