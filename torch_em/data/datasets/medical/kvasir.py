@@ -1,6 +1,11 @@
 import os
 from glob import glob
+from tqdm import tqdm
+from pathlib import Path
 from typing import Union, Tuple
+
+import numpy as np
+import imageio.v3 as imageio
 
 import torch_em
 from torch_em.transform.generic import ResizeInputs
@@ -33,7 +38,22 @@ def _get_kvasir_paths(path, download):
     image_paths = sorted(glob(os.path.join(data_dir, "images", "*.jpg")))
     gt_paths = sorted(glob(os.path.join(data_dir, "masks", "*.jpg")))
 
-    return image_paths, gt_paths
+    neu_gt_dir = os.path.join(data_dir, "masks", "preprocessed")
+    os.makedirs(neu_gt_dir, exist_ok=True)
+
+    neu_gt_paths = []
+    for gt_path in tqdm(gt_paths):
+        neu_gt_path = os.path.join(neu_gt_dir, f"{Path(gt_path).stem}.tif")
+        neu_gt_paths.append(neu_gt_path)
+        if os.path.exists(neu_gt_path):
+            continue
+
+        gt = imageio.imread(gt_path)
+        gt = np.mean(gt, axis=-1)
+        gt = (gt >= 240).astype("uint8")
+        imageio.imwrite(neu_gt_path, gt)
+
+    return image_paths, neu_gt_paths
 
 
 def get_kvasir_dataset(
@@ -43,6 +63,13 @@ def get_kvasir_dataset(
     download: bool = False,
     **kwargs
 ):
+    """Dataset for polyp segmentation in laparoscopy images.
+
+    The dataset is located at https://datasets.simula.no/kvasir-seg/
+
+    This dataset is from Jha et al. - https://doi.org/10.1007/978-3-030-37734-2_37
+    Please cite it if you use this dataset for a publication.
+    """
     image_paths, gt_paths = _get_kvasir_paths(path=path, download=download)
 
     if resize_inputs:
@@ -73,6 +100,8 @@ def get_kvasir_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for polyp segmentation in laparoscopy images. See `get_kvasir_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_kvasir_dataset(
         path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
