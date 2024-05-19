@@ -63,7 +63,7 @@ def get_kvasir_dataset(
     download: bool = False,
     **kwargs
 ):
-    """Dataset for polyp segmentation in laparoscopy images.
+    """Dataset for polyp segmentation in colonoscopy images.
 
     The dataset is located at https://datasets.simula.no/kvasir-seg/
 
@@ -100,7 +100,7 @@ def get_kvasir_loader(
     download: bool = False,
     **kwargs
 ):
-    """Dataloader for polyp segmentation in laparoscopy images. See `get_kvasir_dataset` for details.
+    """Dataloader for polyp segmentation in colonoscopy images. See `get_kvasir_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_kvasir_dataset(
