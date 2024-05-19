@@ -1,5 +1,6 @@
 import os
 from glob import glob
+from pathlib import Path
 from typing import Union, Tuple
 
 import torch_em
@@ -25,10 +26,10 @@ def get_idrid_data(path, download):
     if os.path.exists(data_dir):
         return data_dir
 
-    zip_path = os.path.join(path, "indian-diabetic-retinopathy-image-dataset.zip")
     util.download_source_kaggle(
-        path=zip_path, dataset_name="aaryapatel98/indian-diabetic-retinopathy-image-dataset", download=download,
+        path=path, dataset_name="aaryapatel98/indian-diabetic-retinopathy-image-dataset", download=download,
     )
+    zip_path = os.path.join(path, "indian-diabetic-retinopathy-image-dataset.zip")
     util.unzip(zip_path=zip_path, dst=os.path.join(path, "data"))
     return data_dir
 
@@ -38,12 +39,18 @@ def _get_idrid_paths(path, split, task, download):
 
     split = r"a. Training Set" if split == "train" else r"b. Testing Set"
 
-    image_paths = sorted(glob(os.path.join(data_dir, r"A. Segmentation", r"1. Original Images", split, "*.jpg")))
     gt_paths = sorted(
         glob(
-            os.path.join(data_dir, r"A. Segmentation", r"2. All Segmentation Groundtruths", split, TASKS[task], "*.jpg")
+            os.path.join(data_dir, r"A. Segmentation", r"2. All Segmentation Groundtruths", split, TASKS[task], "*.tif")
         )
     )
+
+    image_dir = os.path.join(data_dir, r"A. Segmentation", r"1. Original Images", split)
+    image_paths = []
+    for gt_path in gt_paths:
+        gt_id = Path(gt_path).stem[:-3]
+        image_path = os.path.join(image_dir, f"{gt_id}.jpg")
+        image_paths.append(image_path)
 
     return image_paths, gt_paths
 

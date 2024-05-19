@@ -12,8 +12,8 @@ def check_idrid():
         patch_shape=(512, 512),
         batch_size=2,
         split="train",
-        task="optic_disc",
-        resize_inputs=False,
+        task="soft_exudates",
+        resize_inputs=True,
         download=True,
     )
 
