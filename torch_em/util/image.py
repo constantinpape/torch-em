@@ -14,6 +14,11 @@ try:
 except ImportError:
     tifffile = None
 
+try:
+    import SimpleITK as sitk
+except ModuleNotFoundError:
+    sitk = None
+
 TIF_EXTS = (".tif", ".tiff")
 
 
@@ -35,6 +40,10 @@ def load_image(image_path, memmap=True):
         return tifffile.memmap(image_path, mode="r")
     elif tifffile is not None and os.path.splitext(image_path)[1].lower() in (".tiff", ".tif"):
         return tifffile.imread(image_path)
+    elif os.path.splitext(image_path)[1].lower() == ".mha":
+        assert sitk is not None, "Please install 'SimpleITK'."
+        image = sitk.ReadImage(image_path)
+        return sitk.GetArrayFromImage(image)
     else:
         return imageio.imread(image_path)
 
