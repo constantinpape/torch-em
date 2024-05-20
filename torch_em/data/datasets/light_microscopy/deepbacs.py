@@ -1,9 +1,17 @@
+"""DeepBacs is a dataset for segmenting bacteria in label-free light microscopy.
+
+This dataset is from the publication https://doi.org/10.1038/s42003-022-03634-z.
+Please cite it if you use this dataset in your research.
+"""
+
 import os
 import shutil
 import numpy as np
 from glob import glob
+from typing import Tuple, Union
 
 import torch_em
+from torch.utils.data import Dataset, DataLoader
 from .. import util
 
 URLS = {
@@ -18,18 +26,6 @@ CHECKSUMS = {
     "b_subtilis": "1",
     "mixed": "2730e6b391637d6dc05bbc7b8c915fd8184d835ac3611e13f23ac6f10f86c2a0",
 }
-
-
-def _require_deebacs_dataset(path, bac_type, download):
-    os.makedirs(path, exist_ok=True)
-
-    zip_path = os.path.join(path, f"{bac_type}.zip")
-    if not os.path.exists(zip_path):
-        util.download_source(zip_path, URLS[bac_type], download, checksum=CHECKSUMS[bac_type])
-    util.unzip(zip_path, os.path.join(path, bac_type))
-
-    # let's get a val split for the expected bacteria type
-    _assort_val_set(path, bac_type)
 
 
 def _assort_val_set(path, bac_type):
@@ -71,6 +67,36 @@ def _assort_val_set(path, bac_type):
         shutil.move(src_val_label_path, dst_val_label_path)
 
 
+def get_deebacs_data(path: Union[os.PathLike, str], bac_type: str, download: bool) -> str:
+    f"""Download the DeepBacs training data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        bac_type: The bacteria type. The available types are:
+            {', '.join(URLS.keys())}
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the training data.
+    """
+    bac_types = list(URLS.keys())
+    assert bac_type in bac_types, f"{bac_type} is not in expected bacteria types: {bac_types}"
+
+    data_folder = os.path.join(path, bac_type)
+    if os.path.exists(data_folder):
+        return data_folder
+
+    os.makedirs(path, exist_ok=True)
+    zip_path = os.path.join(path, f"{bac_type}.zip")
+    if not os.path.exists(zip_path):
+        util.download_source(zip_path, URLS[bac_type], download, checksum=CHECKSUMS[bac_type])
+    util.unzip(zip_path, os.path.join(path, bac_type))
+
+    # Get a val split for the expected bacteria type.
+    _assort_val_set(path, bac_type)
+    return data_folder
+
+
 def _get_paths(path, bac_type, split):
     # the bacteria types other than mixed are a bit more complicated so we don't have the dataloaders for them yet
     # mixed is the combination of all other types
@@ -87,31 +113,59 @@ def _get_paths(path, bac_type, split):
 
 
 def get_deepbacs_dataset(
-    path, split, patch_shape, bac_type="mixed", download=False, **kwargs
-):
-    """Dataset for the segmentation of bacteria in light microscopy.
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    bac_type: str = "mixed",
+    download: bool = False,
+    **kwargs
+) -> Dataset:
+    f"""Get the CTC dataset for cell segmentation.
 
-    This dataset is from the publication https://doi.org/10.1038/s42003-022-03634-z.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        bac_type: The bacteria type. The available types are:
+            {', '.join(URLS.keys())}
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
     """
     assert split in ("train", "val", "test")
-    bac_types = list(URLS.keys())
-    assert bac_type in bac_types, f"{bac_type} is not in expected bacteria types: {bac_types}"
-
-    data_folder = os.path.join(path, bac_type)
-    if not os.path.exists(data_folder):
-        _require_deebacs_dataset(path, bac_type, download)
-
+    get_deebacs_data(path, bac_type, download)
     image_folder, label_folder = _get_paths(path, bac_type, split)
-
     dataset = torch_em.default_segmentation_dataset(
         image_folder, "*.tif", label_folder, "*.tif", patch_shape=patch_shape, **kwargs
     )
     return dataset
 
 
-def get_deepbacs_loader(path, split, patch_shape, batch_size, bac_type="mixed", download=False, **kwargs):
-    """Dataloader for the segmentation of bacteria in light microscopy. See 'get_deepbacs_dataset' for details.
+def get_deepbacs_loader(
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    batch_size: int,
+    bac_type: str = "mixed",
+    download: bool = False,
+    **kwargs
+) -> DataLoader:
+    f"""Get the CTC dataset for cell segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        bac_type: The bacteria type. The available types are:
+            {', '.join(URLS.keys())}
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_deepbacs_dataset(path, split, patch_shape, bac_type=bac_type, download=download, **ds_kwargs)

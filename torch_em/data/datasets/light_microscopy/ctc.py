@@ -1,8 +1,16 @@
+"""The Cell Tracking Challenge contains annotated data for cell segmentation and tracking.
+
+We currently cprovide the 2d datasets with segmentation annotations.
+If you use this data in your research please cite https://doi.org/10.1038/nmeth.4473.
+"""
+
 import os
 from glob import glob
 from shutil import copyfile
+from typing import Optional, Tuple, Union
 
 import torch_em
+from torch.utils.data import Dataset, DataLoader
 from .. import util
 
 
@@ -34,7 +42,7 @@ CTC_CHECKSUMS = {
 }
 
 
-def get_ctc_url_and_checksum(dataset_name, split):
+def _get_ctc_url_and_checksum(dataset_name, split):
     if split == "train":
         _link_to_split = "training-datasets"
     else:
@@ -45,7 +53,24 @@ def get_ctc_url_and_checksum(dataset_name, split):
     return url, checksum
 
 
-def _require_ctc_dataset(path, dataset_name, download, split):
+def get_ctc_data(
+    path: Union[os.PathLike, str],
+    dataset_name: str,
+    download: bool,
+    split: str
+) -> str:
+    f"""Download training data from the cell tracking challenge.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        dataset_name: Name of the dataset to be downloaded. The available datasets are:
+            {', '.join(CTC_CHECKSUMS['train'].keys())}
+        download: Whether to download the data if it is not present.
+        split: The split to download. Either 'train' or 'test'.
+
+    Returns:
+        The filepath to the training data.
+    """
     dataset_names = list(CTC_CHECKSUMS["train"].keys())
     if dataset_name not in dataset_names:
         raise ValueError(f"Invalid dataset: {dataset_name}, choose one of {dataset_names}.")
@@ -56,7 +81,7 @@ def _require_ctc_dataset(path, dataset_name, download, split):
         return data_path
 
     os.makedirs(data_path)
-    url, checksum = get_ctc_url_and_checksum(dataset_name, split)
+    url, checksum = _get_ctc_url_and_checksum(dataset_name, split)
     zip_path = os.path.join(path, f"{dataset_name}.zip")
     util.download_source(zip_path, url, download, checksum=checksum)
     util.unzip(zip_path, os.path.join(path, split), remove=True)
@@ -97,23 +122,32 @@ def _require_gt_images(data_path, vol_ids):
 
 
 def get_ctc_segmentation_dataset(
-    path,
-    dataset_name,
-    patch_shape,
-    split="train",
-    vol_id=None,
-    download=False,
+    path: Union[os.PathLike, str],
+    dataset_name: str,
+    patch_shape: Tuple[int, int, int],
+    split: str = "train",
+    vol_id: Optional[int] = None,
+    download: bool = False,
     **kwargs,
-):
-    """Dataset for the cell tracking challenge segmentation data.
+) -> Dataset:
+    """Get the CTC dataset for cell segmentation.
 
-    This dataset provides access to the 2d segmentation datsets of the
-    cell tracking challenge. If you use this data in your research please cite
-    https://doi.org/10.1038/nmeth.4473
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        dataset_name: Name of the dataset to be downloaded. The available datasets are:
+            {', '.join(CTC_CHECKSUMS['train'].keys())}
+        patch_shape: The patch shape to use for training.
+        split: The split to download. Currently only supports 'train'.
+        vol_id: The train id to load.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
     """
     assert split in ["train"]
 
-    data_path = _require_ctc_dataset(path, dataset_name, download, split)
+    data_path = get_ctc_data(path, dataset_name, download, split)
 
     if vol_id is None:
         vol_ids = glob(os.path.join(data_path, "*_GT"))
@@ -131,17 +165,30 @@ def get_ctc_segmentation_dataset(
 
 
 def get_ctc_segmentation_loader(
-    path,
-    dataset_name,
-    patch_shape,
-    batch_size,
-    split="train",
-    vol_id=None,
-    download=False,
+    path: Union[os.PathLike, str],
+    dataset_name: str,
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    split: str = "train",
+    vol_id: Optional[int] = None,
+    download: bool = False,
     **kwargs,
-):
-    """Dataloader for cell tracking challenge segmentation data.
-    See 'get_ctc_segmentation_dataset' for details.
+) -> DataLoader:
+    """Get the CTC dataloader for cell segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        dataset_name: Name of the dataset to be downloaded. The available datasets are:
+            {', '.join(CTC_CHECKSUMS['train'].keys())}
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        split: The split to download. Currently only supports 'train'.
+        vol_id: The train id to load.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+       The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs

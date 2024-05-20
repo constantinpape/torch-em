@@ -1,5 +1,15 @@
+"""The TissueNet dataset contains annotations for cell segmentation in microscopy images of different tissue types.
+
+This dataset is from the publication https://doi.org/10.1038/s41587-021-01094-0.
+Please cite it if you use this dataset for your research.
+
+This dataset cannot be downloaded automatically, please visit https://datasets.deepcell.org/data
+and download it yourself.
+"""
+
 import os
 from glob import glob
+from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -7,11 +17,8 @@ import torch_em
 import z5py
 
 from tqdm import tqdm
+from torch.utils.data import Dataset, DataLoader
 from .. import util
-
-
-# Automated download is currently not possible, because of authentication
-URL = None  # TODO: here - https://datasets.deepcell.org/data
 
 
 def _create_split(path, split):
@@ -51,12 +58,27 @@ def _create_dataset(path, zip_path):
 
 
 def get_tissuenet_dataset(
-    path, split, patch_shape, raw_channel, label_channel, download=False, **kwargs
-):
-    """Dataset for the segmentation of cells in tissue imaged with light microscopy.
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    raw_channel: str,
+    label_channel: str,
+    download: bool = False,
+    **kwargs
+) -> Dataset:
+    """Get the TissueNet dataset for segmenting cells in microscopy tissue images.
 
-    This dataset is from the publication https://doi.org/10.1038/s41587-021-01094-0.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        raw_channel: The channel to load for the raw data. Either 'nucleus', 'cell' or 'rgb'.
+        label_channel: The channel to load for the label data. Either 'nucleus' or 'cell'.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     assert raw_channel in ("nucleus", "cell", "rgb")
     assert label_channel in ("nucleus", "cell")
@@ -93,10 +115,29 @@ def get_tissuenet_dataset(
 
 # TODO enable loading specific tissue types etc. (from the 'meta' attributes)
 def get_tissuenet_loader(
-    path, split, patch_shape, batch_size, raw_channel, label_channel, download=False, **kwargs
-):
-    """Dataloader for the segmentation of cells in tissue imaged with light microscopy.
-    See 'get_tissuenet_dataset' for details.
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    batch_size: int,
+    raw_channel: str,
+    label_channel: str,
+    download: bool = False,
+    **kwargs
+) -> DataLoader:
+    """Get the TissueNet dataloader for segmenting cells in microscopy tissue images.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        raw_channel: The channel to load for the raw data. Either 'nucleus', 'cell' or 'rgb'.
+        label_channel: The channel to load for the label data. Either 'nucleus' or 'cell'.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_tissuenet_dataset(

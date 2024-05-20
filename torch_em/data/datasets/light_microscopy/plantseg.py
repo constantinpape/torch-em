@@ -1,7 +1,16 @@
+"""This dataset contains confocal and lightsheet microscopy images of plant cells
+with annotations for cell and nucleus segmentation.
+
+The dataset part of the publication https://doi.org/10.7554/eLife.57613.
+Please cite it if you use this dataset in your research.
+"""
+
 import os
 from glob import glob
+from typing import List, Optional, Tuple, Union
 
 import torch_em
+from torch.utils.data import Dataset, DataLoader
 from .. import util
 
 URLS = {
@@ -20,7 +29,7 @@ URLS = {
     }
 }
 
-# FIXME somehow the checksums are not reliably, this is quite worrying...
+# FIXME somehow the checksums are not reliably, this is a bit weird.
 CHECKSUMS = {
     "root": {
         "train": None, "val": None, "test": None
@@ -47,7 +56,18 @@ CHECKSUMS = {
 # NATIVE_RESOLUTION = (0.235, 0.075, 0.075)
 
 
-def _require_plantseg_data(path, download, name, split):
+def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, split: str) -> str:
+    """Download the PlantSeg training data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+        name: The name of the data to load. Either 'root', 'nuclei' or 'ovules'.
+        split: The split to download. Either 'train', 'val' or 'test'.
+
+    Returns:
+        The filepath to the training data.
+    """
     url = URLS[name][split]
     checksum = CHECKSUMS[name][split]
     os.makedirs(path, exist_ok=True)
@@ -61,23 +81,34 @@ def _require_plantseg_data(path, download, name, split):
 
 
 def get_plantseg_dataset(
-    path,
-    name,
-    split,
-    patch_shape,
-    download=False,
-    offsets=None,
-    boundaries=False,
-    binary=False,
+    path: Union[os.PathLike, str],
+    name: str,
+    split: str,
+    patch_shape: Tuple[int, int, int],
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     **kwargs,
-):
-    """Dataset for the segmentation of plant cells in confocal and light-sheet microscopy.
+) -> Dataset:
+    """Get the PlantSeg dataset for segmenting nuclei or cells.
 
-    This dataset is from the publication https://doi.org/10.7554/eLife.57613.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: The name of the data to load. Either 'root', 'nuclei' or 'ovules'.
+        split: The split to download. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
     """
     assert len(patch_shape) == 3
-    data_path = _require_plantseg_data(path, download, name, split)
+    data_path = get_plantseg_data(path, download, name, split)
 
     file_paths = glob(os.path.join(data_path, "*.h5"))
     file_paths.sort()
@@ -93,18 +124,34 @@ def get_plantseg_dataset(
 
 # TODO add support for ignore label, key: "/label_with_ignore"
 def get_plantseg_loader(
-    path,
-    name,
-    split,
-    patch_shape,
-    batch_size,
-    download=False,
-    offsets=None,
-    boundaries=False,
-    binary=False,
+    path: Union[os.PathLike, str],
+    name: str,
+    split: str,
+    patch_shape: Tuple[int, int, int],
+    batch_size: int,
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     **kwargs,
-):
-    """Dataloader for the segmentation of cells in confocal and light-sheet microscopy. See 'get_plantseg_dataset'."""
+) -> DataLoader:
+    """Get the PlantSeg dataloader for segmenting nuclei or cells.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: The name of the data to load. Either 'root', 'nuclei' or 'ovules'.
+        split: The split to download. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+       The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )

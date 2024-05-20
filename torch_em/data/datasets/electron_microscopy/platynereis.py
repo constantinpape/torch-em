@@ -179,7 +179,7 @@ def get_platynereis_cilia_dataset(
         sample_ids: The sample ids to use for the dataset
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
-        binary: Whether to return a binary segmentation target.
+        binary: Whether to use a binary segmentation target.
         rois: The region of interests to use for the data blocks.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.

@@ -1,16 +1,23 @@
+import os
+import sys
+
 from torch_em.data.datasets import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_unsupervised_loader
 )
 from torch_em.util.debug import check_loader
 
-NEURIPS_ROOT = "/home/pape/Work/data/neurips-cell-seg"
+sys.path.append("..")
 
 
 def check_neurips():
-    loader = get_neurips_cellseg_supervised_loader(NEURIPS_ROOT, "train", (512, 512), 1)
+    from util import ROOT
+
+    neurips_root = os.path.join(ROOT, "neurips-cell-seg")
+
+    loader = get_neurips_cellseg_supervised_loader(neurips_root, "train", (512, 512), 1, download=True)
     check_loader(loader, 15, instance_labels=True, rgb=True)
 
-    loader = get_neurips_cellseg_unsupervised_loader(NEURIPS_ROOT, (512, 512), 1)
+    loader = get_neurips_cellseg_unsupervised_loader(neurips_root, (512, 512), 1, download=True)
     check_loader(loader, 15, rgb=True)
 
 

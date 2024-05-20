@@ -1,11 +1,17 @@
+import os
+import sys
+
 from torch_em.data.datasets import get_livecell_loader
 from torch_em.util.debug import check_loader
 
-LIVECELL_ROOT = "/home/pape/Work/data/incu_cyte/livecell"
+sys.path.append("..")
 
 
 def check_livecell():
-    loader = get_livecell_loader(LIVECELL_ROOT, "train", (512, 512), 1)
+    from util import ROOT
+
+    livecell_root = os.path.join(ROOT, "livecell")
+    loader = get_livecell_loader(livecell_root, "train", (512, 512), 1, download=True)
     check_loader(loader, 15, instance_labels=True)
 
 

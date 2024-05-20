@@ -1,19 +1,28 @@
+"""This dataset was part of the HPA Kaggle challenge for protein identification.
+It contains confocal microscopy images and annotations for cell segmentation.
+
+The dataset is described in the publication https://doi.org/10.1038/s41592-019-0658-6.
+Please cite it if you use this dataset in your research.
+"""
+
 import os
 import json
 import shutil
 from concurrent import futures
 from functools import partial
 from glob import glob
+from typing import List, Optional, Sequence, Tuple, Union
 
 import imageio
 import h5py
 import numpy as np
+import torch_em
 from PIL import Image, ImageDraw
 from skimage import draw as skimage_draw
 from skimage import morphology
 from tqdm import tqdm
+from torch.utils.data import Dataset, DataLoader
 
-import torch_em
 from .. import util
 
 
@@ -74,10 +83,10 @@ def _generate_binary_masks(annot_dict, shape, erose_size=5, obj_size_rem=500, sa
 
     if save_indiv is True:
         mask_edge_indiv = np.zeros(
-            (shape[0], shape[1], len(annot_dict)), dtype=np.bool
+            (shape[0], shape[1], len(annot_dict)), dtype="bool"
         )
         mask_fill_indiv = np.zeros(
-            (shape[0], shape[1], len(annot_dict)), dtype=np.bool
+            (shape[0], shape[1], len(annot_dict)), dtype="bool"
         )
 
     # Image used to draw lines - for edge mask for freelines
@@ -306,21 +315,62 @@ def _check_data(path):
     return have_train and have_test and have_val
 
 
-def get_hpa_segmentation_dataset(
-    path, split, patch_shape,
-    offsets=None, boundaries=False, binary=False,
-    channels=["microtubules", "protein", "nuclei", "er"],
-    download=False, n_workers_preproc=8, **kwargs
-):
-    """Dataset for the segmentation of cells in light microscopy.
+def get_hpa_segmentation_data(
+    path: Union[os.PathLike, str],
+    download: bool,
+    channels: Sequence[str],
+    n_workers_preproc: int = 8
+) -> str:
+    """Download the HPA training data.
 
-    This dataset is from the publication https://doi.org/10.1038/s41592-019-0658-6.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+        channels: The image channels to extract. Available channels are
+            'microtubules', 'protein', 'nuclei' or 'er'.
+        n_workers_preproc: The number of workers to use for preprocessing.
+
+    Returns:
+        The filepath to the training data.
     """
     data_is_complete = _check_data(path)
     if not data_is_complete:
         _download_hpa_data(path, "segmentation", download)
         _process_hpa_data(path, channels, n_workers_preproc, remove=True)
+    return path
+
+
+def get_hpa_segmentation_dataset(
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    channels: Sequence[str] = ["microtubules", "protein", "nuclei", "er"],
+    download: bool = False,
+    n_workers_preproc: int = 8,
+    **kwargs
+) -> Dataset:
+    """Get the HPA dataset for segmenting cells in confocal microscopy.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split for the dataset. Available splits are 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        channels: The image channels to extract. Available channels are
+            'microtubules', 'protein', 'nuclei' or 'er'.
+        download: Whether to download the data if it is not present.
+        n_workers_preproc: The number of workers to use for preprocessing.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
+    """
+    get_hpa_segmentation_data(path, download, channels, n_workers_preproc)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
@@ -336,12 +386,36 @@ def get_hpa_segmentation_dataset(
 
 
 def get_hpa_segmentation_loader(
-    path, split, patch_shape, batch_size,
-    offsets=None, boundaries=False, binary=False,
-    channels=["microtubules", "protein", "nuclei", "er"],
-    download=False, n_workers_preproc=8, **kwargs
-):
-    """Dataloader for the segmentation of cells in light microscopy. See 'get_hpa_segmentation_dataset' for details.
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    batch_size: int,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    channels: Sequence[str] = ["microtubules", "protein", "nuclei", "er"],
+    download: bool = False,
+    n_workers_preproc: int = 8,
+    **kwargs
+) -> DataLoader:
+    """Get the HPA dataloader for segmenting cells in confocal microscopy.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split for the dataset. Available splits are 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        channels: The image channels to extract. Available channels are
+            'microtubules', 'protein', 'nuclei' or 'er'.
+        download: Whether to download the data if it is not present.
+        n_workers_preproc: The number of workers to use for preprocessing.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+       The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs

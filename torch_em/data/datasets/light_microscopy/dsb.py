@@ -1,7 +1,16 @@
+"""This Dataset was used in a Kaggle Data Science Bowl. It contains light microscopy
+images with annotations for nucleus segmentation.
+
+The dataset is described in the publication https://doi.org/10.1038/s41592-019-0612-7.
+Please cite it if you use this dataset in your research.
+"""
+
 import os
 from shutil import move
+from typing import List, Optional, Tuple, Union
 
 import torch_em
+from torch.utils.data import Dataset, DataLoader
 from .. import util
 
 DSB_URLS = {
@@ -14,7 +23,18 @@ CHECKSUMS = {
 }
 
 
-def _download_dsb(path, source, download):
+def get_dsb_data(path: Union[os.PathLike, str], source: str, download: bool) -> str:
+    """Download the DeepBacs training data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        source: The source of the dataset. Can either be 'full' for the complete dataset,
+            or 'reduced' for the dataset excluding histopathology images.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the training data.
+    """
     os.makedirs(path, exist_ok=True)
     url = DSB_URLS[source]
     checksum = CHECKSUMS[source]
@@ -23,7 +43,7 @@ def _download_dsb(path, source, download):
     test_out_path = os.path.join(path, "test")
 
     if os.path.exists(train_out_path) and os.path.exists(test_out_path):
-        return
+        return path
 
     zip_path = os.path.join(path, "dsb.zip")
     util.download_source(zip_path, url, download, checksum)
@@ -31,20 +51,39 @@ def _download_dsb(path, source, download):
 
     move(os.path.join(path, "dsb2018", "train"), train_out_path)
     move(os.path.join(path, "dsb2018", "test"), test_out_path)
+    return path
 
 
 def get_dsb_dataset(
-    path, split, patch_shape, download=False,
-    offsets=None, boundaries=False, binary=False,
-    source="reduced", **kwargs
-):
-    """Dataset for the segmentation of nuclei in light microscopy.
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    source: str = "reduced",
+    **kwargs
+) -> Dataset:
+    """Get the DSB dataset for nucleus segmentation.
 
-    This dataset is from the publication https://doi.org/10.1038/s41592-019-0612-7.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train' or 'test'.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        source: The source of the dataset. Can either be 'full' for the complete dataset,
+            or 'reduced' for the dataset excluding histopathology images.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
     """
     assert split in ("test", "train"), split
-    _download_dsb(path, source, download)
+    get_dsb_data(path, source, download)
 
     image_path = os.path.join(path, split, "images")
     label_path = os.path.join(path, split, "masks")
@@ -59,11 +98,34 @@ def get_dsb_dataset(
 
 
 def get_dsb_loader(
-    path, split, patch_shape, batch_size, download=False,
-    offsets=None, boundaries=False, binary=False,
-    source="reduced", **kwargs
-):
-    """Dataloader for the segmentation of nuclei in light microscopy. See 'get_dsb_dataset' for details.
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    batch_size: int,
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    source: str = "reduced",
+    **kwargs
+) -> DataLoader:
+    """Get the DSB dataloader for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train' or 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        source: The source of the dataset. Can either be 'full' for the complete dataset,
+            or 'reduced' for the dataset excluding histopathology images.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs

@@ -1,18 +1,26 @@
+"""The DynamicNuclearNet dataset contains annotations for nucleus segmentation
+and tracking in fluorescence light microscopy, for five different cell lines.
+
+This dataset is from the publication https://doi.org/10.1101/803205.
+Please cite it if you use this dataset for your research.
+
+This dataset cannot be downloaded automatically, please visit https://datasets.deepcell.org/data
+and download it yourself.
+"""
+
 import os
 from tqdm import tqdm
 from glob import glob
+from typing import Tuple, Union
 
 import z5py
 import numpy as np
 import pandas as pd
 
 import torch_em
+from torch.utils.data import Dataset, DataLoader
 
 from .. import util
-
-
-# Automatic download is currently not possible, because of authentication
-URL = None  # TODO: here - https://datasets.deepcell.org/data
 
 
 def _create_split(path, split):
@@ -48,12 +56,24 @@ def _create_dataset(path, zip_path):
 
 
 def get_dynamicnuclearnet_dataset(
-    path, split, patch_shape, download=False, **kwargs
-):
-    """Dataset for the segmentation of cell nuclei imaged with fluorescene microscopy.
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    download: bool = False,
+    **kwargs
+) -> Dataset:
+    """Get the DynamicNuclearNet dataset for nucleus segmentation.
 
-    This dataset is from the publication https://doi.org/10.1101/803205.
-    Please cite it if you use this dataset for a publication."""
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+       The segmentation dataset.
+    """
     splits = ["train", "val", "test"]
     assert split in splits
 
@@ -82,11 +102,26 @@ def get_dynamicnuclearnet_dataset(
 
 
 def get_dynamicnuclearnet_loader(
-    path, split, patch_shape, batch_size, download=False, **kwargs
-):
-    """Dataloader for the segmentation of cell nuclei for 5 different cell lines in fluorescence microscopes.
-    See `get_dynamicnuclearnet_dataset` for details.
-"""
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    batch_size: int,
+    download: bool = False,
+    **kwargs
+) -> DataLoader:
+    """Get the DynamicNuclearNet dataloader for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_dynamicnuclearnet_dataset(path, split, patch_shape, download, **ds_kwargs)
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

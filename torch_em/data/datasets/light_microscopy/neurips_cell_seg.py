@@ -1,11 +1,22 @@
+"""This dataset comes from the Neurips Cell Segmentation Challenge,
+which collects microscopy images and annotations for cell segmentation.
+
+The dataset contains both images with annotations for cell segmentation
+and unlabed images for self-supervised or semi-supervised learning.
+See also the challenge website for details: https://neurips22-cellseg.grand-challenge.org/.
+The dataset os decribed in the publication https://doi.org/10.1038/s41592-024-02233-6.
+Please cite it if you use the dataset in your research.
+"""
+
 import os
 import numpy as np
 from glob import glob
 from typing import Union, Tuple, Any, Optional
 
 import torch
-
 import torch_em
+from torch.utils.data import Dataset, DataLoader
+
 from .. import util
 from ... import ImageCollectionDataset, RawImageCollectionDataset, ConcatDataset
 
@@ -50,7 +61,18 @@ def to_rgb(image):
     return image
 
 
-def _download_dataset(root, split, download):
+def get_neurips_cellseg_data(root: Union[os.PathLike, str], split: str, download: bool) -> str:
+    f"""Download the Neurips Cell Seg training data.
+
+    Args:
+        root: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to download. Available splits are:
+            {', '.join(URL.keys())}
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the training data.
+    """
     os.makedirs(root, exist_ok=True)
 
     target_dir = os.path.join(root, DIR_NAMES[split])
@@ -64,7 +86,7 @@ def _download_dataset(root, split, download):
 
 
 def _get_image_and_label_paths(root, split, download):
-    path = _download_dataset(root, split, download)
+    path = get_neurips_cellseg_data(root, split, download)
 
     image_folder = os.path.join(path, "images")
     assert os.path.exists(image_folder)
@@ -93,10 +115,25 @@ def get_neurips_cellseg_supervised_dataset(
     n_samples: Optional[int] = None,
     sampler: Optional[Any] = None,
     download: bool = False,
-):
-    """Dataset for the segmentation of cells in light microscopy.
+) -> Dataset:
+    f"""Get the dataset for cell segmentation from the NeurIPS Cell Seg Challenge.
 
-    This dataset is part of the NeurIPS Cell Segmentation challenge: https://neurips22-cellseg.grand-challenge.org/.
+    Args:
+        root: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to download. Available splits are:
+            {', '.join(URL.keys())}
+        patch_shape: The patch shape to use for training.
+        make_rgb: Whether to map all data to RGB or treat it as grayscale.
+        label_transform: Transformation of labels, applied before data augmentation.
+        label_transform2: Transformation of labels, applied after data augmentation.
+        raw_transform: Transformation of the raw data.
+        label_dtype: The data type of the label data.
+        n_samples: Number of samples per epoch from this dataset.
+        sampler: Sampler for rejecting batches.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The segmentation dataset.
     """
     assert split in ("train", "val", "test"), split
     image_paths, label_paths = _get_image_and_label_paths(root, split, download)
@@ -137,8 +174,29 @@ def get_neurips_cellseg_supervised_loader(
     sampler: Optional[Any] = None,
     download: bool = False,
     **loader_kwargs
-):
-    """Dataloader for the segmentation of cells in light microscopy. See `get_neurips_cellseg_supervised_dataset`."""
+) -> DataLoader:
+    f"""Get the dataset for cell segmentation from the NeurIPS Cell Seg Challenge.
+
+    Args:
+        root: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to download. Available splits are:
+            {', '.join(URL.keys())}
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        make_rgb: Whether to map all data to RGB or treat it as grayscale.
+        label_transform: Transformation of labels, applied before data augmentation.
+        label_transform2: Transformation of labels, applied after data augmentation.
+        raw_transform: Transformation of the raw data.
+        transform: Transformation applied to raw and label data.
+        label_dtype: The data type of the label data.
+        n_samples: Number of samples per epoch from this dataset.
+        sampler: Sampler for rejecting batches.
+        download: Whether to download the data if it is not present.
+        loader_kwargs: Keyword arguments for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
     ds = get_neurips_cellseg_supervised_dataset(
         root=root,
         split=split,
@@ -157,14 +215,14 @@ def get_neurips_cellseg_supervised_loader(
 
 
 def _get_image_paths(root, download):
-    path = _download_dataset(root, "unlabeled", download)
+    path = get_neurips_cellseg_data(root, "unlabeled", download)
     image_paths = glob(os.path.join(path, "*"))
     image_paths.sort()
     return image_paths
 
 
 def _get_wholeslide_paths(root, patch_shape, download):
-    path = _download_dataset(root, "unlabeled_wsi", download)
+    path = get_neurips_cellseg_data(root, "unlabeled_wsi", download)
     image_paths = glob(os.path.join(path, "*"))
     image_paths.sort()
 
@@ -193,10 +251,23 @@ def get_neurips_cellseg_unsupervised_dataset(
     use_images: bool = True,
     use_wholeslide: bool = True,
     download: bool = False,
-):
-    """Dataset for the segmentation of cells in light microscopy.
+) -> Dataset:
+    """Get the unsupervised dataset from the NeurIPS Cell Seg Challenge.
 
-    This dataset is part of the NeurIPS Cell Segmentation challenge: https://neurips22-cellseg.grand-challenge.org/.
+    Args:
+        root: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        make_rgb: Whether to map all data to RGB or treat it as grayscale.
+        raw_transform: Transformation of the raw data.
+        transform: Transformation applied to raw and label data.
+        dtype: The data type of the image data.
+        sampler: Sampler for rejecting batches.
+        use_images: Whether to use the normal image data.
+        use_wholeslide: Whether to use the wholeslide image data.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The segmentation dataset.
     """
     if raw_transform is None:
         trafo = to_rgb if make_rgb else None
@@ -247,8 +318,25 @@ def get_neurips_cellseg_unsupervised_loader(
     use_wholeslide: bool = True,
     download: bool = False,
     **loader_kwargs,
-):
-    """Dataloader for the segmentation of cells in light microscopy. See `get_neurips_cellseg_unsupervised_dataset`.
+) -> DataLoader:
+    """Get the unsupervised dataset from the NeurIPS Cell Seg Challenge.
+
+    Args:
+        root: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        make_rgb: Whether to map all data to RGB or treat it as grayscale.
+        raw_transform: Transformation of the raw data.
+        transform: Transformation applied to raw and label data.
+        dtype: The data type of the image data.
+        sampler: Sampler for rejecting batches.
+        use_images: Whether to use the normal image data.
+        use_wholeslide: Whether to use the wholeslide image data.
+        download: Whether to download the data if it is not present.
+        loader_kwargs: Keyword arguments for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds = get_neurips_cellseg_unsupervised_dataset(
         root=root, patch_shape=patch_shape, make_rgb=make_rgb, raw_transform=raw_transform, transform=transform,

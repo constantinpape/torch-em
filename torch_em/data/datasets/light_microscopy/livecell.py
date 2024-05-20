@@ -1,5 +1,13 @@
+"""The LIVECell dataset contains phase-contrast microscopy images
+and annotations for cell segmentations for 8 different cell lines.
+
+This dataset is desceibed in the publication https://doi.org/10.1038/s41592-021-01249-6.
+Please cite it if you use this dataset in your research.
+"""
+
 import os
 from shutil import copyfileobj
+from typing import List, Optional, Sequence, Tuple, Union
 
 import imageio
 import numpy as np
@@ -9,6 +17,7 @@ from tqdm import tqdm
 
 import torch_em
 import torch.utils.data
+from torch.utils.data import Dataset, DataLoader
 from .. import util
 
 try:
@@ -144,23 +153,68 @@ def _download_livecell_annotations(path, split, download, cell_types, label_path
     return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types)
 
 
-def get_livecell_dataset(
-    path, split, patch_shape, download=False,
-    offsets=None, boundaries=False, binary=False,
-    cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs
-):
-    """Dataset for the segmentation of cells in phase-contrast microscopy.
+def get_livecell_data(
+    path: Union[os.PathLike, str],
+    split: str,
+    download: bool,
+    cell_types: Optional[Sequence[str]] = None,
+    label_path: Optional[Union[os.PathLike, str]] = None
+) -> Tuple[List[str], List[str]]:
+    """Download the LIVECell dataset.
 
-    This dataset is from the publication https://doi.org/10.1038/s41592-021-01249-6.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+        cell_types: The cell types for which to get the data paths.
+        label_path: Optional path for loading the label data.
+
+    Returns:
+        The paths to the image data.
+        The paths to the label data.
+    """
+    _download_livecell_images(path, download)
+    image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
+    return image_paths, seg_paths
+
+
+def get_livecell_dataset(
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    cell_types: Optional[Sequence[str]] = None,
+    label_path: Optional[Union[os.PathLike, str]] = None,
+    label_dtype=torch.int64,
+    **kwargs
+) -> Dataset:
+    """Get the LIVECell dataset for segmenting cells in phase-contrast microscopy.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        cell_types: The cell types for which to get the data paths.
+        label_path: Optional path for loading the label data.
+        label_dtype: The datatype of the label data.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     assert split in ("train", "val", "test")
     if cell_types is not None:
         assert isinstance(cell_types, (list, tuple)), \
             f"cell_types must be passed as a list or tuple instead of {cell_types}"
 
-    _download_livecell_images(path, download)
-    image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
+    image_paths, seg_paths = get_livecell_data(path, split, download, cell_types, label_path)
 
     kwargs = util.ensure_transforms(ndim=2, **kwargs)
     kwargs, label_dtype = util.add_instance_label_transform(
@@ -175,11 +229,38 @@ def get_livecell_dataset(
 
 
 def get_livecell_loader(
-    path, split, patch_shape, batch_size, download=False,
-    offsets=None, boundaries=False, binary=False,
-    cell_types=None, label_path=None, label_dtype=torch.int64, **kwargs
-):
-    """Dataloader for the segmentation of cells in phase-contrast microscopy. See 'get_livecell_dataset' for details."""
+    path: Union[os.PathLike, str],
+    split: str,
+    patch_shape: Tuple[int, int],
+    batch_size: int,
+    download: bool = False,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
+    cell_types: Optional[Sequence[str]] = None,
+    label_path: Optional[Union[os.PathLike, str]] = None,
+    label_dtype=torch.int64,
+    **kwargs
+) -> DataLoader:
+    """Get the LIVECell dataloader for segmenting cells in phase-contrast microscopy.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        download: Whether to download the data if it is not present.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        cell_types: The cell types for which to get the data paths.
+        label_path: Optional path for loading the label data.
+        label_dtype: The datatype of the label data.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_livecell_dataset(
         path, split, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary,
