@@ -181,11 +181,11 @@ def get_test_images(dataset):
 
     else:
         if dataset == "mouse_embryo":
-            volume_paths = glob(os.path.join(ROOT, "mouse-embryo", "Nuclei", "test", "*.h5"))
+            volume_paths = sorted(glob(os.path.join(ROOT, "mouse-embryo", "Nuclei", "test", "*.h5")))
         elif dataset == "plantseg":
-            volume_paths = glob(os.path.join(ROOT, "plantseg", "root_test", "*.h5"))
+            volume_paths = sorted(glob(os.path.join(ROOT, "plantseg", "root_test", "*.h5")))
         elif dataset == "mitoem":
-            volume_paths = glob(os.path.join(ROOT, "mitoem", "*_test.n5"))
+            volume_paths = sorted(glob(os.path.join(ROOT, "mitoem", "*_test.n5")))
 
         return volume_paths, volume_paths
 

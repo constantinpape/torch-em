@@ -1,6 +1,8 @@
 import os
 from tqdm import tqdm
+from pathlib import Path
 
+import h5py
 import numpy as np
 
 import torch
@@ -49,16 +51,16 @@ def run_inference(name, model, dataset, task, save_root, device):
     model.to(device)
     model.eval()
 
-    image_paths, gt_paths = get_test_images(dataset=dataset)
+    image_paths, _ = get_test_images(dataset=dataset)
 
-    dsc_list, msa_list, sa50_list = [], [], []
-    for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting", total=len(image_paths)):
+    pred_dir = os.path.join(save_root, "prediction", dataset)
+    os.makedirs(pred_dir, exist_ok=True)
+
+    for image_path in tqdm(image_paths, desc="Predicting"):
         if dataset == "livecell":
             image = _load_image(image_path)
-            gt = _load_image(gt_path)
         elif dataset in ["mouse_embryo", "plantseg"]:
             image = _load_image(image_path, "raw")
-            gt = _load_image(image_path, "label")
 
         if dataset == "livecell":
             tile, halo = (512, 512), (64, 64)
@@ -66,46 +68,81 @@ def run_inference(name, model, dataset, task, save_root, device):
             tile, halo = (64, 256, 256), (16, 64, 64)
 
         prediction = predict_with_halo(
-            input_=image, model=model, gpu_ids=[device], block_shape=tile, halo=halo, disable_tqdm=False,
+            input_=image, model=model, gpu_ids=[device], block_shape=tile, halo=halo, disable_tqdm=True,
         )
-
-        visualize = False
 
         prediction = prediction.squeeze()
 
-        if task == "boundaries":
-            fg, bd = prediction
-            instances = watershed_from_components(boundaries=bd, foreground=fg)
+        # save outputs
+        image_id = Path(image_path).stem
+        pred_path = os.path.join(pred_dir, f"{image_id}.h5")
 
-            msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
-            msa_list.append(msa)
-            sa50_list.append(sa[0])
+        with h5py.File(pred_path, "a") as f:
+            if task == "boundaries":
+                fg, bd = prediction
+                f.create_dataset(f"segmentation/{task}/foreground", shape=fg.shape, data=fg)
+                f.create_dataset(f"segmentation/{task}/boundary", shape=bd.shape, data=bd)
+            else:
+                outputs = prediction
+                f.create_dataset(f"segmentation/{task}/foreground", shape=outputs.shape, data=outputs)
 
-            if visualize:
-                import napari
-                v = napari.Viewer()
-                v.add_image(image)
-                v.add_labels(instances)
-                v.add_labels(fg > 0.5)
-                v.add_labels(bd > 0.5)
-                v.add_labels(gt, visible=False)
-                napari.run()
 
-        else:
-            gt = (gt > 0)   # binarise the instances
-            prediction = (prediction > 0.5)  # threshold the predictions
+def run_evaluation(dataset, task, save_root):
+    visualize = False
 
-            if visualize:
-                import napari
-                v = napari.Viewer()
-                v.add_image(image)
-                v.add_labels(prediction)
-                v.add_labels(gt, visible=False)
-                napari.run()
+    image_paths, gt_paths = get_test_images(dataset=dataset)
 
-            score = dice_score(gt=gt, seg=prediction)
-            assert score > 0 and score <= 1  # HACK: sanity check
-            dsc_list.append(score)
+    pred_dir = os.path.join(save_root, "prediction", dataset)
+
+    dsc_list, msa_list, sa50_list = [], [], []
+    for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Evaluating", total=len(image_paths)):
+        if dataset == "livecell":
+            image = _load_image(image_path)
+            gt = _load_image(gt_path)
+        elif dataset in ["mouse_embryo", "plantseg"]:
+            image = _load_image(image_path, "raw")
+            gt = _load_image(image_path, "label")
+
+        image_id = Path(image_path).stem
+        pred_path = os.path.join(pred_dir, f"{image_id}.h5")
+
+        with h5py.File(pred_path, "r") as f:
+            if task == "boundaries":
+                fg = f[f"segmentation/{task}/foreground"][:]
+                bd = f[f"segmentation/{task}/boundary"][:]
+                instances = watershed_from_components(boundaries=bd, foreground=fg)
+
+                msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
+                msa_list.append(msa)
+                sa50_list.append(sa[0])
+
+                if visualize:
+                    import napari
+                    v = napari.Viewer()
+                    v.add_image(image)
+                    v.add_labels(instances)
+                    v.add_labels(fg > 0.5)
+                    v.add_labels(bd > 0.5)
+                    v.add_labels(gt, visible=False)
+                    napari.run()
+
+            else:
+                prediction = f[f"segmentation/{task}/foreground"][:]
+                prediction = (prediction > 0.5)  # threshold the predictions
+
+                gt = (gt > 0)   # binarise the instances
+
+                if visualize:
+                    import napari
+                    v = napari.Viewer()
+                    v.add_image(image)
+                    v.add_labels(prediction)
+                    v.add_labels(gt, visible=False)
+                    napari.run()
+
+                score = dice_score(gt=gt, seg=prediction)
+                assert score > 0 and score <= 1  # HACK: sanity check
+                dsc_list.append(score)
 
     if task == "binary":
         mean_dice = np.mean(dsc_list)
@@ -133,16 +170,21 @@ def main(args):
 
     if phase == "train":
         run_training(
-            name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device
+            name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device,
         )
 
     elif phase == "predict":
         run_inference(
-            name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device
+            name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device,
+        )
+
+    elif phase == "evaluate":
+        run_evaluation(
+            dataaset=dataset, task=task, save_root=save_root,
         )
 
     else:
-        print(f"'{phase}' is not a valid mode. Choose from 'train' / 'predict'.")
+        print(f"'{phase}' is not a valid mode. Choose from 'train' / 'predict' / 'evaluate'.")
 
 
 if __name__ == "__main__":
