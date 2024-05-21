@@ -2,16 +2,17 @@ import os
 from tqdm import tqdm
 
 import numpy as np
-import imageio.v3 as imageio
-from skimage.segmentation import find_boundaries
 
 import torch
 
 import torch_em
 from torch_em.loss import DiceLoss
 from torch_em.util.prediction import predict_with_halo
+from torch_em.util.segmentation import watershed_from_components
 
-from common import get_dataloaders, get_model, get_experiment_name, get_test_images, dice_score
+from elf.evaluation import mean_segmentation_accuracy
+
+from common import get_dataloaders, get_model, get_experiment_name, get_test_images, dice_score, _load_image
 
 
 SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"  # for HLRN
@@ -50,39 +51,50 @@ def run_inference(name, model, dataset, task, save_root, device):
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
-    scores = []
+    dsc_list, msa_list, sa50_list = [], [], []
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting", total=len(image_paths)):
-        image = imageio.imread(image_path)
-        gt = imageio.imread(gt_path)
-        gt = (gt > 0)   # binarise the instances
+        if dataset == "livecell":
+            image = _load_image(image_path)
+            gt = _load_image(gt_path)
+        elif dataset in ["mouse_embryo", "plantseg"]:
+            image = _load_image(image_path, "raw")
+            gt = _load_image(image_path, "label")
 
-        if task == "boundaries":
-            bd = find_boundaries(gt)
-            gt = np.stack([gt, bd])
+        if dataset == "livecell":
+            tile, halo = (512, 512), (64, 64)
+        else:
+            tile, halo = (64, 256, 256), (16, 64, 64)
 
-        # HACK: values hard coded for livecell
         prediction = predict_with_halo(
-            input_=image, model=model, gpu_ids=[device], block_shape=(512, 512), halo=(64, 64), disable_tqdm=True,
+            input_=image, model=model, gpu_ids=[device], block_shape=tile, halo=halo, disable_tqdm=True,
         )
 
         prediction = prediction.squeeze()
-        prediction = (prediction > 0.5)
 
-        visualize = False
-        if visualize:
-            import napari
-            v = napari.Viewer()
-            v.add_image(image)
-            v.add_labels(gt)
-            v.add_labels(prediction)
-            napari.run()
+        if task == "boundaries":
+            fg, bd = prediction
+            instances = watershed_from_components(boundaries=bd, foreground=fg)
 
-        score = dice_score(gt=gt, seg=prediction)
-        assert score > 0 and score <= 1
-        scores.append(score)
+            msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
+            msa_list.append(msa)
+            sa50_list.append(sa[0])
 
-    mean_dice = np.mean(scores)
-    print(mean_dice)
+        else:
+            gt = (gt > 0)   # binarise the instances
+            prediction = (prediction > 0.5)  # threshold the predictions
+
+            score = dice_score(gt=gt, seg=prediction)
+            assert score > 0 and score <= 1  # HACK: sanity check
+            dsc_list.append(score)
+
+    if task == "binary":
+        mean_dice = np.mean(dsc_list)
+        print(mean_dice)
+
+    else:
+        mean_msa = np.mean(msa_list)
+        mean_sa50 = np.mean(sa50_list)
+        print(mean_msa, mean_sa50)
 
 
 def main(args):

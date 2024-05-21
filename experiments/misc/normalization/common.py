@@ -1,6 +1,9 @@
 import os
+from glob import glob
 
+import h5py
 import numpy as np
+import imageio.v3 as imageio
 
 from torch_em.model import UNet2d, UNet3d
 from torch_em.data import MinTwoInstanceSampler, datasets
@@ -163,17 +166,33 @@ def get_dataloaders(dataset, task):
     return train_loader, val_loader
 
 
+def dice_score(gt, seg, eps=1e-7):
+    nom = 2 * np.sum(gt * seg)
+    denom = np.sum(gt) + np.sum(seg)
+    score = float(nom) / float(denom + eps)
+    return score
+
+
 def get_test_images(dataset):
     if dataset == "livecell":
         image_paths, gt_paths = _get_livecell_paths(input_folder=os.path.join(ROOT, "livecell"), split="test")
         return image_paths, gt_paths
 
     else:
-        raise NotImplementedError
+        if dataset == "mouse_embryo":
+            volume_paths = glob(os.path.join(ROOT, "mouse-embryo", "Nuclei", "test", "*.h5"))
+        elif dataset == "plantseg":
+            volume_paths = glob(os.path.join(ROOT, "plantseg", "root_test", "*.h5"))
+
+        return volume_paths, volume_paths
 
 
-def dice_score(gt, seg, eps=1e-7):
-    nom = 2 * np.sum(gt * seg)
-    denom = np.sum(gt) + np.sum(seg)
-    score = float(nom) / float(denom + eps)
-    return score
+def _load_image(input_path, key=None):
+    if key is None:
+        image = imageio.imread(input_path)
+
+    else:
+        with h5py.File(input_path, "r") as f:
+            image = f[key][:]
+
+    return image
