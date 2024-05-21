@@ -2,6 +2,7 @@ import os
 from glob import glob
 
 import h5py
+import z5py
 import numpy as np
 import imageio.v3 as imageio
 
@@ -183,6 +184,8 @@ def get_test_images(dataset):
             volume_paths = glob(os.path.join(ROOT, "mouse-embryo", "Nuclei", "test", "*.h5"))
         elif dataset == "plantseg":
             volume_paths = glob(os.path.join(ROOT, "plantseg", "root_test", "*.h5"))
+        elif dataset == "mitoem":
+            volume_paths = glob(os.path.join(ROOT, "mitoem", "*_test.n5"))
 
         return volume_paths, volume_paths
 
@@ -192,7 +195,11 @@ def _load_image(input_path, key=None):
         image = imageio.imread(input_path)
 
     else:
-        with h5py.File(input_path, "r") as f:
-            image = f[key][:]
+        if input_path.endswith(".h5"):
+            with h5py.File(input_path, "r") as f:
+                image = f[key][:]
+        else:
+            with z5py.File(input_path, "r") as f:
+                image = f[key][:]
 
     return image

@@ -66,8 +66,10 @@ def run_inference(name, model, dataset, task, save_root, device):
             tile, halo = (64, 256, 256), (16, 64, 64)
 
         prediction = predict_with_halo(
-            input_=image, model=model, gpu_ids=[device], block_shape=tile, halo=halo, disable_tqdm=True,
+            input_=image, model=model, gpu_ids=[device], block_shape=tile, halo=halo, disable_tqdm=False,
         )
+
+        visualize = False
 
         prediction = prediction.squeeze()
 
@@ -79,9 +81,27 @@ def run_inference(name, model, dataset, task, save_root, device):
             msa_list.append(msa)
             sa50_list.append(sa[0])
 
+            if visualize:
+                import napari
+                v = napari.Viewer()
+                v.add_image(image)
+                v.add_labels(instances)
+                v.add_labels(fg > 0.5)
+                v.add_labels(bd > 0.5)
+                v.add_labels(gt, visible=False)
+                napari.run()
+
         else:
             gt = (gt > 0)   # binarise the instances
             prediction = (prediction > 0.5)  # threshold the predictions
+
+            if visualize:
+                import napari
+                v = napari.Viewer()
+                v.add_image(image)
+                v.add_labels(prediction)
+                v.add_labels(gt, visible=False)
+                napari.run()
 
             score = dice_score(gt=gt, seg=prediction)
             assert score > 0 and score <= 1  # HACK: sanity check
@@ -126,6 +146,9 @@ def main(args):
 
 
 if __name__ == "__main__":
+    import warnings
+    warnings.simplefilter("ignore")
+
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument(
