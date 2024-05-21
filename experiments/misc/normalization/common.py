@@ -185,7 +185,7 @@ def get_test_images(dataset):
         elif dataset == "plantseg":
             volume_paths = sorted(glob(os.path.join(ROOT, "plantseg", "root_test", "*.h5")))
         elif dataset == "mitoem":
-            volume_paths = sorted(glob(os.path.join(ROOT, "mitoem", "*_test.n5")))
+            volume_paths = sorted(glob(os.path.join(ROOT, "mitoem", "*_val.n5")))
 
         return volume_paths, volume_paths
 

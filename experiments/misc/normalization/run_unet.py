@@ -43,7 +43,7 @@ def run_training(name, model, dataset, task, save_root, device):
     trainer.fit(iterations=int(1e5))
 
 
-def run_inference(name, model, dataset, task, save_root, device):
+def run_inference(name, model, norm, dataset, task, save_root, device):
     checkpoint = os.path.join(save_root, "checkpoints", name, "best.pt")
     assert os.path.exists(checkpoint)
 
@@ -59,7 +59,7 @@ def run_inference(name, model, dataset, task, save_root, device):
     for image_path in tqdm(image_paths, desc="Predicting"):
         if dataset == "livecell":
             image = _load_image(image_path)
-        elif dataset in ["mouse_embryo", "plantseg"]:
+        elif dataset in ["mouse_embryo", "plantseg", "mitoem"]:
             image = _load_image(image_path, "raw")
 
         if dataset == "livecell":
@@ -68,7 +68,7 @@ def run_inference(name, model, dataset, task, save_root, device):
             tile, halo = (64, 256, 256), (16, 64, 64)
 
         prediction = predict_with_halo(
-            input_=image, model=model, gpu_ids=[device], block_shape=tile, halo=halo, disable_tqdm=True,
+            input_=image, model=model, gpu_ids=[device], block_shape=tile, halo=halo, disable_tqdm=False,
         )
 
         prediction = prediction.squeeze()
@@ -80,14 +80,14 @@ def run_inference(name, model, dataset, task, save_root, device):
         with h5py.File(pred_path, "a") as f:
             if task == "boundaries":
                 fg, bd = prediction
-                f.create_dataset(f"segmentation/{task}/foreground", shape=fg.shape, data=fg)
-                f.create_dataset(f"segmentation/{task}/boundary", shape=bd.shape, data=bd)
+                f.create_dataset(f"segmentation/{norm}/{task}/foreground", shape=fg.shape, data=fg)
+                f.create_dataset(f"segmentation/{norm}/{task}/boundary", shape=bd.shape, data=bd)
             else:
                 outputs = prediction
-                f.create_dataset(f"segmentation/{task}/foreground", shape=outputs.shape, data=outputs)
+                f.create_dataset(f"segmentation/{norm}/{task}/foreground", shape=outputs.shape, data=outputs)
 
 
-def run_evaluation(dataset, task, save_root):
+def run_evaluation(norm, dataset, task, save_root):
     visualize = False
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
@@ -108,8 +108,8 @@ def run_evaluation(dataset, task, save_root):
 
         with h5py.File(pred_path, "r") as f:
             if task == "boundaries":
-                fg = f[f"segmentation/{task}/foreground"][:]
-                bd = f[f"segmentation/{task}/boundary"][:]
+                fg = f[f"segmentation/{norm}/{task}/foreground"][:]
+                bd = f[f"segmentation/{norm}/{task}/boundary"][:]
                 instances = watershed_from_components(boundaries=bd, foreground=fg)
 
                 msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
@@ -127,7 +127,7 @@ def run_evaluation(dataset, task, save_root):
                     napari.run()
 
             else:
-                prediction = f[f"segmentation/{task}/foreground"][:]
+                prediction = f[f"segmentation/{norm}/{task}/foreground"][:]
                 prediction = (prediction > 0.5)  # threshold the predictions
 
                 gt = (gt > 0)   # binarise the instances
@@ -175,12 +175,12 @@ def main(args):
 
     elif phase == "predict":
         run_inference(
-            name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device,
+            name=name, model=model, norm=norm, dataset=dataset, task=task, save_root=save_root, device=device,
         )
 
     elif phase == "evaluate":
         run_evaluation(
-            dataaset=dataset, task=task, save_root=save_root,
+            norm=norm, dataaset=dataset, task=task, save_root=save_root,
         )
 
     else:
