@@ -51,7 +51,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
     image_paths, _ = get_test_images(dataset=dataset)
 
-    pred_dir = os.path.join(save_root, "prediction", dataset)
+    pred_dir = os.path.join(save_root, "prediction", dataset, norm, task)
     os.makedirs(pred_dir, exist_ok=True)
 
     for image_path in tqdm(image_paths, desc="Predicting"):
@@ -78,11 +78,11 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
         with h5py.File(pred_path, "a") as f:
             if task == "boundaries":
                 fg, bd = prediction
-                f.create_dataset(f"segmentation/{norm}/{task}/foreground", shape=fg.shape, data=fg)
-                f.create_dataset(f"segmentation/{norm}/{task}/boundary", shape=bd.shape, data=bd)
+                f.create_dataset("segmentation/foreground", shape=fg.shape, data=fg, compression="gzip")
+                f.create_dataset("segmentation/boundary", shape=bd.shape, data=bd, compression="gzip")
             else:
                 outputs = prediction
-                f.create_dataset(f"segmentation/{norm}/{task}/foreground", shape=outputs.shape, data=outputs)
+                f.create_dataset("segmentation/foreground", shape=outputs.shape, data=outputs, compression="gzip")
 
 
 def run_evaluation(norm, dataset, task, save_root):
@@ -90,7 +90,7 @@ def run_evaluation(norm, dataset, task, save_root):
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
-    pred_dir = os.path.join(save_root, "prediction", dataset)
+    pred_dir = os.path.join(save_root, "prediction", dataset, norm, task)
 
     dsc_list, msa_list, sa50_list = [], [], []
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Evaluating", total=len(image_paths)):
@@ -106,8 +106,8 @@ def run_evaluation(norm, dataset, task, save_root):
 
         with h5py.File(pred_path, "r") as f:
             if task == "boundaries":
-                fg = f[f"segmentation/{norm}/{task}/foreground"][:]
-                bd = f[f"segmentation/{norm}/{task}/boundary"][:]
+                fg = f["segmentation/foreground"][:]
+                bd = f["segmentation/boundary"][:]
                 instances = watershed_from_components(boundaries=bd, foreground=fg)
 
                 msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
@@ -125,7 +125,7 @@ def run_evaluation(norm, dataset, task, save_root):
                     napari.run()
 
             else:
-                prediction = f[f"segmentation/{norm}/{task}/foreground"][:]
+                prediction = f["segmentation/foreground"][:]
                 prediction = (prediction > 0.5)  # threshold the predictions
 
                 gt = (gt > 0)   # binarise the instances
