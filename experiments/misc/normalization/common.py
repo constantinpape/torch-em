@@ -12,8 +12,13 @@ from torch_em.data import MinTwoInstanceSampler, datasets
 from micro_sam.evaluation.livecell import _get_livecell_paths
 
 
-ROOT = "/scratch/projects/nim00007/sam/data"  # for HLRN
-# ROOT = "/media/anwai/ANWAI/data/"
+# for HLRN
+# ROOT = "/scratch/projects/nim00007/sam/data"
+# SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"
+
+# for local
+ROOT = "/media/anwai/ANWAI/data/"
+SAVE_DIR = "/media/anwai/ANWAI/models/torch-em/verify_normalization"
 
 
 def get_model(dataset, task, norm):

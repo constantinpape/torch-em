@@ -14,11 +14,9 @@ from torch_em.util.segmentation import watershed_from_components
 
 from elf.evaluation import mean_segmentation_accuracy
 
-from common import get_dataloaders, get_model, get_experiment_name, get_test_images, dice_score, _load_image
-
-
-SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"  # for HLRN
-# SAVE_DIR = "/media/anwai/ANWAI/models/torch-em/verify_normalization"
+from common import (
+    get_dataloaders, get_model, get_experiment_name, get_test_images, dice_score, _load_image, SAVE_DIR
+)
 
 
 def run_training(name, model, dataset, task, save_root, device):
