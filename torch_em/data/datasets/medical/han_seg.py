@@ -92,6 +92,12 @@ def get_han_seg_dataset(
     """
     image_paths, gt_paths = _get_han_seg_paths(path=path, download=download)
 
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs,
+        )
+
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
