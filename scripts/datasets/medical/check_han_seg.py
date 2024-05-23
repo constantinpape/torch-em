@@ -8,7 +8,7 @@ ROOT = "/media/anwai/ANWAI/data/han-seg/"
 def check_han_seg():
     loader = get_han_seg_loader(
         path=ROOT,
-        patch_shape=(1, 512, 512),
+        patch_shape=(1, 1024, 1024),
         batch_size=2,
         resize_inputs=False,
         download=False,

@@ -62,7 +62,7 @@ def _get_han_seg_paths(path, download):
                 continue
 
             data, header = nrrd.read(nrrd_path)
-            all_volumes.append(data.transpose(2, 0, 1))
+            all_volumes.append(data)
             all_volume_ids.append(image_id)
 
         raw = all_volumes[0]
