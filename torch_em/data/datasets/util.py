@@ -16,8 +16,8 @@ from skimage.draw import polygon
 import torch
 
 import torch_em
-from torch_em.transform.raw import ConcatTransforms
-from torch_em.transform.generic import ResizeInputs
+from torch_em.transform import get_raw_transform
+from torch_em.transform.generic import ResizeInputs, Compose
 
 try:
     import gdown
@@ -263,13 +263,13 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
         label_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
 
     if "raw_transform" in kwargs:
-        trafo = ConcatTransforms(transform1=kwargs["raw_transform"], transform2=raw_trafo)
+        trafo = Compose([kwargs["raw_transform"], raw_trafo])
         kwargs["raw_transform"] = trafo
     else:
-        kwargs["raw_transform"] = raw_trafo
+        kwargs["raw_transform"] = Compose([get_raw_transform(), raw_trafo])
 
     if "label_transform" in kwargs:
-        trafo = ConcatTransforms(transform1=kwargs["raw_transform"], transform2=label_trafo)
+        trafo = Compose(transform1=kwargs["raw_transform"], transform2=label_trafo)
         kwargs["label_transform"] = trafo
     else:
         kwargs["label_transform"] = label_trafo

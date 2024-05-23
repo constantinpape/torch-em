@@ -227,19 +227,3 @@ def get_default_mean_teacher_augmentations(
         augmentation1=aug1,
         augmentation2=aug2
     )
-
-
-# The functionality below merges incoming and requested transforms to work together.
-class ConcatTransforms:
-    def __init__(self, transform1=None, transform2=None):
-        self.transform1 = transform1
-        self.transform2 = transform2
-
-    def __call__(self, inputs):
-        if self.transform1 is not None:
-            inputs = self.transform1(inputs)
-
-        if self.transform2 is not None:
-            inputs = self.transform2(inputs)
-
-        return inputs
