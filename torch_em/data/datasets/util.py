@@ -14,7 +14,10 @@ from xml.dom import minidom
 from skimage.draw import polygon
 
 import torch
+
 import torch_em
+from torch_em.transform.raw import ConcatTransforms
+from torch_em.transform.generic import ResizeInputs
 
 try:
     import gdown
@@ -245,6 +248,33 @@ def add_instance_label_transform(
         kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
         label_dtype = torch.float32
     return kwargs, label_dtype
+
+
+def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kwargs=None):
+    """
+    Checks for raw_transform and label_transform incoming values.
+    If yes, it will automatically merge these two transforms to apply them together.
+    """
+    if resize_inputs:
+        assert isinstance(resize_kwargs, dict)
+        patch_shape = None
+
+        raw_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_rgb=resize_kwargs["is_rgb"])
+        label_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
+
+    if "raw_transform" in kwargs:
+        trafo = ConcatTransforms(transform1=kwargs["raw_transform"], transform2=raw_trafo)
+        kwargs["raw_transform"] = trafo
+    else:
+        kwargs["raw_transform"] = raw_trafo
+
+    if "label_transform" in kwargs:
+        trafo = ConcatTransforms(transform1=kwargs["raw_transform"], transform2=label_trafo)
+        kwargs["label_transform"] = trafo
+    else:
+        kwargs["label_transform"] = label_trafo
+
+    return kwargs, patch_shape
 
 
 def generate_labeled_array_from_xml(shape, xml_file):

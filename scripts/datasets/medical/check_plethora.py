@@ -1,3 +1,4 @@
+from torch_em.data import MinInstanceSampler
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_plethora_loader
 
@@ -8,11 +9,12 @@ ROOT = "/media/anwai/ANWAI/data/plethora"
 def check_plethora():
     loader = get_plethora_loader(
         path=ROOT,
-        task="pleural_effusion",
+        task="thoracic",
         patch_shape=(1, 512, 512),
         batch_size=2,
-        resize_inputs=False,
+        resize_inputs=True,
         download=True,
+        sampler=MinInstanceSampler(),
     )
 
     check_loader(loader, 8)
