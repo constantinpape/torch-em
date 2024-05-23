@@ -1,7 +1,13 @@
 import os
 from glob import glob
+from tqdm import tqdm
+from pathlib import Path
 from natsort import natsorted
 from typing import Union, Tuple
+
+import nrrd
+import numpy as np
+import nibabel as nib
 
 import torch_em
 
@@ -31,31 +37,43 @@ def get_han_seg_data(path, download):
 def _get_han_seg_paths(path, download):
     data_dir = get_han_seg_data(path=path, download=download)
 
+    image_dir = os.path.join(data_dir, "set_1", "preprocessed", "images")
+    gt_dir = os.path.join(data_dir, "set_1", "preprocessed", "ground_truth")
+    os.makedirs(image_dir, exist_ok=True)
+    os.makedirs(gt_dir, exist_ok=True)
+
+    image_paths, gt_paths = [], []
     all_case_dirs = natsorted(glob(os.path.join(data_dir, "set_1", "case_*")))
-    for case_dir in all_case_dirs:
+    for case_dir in tqdm(all_case_dirs):
+        image_path = os.path.join(image_dir, f"{os.path.split(case_dir)[-1]}_ct.nii.gz")
+        gt_path = os.path.join(gt_dir, f"{os.path.split(case_dir)[-1]}.nii.gz")
+        image_paths.append(image_path)
+        gt_paths.append(gt_path)
+        if os.path.exists(image_path) and os.path.exists(gt_path):
+            continue
 
-        all_vols = []
-        all_nrrd_paths = glob(os.path.join(case_dir, "*.nrrd"))
+        all_nrrd_paths = natsorted(glob(os.path.join(case_dir, "*.nrrd")))
+        all_volumes, all_volume_ids = [], []
         for nrrd_path in all_nrrd_paths:
-            from pathlib import Path
-            import nrrd
-
             image_id = Path(nrrd_path).stem
-            if not image_id.endswith("_MR_T1"):
+
+            # we skip the MRI volumes
+            if image_id.endswith("_MR_T1"):
                 continue
 
             data, header = nrrd.read(nrrd_path)
-            all_vols.append(data.transpose(2, 1, 0))
+            all_volumes.append(data.transpose(2, 0, 1))
+            all_volume_ids.append(image_id)
 
-        import napari
-        v = napari.Viewer()
-        v.add_image(all_vols[0])
-        # for vol in all_vols[1:]:
-        #     v.add_labels(vol)
-        napari.run()
+        raw = all_volumes[0]
+        raw = nib.Nifti2Image(raw, np.eye(4))
+        nib.save(raw, image_path)
 
-    image_paths = ...
-    gt_paths = ...
+        gt = np.zeros(raw.shape)
+        for idx, per_organ in enumerate(all_volumes[1:], 1):
+            gt[per_organ > 0] = idx
+        gt = nib.Nifti2Image(gt, np.eye(4))
+        nib.save(gt, gt_path)
 
     return image_paths, gt_paths
 
@@ -67,9 +85,21 @@ def get_han_seg_dataset(
     download: bool = False,
     **kwargs
 ):
+    """Dataset for head and neck organ-at-rish segmentation in CT scans.
+
+    This dataset is from Podobnik et al. - https://doi.org/10.1002/mp.16197
+    Please cite it if you use it in a publication.
+    """
     image_paths, gt_paths = _get_han_seg_paths(path=path, download=download)
 
-    dataset = ...
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key="data",
+        label_paths=gt_paths,
+        label_key="data",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
     return dataset
 
@@ -82,6 +112,8 @@ def get_han_seg_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for for head and neck organ-at-rish segmentation in CT scans. See `get_han_seg_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_han_seg_dataset(
         path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
