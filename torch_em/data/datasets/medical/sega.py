@@ -83,6 +83,9 @@ def get_sega_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs,
         )
 
+    # TODO: need to check the nrrd inputs and see if:
+    # - a. do we need to make some changes in the dataset
+    # - b. OR, we can use the dataset just like that and need to update "load_image" to accept nrrd files
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
