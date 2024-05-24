@@ -263,13 +263,13 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
         label_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
 
     if "raw_transform" in kwargs:
-        trafo = Compose([kwargs["raw_transform"], raw_trafo])
+        trafo = Compose(raw_trafo, kwargs["raw_transform"])
         kwargs["raw_transform"] = trafo
     else:
-        kwargs["raw_transform"] = Compose([get_raw_transform(), raw_trafo])
+        kwargs["raw_transform"] = Compose(raw_trafo, get_raw_transform())
 
     if "label_transform" in kwargs:
-        trafo = Compose(transform1=kwargs["raw_transform"], transform2=label_trafo)
+        trafo = Compose(label_trafo, kwargs["label_transform"])
         kwargs["label_transform"] = trafo
     else:
         kwargs["label_transform"] = label_trafo
