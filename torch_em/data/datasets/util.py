@@ -1,25 +1,33 @@
-import inspect
 import os
 import hashlib
-import zipfile
-import numpy as np
+import inspect
+import requests
 from tqdm import tqdm
 from warnings import warn
-from xml.dom import minidom
-from shutil import copyfileobj, which
 from subprocess import run
 from packaging import version
+from shutil import copyfileobj, which
 
+import zipfile
+import numpy as np
+from xml.dom import minidom
 from skimage.draw import polygon
 
 import torch
+
 import torch_em
-import requests
+from torch_em.transform import get_raw_transform
+from torch_em.transform.generic import ResizeInputs, Compose
 
 try:
     import gdown
 except ImportError:
     gdown = None
+
+try:
+    from tcia_utils import nbia
+except ModuleNotFoundError:
+    nbia = None
 
 
 BIOIMAGEIO_IDS = {
@@ -163,6 +171,23 @@ def download_source_kaggle(path, dataset_name, download):
     api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
 
 
+def download_source_tcia(path, url, dst, csv_filename, download):
+    if not download:
+        raise RuntimeError(f"Cannot fine the data at {path}, but download was set to False.")
+
+    assert url.endswith(".tcia"), f"{path} is not a TCIA Manifest."
+
+    # downloads the manifest file from the collection page
+    manifest = requests.get(url=url)
+    with open(path, "wb") as f:
+        f.write(manifest.content)
+
+    # this part extracts the UIDs from the manigests and downloads them.
+    nbia.downloadSeries(
+        series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename,
+    )
+
+
 def update_kwargs(kwargs, key, value, msg=None):
     if key in kwargs:
         msg = f"{key} will be over-ridden in loader kwargs." if msg is None else msg
@@ -223,6 +248,33 @@ def add_instance_label_transform(
         kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
         label_dtype = torch.float32
     return kwargs, label_dtype
+
+
+def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kwargs=None):
+    """
+    Checks for raw_transform and label_transform incoming values.
+    If yes, it will automatically merge these two transforms to apply them together.
+    """
+    if resize_inputs:
+        assert isinstance(resize_kwargs, dict)
+        patch_shape = None
+
+        raw_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_rgb=resize_kwargs["is_rgb"])
+        label_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
+
+    if "raw_transform" in kwargs:
+        trafo = Compose(raw_trafo, kwargs["raw_transform"])
+        kwargs["raw_transform"] = trafo
+    else:
+        kwargs["raw_transform"] = Compose(raw_trafo, get_raw_transform())
+
+    if "label_transform" in kwargs:
+        trafo = Compose(label_trafo, kwargs["label_transform"])
+        kwargs["label_transform"] = trafo
+    else:
+        kwargs["label_transform"] = label_trafo
+
+    return kwargs, patch_shape
 
 
 def generate_labeled_array_from_xml(shape, xml_file):
