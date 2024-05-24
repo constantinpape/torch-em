@@ -70,6 +70,11 @@ def get_sega_dataset(
     download: bool = False,
     **kwargs
 ):
+    """Dataset for segmentation of aorta in computed tomography angiography  (CTA) scans.
+
+    This dataset is from Pepe et al. - https://doi.org/10.1007/978-3-031-53241-2
+    Please cite it if you use this dataset for a publication.
+    """
     image_paths, gt_paths = _get_sega_paths(path=path, download=download)
 
     if resize_inputs:
@@ -98,6 +103,8 @@ def get_sega_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for segmentation of aorta in CTA scans. See `get_sega_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_sega_dataset(
         path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
