@@ -6,3 +6,4 @@ from .drive import get_drive_dataset, get_drive_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
 from .siim_acr import get_siim_acr_dataset, get_siim_acr_loader
+from .verse import get_verse_dataset, get_verse_loader
