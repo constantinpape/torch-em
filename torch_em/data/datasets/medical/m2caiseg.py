@@ -4,10 +4,8 @@ from natsort import natsorted
 from typing import Union, Tuple
 
 import torch_em
-from torch_em.transform.generic import ResizeInputs
 
 from .. import util
-from ... import ImageCollectionDataset
 
 
 def get_m2caiseg_data(path, download):
@@ -45,6 +43,10 @@ def _get_m2caiseg_paths(path, split, download):
         v.add_labels(gt.transpose(2, 0, 1))
         napari.run()
 
+        # TODO:
+        # the ground truth has 3 channels (I am guessing paired with the rgb images)
+        # not sure how to handle these cases! need to discuss with CP
+
         breakpoint()
 
     return image_paths, gt_paths
@@ -58,24 +60,16 @@ def get_m2caiseg_dataset(
     download: bool = False,
     **kwargs
 ):
-    assert split in ["train", "val", "split"]
+    assert split in ["train", "val", "test"]
 
     image_paths, gt_paths = _get_m2caiseg_paths(path=path, split=split, download=download)
 
-    if resize_inputs:
-        raw_trafo = ResizeInputs(target_shape=patch_shape, is_rgb=True)
-        label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
-        patch_shape = None
-    else:
-        patch_shape = patch_shape
-        raw_trafo, label_trafo = None, None
-
-    dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths,
-        label_image_paths=gt_paths,
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
         patch_shape=patch_shape,
-        raw_transform=raw_trafo,
-        label_transform=label_trafo,
         **kwargs
     )
 
