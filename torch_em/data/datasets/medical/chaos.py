@@ -1,7 +1,10 @@
 import os
 from glob import glob
+from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Tuple, Optional
+
+import numpy as np
 
 import torch_em
 
@@ -33,6 +36,24 @@ def get_chaos_data(path, split, download):
     return data_dir
 
 
+def _open_image(input_path):
+    ext = os.path.splitext(input_path)[-1]
+
+    if ext == ".dcm":
+        import pydicom as dicom
+        inputs = dicom.dcmread(input_path)
+        inputs = inputs.pixel_array
+
+    elif ext == ".png":
+        import imageio.v3 as imageio
+        inputs = imageio.imread(input_path)
+
+    else:
+        raise ValueError
+
+    return inputs
+
+
 def _get_chaos_paths(path, split, modality, download):
     data_dir = get_chaos_data(path=path, split=split, download=download)
 
@@ -42,20 +63,61 @@ def _get_chaos_paths(path, split, modality, download):
         if isinstance(modality, str):
             modality = [modality]
 
+    image_paths, gt_paths = [], []
     for m in modality:
         if m.upper() == "CT":
-            ...
-        elif m.upper() == "MRI":
-            ...
+            m = m.upper()
+            image_exts = ["DICOM_anon/*"]
+            gt_exts = ["Ground/*"]
+
+        elif m.upper().startswith("MR"):
+            m = "MR"
+            image_exts = ["T1DUAL/DICOM_anon/InPhase/*", "T2SPIR/DICOM_anon/*"]
+            gt_exts = ["T1DUAL/Ground/*", "T2SPIR/Ground/*"]
+
         else:
             raise ValueError
 
-        series_uids = natsorted(glob(os.path.join(data_dir, m.upper(), "*")))
+        series_uids = glob(os.path.join(data_dir, m, "*"))
 
-        breakpoint()
+        for uid in tqdm(series_uids):
+            _id = os.path.split(uid)[-1]
 
-    image_paths = ...
-    gt_paths = ...
+            base_dir = os.path.join(data_dir, "preprocessed", m.upper())
+
+            os.makedirs(os.path.join(base_dir, "image"), exist_ok=True)
+            os.makedirs(os.path.join(base_dir, "ground_truth"), exist_ok=True)
+
+            for image_ext, gt_ext in zip(image_exts, gt_exts):
+                if m == "MR":
+                    modname = image_ext.split("/")[0] + "_MR"
+                else:
+                    modname = m
+
+                image_path = os.path.join(base_dir, "image", f"{_id}_{modname}.nii.gz")
+                gt_path = os.path.join(base_dir, "ground_truth", f"{_id}_{modname}.nii.gz")
+
+                image_paths.append(image_path)
+                gt_paths.append(gt_path)
+
+                if os.path.exists(image_path) and os.path.exists(gt_path):
+                    continue
+
+                raw_slices = natsorted(glob(os.path.join(uid, image_ext)))
+                gt_slices = natsorted(glob(os.path.join(uid, gt_ext)))
+
+                raw = np.stack([_open_image(raw_slice) for raw_slice in raw_slices])
+                gt = np.stack([_open_image(gt_slice) for gt_slice in gt_slices]).astype("uint8")
+
+                raw = raw.transpose(1, 2, 0)
+                gt = gt.transpose(1, 2, 0)
+
+                import nibabel as nib
+                raw_nifti = nib.Nifti2Image(raw, np.eye(4))
+                nib.save(raw_nifti, image_path)
+
+                gt_nifti = nib.Nifti2Image(gt, np.eye(4))
+                nib.save(gt_nifti, gt_path)
 
     return image_paths, gt_paths
 
@@ -71,11 +133,16 @@ def get_chaos_dataset(
 ):
     """
     """
-    image_paths, gt_paths = _get_chaos_paths(
-        path=path, split=split, download=download, modality=modality, download=download
-    )
+    image_paths, gt_paths = _get_chaos_paths(path=path, split=split, modality=modality, download=download)
 
-    dataset = ...
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key="data",
+        label_paths=gt_paths,
+        label_key="data",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
     return dataset
 
