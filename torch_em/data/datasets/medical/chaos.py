@@ -125,14 +125,19 @@ def _get_chaos_paths(path, split, modality, download):
 def get_chaos_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
-    split: str,
+    split: str = "train",
     modality: Optional[str] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
+    """Dataset for segmentation of abdominal organs in CT and MRI scans.
+
+    This dataset is from Kavur et al. - https://doi.org/10.1016/j.media.2020.101950
+    Please cite it if you use this dataset for a publication.
     """
-    """
+    assert split == "train", "'train' is the only split with ground truth annotations."
+
     image_paths, gt_paths = _get_chaos_paths(path=path, split=split, modality=modality, download=download)
 
     dataset = torch_em.default_segmentation_dataset(
@@ -151,13 +156,13 @@ def get_chaos_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     batch_size: int,
-    split: str,
+    split: str = "train",
     modality: Optional[str] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataloader for segmentation of abdominal organs in CT and MRI scans. See `get_chaos_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_chaos_dataset(
