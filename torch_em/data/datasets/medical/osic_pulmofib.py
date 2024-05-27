@@ -5,6 +5,7 @@ from pathlib import Path
 from natsort import natsorted
 from typing import Union, Tuple
 
+import json
 import nrrd
 import numpy as np
 import nibabel as nib
@@ -53,6 +54,9 @@ def _get_osic_pulmofib_paths(path, download):
     os.makedirs(image_dir, exist_ok=True)
     os.makedirs(gt_dir, exist_ok=True)
 
+    cpath = os.path.join(data_dir, "preprocessed", "confirmer.json")
+    _completed_preproc = os.path.exists(cpath)
+
     image_paths, gt_paths = [], []
     uid_paths = natsorted(glob(os.path.join(data_dir, "train", "*")))
     for uid_path in tqdm(uid_paths):
@@ -60,17 +64,23 @@ def _get_osic_pulmofib_paths(path, download):
 
         image_path = os.path.join(image_dir, f"{uid}.nii.gz")
         gt_path = os.path.join(gt_dir, f"{uid}.nii.gz")
-        if os.path.exists(image_path) and os.path.exists(gt_path):
+
+        if _completed_preproc:
+            if os.path.exists(image_path) and os.path.exists(gt_path):
+                image_paths.append(image_path)
+                gt_paths.append(gt_path)
+
             continue
 
+        # creating the volume out of individual dicom slices
         all_slices = []
         for slice_path in natsorted(glob(os.path.join(uid_path, "*.dcm"))):
             per_slice = dicom.dcmread(slice_path)
             per_slice = per_slice.pixel_array
             all_slices.append(per_slice)
-
         all_slices = np.stack(all_slices).transpose(1, 2, 0)
 
+        # next, combining the semantic organ annotations into one ground-truth volume with specific semantic labels
         all_gt = np.zeros(all_slices.shape, dtype="uint8").transpose(1, 0, 2)
         for ann_path in glob(os.path.join(data_dir, "*", "*", f"{uid}_*.nrrd")):
             ann_organ = Path(ann_path).stem.split("_")[-1]
@@ -79,24 +89,32 @@ def _get_osic_pulmofib_paths(path, download):
 
             per_gt, _ = nrrd.read(ann_path)
 
-            try:
+            # some organ anns have weird dim, we don't consider them for simplicity
+            if per_gt.shape == all_slices.shape:  
                 all_gt[per_gt > 0] = ORGAN_IDS[ann_organ]
-            except IndexError:  # some organ anns have weird shapes, for simplicity we don't consider them.
-                if per_gt.shape != all_slices.shape:
-                    continue
 
+        # only if the volume has any labels (some volumes do not have segmentations), we save those raw and gt volumes
         if len(np.unique(all_gt)) > 1:
             all_gt = np.flip(all_gt, axis=2)
 
-            # image_nifti = nib.Nifti2Image(all_slices, np.eye(4))
-            # gt_nifti = nib.Nifti2Image(all_gt, np.eye(4))
+            image_nifti = nib.Nifti2Image(all_slices, np.eye(4))
+            gt_nifti = nib.Nifti2Image(all_gt, np.eye(4))
 
-            # nib.save(image_nifti, image_path)
-            # nib.save(gt_nifti, gt_path)
+            nib.save(image_nifti, image_path)
+            nib.save(gt_nifti, gt_path)
 
         print(np.unique(all_gt))
 
+    if not _completed_preproc:
+        # since we do not have segmentation for all volumes, we store a file which reflects aggrement of created dataset
+        confirm_msg = "The dataset has been preprocessed. "
+        confirm_msg += f"It has {len(image_paths)} volume and {len(gt_paths)} respective ground-truth."
+        print(confirm_msg)
+
     breakpoint()
+
+    with open(cpath, "w") as f:
+        json.dump(confirm_msg, f)
 
     return image_paths, gt_paths
 
@@ -108,7 +126,7 @@ def get_osic_pulmofib_dataset(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataset for segmentation of lung, heart and trachea in CT scans.
     """
     image_paths, gt_paths = _get_osic_pulmofib_paths(path=path, download=download)
 
@@ -132,6 +150,8 @@ def get_osic_pulmofib_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for segmentation of lung, heart and trachea in CT scans. See `get_osic_pulmofib_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_osic_pulmofib_dataset(
         path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
