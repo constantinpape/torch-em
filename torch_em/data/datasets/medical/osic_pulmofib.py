@@ -29,7 +29,7 @@ def get_osic_pulmofib_data(path, download):
     # download the data first
     zip_path = os.path.join(path, "osic-pulmonary-fibrosis-progression.zip")
     util.download_source_kaggle(
-        path=path, dataset_name="", download=download
+        path=path, dataset_name="osic-pulmonary-fibrosis-progression", download=download, competition=True
     )
     util.unzip(zip_path=zip_path, dst=data_dir, remove=False)
 
