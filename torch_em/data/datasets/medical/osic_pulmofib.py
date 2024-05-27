@@ -16,9 +16,7 @@ import torch_em
 from .. import util
 
 
-ORGAN_IDS = {
-    "heart": 1, "lung": 2, "trachea": 3,
-}
+ORGAN_IDS = {"heart": 1, "lung": 2, "trachea": 3}
 
 
 def get_osic_pulmofib_data(path, download):
@@ -81,16 +79,17 @@ def _get_osic_pulmofib_paths(path, download):
         all_slices = np.stack(all_slices).transpose(1, 2, 0)
 
         # next, combining the semantic organ annotations into one ground-truth volume with specific semantic labels
-        all_gt = np.zeros(all_slices.shape, dtype="uint8").transpose(1, 0, 2)
+        all_gt = np.zeros(all_slices.shape, dtype="uint8")
         for ann_path in glob(os.path.join(data_dir, "*", "*", f"{uid}_*.nrrd")):
             ann_organ = Path(ann_path).stem.split("_")[-1]
             if ann_organ == "noisy":
                 continue
 
             per_gt, _ = nrrd.read(ann_path)
+            per_gt = per_gt.transpose(1, 0, 2)
 
-            # some organ anns have weird dim, we don't consider them for simplicity
-            if per_gt.shape == all_slices.shape:  
+            # some organ anns have weird dimension mismatch, we don't consider them for simplicity
+            if per_gt.shape == all_slices.shape:
                 all_gt[per_gt > 0] = ORGAN_IDS[ann_organ]
 
         # only if the volume has any labels (some volumes do not have segmentations), we save those raw and gt volumes
@@ -106,18 +105,14 @@ def _get_osic_pulmofib_paths(path, download):
             image_paths.append(image_path)
             gt_paths.append(gt_path)
 
-        print(np.unique(all_gt))
-
     if not _completed_preproc:
         # since we do not have segmentation for all volumes, we store a file which reflects aggrement of created dataset
         confirm_msg = "The dataset has been preprocessed. "
         confirm_msg += f"It has {len(image_paths)} volume and {len(gt_paths)} respective ground-truth."
         print(confirm_msg)
 
-    breakpoint()
-
-    with open(cpath, "w") as f:
-        json.dump(confirm_msg, f)
+        with open(cpath, "w") as f:
+            json.dump(confirm_msg, f)
 
     return image_paths, gt_paths
 
