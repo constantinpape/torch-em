@@ -103,6 +103,9 @@ def _get_osic_pulmofib_paths(path, download):
             nib.save(image_nifti, image_path)
             nib.save(gt_nifti, gt_path)
 
+            image_paths.append(image_path)
+            gt_paths.append(gt_path)
+
         print(np.unique(all_gt))
 
     if not _completed_preproc:
@@ -127,6 +130,11 @@ def get_osic_pulmofib_dataset(
     **kwargs
 ):
     """Dataset for segmentation of lung, heart and trachea in CT scans.
+
+    This dataset is from OSIC Pulmonary Fibrosis Progression Challenge:
+    - https://www.kaggle.com/c/osic-pulmonary-fibrosis-progression/data (dataset source)
+    - https://www.kaggle.com/datasets/sandorkonya/ct-lung-heart-trachea-segmentation (segmentation source)
+    Please cite it if you use this dataset for a publication.
     """
     image_paths, gt_paths = _get_osic_pulmofib_paths(path=path, download=download)
 
