@@ -37,7 +37,7 @@ def get_sa_med2d_data(path, download):
             - https://huggingface.co/datasets/OpenGVLab/SA-Med2D-20M/resolve/main/raw/SA-Med2D-16M.zip
 
     2. Using Git Large File Storage (lfs):
-        - `git lfs install` (# Make sure you have git-lfs installed (https://git-lfs.com))
+        - `git lfs install` (Make sure you have git-lfs installed (https://git-lfs.com))
         - `git clone https://huggingface.co/datasets/OpenGVLab/SA-Med2D-20M`
             - This step takes several hours, make sure you have a consistent internet and sufficient space.
 
