@@ -1,5 +1,9 @@
+import os
 import numpy as np
+from typing import List, Optional, Tuple, Union
+
 import torch
+
 from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
                     load_image, supports_memmap)
 
@@ -46,25 +50,26 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        raw_image_paths,
-        label_image_paths,
-        patch_shape,
+        raw_image_paths: List[Union[str, os.PathLike]],
+        label_image_paths: List[Union[str, os.PathLike]],
+        patch_shape: Tuple[int, ...],
         raw_transform=None,
         label_transform=None,
         label_transform2=None,
         transform=None,
-        dtype=torch.float32,
-        label_dtype=torch.float32,
-        n_samples=None,
+        dtype: torch.dtype = torch.float32,
+        label_dtype: torch.dtype = torch.float32,
+        n_samples: Optional[int] = None,
         sampler=None,
-        full_check=False,
+        full_check: bool = False,
     ):
         self._check_inputs(raw_image_paths, label_image_paths, full_check=full_check)
         self.raw_images = raw_image_paths
         self.label_images = label_image_paths
         self._ndim = 2
 
-        assert len(patch_shape) == self._ndim
+        if patch_shape is not None:
+            assert len(patch_shape) == self._ndim
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform
@@ -91,11 +96,17 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         return self._ndim
 
     def _sample_bounding_box(self, shape):
-        bb_start = [
-            np.random.randint(0, sh - psh) if sh - psh > 0 else 0
-            for sh, psh in zip(shape, self.patch_shape)
-        ]
-        return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
+        if self.patch_shape is None:
+            patch_shape_for_bb = shape
+            bb_start = [0] * len(shape)
+        else:
+            patch_shape_for_bb = self.patch_shape
+            bb_start = [
+                np.random.randint(0, sh - psh) if sh - psh > 0 else 0
+                for sh, psh in zip(shape, patch_shape_for_bb)
+            ]
+
+        return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
 
     def _ensure_patch_shape(self, raw, labels, have_raw_channels, have_label_channels, channel_first):
         shape = raw.shape
@@ -133,7 +144,8 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         if have_raw_channels:
             channel_first = raw.shape[-1] > 16
 
-        raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels, channel_first)
+        if self.patch_shape is not None:
+            raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels, channel_first)
         shape = raw.shape
 
         prefix_box = tuple()

@@ -1,3 +1,7 @@
+"""
+.. include:: ../doc/start_page.md
+.. include:: ../doc/datasets_and_dataloaders.md
+"""
 from .segmentation import (
     default_segmentation_dataset,
     default_segmentation_loader,

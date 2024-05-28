@@ -1,7 +1,10 @@
+import os
 import warnings
+import numpy as np
+from typing import List, Union, Tuple, Optional, Any
 
 import torch
-import numpy as np
+
 from elf.wrapper import RoiWrapper
 
 from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data
@@ -14,28 +17,31 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
     @staticmethod
     def compute_len(shape, patch_shape):
-        n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
-        return n_samples
+        if patch_shape is None:
+            return 1
+        else:
+            n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
+            return n_samples
 
     def __init__(
         self,
-        raw_path,
-        raw_key,
-        label_path,
-        label_key,
-        patch_shape,
+        raw_path: Union[List[Any], str, os.PathLike],
+        raw_key: str,
+        label_path: Union[List[Any], str, os.PathLike],
+        label_key: str,
+        patch_shape: Tuple[int, ...],
         raw_transform=None,
         label_transform=None,
         label_transform2=None,
         transform=None,
-        roi=None,
-        dtype=torch.float32,
-        label_dtype=torch.float32,
-        n_samples=None,
+        roi: Optional[dict] = None,
+        dtype: torch.dtype = torch.float32,
+        label_dtype: torch.dtype = torch.float32,
+        n_samples: Optional[int] = None,
         sampler=None,
-        ndim=None,
-        with_channels=False,
-        with_label_channels=False,
+        ndim: Optional[int] = None,
+        with_channels: bool = False,
+        with_label_channels: bool = False,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -64,7 +70,10 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         self._ndim = len(shape_raw) if ndim is None else ndim
         assert self._ndim in (2, 3, 4), f"Invalid data dimensions: {self._ndim}. Only 2d, 3d or 4d data is supported"
-        assert len(patch_shape) in (self._ndim, self._ndim + 1), f"{patch_shape}, {self._ndim}"
+
+        if patch_shape is not None:
+            assert len(patch_shape) in (self._ndim, self._ndim + 1), f"{patch_shape}, {self._ndim}"
+
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform
@@ -99,11 +108,17 @@ class SegmentationDataset(torch.utils.data.Dataset):
         return self._ndim
 
     def _sample_bounding_box(self):
-        bb_start = [
-            np.random.randint(0, sh - psh) if sh - psh > 0 else 0
-            for sh, psh in zip(self.shape, self.sample_shape)
-        ]
-        return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.sample_shape))
+        if self.sample_shape is None:
+            bb_start = [0] * len(self.shape)
+            patch_shape_for_bb = self.shape
+        else:
+            bb_start = [
+                np.random.randint(0, sh - psh) if sh - psh > 0 else 0
+                for sh, psh in zip(self.shape, self.sample_shape)
+            ]
+            patch_shape_for_bb = self.sample_shape
+
+        return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
 
     def _get_sample(self, index):
         if self.raw is None or self.labels is None:
@@ -125,7 +140,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
-        if len(self.patch_shape) == self._ndim + 1:
+        if self.patch_shape is not None and len(self.patch_shape) == self._ndim + 1:
             raw = raw.squeeze(1 if self._with_channels else 0)
             labels = labels.squeeze(1 if self._with_label_channels else 0)
 
