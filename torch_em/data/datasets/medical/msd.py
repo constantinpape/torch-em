@@ -25,14 +25,14 @@ URL = {
 CHECKSUM = {
     "braintumour": "d423911308d2ae5396d9c6bf4fad2b68cfde2dd09044269da9c0d639c22753c4",
     "heart": "4277dc6dfe100142aa8060e895f6ff0f81c5b733703ea250bd294df8f820bcba",
-    "liver": "",
+    "liver": "4007d9db1acda850d57a6ceb2b3998b7a0d43f8ad5a3f740dc38bc0cb8b7a2c5",
     "hippocampus": "282d808a3e84e5a52f090d9dd4c0b0057b94a6bd51ad41569aef5ff303287771",
     "prostate": "8cbbd7147691109b880ff8774eb6ab26704b1be0935482e7996a36a4ed31ec79",
-    "lung": "",
-    "pancreas": "",
-    "hepaticvessel": "",
-    "spleen": "",
-    "colon": "",
+    "lung": "f782cd09da9cf7a3128475d4a53650d371db10f0427aa76e166fccfcb2654161",
+    "pancreas": "e40181a0229ca85c2588d6ebb90fa6674f84eb1e66f0f968cda088d011769732",
+    "hepaticvessel": "ee880799f12e3b6e1ef2f8645f6626c5b39de77a4f1eae6f496c25fbf306ba04",
+    "spleen": "dfeba347daae4fb08c38f4d243ab606b28b91b206ffc445ec55c35489fa65e60",
+    "colon": "a26bfd23faf2de703f5a51a262cd4e2b9774c47e7fb86f0e0a854f8446ec2325",
 }
 
 FILENAMES = {
@@ -102,23 +102,15 @@ def get_msd_dataset(
         image_paths = glob(os.path.join(data_dir, Path(FILENAMES[task_name]).stem, "imagesTr", "*.nii.gz"))
         label_paths = glob(os.path.join(data_dir, Path(FILENAMES[task_name]).stem, "labelsTr", "*.nii.gz"))
 
-        # for image_path, label_path in zip(image_paths, label_paths):
-        #     import nibabel as nib
+        # TODO: need to customize parameters for the dataset a bit
+        # for eg. brain tumour segmentation has multiple input channels (4)
 
-        #     image, gt = nib.load(image_path), nib.load(label_path)
-        #     image, gt = image.get_fdata(), gt.get_fdata()
+        # 4 channels: braintumour
+        # 2 channels: prostate
+        # 1 channel: heart, liver, hippocampus, lung, pancreas, hepaticvessel, spleen, colon
 
-        #     print(image.shape, gt.shape)
-        #     breakpoint()
-
-        #     image = image.transpose(2, 0, 1)
-        #     gt = gt.transpose(2, 0, 1)
-
-        #     import napari
-        #     v = napari.Viewer()
-        #     v.add_image(image)
-        #     v.add_labels(gt.astype("uint8"))
-        #     napari.run()
+        if task_name in ["braintumour", "prostate"]:
+            kwargs["with_channels"] = True
 
         this_dataset = torch_em.default_segmentation_dataset(
             raw_paths=image_paths,
