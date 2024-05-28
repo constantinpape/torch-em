@@ -1,7 +1,7 @@
 import os
 from glob import glob
 from pathlib import Path
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List, Union
 
 import torch_em
 
@@ -68,7 +68,7 @@ def get_msd_dataset(
     path: str,
     patch_shape: Tuple[int, ...],
     ndim: int,
-    task_names: Optional[Union[str, List[str]]] = None,
+    task_names: Union[str, List[str]],
     download: bool = False,
     **kwargs
 ):
@@ -80,34 +80,42 @@ def get_msd_dataset(
 
     Please cite it if you use this dataset for a publication.
 
-    Arguments:
+    Args:
         path: The path to prepare the dataset.
         patch_shape: The patch shape (for 2d or 3d patches)
         ndim: The dimensions of inputs (use `2` for getting `2d` patches, and `3` for getting 3d patches)
-        task_names: The names for the 10 different segmentation tasks.
-            - (default: None) If passed `None`, it takes all the tasks as inputs.
-            - the names of the tasks are (see the challenge website for further details):
-                - braintumour, heart, liver, hippocampus, prostate, lung, pancreas, hepaticvessel, spleen, colon
+        task_names: The names for the 10 different segmentation tasks (see the challenge website for further details):
+            1. tasks with 1 modality inputs are: heart, liver, hippocampus, lung, pancreas, hepaticvessel, spleen, colon
+            2. tasks with multi-modality inputs are:
+                - braintumour: with 4 modality (channel) inputs
+                - prostate: with 2 modality (channel) inputs
         download: Downloads the dataset
+
+    Here's an example for how to pass different tasks:
+    ```python
+    # we want to get datasets for one task, eg. "heart"
+    task_names = ["heart"]
+
+    # we want to get datasets for multiple tasks
+    # NOTE 1: it's important to note that datasets with similar number of modality (channels) can be paired together.
+    # to use different datasets together, you need to use "raw_transform" to update inputs per dataset
+    # to pair as desired patch shapes per batch.
+    # Example 1: "heart", "liver", "lung" all have one modality inputs
+    task_names = ["heart", "lung", "liver"]
+
+    # Example 2: "braintumour" and "prostate" have multi-modal inputs, however the no. of modalities are not equal.
+    # hence, you can use only one at a time.
+    task_names = ["prostate"]
+    ```
     """
-    if task_names is None:
-        task_names = list(URL.keys())
-    else:
-        if isinstance(task_names, str):
-            task_names = [task_names]
+    if isinstance(task_names, str):
+        task_names = [task_names]
 
     _datasets = []
     for task_name in task_names:
         data_dir = get_msd_data(path, task_name, download)
         image_paths = glob(os.path.join(data_dir, Path(FILENAMES[task_name]).stem, "imagesTr", "*.nii.gz"))
         label_paths = glob(os.path.join(data_dir, Path(FILENAMES[task_name]).stem, "labelsTr", "*.nii.gz"))
-
-        # TODO: need to customize parameters for the dataset a bit
-        # for eg. brain tumour segmentation has multiple input channels (4)
-
-        # 4 channels: braintumour
-        # 2 channels: prostate
-        # 1 channel: heart, liver, hippocampus, lung, pancreas, hepaticvessel, spleen, colon
 
         if task_name in ["braintumour", "prostate"]:
             kwargs["with_channels"] = True
@@ -127,7 +135,7 @@ def get_msd_dataset(
 
 
 def get_msd_loader(
-    path, patch_shape, batch_size, ndim, task_names=None, download=False, **kwargs
+    path, patch_shape, batch_size, ndim, task_names, download=False, **kwargs
 ):
     """Dataloader for semantic segmentation from 10 highly variable medical segmentation tasks.
     See `get_msd_dataset` for details.
