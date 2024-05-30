@@ -40,7 +40,7 @@ class Compose:
     def __call__(self, *inputs):
         outputs = self.transforms[0](*inputs)
         for trafo in self.transforms[1:]:
-            outputs = trafo(*outputs)
+            outputs = trafo(outputs)
         return outputs
 
 

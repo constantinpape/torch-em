@@ -138,11 +138,12 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
         return rpath, lpath
 
     patch_shape = kwargs.pop("patch_shape")
-    if len(patch_shape) == 3:
-        if patch_shape[0] != 1:
-            raise ValueError(f"Image collection dataset expects 2d patch shape, got {patch_shape}")
-        patch_shape = patch_shape[1:]
-    assert len(patch_shape) == 2
+    if patch_shape is not None:
+        if len(patch_shape) == 3:
+            if patch_shape[0] != 1:
+                raise ValueError(f"Image collection dataset expects 2d patch shape, got {patch_shape}")
+            patch_shape = patch_shape[1:]
+        assert len(patch_shape) == 2
 
     if isinstance(raw_paths, str):
         raw_paths, label_paths = _get_paths(raw_paths, raw_key, label_paths, label_key, roi)

@@ -250,7 +250,7 @@ def add_instance_label_transform(
     return kwargs, label_dtype
 
 
-def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kwargs=None):
+def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kwargs=None, ensure_rgb=None):
     """
     Checks for raw_transform and label_transform incoming values.
     If yes, it will automatically merge these two transforms to apply them together.
@@ -266,7 +266,8 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
         trafo = Compose(raw_trafo, kwargs["raw_transform"])
         kwargs["raw_transform"] = trafo
     else:
-        kwargs["raw_transform"] = Compose(raw_trafo, get_raw_transform())
+        assert not isinstance(ensure_rgb, bool), "'ensure_rgb' is expected to be a function."
+        kwargs["raw_transform"] = Compose(raw_trafo, get_raw_transform(augmentation2=ensure_rgb))
 
     if "label_transform" in kwargs:
         trafo = Compose(label_trafo, kwargs["label_transform"])
