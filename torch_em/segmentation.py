@@ -339,7 +339,7 @@ def default_segmentation_trainer(
     compile_model=None,
     rank=None,
 ):
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, **optimizer_kwargs)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, **optimizer_kwargs)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)
 
     loss = DiceLoss() if loss is None else loss
