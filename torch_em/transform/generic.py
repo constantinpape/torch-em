@@ -34,13 +34,18 @@ class Tile(torch.nn.Module):
 
 # a simple way to compose transforms
 class Compose:
-    def __init__(self, *transforms):
+    def __init__(self, *transforms, is_multi_tensor=True):
         self.transforms = transforms
+        self.is_multi_tensor = is_multi_tensor
 
     def __call__(self, *inputs):
         outputs = self.transforms[0](*inputs)
         for trafo in self.transforms[1:]:
-            outputs = trafo(outputs)
+            if self.is_multi_tensor:
+                outputs = trafo(*outputs)
+            else:
+                outputs = trafo(outputs)
+
         return outputs
 
 
