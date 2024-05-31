@@ -223,7 +223,11 @@ def _assort_sa_med2d_data(data_dir):
                     continue
 
             per_gt = imageio.imread(os.path.join(data_dir, gfile))
-            assert per_gt.shape == shape
+
+            # HACK: need to see if we can resize this inputs
+            if per_gt.shape != shape:
+                print("Skipping these mismatching images, we would like to resize them later.")
+                continue
 
             # HACK: (UPDATE) optic disk is mapped as 0, and background as 1
             if dataset == "ichallenge_adam_task2":
@@ -233,6 +237,8 @@ def _assort_sa_med2d_data(data_dir):
 
         instances = relabel_sequential(instances)[0]
         imageio.imwrite(gt_path, instances, compression="zlib")
+
+    breakpoint()
 
 
 def _get_split_wise_paths(data_dir, split):
@@ -249,7 +255,7 @@ def _get_split_wise_paths(data_dir, split):
 def _get_sa_med2d_paths(path, split, exclude_dataset, exclude_modality, download):
     data_dir = get_sa_med2d_data(path=path, download=download)
 
-    _assort_sa_med2d_data(data_dir=data_dir, download=download)
+    _assort_sa_med2d_data(data_dir=data_dir)
     image_paths, gt_paths = _get_split_wise_paths(data_dir=data_dir, split=split)
 
     return image_paths, gt_paths

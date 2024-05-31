@@ -9,6 +9,7 @@ def check_sa_med2d():
     loader = get_sa_med2d_loader(
         path=ROOT,
         patch_shape=(512, 512),
+        split="train",
         batch_size=2,
         resize_inputs=True,
         exclude_dataset=None,
