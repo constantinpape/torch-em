@@ -10,7 +10,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 def setup(rank, world_size):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
-    dist.init_process_grop("nccl", rank=rank, world_size=world_size)
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 
 def cleanup():
@@ -18,25 +18,37 @@ def cleanup():
 
 
 def _train_impl(
-    rank, world_size, model_class, model_kwargs, n_iterations, trainer_class, **kwargs
+    rank, world_size,
+    model_callable, model_kwargs,
+    train_loader_callable, train_loader_kwargs,
+    val_loader_callable, val_loader_kwargs,
+    iterations, **kwargs
 ):
     assert "device" not in kwargs
-    print("Running DDP on rank {rank}.")
+    print(f"Running DDP on rank {rank}.")
     setup(rank, world_size)
 
-    model = model_class(**model_kwargs).to(rank)
+    model = model_callable(**model_kwargs).to(rank)
     ddp_model = DDP(model, device_ids=[rank])
 
-    # TODO train and val loader!
+    train_loader = train_loader_callable(**train_loader_kwargs)
+    val_loader = val_loader_callable(**val_loader_kwargs)
 
-    trainer = torch_em.default_segmentation_trainer(model=ddp_model, **kwargs)
-    trainer.fit(n_iterations=n_iterations)
+    trainer = torch_em.default_segmentation_trainer(
+        model=ddp_model, train_loader=train_loader, val_loader=val_loader,
+        device=rank, rank=rank, **kwargs
+    )
+    trainer.fit(iterations=iterations)
 
     cleanup()
 
 
-# TODO we need to also accept the train and val loader, but first make sure that works with multi-processing
-def train_multi_gpu(model_class, model_kwargs, n_iterations, **kwargs) -> None:
+def train_multi_gpu(
+    model_callable, model_kwargs,
+    train_loader_callable, train_loader_kwargs,
+    val_loader_callable, val_loader_kwargs,
+    iterations, **kwargs
+) -> None:
     """
 
     Args:
@@ -44,5 +56,11 @@ def train_multi_gpu(model_class, model_kwargs, n_iterations, **kwargs) -> None:
         kwargs: Keyword arguments for `torch_em.segmentation.default_segmentation_trainer`.
     """
     world_size = torch.cuda.device_count()
-    train = partial(_train_impl, model_class=model_class, model_kwargs=model_kwargs, **kwargs)
+    train = partial(
+        _train_impl,
+        model_callable=model_callable, model_kwargs=model_kwargs,
+        train_loader_callable=train_loader_callable, train_loader_kwargs=train_loader_kwargs,
+        val_loader_callable=val_loader_callable, val_loader_kwargs=val_loader_kwargs,
+        iterations=iterations, **kwargs
+    )
     torch.multiprocessing.spawn(train, args=(world_size,), nprocs=world_size, join=True)
