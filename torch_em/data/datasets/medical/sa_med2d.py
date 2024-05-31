@@ -7,6 +7,7 @@ import json
 import numpy as np
 import imageio.v3 as imageio
 from skimage.segmentation import relabel_sequential
+from sklearn.model_selection import train_test_split
 
 import torch_em
 
@@ -241,22 +242,64 @@ def _assort_sa_med2d_data(data_dir):
     breakpoint()
 
 
-def _get_split_wise_paths(data_dir, split):
-    json_file = os.path.join(data_dir, "preprocessed_inputs.json")
-    if os.path.exists(json_file):
-        ...
-    else:
-        # 1. load all the image filenames and group them under datasets
-        # 2. make a 10% 90% train val split (as we will have more than enough val samples)
-        # 3. store them in the aforementioned json file
-        ...
+def _create_splits_per_dataset(data_dir, json_file, val_fraction=0.1):
+    with open(os.path.join(data_dir, "SAMed2D_v1.json")) as f:
+        data = json.load(f)
+
+    image_files = list(data.keys())
+
+    # now, get's group them data-wise and make splits per dataset
+    data_dict = {}
+    for image_file in image_files:
+        _image_file = os.path.split(image_file)[-1]
+        splits = _image_file.split("--")
+        dataset = splits[1]
+
+        if dataset in data_dict:
+            data_dict[dataset].append(_image_file)
+        else:
+            data_dict[dataset] = [_image_file]
+
+    # next, let's make a train-val split out of the dataset and write them in a json file
+    train_dict, val_dict = {}, {}
+    for dataset, dfiles in data_dict.items():
+        tr_split, val_split = train_test_split(dfiles, test_size=val_fraction)
+        train_dict[dataset] = tr_split
+        val_dict[dataset] = val_split
+
+    fdict = {"train": train_dict, "val": val_dict}
+    with open(json_file, "w") as f:
+        json.dump(fdict, f)
+
+
+def _get_split_wise_paths(data_dir, json_file, split):
+    with open(json_file, "r") as f:
+        data = json.read(f)
+
+    image_files = data[split]
+    image_paths, gt_paths = [], []
+    for dfiles in image_files.values():
+        per_dataset_ipaths = [os.path.join(data_dir, fname) for fname in dfiles]
+        per_dataset_gpaths = [
+            Path(os.path.join(data_dir, "preprocessed_instances", fname)).with_suffix(".tif") for fname in dfiles
+        ]
+
+        image_paths.append(*per_dataset_ipaths)
+        gt_paths.append(*per_dataset_gpaths)
+
+    return image_paths, gt_paths
 
 
 def _get_sa_med2d_paths(path, split, exclude_dataset, exclude_modality, download):
     data_dir = get_sa_med2d_data(path=path, download=download)
 
     _assort_sa_med2d_data(data_dir=data_dir)
-    image_paths, gt_paths = _get_split_wise_paths(data_dir=data_dir, split=split)
+
+    json_file = os.path.join(data_dir, "preprocessed_inputs.json")
+    if not os.path.exists(json_file):
+        _create_splits_per_dataset(data_dir=data_dir, json_file=json_file)
+
+    image_paths, gt_paths = _get_split_wise_paths(data_dir, json_file, split)
 
     return image_paths, gt_paths
 
