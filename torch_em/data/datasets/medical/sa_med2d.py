@@ -190,6 +190,7 @@ def _assort_sa_med2d_data(data_dir):
     gt_instances_dir = os.path.join(data_dir, "preprocessed_instances")
     os.makedirs(gt_instances_dir, exist_ok=True)
 
+    skipped_files = []
     for ifile in tqdm(image_files):
         image_path = os.path.join(data_dir, ifile)
         image_id = Path(image_path).stem
@@ -204,6 +205,7 @@ def _assort_sa_med2d_data(data_dir):
 
         # HACK: (SKIP) there are some known images which are pretty weird (binary brain masks as inputs)
         if splits[2].find("brain-growth") != -1:
+            skipped_files.append(ifile)
             continue
 
         # let's get the shape of the image
@@ -213,6 +215,7 @@ def _assort_sa_med2d_data(data_dir):
         # HACK: (SKIP) there are weird images which appear to be whole brain binary masks
         if dataset == "Brain_PTM":
             if len(np.unique(image)) == 2:  # easy check for binary values in the input image
+                skipped_files.append(ifile)
                 continue
 
         # let's create an empty array and merge all segmentations into one
@@ -227,7 +230,7 @@ def _assort_sa_med2d_data(data_dir):
 
             # HACK: need to see if we can resize this inputs
             if per_gt.shape != shape:
-                print("Skipping these mismatching images, we would like to resize them later.")
+                print("Skipping these images with mismatching ground-truth shapes.")
                 continue
 
             # HACK: (UPDATE) optic disk is mapped as 0, and background as 1
@@ -239,18 +242,24 @@ def _assort_sa_med2d_data(data_dir):
         instances = relabel_sequential(instances)[0]
         imageio.imwrite(gt_path, instances, compression="zlib")
 
-    breakpoint()
+    return skipped_files
 
 
-def _create_splits_per_dataset(data_dir, json_file, val_fraction=0.1):
+def _create_splits_per_dataset(data_dir, json_file, skipped_files, val_fraction=0.1):
     with open(os.path.join(data_dir, "SAMed2D_v1.json")) as f:
         data = json.load(f)
 
     image_files = list(data.keys())
 
+    breakpoint()
+
     # now, get's group them data-wise and make splits per dataset
     data_dict = {}
     for image_file in image_files:
+        if image_file in skipped_files:
+            print("Skipping this file:", image_file)
+            continue
+
         _image_file = os.path.split(image_file)[-1]
         splits = _image_file.split("--")
         dataset = splits[1]
@@ -274,18 +283,18 @@ def _create_splits_per_dataset(data_dir, json_file, val_fraction=0.1):
 
 def _get_split_wise_paths(data_dir, json_file, split):
     with open(json_file, "r") as f:
-        data = json.read(f)
+        data = json.load(f)
 
     image_files = data[split]
     image_paths, gt_paths = [], []
     for dfiles in image_files.values():
-        per_dataset_ipaths = [os.path.join(data_dir, fname) for fname in dfiles]
+        per_dataset_ipaths = [os.path.join(data_dir, "images", fname) for fname in dfiles]
         per_dataset_gpaths = [
-            Path(os.path.join(data_dir, "preprocessed_instances", fname)).with_suffix(".tif") for fname in dfiles
+            os.path.join(data_dir, "preprocessed_instances", f"{Path(fname).stem}.tif") for fname in dfiles
         ]
 
-        image_paths.append(*per_dataset_ipaths)
-        gt_paths.append(*per_dataset_gpaths)
+        image_paths.extend(per_dataset_ipaths)
+        gt_paths.extend(per_dataset_gpaths)
 
     return image_paths, gt_paths
 
@@ -293,11 +302,10 @@ def _get_split_wise_paths(data_dir, json_file, split):
 def _get_sa_med2d_paths(path, split, exclude_dataset, exclude_modality, download):
     data_dir = get_sa_med2d_data(path=path, download=download)
 
-    _assort_sa_med2d_data(data_dir=data_dir)
-
     json_file = os.path.join(data_dir, "preprocessed_inputs.json")
     if not os.path.exists(json_file):
-        _create_splits_per_dataset(data_dir=data_dir, json_file=json_file)
+        skipped_files = _assort_sa_med2d_data(data_dir=data_dir)
+        _create_splits_per_dataset(data_dir=data_dir, json_file=json_file, skipped_files=skipped_files)
 
     image_paths, gt_paths = _get_split_wise_paths(data_dir, json_file, split)
 
