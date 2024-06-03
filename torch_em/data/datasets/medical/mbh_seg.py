@@ -42,9 +42,20 @@ def get_mbh_seg_dataset(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataset for segmentation of multi-class intracranial hemorrhages in non-contrast CT scans.
+
+    This dataset is from the MBH-Seg Challenge (https://mbh-seg.com/):
+    - https://kaggle.com/competitions/rsna-intracranial-hemorrhage-detection (original scans)
+
+    Please cite it if you use the dataset for your publication.
     """
     image_paths, gt_paths = _get_mbh_seg_paths(path=path, download=download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
@@ -66,7 +77,8 @@ def get_mbh_seg_loader(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataloader for segmentation of multi-class intracranial hemorrhages in non-contrast CT scans.
+    See `get_mbh_seg_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_mbh_seg_dataset(
