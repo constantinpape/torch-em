@@ -11,7 +11,7 @@ def check_pengwin():
         path=ROOT,
         patch_shape=(1, 512, 512),
         batch_size=2,
-        modality="MRI",
+        modality="CT",
         resize_inputs=False,
         download=False,
         sampler=MinInstanceSampler(),

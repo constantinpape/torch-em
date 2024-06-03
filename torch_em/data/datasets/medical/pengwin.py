@@ -38,8 +38,8 @@ def get_pengwin_data(path, modality, download):
     os.makedirs(path, exist_ok=True)
 
     data_dir = os.path.join(path, "data")
-    # if os.path.exists(data_dir):
-    #     return data_dir
+    if os.path.exists(data_dir):
+        return data_dir
 
     urls = URLS[modality]
     checksums = CHECKSUMS[modality]
@@ -47,8 +47,6 @@ def get_pengwin_data(path, modality, download):
 
     for url, checksum, dst_dir in zip(urls, checksums, dst_dirs):
         zip_path = os.path.join(path, os.path.split(url)[-1])
-        print(zip_path)
-        breakpoint()
         util.download_source(path=zip_path, url=url, download=download, checksum=checksum)
         util.unzip(zip_path=zip_path, dst=os.path.join(data_dir, dst_dir), remove=False)
 
@@ -59,12 +57,12 @@ def _get_pengwin_paths(path, modality, download):
     if not isinstance(modality, str) and modality in MODALITIES:
         raise ValueError(f"Please choose a modality from {MODALITIES}.")
 
-    data_dir = get_pengwin_data(path=path, download=download)
+    data_dir = get_pengwin_data(path=path, modality=modality, download=download)
 
     if modality == "CT":
         image_paths = natsorted(glob(os.path.join(data_dir, modality, "images", "*.mha")))
         gt_paths = natsorted(glob(os.path.join(data_dir, modality, "labels", "*.mha")))
-    else:
+    else:  # X-Ray
         base_dir = os.path.join(data_dir, modality, "train")
         image_paths = natsorted(glob(os.path.join(base_dir, "input", "images", "*.tif")))
         gt_paths = natsorted(glob(os.path.join(base_dir, "output", "images", "*.tif")))
@@ -98,9 +96,9 @@ def get_pengwin_dataset(
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
-        raw_key="data",
+        raw_key=None,
         label_paths=gt_paths,
-        label_key="data",
+        label_key=None,
         patch_shape=patch_shape,
         **kwargs
     )
