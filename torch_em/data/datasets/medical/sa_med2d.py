@@ -320,7 +320,7 @@ def get_sa_med2d_dataset(
     download: bool = False,
     **kwargs
 ):
-    """Dataset...
+    """Dataset for segmentation of various organs and structures in multiple medical imaging modalities.
 
     You should download the dataset yourself. See `get_sa_med2d_data` for details.
 
@@ -371,7 +371,7 @@ def get_sa_med2d_loader(
     download: bool = False,
     **kwargs
 ):
-    """Dataloader...
+    """Dataloader for segmentation of various organs and structures in multiple medical imaging modalities.
     See `get_sa_med2d_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
