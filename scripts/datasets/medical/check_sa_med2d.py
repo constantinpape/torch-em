@@ -18,11 +18,6 @@ def check_sa_med2d():
         num_workers=32,
     )
 
-    for x, y in loader:
-        print(x.shape, y.shape)
-
-    breakpoint()
-
     check_loader(loader, 8, plt=True, save_path="./sa-med2d.png")
 
 
