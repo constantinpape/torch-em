@@ -251,8 +251,6 @@ def _create_splits_per_dataset(data_dir, json_file, skipped_files, val_fraction=
 
     image_files = list(data.keys())
 
-    breakpoint()
-
     # now, get's group them data-wise and make splits per dataset
     data_dict = {}
     for image_file in image_files:
@@ -345,6 +343,8 @@ def get_sa_med2d_dataset(
             ensure_rgb=to_rgb,
         )
 
+    print("Creating the dataset for the SA-Med2D-20M dataset. This takes a bit of time.")
+
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
@@ -385,5 +385,6 @@ def get_sa_med2d_loader(
         download=download,
         **ds_kwargs
     )
+    print("Creating the dataloader for the SA-Med2D-20M dataset. This takes a bit of time.")
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader

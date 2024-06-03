@@ -15,6 +15,7 @@ def check_sa_med2d():
         exclude_dataset=None,
         exclude_modality=None,
         download=False,
+        num_workers=32,
     )
 
     for x, y in loader:
