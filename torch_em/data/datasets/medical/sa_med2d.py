@@ -1,7 +1,8 @@
 import os
+import random
 from tqdm import tqdm
 from pathlib import Path
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional
 
 import json
 import numpy as np
@@ -121,6 +122,16 @@ MODALITY_NAMES = [
     'mr_t1gd', 'mr_t1w', 'mr_t2', 'mr_t2w', 'mr_tmax', 'mr_ttp',
     # mono-channel modalities
     'pet_00', 'ultrasound_00', 'x_ray'
+]
+
+
+# datasets under 1000 samples
+SMALL_DATASETS = [
+    "crass", "covid_19_ct_cxr", "cvc_clinicdb", "cranium", "CrossMoDA21", "EMIDEC",
+    "endovis15", "fusc2021", "Heart_Seg_MRI", "ichallenge_adam_task2", "gamma", "gamma3",
+    "Instance22", "LNDb", "MSD_Heart", "MSD_Prostate", "MSD_Spleen", "MSD_Colon",
+    "picai_baseline", "picai_semi", "Promise09", "PROMISE12", "Pulmonary_Chest_X-Ray_Abnormalities_seg",
+    "QUBIQ2020", "breast_ultrasound_images_dataset", "kvasircapsule_seg", "sz_cxr", "kvasir_seg"
 ]
 
 
@@ -279,13 +290,32 @@ def _create_splits_per_dataset(data_dir, json_file, skipped_files, val_fraction=
         json.dump(fdict, f)
 
 
-def _get_split_wise_paths(data_dir, json_file, split):
+def _get_split_wise_paths(data_dir, json_file, split, exclude_dataset, exclude_modality, n_fraction_per_dataset):
     with open(json_file, "r") as f:
         data = json.load(f)
+
+    if exclude_dataset is not None and not isinstance(exclude_dataset, list):
+        exclude_dataset = [exclude_dataset]
+
+    if exclude_modality is not None and not isinstance(exclude_modality, list):
+        exclude_modality = [exclude_modality]
 
     image_files = data[split]
     image_paths, gt_paths = [], []
     for dfiles in image_files.values():
+        splits = dfiles[0].split("--")
+        modality = splits[0]
+        dataset = splits[1]
+
+        if exclude_dataset is not None and dataset in exclude_dataset:
+            continue
+
+        if exclude_modality is not None and modality in exclude_modality:
+            continue
+
+        if n_fraction_per_dataset is not None and dataset not in SMALL_DATASETS:
+            dfiles = random.sample(dfiles, k=int(n_fraction_per_dataset * len(dfiles)))
+
         per_dataset_ipaths = [os.path.join(data_dir, "images", fname) for fname in dfiles]
         per_dataset_gpaths = [
             os.path.join(data_dir, "preprocessed_instances", f"{Path(fname).stem}.tif") for fname in dfiles
@@ -297,7 +327,7 @@ def _get_split_wise_paths(data_dir, json_file, split):
     return image_paths, gt_paths
 
 
-def _get_sa_med2d_paths(path, split, exclude_dataset, exclude_modality, download):
+def _get_sa_med2d_paths(path, split, exclude_dataset, exclude_modality, n_fraction_per_dataset, download):
     data_dir = get_sa_med2d_data(path=path, download=download)
 
     json_file = os.path.join(data_dir, "preprocessed_inputs.json")
@@ -305,7 +335,14 @@ def _get_sa_med2d_paths(path, split, exclude_dataset, exclude_modality, download
         skipped_files = _assort_sa_med2d_data(data_dir=data_dir)
         _create_splits_per_dataset(data_dir=data_dir, json_file=json_file, skipped_files=skipped_files)
 
-    image_paths, gt_paths = _get_split_wise_paths(data_dir, json_file, split)
+    image_paths, gt_paths = _get_split_wise_paths(
+        data_dir=data_dir,
+        json_file=json_file,
+        split=split,
+        exclude_dataset=exclude_dataset,
+        exclude_modality=exclude_modality,
+        n_fraction_per_dataset=n_fraction_per_dataset
+    )
 
     return image_paths, gt_paths
 
@@ -315,8 +352,9 @@ def get_sa_med2d_dataset(
     patch_shape: Tuple[int, int],
     split: str,
     resize_inputs: bool = False,
-    exclude_dataset: bool = None,
-    exclude_modality: bool = None,
+    exclude_dataset: Optional[Union[str, list]] = None,
+    exclude_modality: Optional[Union[str, list]] = None,
+    n_fraction_per_dataset: Optional[float] = None,
     download: bool = False,
     **kwargs
 ):
@@ -330,7 +368,12 @@ def get_sa_med2d_dataset(
     Please cite it if you use it in a publication.
     """
     image_paths, gt_paths = _get_sa_med2d_paths(
-        path=path, split=split, exclude_dataset=exclude_dataset, exclude_modality=exclude_modality, download=download,
+        path=path,
+        split=split,
+        exclude_dataset=exclude_dataset,
+        exclude_modality=exclude_modality,
+        n_fraction_per_dataset=n_fraction_per_dataset,
+        download=download,
     )
 
     if resize_inputs:
@@ -366,8 +409,9 @@ def get_sa_med2d_loader(
     batch_size: int,
     split: str,
     resize_inputs: bool = False,
-    exclude_dataset: bool = None,
-    exclude_modality: bool = None,
+    exclude_dataset: Optional[Union[str, list]] = None,
+    exclude_modality: Optional[Union[str, list]] = None,
+    n_fraction_per_dataset: Optional[float] = None,
     download: bool = False,
     **kwargs
 ):
@@ -382,6 +426,7 @@ def get_sa_med2d_loader(
         resize_inputs=resize_inputs,
         exclude_dataset=exclude_dataset,
         exclude_modality=exclude_modality,
+        n_fraction_per_dataset=n_fraction_per_dataset,
         download=download,
         **ds_kwargs
     )

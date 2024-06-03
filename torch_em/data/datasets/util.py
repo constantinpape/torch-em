@@ -267,7 +267,13 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
         kwargs["raw_transform"] = trafo
     else:
         assert not isinstance(ensure_rgb, bool), "'ensure_rgb' is expected to be a function."
-        kwargs["raw_transform"] = Compose(raw_trafo, get_raw_transform(augmentation2=ensure_rgb), is_multi_tensor=False)
+
+        if ensure_rgb is None:
+            trafos = [raw_trafo, get_raw_transform()]
+        else:
+            trafos = [ensure_rgb, raw_trafo, get_raw_transform()]
+
+        kwargs["raw_transform"] = Compose(*trafos, is_multi_tensor=False)
 
     if "label_transform" in kwargs:
         trafo = Compose(label_trafo, kwargs["label_transform"], is_multi_tensor=False)
