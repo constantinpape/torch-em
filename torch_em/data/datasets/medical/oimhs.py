@@ -86,6 +86,10 @@ def get_oimhs_dataset(
     **kwargs
 ):
     """Dataset for segmentation of macular hole and retinal regions in OCT scans.
+
+    The dataset is from Ye et al. - https://doi.org/10.1038/s41597-023-02675-1.
+
+    Please cite it if you use this dataset for your publication.
     """
     image_paths, gt_paths = _get_oimhs_paths(path=path, download=download)
 
