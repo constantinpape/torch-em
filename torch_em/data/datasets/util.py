@@ -154,7 +154,7 @@ def download_source_empiar(path, access_id, download):
     return download_path
 
 
-def download_source_kaggle(path, dataset_name, download):
+def download_source_kaggle(path, dataset_name, download, competition=False):
     if not download:
         raise RuntimeError(f"Cannot fine the data at {path}, but download was set to False.")
 
@@ -168,7 +168,11 @@ def download_source_kaggle(path, dataset_name, download):
 
     api = KaggleApi()
     api.authenticate()
-    api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
+
+    if competition:
+        api.competition_download_files(competition=dataset_name, path=path, quiet=False)
+    else:
+        api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
 
 
 def download_source_tcia(path, url, dst, csv_filename, download):
