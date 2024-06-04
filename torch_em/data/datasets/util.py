@@ -196,6 +196,27 @@ def update_kwargs(kwargs, key, value, msg=None):
     return kwargs
 
 
+def unzip_tarfile(tar_path, dst, remove=True):
+    import tarfile
+
+    if tar_path.endswith(".tar.gz"):
+        access_mode = "r:gz"
+    elif tar_path.endswith(".tar"):
+        access_mode = "r:"
+    else:
+        raise ValueError(
+            "The provided file isn't a supported archive to unpack. ",
+            f"Please check the file: {tar_path}"
+        )
+
+    tar = tarfile.open(tar_path, access_mode)
+    tar.extractall(dst)
+    tar.close()
+
+    if remove:
+        os.remove(tar_path)
+
+
 def unzip(zip_path, dst, remove=True):
     with zipfile.ZipFile(zip_path, "r") as f:
         f.extractall(dst)
