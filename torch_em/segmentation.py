@@ -250,8 +250,11 @@ def default_segmentation_dataset(
     is_seg_dataset=None,
     with_channels=False,
     with_label_channels=False,
+    verify_paths=True,
 ):
-    check_paths(raw_paths, label_paths)
+    if verify_paths:
+        check_paths(raw_paths, label_paths)
+
     if is_seg_dataset is None:
         is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
 
