@@ -10,7 +10,7 @@ def check_montgomery():
         path=ROOT,
         patch_shape=(512, 512),
         batch_size=2,
-        resize_inputs=False,
+        resize_inputs=True,
         download=True,
     )
 
