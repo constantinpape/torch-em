@@ -8,7 +8,7 @@ ROOT = "/media/anwai/ANWAI/data/uwaterloo_skinseg"
 def check_uwaterloo_skin():
     loader = get_uwaterloo_skin_loader(
         path=ROOT,
-        patch_shape=(256, 256),
+        patch_shape=(512, 512),
         batch_size=2,
         resize_inputs=True,
         download=True,
