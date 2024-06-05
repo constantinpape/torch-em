@@ -17,12 +17,29 @@ def cleanup():
     dist.destroy_process_group()
 
 
+def _create_data_loader(ds_callable, ds_kwargs, loader_kwargs, world_size, rank):
+    # Create the dataset.
+    ds = ds_callable(**ds_kwargs)
+
+    # Create the sampler
+    # Set shuffle on the sampler instead of the loader
+    shuffle = loader_kwargs.pop("shuffle", False)
+    sampler = torch.utils.data.distributed.DistributedSampler(ds, num_replicas=world_size, rank=rank, shuffle=shuffle)
+
+    # Create the loader.
+    loader = torch.utils.data.DataLoader(ds, sampler=sampler, **loader_kwargs)
+    # loader = torch.utils.data.DataLoader(ds, shuffle=shuffle, **loader_kwargs)
+    # loader.shuffle = shuffle
+
+    return loader
+
+
 def _train_impl(
     rank, world_size,
     model_callable, model_kwargs,
-    train_loader_callable, train_loader_kwargs,
-    val_loader_callable, val_loader_kwargs,
-    iterations, **kwargs
+    train_dataset_callable, train_dataset_kwargs,
+    val_dataset_callable, val_dataset_kwargs,
+    loader_kwargs, iterations, **kwargs
 ):
     assert "device" not in kwargs
     print(f"Running DDP on rank {rank}.")
@@ -31,8 +48,8 @@ def _train_impl(
     model = model_callable(**model_kwargs).to(rank)
     ddp_model = DDP(model, device_ids=[rank])
 
-    train_loader = train_loader_callable(**train_loader_kwargs)
-    val_loader = val_loader_callable(**val_loader_kwargs)
+    train_loader = _create_data_loader(train_dataset_callable, train_dataset_kwargs, loader_kwargs, world_size, rank)
+    val_loader = _create_data_loader(val_dataset_callable, val_dataset_kwargs, loader_kwargs, world_size, rank)
 
     trainer = torch_em.default_segmentation_trainer(
         model=ddp_model, train_loader=train_loader, val_loader=val_loader,
@@ -45,9 +62,9 @@ def _train_impl(
 
 def train_multi_gpu(
     model_callable, model_kwargs,
-    train_loader_callable, train_loader_kwargs,
-    val_loader_callable, val_loader_kwargs,
-    iterations, **kwargs
+    train_dataset_callable, train_dataset_kwargs,
+    val_dataset_callable, val_dataset_kwargs,
+    loader_kwargs, iterations, **kwargs
 ) -> None:
     """
 
@@ -59,8 +76,8 @@ def train_multi_gpu(
     train = partial(
         _train_impl,
         model_callable=model_callable, model_kwargs=model_kwargs,
-        train_loader_callable=train_loader_callable, train_loader_kwargs=train_loader_kwargs,
-        val_loader_callable=val_loader_callable, val_loader_kwargs=val_loader_kwargs,
-        iterations=iterations, **kwargs
+        train_dataset_callable=train_dataset_callable, train_dataset_kwargs=train_dataset_kwargs,
+        val_dataset_callable=val_dataset_callable, val_dataset_kwargs=val_dataset_kwargs,
+        loader_kwargs=loader_kwargs, iterations=iterations, **kwargs
     )
     torch.multiprocessing.spawn(train, args=(world_size,), nprocs=world_size, join=True)
