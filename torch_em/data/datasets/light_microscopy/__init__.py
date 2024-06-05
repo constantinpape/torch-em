@@ -10,5 +10,6 @@ from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
 )
+from .orgasegment import get_orgasegment_dataset, get_orgasegment_loader
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
