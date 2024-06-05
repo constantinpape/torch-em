@@ -40,6 +40,7 @@ def _get_jnuifm_paths(path, download):
 def get_jnuifm_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
@@ -54,6 +55,12 @@ def get_jnuifm_dataset(
     """
     image_paths, gt_paths = _get_jnuifm_paths(path=path, download=download)
 
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
+
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
@@ -62,6 +69,7 @@ def get_jnuifm_dataset(
         patch_shape=patch_shape,
         ndim=2,
         with_channels=True,
+        is_seg_dataset=False,
         **kwargs
     )
 
@@ -72,6 +80,7 @@ def get_jnuifm_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     batch_size: int,
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
@@ -80,6 +89,8 @@ def get_jnuifm_loader(
     See `get_jnuifm_loader` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_jnuifm_dataset(path=path, patch_shape=patch_shape, download=download, **ds_kwargs)
+    dataset = get_jnuifm_dataset(
+        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
+    )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
