@@ -1,3 +1,4 @@
+from torch_em.data import MinInstanceSampler
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_sega_loader
 
@@ -10,8 +11,11 @@ def check_sega():
         path=ROOT,
         patch_shape=(1, 512, 512),
         batch_size=2,
-        resize_inputs=False,
+        ndim=2,
+        data_choice="KiTS",
+        resize_inputs=True,
         download=True,
+        sampler=MinInstanceSampler(),
     )
 
     check_loader(loader, 8)

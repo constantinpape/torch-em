@@ -4,6 +4,7 @@ import os
 import numpy as np
 
 from elf.io import open_file
+
 try:
     import imageio.v3 as imageio
 except ImportError:
@@ -13,6 +14,7 @@ try:
     import tifffile
 except ImportError:
     tifffile = None
+
 
 TIF_EXTS = (".tif", ".tiff")
 
@@ -35,6 +37,9 @@ def load_image(image_path, memmap=True):
         return tifffile.memmap(image_path, mode="r")
     elif tifffile is not None and os.path.splitext(image_path)[1].lower() in (".tiff", ".tif"):
         return tifffile.imread(image_path)
+    elif os.path.splitext(image_path)[1].lower() in (".nrrd"):
+        import nrrd
+        return nrrd.read(image_path)[0]
     else:
         return imageio.imread(image_path)
 

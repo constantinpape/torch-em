@@ -2,7 +2,7 @@ import os
 from glob import glob
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional, Literal
 
 import torch_em
 
@@ -22,7 +22,7 @@ CHECKSUMS = {
 }
 
 ZIPFILES = {
-    "kits": "KiTs.zip",
+    "kits": "KiTS.zip",
     "rider": "Rider.zip",
     "dongyang": "Dongyang.zip"
 }
@@ -30,6 +30,8 @@ ZIPFILES = {
 
 def get_sega_data(path, data_choice, download):
     os.makedirs(path, exist_ok=True)
+
+    data_choice = data_choice.lower()
 
     zip_fid = ZIPFILES[data_choice]
 
@@ -46,10 +48,14 @@ def get_sega_data(path, data_choice, download):
     return data_dir
 
 
-def _get_sega_paths(path, download):
-    data_dirs = [
-        get_sega_data(path=path, data_choice=data_choice, download=download) for data_choice in list(URL.keys())
-    ]
+def _get_sega_paths(path, data_choice, download):
+    if data_choice is None:
+        data_choices = URL.keys()
+    else:
+        if isinstance(data_choice, str):
+            data_choices = [data_choice]
+
+    data_dirs = [get_sega_data(path=path, data_choice=data_choice, download=download) for data_choice in data_choices]
 
     image_paths, gt_paths = [], []
     for data_dir in data_dirs:
@@ -66,6 +72,7 @@ def _get_sega_paths(path, download):
 def get_sega_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
+    data_choice: Optional[Literal["KiTS", "Rider", "Dongyang"]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -75,7 +82,7 @@ def get_sega_dataset(
     This dataset is from Pepe et al. - https://doi.org/10.1007/978-3-031-53241-2
     Please cite it if you use this dataset for a publication.
     """
-    image_paths, gt_paths = _get_sega_paths(path=path, download=download)
+    image_paths, gt_paths = _get_sega_paths(path=path, data_choice=data_choice, download=download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -83,9 +90,6 @@ def get_sega_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs,
         )
 
-    # TODO: need to check the nrrd inputs and see if:
-    # - a. do we need to make some changes in the dataset
-    # - b. OR, we can use the dataset just like that and need to update "load_image" to accept nrrd files
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
@@ -102,6 +106,7 @@ def get_sega_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     batch_size: int,
+    data_choice: Optional[Literal["KiTS", "Rider", "Dongyang"]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -110,7 +115,12 @@ def get_sega_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_sega_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
+        path=path,
+        patch_shape=patch_shape,
+        data_choice=data_choice,
+        resize_inputs=resize_inputs,
+        download=download,
+        **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
