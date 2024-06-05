@@ -206,6 +206,7 @@ def default_segmentation_loader(
     is_seg_dataset=None,
     with_channels=False,
     with_label_channels=False,
+    verify_paths=True,
     **loader_kwargs,
 ):
     ds = default_segmentation_dataset(
@@ -227,6 +228,7 @@ def default_segmentation_loader(
         is_seg_dataset=is_seg_dataset,
         with_channels=with_channels,
         with_label_channels=with_label_channels,
+        verify_paths=verify_paths,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -250,8 +252,11 @@ def default_segmentation_dataset(
     is_seg_dataset=None,
     with_channels=False,
     with_label_channels=False,
+    verify_paths=True,
 ):
-    check_paths(raw_paths, label_paths)
+    if verify_paths:
+        check_paths(raw_paths, label_paths)
+
     if is_seg_dataset is None:
         is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
 
