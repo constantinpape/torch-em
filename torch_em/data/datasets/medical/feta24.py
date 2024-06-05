@@ -11,7 +11,21 @@ from .. import util
 def get_feta24_data(path, download):
     """This function describes the download fucntionality and ensures your data has been downloaded in expected format.
 
-    TODO
+    The dataset is from the FeTa Challenge 2024 - https://fetachallenge.github.io/ (Task 1: Segmentation).
+    A detailed description of the dataset is provided here: https://fetachallenge.github.io/pages/Data_description.
+    To download the dataset, please follow the below mentioned steps:
+    - Go to the section `1. Request access and download the FeTa 2024 data from the University Children's Hospital
+    Zurich` at `https://fetachallenge.github.io/pages/Data_download`, which explains the steps to be a registered user
+    in Synapse platform and expects the user to agree with the mentioned conditions.
+    - While registration, the users are expected to provide some information
+    (see https://fetachallenge.github.io/pages/Data_download for details).
+    - Next, you can proceed with requesting access (by following provided instructions) at
+    https://www.synapse.org/#!Synapse:syn25649159/wiki/610007.
+
+    Once you have access to the dataset, you can use the synapse client or the platform download option to get
+    the zipped files. It contains 80 scans paired with their segmentations (more details in the challenge website).
+
+    Finally, you should provide the path to the parent directory where the zipfile is stored.
     """
     if download:
         print("Download is not supported due to the challenge's setup. See 'get_feta24_data' for details.")
@@ -46,7 +60,7 @@ def get_feta24_dataset(
     download: bool = False,
     **kwargs
 ):
-    """Dataset...
+    """Dataset for segmentation of fetal brain tissues in MRI.
 
     This dataset is from FeTa 2024 Challenge:
     - https://doi.org/10.5281/zenodo.11192452
@@ -82,7 +96,7 @@ def get_feta24_loader(
     download: bool = False,
     **kwargs
 ):
-    """Dataloader...
+    """Dataloader for segmentation of fetal brain tissues in MRI.
     See `get_feta24_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
