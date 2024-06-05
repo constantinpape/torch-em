@@ -397,6 +397,7 @@ def get_sa_med2d_dataset(
         ndim=2,
         with_channels=True,
         is_seg_dataset=False,
+        verify_paths=False,
         **kwargs
     )
 
