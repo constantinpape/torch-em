@@ -5,6 +5,7 @@ from .camus import get_camus_dataset, get_camus_loader
 from .drive import get_drive_dataset, get_drive_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
+from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
 from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .msd import get_msd_dataset, get_msd_loader
