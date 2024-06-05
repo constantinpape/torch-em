@@ -8,7 +8,9 @@ from .. import util
 
 
 URL = "https://humanheart-project.creatis.insa-lyon.fr/database/api/v1/folder/63fde55f73e9f004868fb7ac/download"
-CHECKSUM = "43745d640db5d979332bda7f00f4746747a2591b46efc8f1966b573ce8d65655"
+
+# TODO: the checksums are different with each download, not sure why
+# CHECKSUM = "43745d640db5d979332bda7f00f4746747a2591b46efc8f1966b573ce8d65655"
 
 
 def get_camus_data(path, download):
@@ -19,7 +21,7 @@ def get_camus_data(path, download):
         return data_dir
 
     zip_path = os.path.join(path, "CAMUS.zip")
-    util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
+    util.download_source(path=zip_path, url=URL, download=download, checksum=None)
     util.unzip(zip_path=zip_path, dst=path)
 
     return data_dir
