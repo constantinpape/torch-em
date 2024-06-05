@@ -37,9 +37,13 @@ def load_image(image_path, memmap=True):
         return tifffile.memmap(image_path, mode="r")
     elif tifffile is not None and os.path.splitext(image_path)[1].lower() in (".tiff", ".tif"):
         return tifffile.imread(image_path)
-    elif os.path.splitext(image_path)[1].lower() in (".nrrd"):
+    elif os.path.splitext(image_path)[1].lower() == ".nrrd":
         import nrrd
         return nrrd.read(image_path)[0]
+    elif os.path.splitext(image_path)[1].lower() == ".mha":
+        import SimpleITK as sitk
+        image = sitk.ReadImage(image_path)
+        return sitk.GetArrayFromImage(image)
     else:
         return imageio.imread(image_path)
 
