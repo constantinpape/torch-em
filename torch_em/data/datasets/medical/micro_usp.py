@@ -1,5 +1,6 @@
 import os
 from glob import glob
+from pathlib import Path
 from natsort import natsorted
 from typing import Union, Tuple
 
@@ -16,11 +17,12 @@ FNAME = "Micro_Ultrasound_Prostate_Segmentation_Dataset"
 def get_micro_usp_data(path, download):
     os.makedirs(path, exist_ok=True)
 
-    data_dir = os.path.join(path, FNAME)
+    fname = Path(URL).stem
+    data_dir = os.path.join(path, fname)
     if os.path.exists(data_dir):
         return data_dir
 
-    zip_path = os.path.join(path, f"{FNAME}.zip")
+    zip_path = os.path.join(path, f"{fname}.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
     util.unzip(zip_path=zip_path, dst=path)
 
@@ -33,14 +35,11 @@ def _get_micro_usp_paths(path, split, download):
     image_paths = natsorted(glob(os.path.join(data_dir, split, "micro_ultrasound_scans", "*.nii.gz")))
     gt_paths = natsorted(glob(os.path.join(data_dir, split, "expert_annotations", "*.nii.gz")))
 
+    from tukra.utils import read_image
+
     for image_path, gt_path in zip(image_paths, gt_paths):
-        import nibabel as nib
-
-        image = nib.load(image_path)
-        image = image.get_fdata()
-
-        gt = nib.load(gt_path)
-        gt = gt.get_fdata()
+        image = read_image(image_path)
+        gt = read_image(gt_path)
 
         import napari
         v = napari.Viewer()
@@ -67,6 +66,12 @@ def get_micro_usp_dataset(
     Please cite it if you use this dataset for a publication.
     """
     image_paths, gt_paths = _get_micro_usp_paths(path=path, split=split, download=download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
