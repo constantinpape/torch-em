@@ -1,5 +1,5 @@
 from torch_em.util.debug import check_loader
-from torch_em.data.datasets import get_orgasegment_loader
+from torch_em.data.datasets.light_microscopy import get_orgasegment_loader
 
 
 ROOT = "/media/anwai/ANWAI/data/orgasegment"
