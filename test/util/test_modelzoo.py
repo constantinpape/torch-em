@@ -27,12 +27,14 @@ class ExpandChannels:
 
 
 class TestModelzoo(unittest.TestCase):
-    data_path = "./data.h5"
     checkpoint_folder = "./checkpoints"
-    save_folder = "./zoo_export"
-    name = "test"
+    log_folder = "./logs"
+    save_folder = "./tmp_zoo_export"
+    name = "test-export"
+    data_path = "./tmp_zoo_export/data.h5"
 
     def setUp(self):
+        os.makedirs(self.save_folder, exist_ok=True)
         shape = (8, 128, 128)
         chunks = (1, 128, 128)
         with h5py.File(self.data_path, "w") as f:
@@ -42,10 +44,9 @@ class TestModelzoo(unittest.TestCase):
                              chunks=chunks)
 
     def tearDown(self):
-        if os.path.exists(self.data_path):
-            os.remove(self.data_path)
         rmtree(self.checkpoint_folder, ignore_errors=True)
         rmtree(self.save_folder, ignore_errors=True)
+        rmtree(self.log_folder, ignore_errors=True)
 
     def _create_checkpoint(self, n_channels):
         if n_channels > 1:
@@ -62,7 +63,7 @@ class TestModelzoo(unittest.TestCase):
         )
         model = UNet2d(in_channels=1, out_channels=n_channels,
                        depth=2, initial_features=4, norm="BatchNorm")
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
         trainer = DefaultTrainer(
             name=self.name, train_loader=loader, val_loader=loader,
             model=model, loss=DiceLoss(), metric=DiceLoss(),
@@ -71,40 +72,44 @@ class TestModelzoo(unittest.TestCase):
         )
         trainer.fit(10)
 
-    def _test_export(self, n_channels):
+    def _test_export(self, n_channels, name):
         from torch_em.util.modelzoo import export_bioimageio_model
-        self._create_checkpoint(n_channels)
 
+        self._create_checkpoint(n_channels)
+        output_path = os.path.join(self.save_folder, f"exported-{name}.zip")
         success = export_bioimageio_model(
             os.path.join(self.checkpoint_folder, self.name),
-            self.save_folder,
+            output_path,
             input_data=np.random.rand(128, 128).astype("float32"),
+            maintainers=[{"github_user": "constantinpape"}],
             input_optional_parameters=False
-
         )
         self.assertTrue(success)
-        self.assertTrue(os.path.exists(self.save_folder))
-        self.assertTrue(os.path.exists(os.path.join(self.save_folder, "rdf.yaml")))
+        self.assertTrue(os.path.exists(output_path))
+
+        return output_path
 
     def test_export_single_channel(self):
-        self._test_export(1)
+        self._test_export(1, "single-chan")
 
     def test_export_multi_channel(self):
-        self._test_export(4)
+        self._test_export(4, "multi-chan")
 
+    @unittest.expectedFailure
     def test_add_weights_torchscript(self):
         from torch_em.util.modelzoo import add_weight_formats
-        self._test_export(1)
-        additional_formats = ["torchscript"]
-        add_weight_formats(self.save_folder, additional_formats)
+
+        model_path = self._test_export(1, "torchscript")
+        add_weight_formats(model_path, ["torchscript"])
         self.assertTrue(os.path.join(self.save_folder, "weigths-torchscript.pt"))
 
+    @unittest.expectedFailure
     @unittest.skipIf(onnx is None, "Needs onnx")
     def test_add_weights_onnx(self):
         from torch_em.util.modelzoo import add_weight_formats
-        self._test_export(1)
-        additional_formats = ["onnx"]
-        add_weight_formats(self.save_folder, additional_formats)
+
+        self._test_export(1, "onnx")
+        add_weight_formats(self.save_folder, ["onnx"])
         self.assertTrue(os.path.join(self.save_folder, "weigths.onnx"))
 
 

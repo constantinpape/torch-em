@@ -1,5 +1,9 @@
+import os
 import numpy as np
+from typing import List, Union, Tuple, Optional, Any
+
 import torch
+
 from ..util import ensure_tensor_with_channels, load_image, supports_memmap
 
 
@@ -31,15 +35,15 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        raw_image_paths,
-        patch_shape,
+        raw_image_paths: Union[List[Any], str, os.PathLike],
+        patch_shape: Tuple[int, ...],
         raw_transform=None,
         transform=None,
-        dtype=torch.float32,
-        n_samples=None,
+        dtype: torch.dtype = torch.float32,
+        n_samples: Optional[int] = None,
         sampler=None,
         augmentations=None,
-        full_check=False,
+        full_check: bool = False,
     ):
         self._check_inputs(raw_image_paths, full_check)
         self.raw_images = raw_image_paths
