@@ -11,7 +11,7 @@ def check_oimhs():
         patch_shape=(512, 512),
         batch_size=2,
         download=False,
-        resize_inputs=False,
+        resize_inputs=True,
     )
 
     check_loader(loader, 8)
