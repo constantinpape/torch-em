@@ -11,7 +11,6 @@ from .. import util
 
 URL = "https://zenodo.org/records/10475293/files/Micro_Ultrasound_Prostate_Segmentation_Dataset.zip?"
 CHECKSUM = "031645dc30948314e379d0a0a7d54bad1cd4e1f3f918b77455d69810aa05dce3"
-FNAME = "Micro_Ultrasound_Prostate_Segmentation_Dataset"
 
 
 def get_micro_usp_data(path, download):
@@ -34,20 +33,6 @@ def _get_micro_usp_paths(path, split, download):
 
     image_paths = natsorted(glob(os.path.join(data_dir, split, "micro_ultrasound_scans", "*.nii.gz")))
     gt_paths = natsorted(glob(os.path.join(data_dir, split, "expert_annotations", "*.nii.gz")))
-
-    from tukra.utils import read_image
-
-    for image_path, gt_path in zip(image_paths, gt_paths):
-        image = read_image(image_path)
-        gt = read_image(gt_path)
-
-        import napari
-        v = napari.Viewer()
-        v.add_image(image.transpose(2, 0, 1))
-        v.add_labels(gt.transpose(2, 0, 1).astype("uint8"))
-        napari.run()
-
-        breakpoint()
 
     return image_paths, gt_paths
 
