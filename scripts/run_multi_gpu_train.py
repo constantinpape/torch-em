@@ -32,6 +32,6 @@ if __name__ == "__main__":
         train_dataset_class, train_dataset_kwargs,
         val_dataset_class, val_dataset_kwargs,
         loader_kwargs=loader_kwargs,
-        iterations=1e3, name="multi-gpu-test",
+        iterations=250, name="multi-gpu-test",
         compile_model=False,
     )

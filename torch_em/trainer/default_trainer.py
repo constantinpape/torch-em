@@ -571,12 +571,15 @@ class DefaultTrainer:
         msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
         train_epochs = self.max_epoch - self._epoch
         t_start = time.time()
-        for epoch_ in range(train_epochs):
+        for epoch in range(train_epochs):
 
-            # TODO
-            # train_sampler.set_epoch(epoch)  # Ensure data is shuffled differently at each epoch
+            # Ensure data is shuffled differently at each epoch.
+            try:
+                self.train_loader.sampler.set_epoch(epoch)
+            except AttributeError:
+                pass
 
-            # run training and validation for this epoch
+            # Run training and validation for this epoch
             t_per_iter = train_epoch(progress)
             current_metric = validate()
 

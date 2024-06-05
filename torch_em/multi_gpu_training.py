@@ -28,8 +28,7 @@ def _create_data_loader(ds_callable, ds_kwargs, loader_kwargs, world_size, rank)
 
     # Create the loader.
     loader = torch.utils.data.DataLoader(ds, sampler=sampler, **loader_kwargs)
-    # loader = torch.utils.data.DataLoader(ds, shuffle=shuffle, **loader_kwargs)
-    # loader.shuffle = shuffle
+    loader.shuffle = shuffle
 
     return loader
 
