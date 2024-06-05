@@ -2,7 +2,6 @@ from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_idrid_loader
 
 
-URL = "aaryapatel98/indian-diabetic-retinopathy-image-dataset"
 ROOT = "/media/anwai/ANWAI/data/idrid"
 
 
