@@ -4,13 +4,10 @@ from tqdm import tqdm
 from typing import Union, Tuple
 
 import imageio.v3 as imageio
-from skimage.transform import resize
 
 import torch_em
-from torch_em.transform import get_raw_transform
 
 from .. import util
-from ... import ImageCollectionDataset
 
 
 URL = "http://openi.nlm.nih.gov/imgs/collections/NLM-MontgomeryCXRSet.zip"
@@ -29,29 +26,6 @@ def get_montgomery_data(path, download):
     util.unzip(zip_path=zip_path, dst=path)
 
     return data_dir
-
-
-class _ResizeInputs:
-    def __init__(self, target_shape, is_label=False):
-        self.target_shape = target_shape
-        self.is_label = is_label
-
-    def __call__(self, inputs):
-        print(inputs.shape)
-        if self.is_label:
-            anti_aliasing = True
-        else:
-            anti_aliasing = False
-
-        inputs = resize(
-            image=inputs,
-            output_shape=self.target_shape,
-            order=3,
-            anti_aliasing=anti_aliasing,
-            preserve_range=True,
-        )
-
-        return inputs
 
 
 def _get_montgomery_paths(path, download):
@@ -90,8 +64,8 @@ def _get_montgomery_paths(path, download):
 def get_montgomery_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    download: bool = False,
     resize_inputs: bool = True,
+    download: bool = False,
     **kwargs
 ):
     """Dataset for the segmentation of lungs in x-ray.
@@ -108,20 +82,17 @@ def get_montgomery_dataset(
     image_paths, gt_paths = _get_montgomery_paths(path=path, download=download)
 
     if resize_inputs:
-        raw_transform = get_raw_transform(augmentation1=_ResizeInputs(target_shape=patch_shape))
-        label_transform = _ResizeInputs(target_shape=patch_shape, is_label=True)
-    else:
-        print("You chose to not resize the inputs. The inputs will be returned in original (high) resolution.")
-        raw_transform, label_transform = None, None
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
-    dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths,
-        label_image_paths=gt_paths,
-        # this is done to load entire image first, later get the desired (resized) patch shape (specified in args above)
-        # another reason for this number: images are of two diff. shapes - (4020, 4892); (4892, 4020)
-        patch_shape=(5000, 5000),
-        raw_transform=raw_transform,
-        label_transform=label_transform,
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
+        patch_shape=patch_shape,
         **kwargs
     )
     return dataset
@@ -131,19 +102,15 @@ def get_montgomery_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     batch_size: int,
-    download: bool = False,
     resize_inputs: bool = True,
+    download: bool = False,
     **kwargs
 ):
     """Dataloader for the segmentation of lungs in x-ray. See 'get_montgomery_dataset' for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_montgomery_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        download=download,
-        resize_inputs=resize_inputs,
-        **ds_kwargs
+        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
