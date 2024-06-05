@@ -60,7 +60,7 @@ class TestSpocoTrainer(unittest.TestCase):
             "model": model,
             "loss": DummySpocoLoss(),
             "metric": DummySpocoMetric(),
-            "optimizer": torch.optim.Adam(model.parameters(), lr=1e-5),
+            "optimizer": torch.optim.AdamW(model.parameters(), lr=1e-5),
             "device": torch.device("cpu"),
             "mixed_precision": False,
             "momentum": 0.95,

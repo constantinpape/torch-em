@@ -1,54 +1,32 @@
 # Datasets in `torch-em`
 
-Available open-source datasets in `torch-em` located at `torch_em/data/datasets/` (see `scripts/datasets` for a quick guide on how to use the dataloaders out-of-the-box):
+We provide PyTorch Datasets / DataLoaders for many different biomedical datasets, mostly for segmentation tasks.
+They are implemented in `torch_em.data.datasets`. See `scripts/datasets` for examples on how to visualize images from these datasets.
 
-### Microscopy
 
-- ASEM (`asem.py`): Segmentation of organelles in FIB-SEM cells.
-- AxonDeepSeg (`axondeepseg.py`): Segmentation of myelinated axons in electron microscopy.
-- MitoLab* (`cem.py`):
-    - CEM MitoLab: Segmentation of mitochondria in electron microscopy.
-    - CEM Mito Benchmark: Segmentation of mitochondria in 7 benchmark electron microscopy datasets.
-- Covid IF (`covidif.py`): Segmentation of cells and nuclei in immunofluoroscence.
-- CREMI (`cremi.py`): Segmentation of neurons in electron microscopy.
-- Cell Tracking Challenge (`ctc.py`): Segmentation data for cell tracking challenge (consists of 10 datasets).
-- DeepBacs (`deepbacs.py`): Segmentation of bacteria in light microscopy.
-- DSB (`dsb.py`): Segmentation of nuclei in light microscopy.
-- DynamicNuclearNet* (`dynamicnuclearnet.py`): Segmentation of nuclei in fluorescence microscopy.
-- HPA (`hpa.py`): Segmentation of cells in light microscopy.
-- ISBI (`isbi2012.py`): Segmentation of neurons in electron microscopy.
-- Kasthuri (`kasthuri.py`): Segmentation of mitochondria in electron microscopy.
-- LIVECell (`livecell.py`): Segmentation of cells in phase-contrast microscopy.
-- Lucchi (`lucchi.py`): Segmentation of mitochondria in electron microscopy.
-- MitoEM (`mitoem.py`): Segmentation of mitochondria in electron microscopy.
-- Mouse Embryo (`mouse_embryo.py`): Segmentation of nuclei in confocal microscopy.
-- NeurIPS CellSeg (`neurips_cell_seg.py`): Segmentation of cells in multi-modality light microscopy datasets.
-- NucMM (`nuc_mm.py`): Segmentation of nuclei in electron microscopy and micro-CT.
-- PlantSeg (`plantseg.py`): Segmentation of cells in confocal and light-sheet microscopy.
-- Platynereis (`platynereis.py`): Segmentation of nuclei in electron microscopy.
-- PNAS* (`pnas_arabidopsis.py`): TODO
-- SNEMI (`snemi.py`): Segmentation of neurons in electron microscopy.
-- Sponge EM (`sponge_em.py`): Segmentation of sponge cells and organelles in electron microscopy.
-- TissueNet* (`tissuenet.py`): Segmentation of cellls in tissue imaged with light microscopy.
-- UroCell (`uro_cell.py`): Segmentation of mitochondria and other organelles in electron microscopy.
-- VNC (`vnc.py`): Segmentation of mitochondria in electron microscopy
+## Available Datasets
 
-### Histopathology
+All datasets in `torch_em.data.datasets` are implemented according to the following logic:
+- The function `get_..._data` downloads the respective datasets. Note that some datasets cannot be downloaded automatically. In these cases the function will raise an error with a message that explains how to download the data.
+- The function `get_..._dataset` returns the PyTorch Dataset for the corresponding dataset.
+- The function `get_..._dataloader` returns the PyTorch DataLoader for the corresponding dataset.
 
-- BCSS (`bcss.py`): Segmentation of breast cancer tissue in histopathology.
-- Lizard* (`lizard.py`): Segmentation of nuclei in histopathology.
-- MoNuSaC (`monusac.py`): Segmentation of multi-organ nuclei in histopathology.
-- MoNuSeg (`monuseg.py`): Segmentation of multi-organ nuclei in histopathology.
-- PanNuke (`pannuke.py`): Segmentation of nuclei in histopathology.
+### Light Microscopy
 
+We provide several light microscopy datasets. See `torch_em.data.datasets.light_microscopy` for an overview.
+
+### Electron Microscopy
+
+We provide several electron microscopy datasets. See `torch_em.data.datasets.electron_microscopy` for an overview.
+
+### Histopathology 
+
+`torch_em.data.datasets.histopathology`
 
 ### Medical Imaging
 
-- AutoPET* (`medical/autopet.py`): Segmentation of lesions in whole-body FDG-PET/CT.
-- BTCV* (`medical/btcv.py`): Segmentation of multiple organs in CT.
+`torch_em.data.datasets.medical`
 
-### NOTE:
-- \* - These datasets cannot be used out of the box (mostly because of missing automatic downloading). Please take a look at the scripts and the dataset object for details.
 
 ## How to create your own dataloader?
 
@@ -157,3 +135,51 @@ dataset = RawImageCollectionDataset(
     # there are other optional parameters, see `torch_em.data.raw_image_collection_dataset.py` for details.
 )
 ```
+
+
+<!-- I would rather auto-generate this in a proper pdoc documentation.
+- ASEM (`asem.py`): Segmentation of organelles in FIB-SEM cells.
+- AxonDeepSeg (`axondeepseg.py`): Segmentation of myelinated axons in electron microscopy.
+- MitoLab* (`cem.py`):
+    - CEM MitoLab: Segmentation of mitochondria in electron microscopy.
+    - CEM Mito Benchmark: Segmentation of mitochondria in 7 benchmark electron microscopy datasets.
+- Covid IF (`covidif.py`): Segmentation of cells and nuclei in immunofluoroscence.
+- CREMI (`cremi.py`): Segmentation of neurons in electron microscopy.
+- Cell Tracking Challenge (`ctc.py`): Segmentation data for cell tracking challenge (consists of 10 datasets).
+- DeepBacs (`deepbacs.py`): Segmentation of bacteria in light microscopy.
+- DSB (`dsb.py`): Segmentation of nuclei in light microscopy.
+- DynamicNuclearNet* (`dynamicnuclearnet.py`): Segmentation of nuclei in fluorescence microscopy.
+- HPA (`hpa.py`): Segmentation of cells in light microscopy.
+- ISBI (`isbi2012.py`): Segmentation of neurons in electron microscopy.
+- Kasthuri (`kasthuri.py`): Segmentation of mitochondria in electron microscopy.
+- LIVECell (`livecell.py`): Segmentation of cells in phase-contrast microscopy.
+- Lucchi (`lucchi.py`): Segmentation of mitochondria in electron microscopy.
+- MitoEM (`mitoem.py`): Segmentation of mitochondria in electron microscopy.
+- Mouse Embryo (`mouse_embryo.py`): Segmentation of nuclei in confocal microscopy.
+- NeurIPS CellSeg (`neurips_cell_seg.py`): Segmentation of cells in multi-modality light microscopy datasets.
+- NucMM (`nuc_mm.py`): Segmentation of nuclei in electron microscopy and micro-CT.
+- PlantSeg (`plantseg.py`): Segmentation of cells in confocal and light-sheet microscopy.
+- Platynereis (`platynereis.py`): Segmentation of nuclei in electron microscopy.
+- PNAS* (`pnas_arabidopsis.py`): TODO
+- SNEMI (`snemi.py`): Segmentation of neurons in electron microscopy.
+- Sponge EM (`sponge_em.py`): Segmentation of sponge cells and organelles in electron microscopy.
+- TissueNet* (`tissuenet.py`): Segmentation of cellls in tissue imaged with light microscopy.
+- UroCell (`uro_cell.py`): Segmentation of mitochondria and other organelles in electron microscopy.
+- VNC (`vnc.py`): Segmentation of mitochondria in electron microscopy
+
+### Histopathology
+
+- BCSS (`bcss.py`): Segmentation of breast cancer tissue in histopathology.
+- Lizard* (`lizard.py`): Segmentation of nuclei in histopathology.
+- MoNuSaC (`monusac.py`): Segmentation of multi-organ nuclei in histopathology.
+- MoNuSeg (`monuseg.py`): Segmentation of multi-organ nuclei in histopathology.
+- PanNuke (`pannuke.py`): Segmentation of nuclei in histopathology.
+
+### Medical Imaging
+
+- AutoPET* (`medical/autopet.py`): Segmentation of lesions in whole-body FDG-PET/CT.
+- BTCV* (`medical/btcv.py`): Segmentation of multiple organs in CT.
+
+### NOTE:
+- \* - These datasets cannot be used out of the box (mostly because of missing automatic downloading). Please take a look at the scripts and the dataset object for details.
+-->
