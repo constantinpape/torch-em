@@ -40,7 +40,7 @@ def get_uwaterloo_skin_data(path, chosen_set, download):
         util.download_source(path=zip_path, url=url, download=download, checksum=CHECKSUMS[chosen_set])
     except ProtocolError:  # the 'uwaterloo.ca' quite randomly times out of connections, pretty weird.
         msg = "The server seems to be unreachable at the moment. "
-        msg += f"We recommend downloading the data from {url} at '{path}'. "
+        msg += f"We recommend downloading the data manually, from '{url}' at '{path}'. "
         print(msg)
         quit()
 
@@ -82,7 +82,7 @@ def get_uwaterloo_skin_dataset(
     image_paths, gt_paths = _get_uwaterloo_skin_paths(path=path, download=download)
 
     if resize_inputs:
-        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
         kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
