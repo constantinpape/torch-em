@@ -62,6 +62,8 @@ def get_feta24_dataset(
 ):
     """Dataset for segmentation of fetal brain tissues in MRI.
 
+    The dataset cannot be automatically download. See `get_feta24_data` for details.
+
     This dataset is from FeTa 2024 Challenge:
     - https://doi.org/10.5281/zenodo.11192452
     - Payete et al. - https://doi.org/10.1038/s41597-021-00946-3
