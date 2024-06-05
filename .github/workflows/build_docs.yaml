@@ -1,0 +1,65 @@
+name: build_documentation
+
+# build the documentation for a new release
+on:
+  release:
+    types: created
+
+# # for debugging
+# on: [push, pull_request]
+
+# security: restrict permissions for CI jobs.
+permissions:
+  contents: read
+
+# NOTE: importing of napari fails with CI and I am not quite sure why
+# I tried to adjust it based on the napari CI tests, but that didn't seem to help
+
+# https://github.com/napari/napari/blob/main/.github/workflows/test_comprehensive.yml
+jobs:
+  # Build the documentation and upload the static HTML files as an artifact.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup miniconda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: sam
+          mamba-version: "*"
+          auto-update-conda: true
+          environment-file: .github/doc_env.yaml
+          python-version: ${{ matrix.python-version }}
+          auto-activate-base: false
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+
+      - name: Install package
+        shell: bash -l {0}
+        run: pip install --no-deps -e .
+
+      # We use a custom build script for pdoc itself, ideally you just run `pdoc -o docs/ ...` here.
+      - name: Run pdoc
+        shell: bash -l {0}
+        run: python build_doc.py --out
+
+      - uses: actions/upload-pages-artifact@v1
+        with:
+          path: tmp/
+
+  # Deploy the artifact to GitHub pages.
+  # This is a separate job so that only actions/deploy-pages has the necessary permissions.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v2
