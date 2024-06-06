@@ -52,6 +52,10 @@ def _train_impl(
     val_dataset_kwargs,
     loader_kwargs,
     iterations,
+    optimizer_callable=None,
+    optimizer_kwargs=None,
+    lr_scheduler_callable=None,
+    lr_scheduler_kwargs=None,
     trainer_callable=None,
     **kwargs
 ):
@@ -61,6 +65,13 @@ def _train_impl(
 
     model = model_callable(**model_kwargs).to(rank)
     ddp_model = DDP(model, device_ids=[rank])
+
+    if optimizer_callable is not None:
+        optimizer = optimizer_callable(model.parameters(), **optimizer_kwargs)
+        kwargs["optimizer"] = optimizer
+        if lr_scheduler_callable is not None:
+            lr_scheduler = lr_scheduler_callable(optimizer, **lr_scheduler_kwargs)
+            kwargs["lr_scheduler"] = lr_scheduler
 
     train_loader = _create_data_loader(train_dataset_callable, train_dataset_kwargs, loader_kwargs, world_size, rank)
     val_loader = _create_data_loader(val_dataset_callable, val_dataset_kwargs, loader_kwargs, world_size, rank)
@@ -90,6 +101,10 @@ def train_multi_gpu(
     val_dataset_kwargs,
     loader_kwargs,
     iterations,
+    optimizer_callable=None,
+    optimizer_kwargs=None,
+    lr_scheduler_callable=None,
+    lr_scheduler_kwargs=None,
     trainer_callable=None,
     **kwargs
 ) -> None:
@@ -110,6 +125,10 @@ def train_multi_gpu(
         val_dataset_kwargs=val_dataset_kwargs,
         loader_kwargs=loader_kwargs,
         iterations=iterations,
+        optimizer_callable=optimizer_callable,
+        optimizer_kwargs=optimizer_kwargs,
+        lr_scheduler_callable=lr_scheduler_callable,
+        lr_scheduler_kwargs=lr_scheduler_kwargs,
         trainer_callable=trainer_callable,
         **kwargs
     )
