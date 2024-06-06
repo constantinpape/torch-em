@@ -4,7 +4,7 @@ from functools import partial
 import torch
 import torch_em
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.nn.parallel import DistributedDataParallel
 
 
 def setup(rank, world_size):
@@ -33,12 +33,27 @@ def _create_data_loader(ds_callable, ds_kwargs, loader_kwargs, world_size, rank)
     return loader
 
 
+class DDP(DistributedDataParallel):
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
+
+
 def _train_impl(
-    rank, world_size,
-    model_callable, model_kwargs,
-    train_dataset_callable, train_dataset_kwargs,
-    val_dataset_callable, val_dataset_kwargs,
-    loader_kwargs, iterations, **kwargs
+    rank,
+    world_size,
+    model_callable,
+    model_kwargs,
+    train_dataset_callable,
+    train_dataset_kwargs,
+    val_dataset_callable,
+    val_dataset_kwargs,
+    loader_kwargs,
+    iterations,
+    trainer_callable=None,
+    **kwargs
 ):
     assert "device" not in kwargs
     print(f"Running DDP on rank {rank}.")
@@ -50,9 +65,16 @@ def _train_impl(
     train_loader = _create_data_loader(train_dataset_callable, train_dataset_kwargs, loader_kwargs, world_size, rank)
     val_loader = _create_data_loader(val_dataset_callable, val_dataset_kwargs, loader_kwargs, world_size, rank)
 
-    trainer = torch_em.default_segmentation_trainer(
-        model=ddp_model, train_loader=train_loader, val_loader=val_loader,
-        device=rank, rank=rank, **kwargs
+    if trainer_callable is None:
+        trainer_callable = torch_em.default_segmentation_trainer
+
+    trainer = trainer_callable(
+        model=ddp_model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        device=rank,
+        rank=rank,
+        **kwargs
     )
     trainer.fit(iterations=iterations)
 
@@ -60,10 +82,16 @@ def _train_impl(
 
 
 def train_multi_gpu(
-    model_callable, model_kwargs,
-    train_dataset_callable, train_dataset_kwargs,
-    val_dataset_callable, val_dataset_kwargs,
-    loader_kwargs, iterations, **kwargs
+    model_callable,
+    model_kwargs,
+    train_dataset_callable,
+    train_dataset_kwargs,
+    val_dataset_callable,
+    val_dataset_kwargs,
+    loader_kwargs,
+    iterations,
+    trainer_callable=None,
+    **kwargs
 ) -> None:
     """
 
@@ -74,9 +102,15 @@ def train_multi_gpu(
     world_size = torch.cuda.device_count()
     train = partial(
         _train_impl,
-        model_callable=model_callable, model_kwargs=model_kwargs,
-        train_dataset_callable=train_dataset_callable, train_dataset_kwargs=train_dataset_kwargs,
-        val_dataset_callable=val_dataset_callable, val_dataset_kwargs=val_dataset_kwargs,
-        loader_kwargs=loader_kwargs, iterations=iterations, **kwargs
+        model_callable=model_callable,
+        model_kwargs=model_kwargs,
+        train_dataset_callable=train_dataset_callable,
+        train_dataset_kwargs=train_dataset_kwargs,
+        val_dataset_callable=val_dataset_callable,
+        val_dataset_kwargs=val_dataset_kwargs,
+        loader_kwargs=loader_kwargs,
+        iterations=iterations,
+        trainer_callable=trainer_callable,
+        **kwargs
     )
     torch.multiprocessing.spawn(train, args=(world_size,), nprocs=world_size, join=True)
