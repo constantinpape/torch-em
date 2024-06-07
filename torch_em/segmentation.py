@@ -138,11 +138,12 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
         return rpath, lpath
 
     patch_shape = kwargs.pop("patch_shape")
-    if len(patch_shape) == 3:
-        if patch_shape[0] != 1:
-            raise ValueError(f"Image collection dataset expects 2d patch shape, got {patch_shape}")
-        patch_shape = patch_shape[1:]
-    assert len(patch_shape) == 2
+    if patch_shape is not None:
+        if len(patch_shape) == 3:
+            if patch_shape[0] != 1:
+                raise ValueError(f"Image collection dataset expects 2d patch shape, got {patch_shape}")
+            patch_shape = patch_shape[1:]
+        assert len(patch_shape) == 2
 
     if isinstance(raw_paths, str):
         raw_paths, label_paths = _get_paths(raw_paths, raw_key, label_paths, label_key, roi)
@@ -205,6 +206,7 @@ def default_segmentation_loader(
     is_seg_dataset=None,
     with_channels=False,
     with_label_channels=False,
+    verify_paths=True,
     **loader_kwargs,
 ):
     ds = default_segmentation_dataset(
@@ -226,6 +228,7 @@ def default_segmentation_loader(
         is_seg_dataset=is_seg_dataset,
         with_channels=with_channels,
         with_label_channels=with_label_channels,
+        verify_paths=verify_paths,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -249,8 +252,11 @@ def default_segmentation_dataset(
     is_seg_dataset=None,
     with_channels=False,
     with_label_channels=False,
+    verify_paths=True,
 ):
-    check_paths(raw_paths, label_paths)
+    if verify_paths:
+        check_paths(raw_paths, label_paths)
+
     if is_seg_dataset is None:
         is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
 
@@ -339,7 +345,7 @@ def default_segmentation_trainer(
     compile_model=None,
     rank=None,
 ):
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, **optimizer_kwargs)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, **optimizer_kwargs)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)
 
     loss = DiceLoss() if loss is None else loss
