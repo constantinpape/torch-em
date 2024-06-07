@@ -34,6 +34,9 @@ def _create_data_loader(ds_callable, ds_kwargs, loader_kwargs, world_size, rank)
 
 
 class DDP(DistributedDataParallel):
+    """Wrapper for the DistributedDataParallel class that overrides the `__getattr__` method
+    to handle access from the "model" object module wrapped by DDP.
+    """
     def __getattr__(self, name):
         try:
             return super().__getattr__(name)
