@@ -107,17 +107,31 @@ def _fetch_loaders(dataset_name):
 
     elif dataset_name == "platy_cilia":
         # 5. Platynereis (Cilia)
-        # TODO: @AA: check this
-        loader = electron_microscopy.get_platynereis_cilia_loader(
+        train_rois = {
+            1: np.s_[0:100, :, :], 2: np.s_[0:100, :, :], 3: np.s_[0:100, :, :]
+        }
+        val_rois = {
+            1: np.s_[100:, :, :], 2: np.s_[100:, :, :], 3: np.s_[100:, :, :]
+        }
+
+        train_loader = electron_microscopy.get_platynereis_cilia_loader(
             path=os.path.join(ROOT, "platynereis"),
             patch_shape=(1, 512, 512),
             ndim=2,
             batch_size=2,
-            sample_ids=...,
-            rois=...,
+            rois=train_rois,
             download=True,
             num_workers=16,
             shuffle=True,
+        )
+        val_loader = electron_microscopy.get_platynereis_cilia_loader(
+            path=os.path.join(ROOT, "platynereis"),
+            patch_shape=(1, 512, 512),
+            ndim=2,
+            batch_size=2,
+            rois=val_rois,
+            download=True,
+            num_workers=16,
         )
 
     else:
@@ -127,7 +141,7 @@ def _fetch_loaders(dataset_name):
 
 
 def _verify_loaders():
-    dataset_name = "mouse-embryo"
+    dataset_name = "platy_cilia"
 
     train_loader, val_loader = _fetch_loaders(dataset_name=dataset_name)
 
