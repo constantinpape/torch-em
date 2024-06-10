@@ -7,8 +7,8 @@ from torch_em.data import MinInstanceSampler
 from torch_em.data.datasets import light_microscopy, electron_microscopy
 
 
-# ROOT = "/scratch/projects/nim00007/sam/data"
-ROOT = "/media/anwai/ANWAI/data/"
+ROOT = "/scratch/projects/nim00007/sam/data"
+# ROOT = "/media/anwai/ANWAI/data/"
 
 
 def _fetch_loaders(dataset_name):
@@ -87,20 +87,34 @@ def _fetch_loaders(dataset_name):
             rois=val_rois,
         )
 
-    elif dataset_name == "mitolab_glycotic_muscle":
+    elif dataset_name == "mitolab_glycolytic_muscle":
         # 4. This dataset would need aspera-cli to be installed, I'll provide you with this data
-        # TODO: @AA: test this and check this one out.
-        loader = electron_microscopy.cem.get_benchmark_loader(
+        # ...
+        train_rois = np.s_[0:175, :, :]
+        val_rois = np.s_[175:225, :, :]
+        test_rois = np.s_[225:, :, :]
+        train_loader = electron_microscopy.cem.get_benchmark_loader(
             path=os.path.join(ROOT, "mitolab"),
-            dataset_id=2,
+            dataset_id=3,
             batch_size=2,
             patch_shape=(1, 512, 512),
-            download=True,
+            download=False,
             num_workers=16,
             shuffle=True,
+            sampler=MinInstanceSampler(),
+            rois=train_rois,
         )
-        train_loader = loader
-        val_loader = loader
+        val_loader = electron_microscopy.cem.get_benchmark_loader(
+            path=os.path.join(ROOT, "mitolab"),
+            dataset_id=3,
+            batch_size=2,
+            patch_shape=(1, 512, 512),
+            download=False,
+            num_workers=16,
+            shuffle=True,
+            sampler=MinInstanceSampler(),
+            rois=val_rois,
+        )
 
     elif dataset_name == "platy_cilia":
         # 5. Platynereis (Cilia)
@@ -143,14 +157,16 @@ def _fetch_loaders(dataset_name):
 
 
 def _verify_loaders():
-    dataset_name = "platy_cilia"
+    dataset_name = "mitolab_glycolytic_muscle"
 
     train_loader, val_loader = _fetch_loaders(dataset_name=dataset_name)
 
+    breakpoint()
+
     # NOTE: if using on the cluster, napari visualization won't work with "check_loader".
     # turn "plt=True" and provide path to save the matplotlib outputs of the loader.
-    check_loader(train_loader, 8)
-    check_loader(val_loader, 8)
+    check_loader(train_loader, 8, plt=True, save_path="./train_loader.png")
+    check_loader(val_loader, 8, plt=True, save_path="./val_loader.png")
 
 
 if __name__ == "__main__":
