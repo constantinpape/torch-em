@@ -1,8 +1,5 @@
 import os
-from glob import glob
-from pathlib import Path
 
-import h5py
 import numpy as np
 
 from torch_em.util.debug import check_loader
@@ -107,11 +104,14 @@ def _fetch_loaders(dataset_name):
 
     elif dataset_name == "platy_cilia":
         # 5. Platynereis (Cilia)
+        # the logic used here is: I use the first 85 slices per volume from the training split for training
+        # and the next ~10-15 slices per volume from the training split for validation
+        # and we use the whole volume from the val set for testing
         train_rois = {
-            1: np.s_[0:100, :, :], 2: np.s_[0:100, :, :], 3: np.s_[0:100, :, :]
+            1: np.s_[0:85, :, :], 2: np.s_[0:85, :, :], 3: np.s_[0:85, :, :]
         }
         val_rois = {
-            1: np.s_[100:, :, :], 2: np.s_[100:, :, :], 3: np.s_[100:, :, :]
+            1: np.s_[85:, :, :], 2: np.s_[85:, :, :], 3: np.s_[85:, :, :]
         }
 
         train_loader = electron_microscopy.get_platynereis_cilia_loader(
@@ -123,15 +123,17 @@ def _fetch_loaders(dataset_name):
             download=True,
             num_workers=16,
             shuffle=True,
+            sampler=MinInstanceSampler(),
         )
         val_loader = electron_microscopy.get_platynereis_cilia_loader(
             path=os.path.join(ROOT, "platynereis"),
             patch_shape=(1, 512, 512),
             ndim=2,
-            batch_size=2,
+            batch_size=1,
             rois=val_rois,
             download=True,
             num_workers=16,
+            sampler=MinInstanceSampler(),
         )
 
     else:
@@ -147,27 +149,9 @@ def _verify_loaders():
 
     # NOTE: if using on the cluster, napari visualization won't work with "check_loader".
     # turn "plt=True" and provide path to save the matplotlib outputs of the loader.
-    # check_loader(train_loader, 8)
+    check_loader(train_loader, 8)
     check_loader(val_loader, 8)
-
-
-def _check_samples():
-    all_volpaths = sorted(glob(os.path.join(ROOT, "mouse-embryo", "Membrane", "val", "*.h5")))
-
-    for volpath in all_volpaths:
-        with h5py.File(volpath, "r") as f:
-            raw = f["raw"][:]
-            labels = f["label"][:]
-
-        fname = Path(volpath).stem
-
-        import napari
-        v = napari.Viewer()
-        v.add_image(raw, name=fname)
-        v.add_labels(labels)
-        napari.run()
 
 
 if __name__ == "__main__":
     _verify_loaders()
-    # _check_samples()
