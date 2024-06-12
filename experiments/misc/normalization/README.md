@@ -1,6 +1,6 @@
 # Experiments for Mini-Batch Normalzation Schemes
 
-> NOTE 1: The discussions below are for semantic segmentation.
+> NOTE 1: The discussions below are for semantic segmentation task for predicting binary foreground and instance segmentation task for predicting foreground and boundary.
 
 > NOTE 2: The chosen evaluation metric is `Dice Score (DSC)` for semantic segmentation,
 and `Segmentation Accuracy over IoU50 (SA50)` for instance segmentation.
@@ -33,15 +33,15 @@ and `Segmentation Accuracy over IoU50 (SA50)` for instance segmentation.
     - `InstanceNorm`: 0.981061366019915
 
 - Boundary Segmentation (mSA | SA50)
-    - `OldDefault`: 
-    - `InstanceNorm`: 
+    - `OldDefault`: 0.014372028994123383 0.018482085449422186
+    - `InstanceNorm`: 0.0014261363636363636 0.004753787878787879
 
 
 ## MitoEM (Human and Rat):
 - Binary Segmentation (DSC)
-    - `OldDefault`: 
-    - `InstanceNorm`: 
+    - `OldDefault`: 0.9206916296864652
+    - `InstanceNorm`: 0.9247380570327044
 
 - Boundary Segmentation (mSA | SA50)
-    - `OldDefault`: 
-    - `InstanceNorm`: 
+    - `OldDefault`: 0.4452180959378787 | 0.5943295393094057
+    - `InstanceNorm`: 0.23307025211315505 0.32876735818930347

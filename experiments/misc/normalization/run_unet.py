@@ -100,6 +100,9 @@ def run_evaluation(norm, dataset, task, save_root):
         elif dataset in ["mouse_embryo", "plantseg"]:
             image = _load_image(image_path, "raw")
             gt = _load_image(image_path, "label")
+        else:  # mitoem
+            image = _load_image(image_path, "raw")
+            gt = _load_image(image_path, "labels")
 
         image_id = Path(image_path).stem
         pred_path = os.path.join(pred_dir, f"{image_id}.h5")
@@ -178,7 +181,7 @@ def main(args):
 
     elif phase == "evaluate":
         run_evaluation(
-            norm=norm, dataaset=dataset, task=task, save_root=save_root,
+            norm=norm, dataset=dataset, task=task, save_root=save_root,
         )
 
     else:
