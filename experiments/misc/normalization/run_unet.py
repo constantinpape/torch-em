@@ -194,6 +194,17 @@ def run_analysis_per_dataset(dataset, task, save_root):
             else:
                 fg_exp2 = f2["segmentation/foreground"][:]
 
+        # NOTE: visualize the whole volume as it is
+        # import napari
+        # v = napari.Viewer()
+        # v.add_image(image)
+        # v.add_image(fg_exp1, name="olddefault", visible=False)
+        # v.add_image(fg_exp2, name="InstanceNorm", visible=False)
+        # v.add_labels(gt)
+        # napari.run()
+
+        # continue
+
         if image.ndim == 3:
             # let's check the 10 worst performing slices on "OldDefault" and compare it with "InstanceNorm"
             dice_scores = [
