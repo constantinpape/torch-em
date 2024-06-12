@@ -86,7 +86,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
 
 def run_evaluation(norm, dataset, task, save_root):
-    visualize = False
+    visualize = True
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
@@ -155,37 +155,153 @@ def run_evaluation(norm, dataset, task, save_root):
         print(mean_msa, mean_sa50)
 
 
+def run_analysis_per_dataset(dataset, task, save_root):
+    k = 10  # determines the number of images to visualize
+
+    image_paths, gt_paths = get_test_images(dataset=dataset)
+
+    exp1_dir = os.path.join(save_root, "prediction", dataset, "OldDefault", task)
+    exp2_dir = os.path.join(save_root, "prediction", dataset, "InstanceNorm", task)
+
+    dice_2d_samples = []
+    image_ids = []
+    for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Analysing", total=len(image_paths)):
+        if dataset == "livecell":
+            image = _load_image(image_path)
+            gt = _load_image(gt_path)
+        elif dataset in ["mouse_embryo", "plantseg"]:
+            image = _load_image(image_path, "raw")
+            gt = _load_image(image_path, "label")
+        else:  # mitoem
+            image = _load_image(image_path, "raw")
+            gt = _load_image(image_path, "labels")
+
+        image_id = Path(image_path).stem
+        pred_exp1_path = os.path.join(exp1_dir, f"{image_id}.h5")
+        pred_exp2_path = os.path.join(exp2_dir, f"{image_id}.h5")
+
+        with h5py.File(pred_exp1_path, "r") as f1:
+            if task == "boundaries":
+                fg_exp1 = f1["segmentation/foreground"][:]
+                bd_exp1 = f1["segmentation/boundary"][:]
+            else:
+                fg_exp1 = f1["segmentation/foreground"][:]
+
+        with h5py.File(pred_exp2_path, "r") as f2:
+            if task == "boundaries":
+                fg_exp2 = f2["segmentation/foreground"][:]
+                bd_exp2 = f2["segmentation/boundary"][:]
+            else:
+                fg_exp2 = f2["segmentation/foreground"][:]
+
+        if image.ndim == 3:
+            # let's check the 10 worst performing slices on "OldDefault" and compare it with "InstanceNorm"
+            dice_scores = [
+                dice_score(gslice > 0, pslice > 0.5) for pslice, gslice in tqdm(zip(fg_exp1, gt), total=image.shape[0])
+            ]
+            k_worst = _get_k_worst_indices(dice_scores, k)
+
+            # now, let's visualize the respective slices
+            for idx, (islice, p1slice, p2slice, gslice) in enumerate(zip(image, fg_exp1, fg_exp2, gt)):
+                if idx not in k_worst:
+                    continue
+
+                import napari
+                v = napari.Viewer()
+                v.add_image(islice)
+                v.add_image(gslice, visible=False)
+                v.add_image(p1slice, name="OldDefault", visible=False)
+                v.add_image(p2slice, name="InstanceNorm", visible=False)
+                napari.run()
+
+        else:
+            # store the dice score pair per experiment and visualize later
+            dice_2d_samples.append(dice_score(gt > 0, fg_exp1 > 0.5))
+            image_ids.append(image_id)
+
+            # import napari
+            # v = napari.Viewer()
+            # v.add_image(image)
+            # v.add_labels(gt)
+            # v.add_image(fg_exp1)
+            # napari.run()
+
+    if len(dice_2d_samples) > 0:
+        k_worst = _get_k_worst_indices(dice_2d_samples, k)
+        for idx in k_worst:
+            image_path = image_paths[idx]
+            gt_path = gt_paths[idx]
+
+            image_id = Path(image_path).stem
+
+            assert image_id == image_ids[idx]
+
+            pred_exp1_path = os.path.join(exp1_dir, f"{image_id}.h5")
+            pred_exp2_path = os.path.join(exp2_dir, f"{image_id}.h5")
+
+            with h5py.File(pred_exp1_path, "r") as f3:
+                if task == "boundaries":
+                    fg_exp1 = f3["segmentation/foreground"][:]
+                    bd_exp1 = f3["segmentation/boundary"][:]
+                else:
+                    fg_exp1 = f3["segmentation/foreground"][:]
+
+            with h5py.File(pred_exp2_path, "r") as f4:
+                if task == "boundaries":
+                    fg_exp2 = f4["segmentation/foreground"][:]
+                    bd_exp2 = f4["segmentation/boundary"][:]
+                else:
+                    fg_exp2 = f4["segmentation/foreground"][:]
+
+            import napari
+            v = napari.Viewer()
+            v.add_image(_load_image(image_path))
+            v.add_image(_load_image(gt_path), visible=False)
+            v.add_image(fg_exp1, name="OldDefault", visible=False)
+            v.add_image(fg_exp2, name="InstanceNorm", visible=False)
+            napari.run()
+
+
+def _get_k_worst_indices(input_list, k):
+    _array = np.array(input_list)
+    non_zero_mask = (_array != 0)
+    non_zero_indices = np.where(non_zero_mask)[0]
+    non_zero_values = _array[non_zero_mask]
+    bottom_k_non_zero_indices = non_zero_indices[np.argsort(non_zero_values)[:k]]
+    return bottom_k_non_zero_indices
+
+
 def main(args):
     phase = args.phase
     dataset = args.dataset
     task = args.task
     norm = args.norm
 
-    assert norm in ["OldDefault", "InstanceNorm"]
-
     save_root = os.path.join(SAVE_DIR, "models")
-    model = get_model(dataset=dataset, task=task, norm=norm)
-    name = get_experiment_name(dataset=dataset, task=task, norm=norm, model_choice="unet")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if phase == "evaluate":
+        assert norm in ["OldDefault", "InstanceNorm"]
+        run_evaluation(norm=norm, dataset=dataset, task=task, save_root=save_root)
 
-    if phase == "train":
-        run_training(
-            name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device,
-        )
-
-    elif phase == "predict":
-        run_inference(
-            name=name, model=model, norm=norm, dataset=dataset, task=task, save_root=save_root, device=device,
-        )
-
-    elif phase == "evaluate":
-        run_evaluation(
-            norm=norm, dataset=dataset, task=task, save_root=save_root,
-        )
+    elif phase == "analysis":
+        run_analysis_per_dataset(dataset=dataset, task=task, save_root=save_root)
 
     else:
-        print(f"'{phase}' is not a valid mode. Choose from 'train' / 'predict' / 'evaluate'.")
+        assert norm in ["OldDefault", "InstanceNorm"]
+        model = get_model(dataset=dataset, task=task, norm=norm)
+        name = get_experiment_name(dataset=dataset, task=task, norm=norm, model_choice="unet")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        if phase == "train":
+            run_training(
+                name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device
+            )
+        elif phase == "predict":
+            run_inference(
+                name=name, model=model, norm=norm, dataset=dataset, task=task, save_root=save_root, device=device
+            )
+        else:
+            print(f"'{phase}' is not a valid mode. Choose from 'train' / 'predict' / 'evaluate'.")
 
 
 if __name__ == "__main__":
@@ -204,7 +320,7 @@ if __name__ == "__main__":
         "-t", "--task", required=True, type=str, help="The type of task for segmentation."
     )
     parser.add_argument(
-        "-n", "--norm", required=True, type=str, help="The choice of layer normalization."
+        "-n", "--norm", type=str, help="The choice of layer normalization."
     )
     args = parser.parse_args()
     main(args)

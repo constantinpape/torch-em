@@ -3,7 +3,7 @@
 > NOTE 1: The discussions below are for semantic segmentation task for predicting binary foreground and instance segmentation task for predicting foreground and boundary.
 
 > NOTE 2: The chosen evaluation metric is `Dice Score (DSC)` for semantic segmentation,
-and `Segmentation Accuracy over IoU50 (SA50)` for instance segmentation.
+and `Segmentation Accuracy` for instance segmentation.
 
 ## Quantitative Results:
 
