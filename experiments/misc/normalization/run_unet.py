@@ -44,7 +44,7 @@ def run_training(name, model, dataset, task, save_root, device):
 
 def run_inference(name, model, norm, dataset, task, save_root, device):
     checkpoint = os.path.join(save_root, "checkpoints", name, "best.pt")
-    assert os.path.exists(checkpoint)
+    assert os.path.exists(checkpoint), checkpoint
 
     model.load_state_dict(torch.load(checkpoint, map_location=torch.device("cpu"))["model_state"])
     model.to(device)
@@ -59,6 +59,12 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
     _whole_vol_norm = True
 
     for image_path in tqdm(image_paths, desc="Predicting"):
+        image_id = Path(image_path).stem
+        pred_path = os.path.join(pred_dir, f"{image_id}.h5")
+
+        if os.path.exists(pred_path):
+            continue
+
         if dataset == "livecell":
             image = _load_image(image_path)
         elif dataset in ["mouse_embryo", "plantseg", "mitoem"]:
@@ -85,12 +91,6 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
         prediction = prediction.squeeze()
 
         # save outputs
-        image_id = Path(image_path).stem
-        pred_path = os.path.join(pred_dir, f"{image_id}.h5")
-
-        if os.path.exists(pred_path):
-            continue
-
         with h5py.File(pred_path, "a") as f:
             if task == "boundaries":
                 fg, bd = prediction
@@ -303,6 +303,8 @@ def main(args):
     dataset = args.dataset
     task = args.task
     norm = args.norm
+
+    assert task in ["binary", "boundaries"]
 
     save_root = os.path.join(SAVE_DIR, "models")
 
