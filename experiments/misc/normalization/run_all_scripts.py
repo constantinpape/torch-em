@@ -8,7 +8,7 @@ def write_batch_script(out_path, _name, dataset, phase, task, norm):
     "Writing scripts for different norm experiments."
     batch_script = f"""#!/bin/bash
 #SBATCH -t 2-00:00:00
-#SBATCH --mem 64G
+#SBATCH --mem 128G
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH -p grete:shared

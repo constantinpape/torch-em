@@ -13,12 +13,12 @@ from micro_sam.evaluation.livecell import _get_livecell_paths
 
 
 # for HLRN
-# ROOT = "/scratch/projects/nim00007/sam/data"
-# SAVE_DIR = "/scratch/projects/nim00007/test/verify_normalization"
+ROOT = "/scratch/projects/nim00007/sam/data"
+SAVE_DIR = "/scratch/share/cidas/cca/test/verify_normalization"
 
 # for local
-ROOT = "/media/anwai/ANWAI/data/"
-SAVE_DIR = "/media/anwai/ANWAI/predictions/verify_normalization"
+# ROOT = "/media/anwai/ANWAI/data/"
+# SAVE_DIR = "/media/anwai/ANWAI/predictions/verify_normalization"
 
 
 def get_model(dataset, task, norm):

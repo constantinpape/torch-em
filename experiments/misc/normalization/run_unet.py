@@ -9,6 +9,7 @@ import torch
 
 import torch_em
 from torch_em.loss import DiceLoss
+from torch_em.transform.raw import standardize
 from torch_em.util.prediction import predict_with_halo
 from torch_em.util.segmentation import watershed_from_components
 
@@ -51,8 +52,11 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
     image_paths, _ = get_test_images(dataset=dataset)
 
-    pred_dir = os.path.join(save_root, "prediction", dataset, norm, task)
+    pred_dir = os.path.join(Path(save_root).parent, "prediction", dataset, norm, task)
     os.makedirs(pred_dir, exist_ok=True)
+
+    # NOTE: performs normalization on either the whole volume or per tile.
+    _whole_vol_norm = True
 
     for image_path in tqdm(image_paths, desc="Predicting"):
         if dataset == "livecell":
@@ -60,13 +64,22 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
         elif dataset in ["mouse_embryo", "plantseg", "mitoem"]:
             image = _load_image(image_path, "raw")
 
+        if _whole_vol_norm:
+            image = standardize(image)
+
         if dataset == "livecell":
             tile, halo = (512, 512), (64, 64)
         else:
             tile, halo = (64, 256, 256), (16, 64, 64)
 
         prediction = predict_with_halo(
-            input_=image, model=model, gpu_ids=[device], block_shape=tile, halo=halo, disable_tqdm=False,
+            input_=image,
+            model=model,
+            gpu_ids=[device],
+            block_shape=tile,
+            halo=halo,
+            disable_tqdm=False,
+            preprocess=None if _whole_vol_norm else standardize,
         )
 
         prediction = prediction.squeeze()
@@ -74,6 +87,9 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
         # save outputs
         image_id = Path(image_path).stem
         pred_path = os.path.join(pred_dir, f"{image_id}.h5")
+
+        if os.path.exists(pred_path):
+            continue
 
         with h5py.File(pred_path, "a") as f:
             if task == "boundaries":
@@ -86,11 +102,11 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
 
 def run_evaluation(norm, dataset, task, save_root):
-    visualize = True
+    visualize = False
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
-    pred_dir = os.path.join(save_root, "prediction", dataset, norm, task)
+    pred_dir = os.path.join(Path(save_root).parent, "prediction", dataset, norm, task)
 
     dsc_list, msa_list, sa50_list = [], [], []
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Evaluating", total=len(image_paths)):
@@ -160,8 +176,8 @@ def run_analysis_per_dataset(dataset, task, save_root):
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
-    exp1_dir = os.path.join(save_root, "prediction", dataset, "OldDefault", task)
-    exp2_dir = os.path.join(save_root, "prediction", dataset, "InstanceNorm", task)
+    exp1_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "OldDefault", task)
+    exp2_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "InstanceNorm", task)
 
     dice_2d_samples = []
     image_ids = []
