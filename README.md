@@ -104,7 +104,7 @@ If you want to use the GPU version, make sure to set the correct CUDA version fo
 
 You can set up a conda environment using one of these files like this:
 ```bash
-mamba create -f <ENV>.yaml -n <ENV_NAME>
+mamba env create -f <ENV>.yaml -n <ENV_NAME>
 mamba activate <ENV_NAME>
 pip install -e .
 ```
