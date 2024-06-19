@@ -172,7 +172,7 @@ def run_evaluation(norm, dataset, task, save_root):
 
 
 def run_analysis_per_dataset(dataset, task, save_root):
-    k = 10  # determines the number of images to visualize
+    k = 50  # determines the number of images to visualize
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
@@ -236,7 +236,7 @@ def run_analysis_per_dataset(dataset, task, save_root):
                 import napari
                 v = napari.Viewer()
                 v.add_image(islice)
-                v.add_image(gslice, visible=False)
+                v.add_image(gslice, name="GT", visible=False)
                 v.add_image(p1slice, name="OldDefault", visible=False)
                 v.add_image(p2slice, name="InstanceNorm", visible=False)
                 napari.run()
@@ -246,6 +246,7 @@ def run_analysis_per_dataset(dataset, task, save_root):
             dice_2d_samples.append(dice_score(gt > 0, fg_exp1 > 0.5))
             image_ids.append(image_id)
 
+            # NOTE: visualizing each 2d image
             # import napari
             # v = napari.Viewer()
             # v.add_image(image)
@@ -283,7 +284,7 @@ def run_analysis_per_dataset(dataset, task, save_root):
             import napari
             v = napari.Viewer()
             v.add_image(_load_image(image_path))
-            v.add_image(_load_image(gt_path), visible=False)
+            v.add_labels(_load_image(gt_path), name="GT")
             v.add_image(fg_exp1, name="OldDefault", visible=False)
             v.add_image(fg_exp2, name="InstanceNorm", visible=False)
             napari.run()
