@@ -1,10 +1,13 @@
 import os
 from functools import partial
+from typing import Dict, Any, Optional, Callable
 
 import torch
-import torch_em
+import torch.utils.data
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
+
+import torch_em
 
 
 def setup(rank, world_size):
@@ -45,21 +48,21 @@ class DDP(DistributedDataParallel):
 
 
 def _train_impl(
-    rank,
-    world_size,
-    model_callable,
-    model_kwargs,
-    train_dataset_callable,
-    train_dataset_kwargs,
-    val_dataset_callable,
-    val_dataset_kwargs,
-    loader_kwargs,
-    iterations,
-    find_unused_parameters=True,
-    optimizer_callable=None,
-    optimizer_kwargs=None,
-    lr_scheduler_callable=None,
-    lr_scheduler_kwargs=None,
+    rank: int,
+    world_size: int,
+    model_callable: Callable[[Any], torch.nn.Module],
+    model_kwargs: Dict[str, Any],
+    train_dataset_callable: Callable[[Any], torch.utils.data.Dataset],
+    train_dataset_kwargs: Dict[str, Any],
+    val_dataset_callable: Callable[[Any], torch.utils.data.Dataset],
+    val_dataset_kwargs: Dict[str, Any],
+    loader_kwargs: Dict[str, Any],
+    iterations: int,
+    find_unused_parameters: bool = True,
+    optimizer_callable: Optional[Callable[[Any], torch.optim.Optimizer]] = None,
+    optimizer_kwargs: Optional[Dict[str, Any]] = None,
+    lr_scheduler_callable: Optional[Callable[[Any], torch.optim.lr_scheduler._LRScheduler]] = None,
+    lr_scheduler_kwargs: Optional[Dict[str, Any]] = None,
     trainer_callable=None,
     **kwargs
 ):
@@ -97,19 +100,19 @@ def _train_impl(
 
 
 def train_multi_gpu(
-    model_callable,
-    model_kwargs,
-    train_dataset_callable,
-    train_dataset_kwargs,
-    val_dataset_callable,
-    val_dataset_kwargs,
-    loader_kwargs,
-    iterations,
-    find_unused_parameters=True,
-    optimizer_callable=None,
-    optimizer_kwargs=None,
-    lr_scheduler_callable=None,
-    lr_scheduler_kwargs=None,
+    model_callable: Callable[[Any], torch.nn.Module],
+    model_kwargs: Dict[str, Any],
+    train_dataset_callable: Callable[[Any], torch.utils.data.Dataset],
+    train_dataset_kwargs: Dict[str, Any],
+    val_dataset_callable: Callable[[Any], torch.utils.data.Dataset],
+    val_dataset_kwargs: Dict[str, Any],
+    loader_kwargs: Dict[str, Any],
+    iterations: int,
+    find_unused_parameters: bool = True,
+    optimizer_callable: Optional[Callable[[Any], torch.optim.Optimizer]] = None,
+    optimizer_kwargs: Optional[Dict[str, Any]] = None,
+    lr_scheduler_callable: Optional[Callable[[Any], torch.optim.lr_scheduler._LRScheduler]] = None,
+    lr_scheduler_kwargs: Optional[Dict[str, Any]] = None,
     trainer_callable=None,
     **kwargs
 ) -> None:
