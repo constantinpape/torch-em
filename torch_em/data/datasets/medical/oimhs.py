@@ -3,10 +3,12 @@ from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple
+from typing import Union, Tuple, Literal
 
+import json
 import numpy as np
 import imageio.v3 as imageio
+from sklearn.model_selection import train_test_split
 
 import torch_em
 
@@ -38,7 +40,27 @@ def get_oimhs_data(path, download):
     return data_dir
 
 
-def _get_oimhs_paths(path, download):
+def _create_splits(data_dir, split_file, test_fraction=0.2):
+    eye_dirs = natsorted(glob(os.path.join(data_dir, "Images", "*")))
+
+    # let's split the data
+    main_split, test_split = train_test_split(eye_dirs, test_size=test_fraction)
+    train_split, val_split = train_test_split(main_split, test_size=0.1)
+
+    decided_splits = {"train": train_split, "val": val_split, "test": test_split}
+
+    with open(split_file, "w") as f:
+        json.dump(decided_splits, f)
+
+
+def _get_per_split_dirs(split_file, split):
+    with open(split_file, "r") as f:
+        data = json.load(f)
+
+    return data[split]
+
+
+def _get_oimhs_paths(path, split, download):
     data_dir = get_oimhs_data(path=path, download=download)
 
     image_dir = os.path.join(data_dir, "preprocessed", "images")
@@ -46,8 +68,13 @@ def _get_oimhs_paths(path, download):
     os.makedirs(image_dir, exist_ok=True)
     os.makedirs(gt_dir, exist_ok=True)
 
+    split_file = os.path.join(path, "split_file.json")
+    if not os.path.exists(split_file):
+        _create_splits(data_dir, split_file)
+
+    eye_dirs = _get_per_split_dirs(split_file=split_file, split=split)
+
     image_paths, gt_paths = [], []
-    eye_dirs = natsorted(glob(os.path.join(data_dir, "Images", "*")))
     for eye_dir in tqdm(eye_dirs):
         eye_id = os.path.split(eye_dir)[-1]
         all_oct_scan_paths = natsorted(glob(os.path.join(eye_dir, "*.png")))
@@ -56,9 +83,11 @@ def _get_oimhs_paths(path, download):
 
             image_path = os.path.join(image_dir, f"{eye_id}_{scan_id}.tif")
             gt_path = os.path.join(gt_dir, f"{eye_id}_{scan_id}.tif")
+
+            image_paths.append(image_path)
+            gt_paths.append(gt_path)
+
             if os.path.exists(image_path) and os.path.exists(gt_path):
-                image_paths.append(image_path)
-                gt_paths.append(gt_path)
                 continue
 
             scan = imageio.imread(per_scan_path)
@@ -72,15 +101,13 @@ def _get_oimhs_paths(path, download):
             imageio.imwrite(image_path, image, compression="zlib")
             imageio.imwrite(gt_path, instances, compression="zlib")
 
-            image_paths.append(image_path)
-            gt_paths.append(gt_path)
-
     return image_paths, gt_paths
 
 
 def get_oimhs_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -91,7 +118,7 @@ def get_oimhs_dataset(
 
     Please cite it if you use this dataset for your publication.
     """
-    image_paths, gt_paths = _get_oimhs_paths(path=path, download=download)
+    image_paths, gt_paths = _get_oimhs_paths(path=path, split=split, download=download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -116,6 +143,7 @@ def get_oimhs_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     batch_size: int,
+    split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -125,7 +153,7 @@ def get_oimhs_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_oimhs_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
+        path=path, patch_shape=patch_shape, split=split, resize_inputs=resize_inputs, download=download, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
