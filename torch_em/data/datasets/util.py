@@ -221,6 +221,15 @@ def unzip_tarfile(tar_path, dst, remove=True):
         os.remove(tar_path)
 
 
+def unzip_rarfile(rar_path, dst, remove=True):
+    import rarfile
+    with rarfile.RarFile(rar_path) as f:
+        f.extractall(path=dst)
+
+    if remove:
+        os.remove(rar_path)
+
+
 def unzip(zip_path, dst, remove=True):
     with zipfile.ZipFile(zip_path, "r") as f:
         f.extractall(dst)
