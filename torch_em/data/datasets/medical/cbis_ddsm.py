@@ -62,9 +62,13 @@ def get_cbis_ddsm_dataset(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataset for segmentation of calcification and mass in mammography.
 
-    https://www.kaggle.com/datasets/mohamedbenticha/cbis-ddsm/data
+    This dataset is a preprocessed version of https://www.cancerimagingarchive.net/collection/cbis-ddsm/ available
+    at https://www.kaggle.com/datasets/mohamedbenticha/cbis-ddsm/data. The related publication is:
+    - https://doi.org/10.1038/sdata.2017.177
+
+    Please cite it if you use this dataset in a publication.
     """
     image_paths, gt_paths = _get_cbis_ddsm_paths(
         path=path, split=split, task=task, tumour_type=tumour_type, download=download
@@ -99,7 +103,7 @@ def get_cbis_ddsm_loader(
     download: bool = False,
     **kwargs
 ):
-    """
+    """Dataloader for segmentation of calcification and mass in mammography. See `get_cbis_ddsm_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_cbis_ddsm_dataset(
