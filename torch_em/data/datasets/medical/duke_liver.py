@@ -11,7 +11,13 @@ from .. import util
 
 
 def get_duke_liver_data(path, download):
-    """
+    """The dataset is located at https://doi.org/10.5281/zenodo.7774566.
+
+    Follow the instructions below to get access to the dataset.
+    - Visit the zenodo site attached above.
+    - Send a request message alongwith some details to get access to the dataset.
+    - The authors would accept the request, then you can access the dataset.
+    - Next, download the `Segmentation.zip` file and provide the path where the zip file is stored.
     """
     if download:
         raise NotImplementedError(
@@ -97,7 +103,13 @@ def get_duke_liver_dataset(
     download,
     **kwargs
 ):
-    """
+    """Dataset for segmentation of liver in MRI.
+
+    This dataset is from Macdonald et al. - https://doi.org/10.1148/ryai.220275.
+
+    The dataset is located at https://doi.org/10.5281/zenodo.7774566 (see `get_duke_liver_dataset` for details).
+
+    Please cite it if you use it in a publication.
     """
 
     image_paths, gt_paths = _get_duke_liver_paths(path=path, download=download)
@@ -129,7 +141,7 @@ def get_duke_liver_loader(
     download,
     **kwargs
 ):
-    """
+    """Dataloader for segmentation of liver in MRI. See `get_duke_liver_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_duke_liver_dataset(
