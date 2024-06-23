@@ -8,13 +8,12 @@ ROOT = "/media/anwai/ANWAI/data/m2caiseg"
 def check_m2caiseg():
     loader = get_m2caiseg_loader(
         path=ROOT,
-        split="val",
+        split="train",
         patch_shape=(512, 512),
         batch_size=2,
-        resize_inputs=False,
+        resize_inputs=True,
         download=True,
     )
-
     check_loader(loader, 8)
 
 

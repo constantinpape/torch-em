@@ -15,14 +15,24 @@ from .. import util
 
 LABEL_MAPS = {
     (0, 0, 0): 0,  # out of frame
-    (0, 85, 170): 1,  # instrument
-    (85, 170, 0): 2,  # liver
-    (85, 170, 255): 3,  # gall bladder
-    (85, 255, 0): 4,  # fat
-    (85, 255, 170): 5,  # upper wall
-    (255, 0, 255): 6,  # intestine
-    (170, 0, 255): 7,  # artery
-    (170, 0, 85): 8,  # unknown
+    (0, 85, 170): 1,  # grasper
+    (0, 85, 255): 2,  # bipolar
+    (0, 170, 255): 3,  # hook
+    (0, 255, 85): 4,  # scissors
+    (0, 255, 170): 5,  # clipper
+    (85, 0, 170): 6,  # irrigator
+    (85, 0, 255): 7,  # specimen bag
+    (170, 85, 85): 8,  # trocars
+    (170, 170, 170): 9,  # clip
+    (85, 170, 0): 10,  # liver
+    (85, 170, 255): 11,  # gall bladder
+    (85, 255, 0): 12,  # fat
+    (85, 255, 170): 13,  # upper wall
+    (170, 0, 255): 14,  # artery
+    (255, 0, 255): 15,  # intestine
+    (255, 255, 0): 16,  # bile
+    (255, 0, 0): 17,  # blood
+    (170, 0, 85): 18,  # unknown
 }
 
 
@@ -65,8 +75,11 @@ def _get_m2caiseg_paths(path, split, download):
         image_paths = natsorted(glob(os.path.join(data_dir, split, "images", "*.jpg")))
         gt_paths = natsorted(glob(os.path.join(data_dir, split, "groundtruth", "*.png")))
 
-    images_dir = os.path.join(data_dir, "preprocessed", "images")
-    mask_dir = os.path.join(data_dir, "preprocessed_masks")
+    images_dir = os.path.join(data_dir, "preprocessed", split, "images")
+    mask_dir = os.path.join(data_dir, "preprocessed", split, "masks")
+    if os.path.exists(images_dir) and os.path.exists(mask_dir):
+        return natsorted(glob(os.path.join(images_dir, "*"))), natsorted(glob(os.path.join(mask_dir, "*")))
+
     os.makedirs(images_dir, exist_ok=True)
     os.makedirs(mask_dir, exist_ok=True)
 
@@ -120,10 +133,6 @@ def get_m2caiseg_dataset(
     assert split in ["train", "val", "test"]
 
     image_paths, gt_paths = _get_m2caiseg_paths(path=path, split=split, download=download)
-
-    print(len(image_paths), len(gt_paths))
-
-    breakpoint()
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
