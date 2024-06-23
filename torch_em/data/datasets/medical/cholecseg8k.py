@@ -4,6 +4,7 @@ from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
+from typing import Tuple, Union, Literal
 
 import numpy as np
 import imageio.v3 as imageio
@@ -103,7 +104,12 @@ def _get_cholecseg8k_paths(path, split, download):
 
 
 def get_cholecseg8k_dataset(
-    path, patch_shape, split, resize_inputs=False, download=False, **kwargs
+    path: Union[str, os.PathLike],
+    patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
+    resize_inputs: bool = False,
+    download: bool = False,
+    **kwargs
 ):
     """Dataset for segmentation of organs and instruments in endoscopy.
 
@@ -135,7 +141,13 @@ def get_cholecseg8k_dataset(
 
 
 def get_cholecseg8k_loader(
-    path, patch_shape, batch_size, split, resize_inputs=False, download=False, **kwargs
+    path: Union[str, os.PathLike],
+    patch_shape: Tuple[int, int],
+    batch_size: int,
+    split: Literal["train", "val", "test"],
+    resize_inputs: bool = False,
+    download: bool = False,
+    **kwargs
 ):
     """Dataloader for segmentation of organs and instruments in endoscopy. See `get_cholecseg_dataset` for details.
     """
