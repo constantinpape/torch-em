@@ -1,5 +1,4 @@
 import os
-import shutil
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
@@ -110,6 +109,14 @@ def get_m2caiseg_dataset(
     download: bool = False,
     **kwargs
 ):
+    """Dataset for segmentation of organs and instruments in endoscopy.
+
+    This data is from Maqbool et al. - https://doi.org/10.48550/arXiv.2008.10134
+
+    This dataset is located at https://www.kaggle.com/datasets/salmanmaq/m2caiseg
+
+    Please cite it if you use this data in a publication.
+    """
     assert split in ["train", "val", "test"]
 
     image_paths, gt_paths = _get_m2caiseg_paths(path=path, split=split, download=download)
@@ -146,6 +153,8 @@ def get_m2caiseg_loader(
     download: bool = False,
     **kwargs
 ):
+    """Dataloader for segmentation of organs and instruments in endoscopy. See `get_m2caiseg_dataset` for details.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_m2caiseg_dataset(
         path=path, split=split, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
