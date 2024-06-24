@@ -98,7 +98,7 @@ def get_papila_dataset(
     image_paths, gt_paths = _get_papila_paths(path=path, task=task, expert_choice=expert_choice, download=download)
 
     if resize_inputs:
-        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
         kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
