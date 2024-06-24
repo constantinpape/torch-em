@@ -2,6 +2,7 @@ from .autopet import get_autopet_loader
 from .btcv import get_btcv_dataset, get_btcv_loader
 from .busi import get_busi_dataset, get_busi_loader
 from .camus import get_camus_dataset, get_camus_loader
+from .cholecseg8k import get_cholecseg8k_dataset, get_cholecseg8k_loader
 from .drive import get_drive_dataset, get_drive_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
