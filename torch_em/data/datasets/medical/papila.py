@@ -2,17 +2,15 @@ import os
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
-from typing import Union, Tuple
+from typing import Union, Tuple, Literal
 
 import numpy as np
 from skimage import draw
 import imageio.v3 as imageio
 
 import torch_em
-from torch_em.transform.generic import ResizeInputs
 
 from .. import util
-from ... import ImageCollectionDataset
 
 
 URL = "https://figshare.com/ndownloader/files/35013982"
@@ -51,13 +49,10 @@ def _get_papila_paths(path, task, expert_choice, download):
 
     gt_dir = os.path.join(data_dir, "ground_truth")
     if os.path.exists(gt_dir):
-        gt_paths = sorted(glob(os.path.join(gt_dir, f"*_{task}.tif")))
+        gt_paths = sorted(glob(os.path.join(gt_dir, f"*_{task}_{expert_choice}.tif")))
         return image_paths, gt_paths
 
     os.makedirs(gt_dir, exist_ok=True)
-
-    if task is None:  # we get the binary segmentations for both disc and cup
-        task = "*"
 
     patient_ids = [Path(image_path).stem for image_path in image_paths]
 
@@ -68,11 +63,9 @@ def _get_papila_paths(path, task, expert_choice, download):
             glob(os.path.join(data_dir, "ExpertsSegmentations", "Contours", f"{patient_id}_{task}_{expert_choice}.txt"))
         )
 
-        assert len(gt_contours) == (4 if task is None else 2)
-
         for gt_contour in gt_contours:
             tmp_task = Path(gt_contour).stem.split("_")[1]
-            gt_path = os.path.join(gt_dir, f"{patient_id}_{tmp_task}.tif")
+            gt_path = os.path.join(gt_dir, f"{patient_id}_{tmp_task}_{expert_choice}.tif")
             gt_paths.append(gt_path)
             if os.path.exists(gt_path):
                 continue
@@ -86,8 +79,8 @@ def _get_papila_paths(path, task, expert_choice, download):
 def get_papila_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    task: str = "disc",
-    expert_choice: str = "exp1",
+    task: Literal["cup", "disc"] = "disc",
+    expert_choice: Literal["exp1", "exp2"] = "exp1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -100,26 +93,23 @@ def get_papila_dataset(
     Please cite it if you use this dataset for a publication.
     """
     assert expert_choice in ["exp1", "exp2"], f"'{expert_choice}' is not a valid expert choice."
-
-    if task is not None:
-        assert task in ["cup", "disc"], f"'{task}' is not a valid task."
+    assert task in ["cup", "disc"], f"'{task}' is not a valid task."
 
     image_paths, gt_paths = _get_papila_paths(path=path, task=task, expert_choice=expert_choice, download=download)
 
     if resize_inputs:
-        raw_trafo = ResizeInputs(target_shape=patch_shape, is_rgb=True)
-        label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
-        patch_shape = None
-    else:
-        patch_shape = patch_shape
-        raw_trafo, label_trafo = None, None
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
-    dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths,
-        label_image_paths=gt_paths,
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
         patch_shape=patch_shape,
-        raw_transform=raw_trafo,
-        label_transform=label_trafo,
+        is_seg_dataset=False,
         **kwargs
     )
 
@@ -130,8 +120,8 @@ def get_papila_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     batch_size: int,
-    task: str = "disc",
-    expert_choice: str = "exp1",
+    task: Literal["cup", "disc"] = "disc",
+    expert_choice: Literal["exp1", "exp2"] = "exp1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
