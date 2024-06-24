@@ -1,12 +1,10 @@
 import os
 from glob import glob
-from typing import Union, Tuple
+from typing import Union, Tuple, Literal
 
 import torch_em
-from torch_em.transform.generic import ResizeInputs
 
 from .. import util
-from ... import ImageCollectionDataset
 
 
 KAGGLE_DATASET_NAME = "vbookshelf/pneumothorax-chest-xray-images-and-masks"
@@ -42,7 +40,7 @@ def _get_siim_acr_paths(path, split, download):
 
 def get_siim_acr_dataset(
     path: Union[os.PathLike, str],
-    split: str,
+    split: Literal["train", "test"],
     patch_shape: Tuple[int, int],
     download: bool = False,
     resize_inputs: bool = False,
@@ -60,19 +58,18 @@ def get_siim_acr_dataset(
     image_paths, gt_paths = _get_siim_acr_paths(path=path, split=split, download=download)
 
     if resize_inputs:
-        raw_trafo = ResizeInputs(target_shape=patch_shape, is_label=False)
-        label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
-        patch_shape = None
-    else:
-        patch_shape = patch_shape
-        raw_trafo, label_trafo = None, None
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
-    dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths,
-        label_image_paths=gt_paths,
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
         patch_shape=patch_shape,
-        raw_transform=raw_trafo,
-        label_transform=label_trafo,
+        is_seg_dataset=False,
         **kwargs
     )
     dataset.max_sampling_attempts = 5000
@@ -82,7 +79,7 @@ def get_siim_acr_dataset(
 
 def get_siim_acr_loader(
     path: Union[os.PathLike, str],
-    split: str,
+    split: Literal["train", "test"],
     patch_shape: Tuple[int, int],
     batch_size: int,
     download: bool = False,
