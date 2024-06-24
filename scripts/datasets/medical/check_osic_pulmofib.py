@@ -2,7 +2,7 @@ from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_osic_pulmofib_loader
 
 
-ROOT = "/scratch/share/cidas/cca/data/osic_pulmofib"
+ROOT = "/media/anwai/ANWAI/data/osic_pulmofib"
 
 
 def check_osic_pulmofib():
@@ -14,7 +14,7 @@ def check_osic_pulmofib():
         download=True,
     )
 
-    check_loader(loader, 8, plt=True, save_path="./osic.png")
+    check_loader(loader, 8)
 
 
 if __name__ == "__main__":
