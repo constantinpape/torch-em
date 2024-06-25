@@ -1,3 +1,4 @@
+[![DOC](https://shields.mitmproxy.org/badge/docs-pdoc.dev-brightgreen.svg)](https://constantinpape.github.io/torch-em/torch_em.html)
 [![Build Status](https://github.com/constantinpape/torch-em/workflows/test/badge.svg)](https://github.com/constantinpape/torch-em/actions)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5108853.svg)](https://doi.org/10.5281/zenodo.5108853)
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/torch_em/badges/version.svg)](https://anaconda.org/conda-forge/torch_em)
@@ -103,7 +104,7 @@ If you want to use the GPU version, make sure to set the correct CUDA version fo
 
 You can set up a conda environment using one of these files like this:
 ```bash
-mamba create -f <ENV>.yaml -n <ENV_NAME>
+mamba env create -f <ENV>.yaml -n <ENV_NAME>
 mamba activate <ENV_NAME>
 pip install -e .
 ```

@@ -41,6 +41,7 @@ class DefaultTrainer:
         id_: Optional[str] = None,
         save_root: Optional[str] = None,
         compile_model: Optional[Union[bool, str]] = None,
+        rank: Optional[int] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
@@ -62,6 +63,7 @@ class DefaultTrainer:
         self.log_image_interval = log_image_interval
         self.save_root = save_root
         self.compile_model = compile_model
+        self.rank = rank
 
         self._iteration = 0
         self._epoch = 0
@@ -477,7 +479,10 @@ class DefaultTrainer:
             save_dict.update({"scaler_state": self.scaler.state_dict()})
         if self.lr_scheduler is not None:
             save_dict.update({"scheduler_state": self.lr_scheduler.state_dict()})
-        torch.save(save_dict, save_path)
+
+        rank = getattr(self, "rank", None)
+        if rank is None or rank == 0:
+            torch.save(save_dict, save_path)
 
     def load_checkpoint(self, checkpoint="best"):
         if isinstance(checkpoint, str):
@@ -566,9 +571,15 @@ class DefaultTrainer:
         msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
         train_epochs = self.max_epoch - self._epoch
         t_start = time.time()
-        for _ in range(train_epochs):
+        for epoch in range(train_epochs):
 
-            # run training and validation for this epoch
+            # Ensure data is shuffled differently at each epoch.
+            try:
+                self.train_loader.sampler.set_epoch(epoch)
+            except AttributeError:
+                pass
+
+            # Run training and validation for this epoch
             t_per_iter = train_epoch(progress)
             current_metric = validate()
 

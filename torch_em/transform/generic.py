@@ -34,13 +34,18 @@ class Tile(torch.nn.Module):
 
 # a simple way to compose transforms
 class Compose:
-    def __init__(self, *transforms):
+    def __init__(self, *transforms, is_multi_tensor=True):
         self.transforms = transforms
+        self.is_multi_tensor = is_multi_tensor
 
     def __call__(self, *inputs):
         outputs = self.transforms[0](*inputs)
         for trafo in self.transforms[1:]:
-            outputs = trafo(*outputs)
+            if self.is_multi_tensor:
+                outputs = trafo(*outputs)
+            else:
+                outputs = trafo(outputs)
+
         return outputs
 
 
@@ -73,9 +78,10 @@ class Rescale:
 
 
 class ResizeInputs:
-    def __init__(self, target_shape, is_label=False):
+    def __init__(self, target_shape, is_label=False, is_rgb=False):
         self.target_shape = target_shape
         self.is_label = is_label
+        self.is_rgb = is_rgb
 
     def __call__(self, inputs):
         if self.is_label:  # kwargs needed for int data
@@ -83,9 +89,15 @@ class ResizeInputs:
         else:  # we use the default settings for float data
             kwargs = {}
 
+        if self.is_rgb:
+            assert inputs.ndim == 3 and inputs.shape[0] == 3
+            patch_shape = (3, *self.target_shape)
+        else:
+            patch_shape = self.target_shape
+
         inputs = resize(
             image=inputs,
-            output_shape=self.target_shape,
+            output_shape=patch_shape,
             preserve_range=True,
             **kwargs
         ).astype(inputs.dtype)

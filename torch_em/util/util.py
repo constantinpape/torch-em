@@ -5,7 +5,6 @@ from collections import OrderedDict
 import numpy as np
 import torch
 import torch_em
-import matplotlib.pyplot as plt
 from matplotlib import colors
 
 # this is a fairly brittle way to check if a module is compiled.
@@ -169,9 +168,9 @@ def get_constructor_arguments(obj):
     # TODO support common torch losses (e.g. CrossEntropy, BCE)
 
     warnings.warn(
-        f"Constructor arguments for {type(obj)} cannot be deduced." +
-        "For this object, empty constructor arguments will be used." +
-        "Hence, the trainer can probably not be correctly deserialized via 'DefaultTrainer.from_checkpoint'."
+        f"Constructor arguments for {type(obj)} cannot be deduced.\n" +
+        "For this object, empty constructor arguments will be used.\n" +
+        "The trainer can probably not be correctly deserialized via 'DefaultTrainer.from_checkpoint'."
     )
     return {}
 
@@ -248,7 +247,6 @@ def model_is_equal(model1, model2):
         if p1.data.ne(p2.data).sum() > 0:
             return False
     return True
-
 
 
 def get_random_colors(labels):

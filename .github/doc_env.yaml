@@ -1,0 +1,13 @@
+channels:
+    - pytorch
+    - conda-forge
+name:
+    sam
+dependencies:
+    - cpuonly
+    - pdoc
+    - python-elf
+    - pytorch
+    - torchvision
+    - tqdm
+    - zarr

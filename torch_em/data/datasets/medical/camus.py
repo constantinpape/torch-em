@@ -3,13 +3,14 @@ from glob import glob
 from typing import Union, Tuple, Optional
 
 import torch_em
-from torch_em.transform.generic import ResizeInputs
 
 from .. import util
 
 
 URL = "https://humanheart-project.creatis.insa-lyon.fr/database/api/v1/folder/63fde55f73e9f004868fb7ac/download"
-CHECKSUM = "43745d640db5d979332bda7f00f4746747a2591b46efc8f1966b573ce8d65655"
+
+# TODO: the checksums are different with each download, not sure why
+# CHECKSUM = "43745d640db5d979332bda7f00f4746747a2591b46efc8f1966b573ce8d65655"
 
 
 def get_camus_data(path, download):
@@ -20,7 +21,7 @@ def get_camus_data(path, download):
         return data_dir
 
     zip_path = os.path.join(path, "CAMUS.zip")
-    util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
+    util.download_source(path=zip_path, url=URL, download=download, checksum=None)
     util.unzip(zip_path=zip_path, dst=path)
 
     return data_dir
@@ -60,12 +61,10 @@ def get_camus_dataset(
     image_paths, gt_paths = _get_camus_paths(path=path, chamber=chamber, download=download)
 
     if resize_inputs:
-        raw_trafo = ResizeInputs(target_shape=patch_shape, is_label=False)
-        label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
-        patch_shape = None
-    else:
-        patch_shape = patch_shape
-        raw_trafo, label_trafo = None, None
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
@@ -73,8 +72,6 @@ def get_camus_dataset(
         label_paths=gt_paths,
         label_key="data",
         patch_shape=patch_shape,
-        raw_transform=raw_trafo,
-        label_transform=label_trafo,
         **kwargs
     )
 
