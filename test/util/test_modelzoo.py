@@ -63,7 +63,7 @@ class TestModelzoo(unittest.TestCase):
         )
         model = UNet2d(in_channels=1, out_channels=n_channels,
                        depth=2, initial_features=4, norm="BatchNorm")
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
         trainer = DefaultTrainer(
             name=self.name, train_loader=loader, val_loader=loader,
             model=model, loss=DiceLoss(), metric=DiceLoss(),
