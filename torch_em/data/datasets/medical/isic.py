@@ -1,15 +1,12 @@
 import os
 from glob import glob
 from pathlib import Path
-from typing import Union, Tuple, Optional, Any
-
-from skimage.transform import resize
+from typing import Union, Tuple
 
 import torch_em
 
 from .. import util
-from ..neurips_cell_seg import to_rgb
-from ... import ImageCollectionDataset
+from ..light_microscopy.neurips_cell_seg import to_rgb
 
 
 URL = {
@@ -79,37 +76,13 @@ def _get_isic_paths(path, split, download):
     return image_paths, gt_paths
 
 
-class _DownSizeInputs:
-    def __init__(self, target_shape, is_label=False):
-        self.target_shape = target_shape
-        self.is_label = is_label
-
-    def __call__(self, inputs):
-        print(inputs.shape)
-        if self.is_label:
-            anti_aliasing = True
-        else:
-            anti_aliasing = False
-
-        inputs = resize(
-            image=inputs,
-            output_shape=self.target_shape,
-            order=3,
-            anti_aliasing=anti_aliasing,
-            preserve_range=True,
-        )
-
-        return inputs
-
-
 def get_isic_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     split: str,
     download: bool = False,
     make_rgb: bool = True,
-    raw_transform: Optional[Any] = None,
-    transform: Optional[Any] = None,
+    resize_inputs: bool = False,
     **kwargs
 ):
     """Dataset for the segmentation of skin lesion in dermoscopy images.
@@ -127,21 +100,22 @@ def get_isic_dataset(
 
     image_paths, gt_paths = _get_isic_paths(path=path, split=split, download=download)
 
-    if raw_transform is None:
-        trafo = to_rgb if make_rgb else None
-        raw_transform = torch_em.transform.get_raw_transform(
-            augmentation1=_DownSizeInputs(target_shape=patch_shape),
-            augmentation2=trafo
-        )
-    if transform is None:
-        transform = torch_em.transform.get_augmentations(ndim=2)
+    if make_rgb:
+        kwargs["raw_transform"] = to_rgb
 
-    dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths,
-        label_image_paths=gt_paths,
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
+
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
         patch_shape=patch_shape,
-        raw_transform=raw_transform,
-        transform=transform,
+        is_seg_dataset=False,
         **kwargs
     )
     return dataset
@@ -154,8 +128,7 @@ def get_isic_loader(
     split: str,
     download: bool = False,
     make_rgb: bool = True,
-    raw_transform: Optional[Any] = None,
-    transform: Optional[Any] = None,
+    resize_inputs: bool = False,
     **kwargs
 ):
     """Dataloader for the segmentation of skin lesion in dermoscopy images. See `get_isic_dataset` for details.
@@ -167,8 +140,7 @@ def get_isic_loader(
         split=split,
         download=download,
         make_rgb=make_rgb,
-        raw_transform=raw_transform,
-        transform=transform,
+        resize_inputs=resize_inputs,
         **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
