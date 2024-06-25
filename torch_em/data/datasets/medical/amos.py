@@ -22,7 +22,7 @@ def get_amos_data(path, download, remove_zip=False):
     zip_path = os.path.join(path, "amos22.zip")
 
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
-    util.unzip(zip_path=zip_path, dst=data_dir, remove=remove_zip)
+    util.unzip(zip_path=zip_path, dst=path, remove=remove_zip)
 
     return data_dir
 
@@ -75,6 +75,7 @@ def get_amos_dataset(
     split: str,
     patch_shape: Tuple[int, ...],
     modality: Optional[str] = None,
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
@@ -83,10 +84,14 @@ def get_amos_dataset(
     The database is located at https://doi.org/10.5281/zenodo.7155725
     The dataset is from AMOS 2022 Challenge - https://doi.org/10.48550/arXiv.2206.08023
     Please cite it if you use this dataset for publication.
-
-    TODO: mention the organ annotations mapping, and allow the user to choose their desired organs.
     """
     image_paths, gt_paths = _get_amos_paths(path=path, split=split, modality=modality, download=download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
@@ -94,6 +99,7 @@ def get_amos_dataset(
         label_paths=gt_paths,
         label_key="data",
         patch_shape=patch_shape,
+        is_seg_dataset=True,
         **kwargs
     )
 
@@ -106,6 +112,7 @@ def get_amos_loader(
     patch_shape: Tuple[int, ...],
     batch_size: int,
     modality: Optional[str] = None,
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
@@ -113,7 +120,13 @@ def get_amos_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_amos_dataset(
-        path=path, split=split, patch_shape=patch_shape, modality=modality, download=download, **ds_kwargs
+        path=path,
+        split=split,
+        patch_shape=patch_shape,
+        modality=modality,
+        resize_inputs=resize_inputs,
+        download=download,
+        **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
