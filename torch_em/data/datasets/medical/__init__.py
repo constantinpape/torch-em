@@ -4,6 +4,7 @@ from .busi import get_busi_dataset, get_busi_loader
 from .camus import get_camus_dataset, get_camus_loader
 from .cbis_ddsm import get_cbis_ddsm_dataset, get_cbis_ddsm_loader
 from .cholecseg8k import get_cholecseg8k_dataset, get_cholecseg8k_loader
+from .dca1 import get_dca1_dataset, get_dca1_loader
 from .drive import get_drive_dataset, get_drive_loader
 from .duke_liver import get_duke_liver_dataset, get_duke_liver_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
