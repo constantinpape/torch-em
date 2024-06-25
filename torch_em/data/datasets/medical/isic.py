@@ -62,7 +62,7 @@ def get_isic_data(path, split, download):
     util.unzip(zip_path=im_zip_path, dst=path, remove=False)
     # download the ground-truth
     util.download_source(path=gt_zip_path, url=gt_url, download=download, checksum=gt_checksum)
-    util.unzip(zip_path=im_zip_path, dst=path, remove=False)
+    util.unzip(zip_path=gt_zip_path, dst=path, remove=False)
 
     return imdir, gtdir
 
