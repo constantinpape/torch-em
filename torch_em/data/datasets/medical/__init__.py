@@ -9,6 +9,7 @@ from .drive import get_drive_dataset, get_drive_loader
 from .duke_liver import get_duke_liver_dataset, get_duke_liver_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
+from .isic import get_isic_dataset, get_isic_loader
 from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
 from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
