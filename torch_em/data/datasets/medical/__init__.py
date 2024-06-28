@@ -24,4 +24,5 @@ from .plethora import get_plethora_dataset, get_plethora_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .sega import get_sega_dataset, get_sega_loader
 from .siim_acr import get_siim_acr_dataset, get_siim_acr_loader
+from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
