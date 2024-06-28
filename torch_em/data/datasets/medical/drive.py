@@ -6,10 +6,8 @@ from typing import Union, Tuple
 import imageio.v3 as imageio
 
 import torch_em
-from torch_em.transform.generic import ResizeInputs
 
 from .. import util
-from ... import ImageCollectionDataset
 
 
 URL = {
@@ -60,11 +58,20 @@ def _get_drive_ground_truth(data_dir):
     return neu_gt_paths
 
 
-def _get_drive_paths(path, download):
+def _get_drive_paths(path, split, download):
     data_dir = get_drive_data(path=path, download=download)
 
     image_paths = sorted(glob(os.path.join(data_dir, "images", "*.tif")))
     gt_paths = _get_drive_ground_truth(data_dir)
+
+    if split == "train":
+        image_paths, gt_paths = image_paths[:10], gt_paths[:10]
+    elif split == "val":
+        image_paths, gt_paths = image_paths[10:14], gt_paths[10:14]
+    elif split == "test":
+        image_paths, gt_paths = image_paths[14:], gt_paths[14:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
 
     return image_paths, gt_paths
 
@@ -72,6 +79,7 @@ def _get_drive_paths(path, download):
 def get_drive_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    split: str,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -84,22 +92,21 @@ def get_drive_dataset(
 
     Please cite it if you use this dataset for a publication.
     """
-    image_paths, gt_paths = _get_drive_paths(path=path, download=download)
+    image_paths, gt_paths = _get_drive_paths(path=path, split=split, download=download)
 
     if resize_inputs:
-        raw_trafo = ResizeInputs(target_shape=patch_shape, is_rgb=True)
-        label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
-        patch_shape = None
-    else:
-        patch_shape = patch_shape
-        raw_trafo, label_trafo = None, None
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
-    dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths,
-        label_image_paths=gt_paths,
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
         patch_shape=patch_shape,
-        raw_transform=raw_trafo,
-        label_transform=label_trafo,
+        is_seg_dataset=False,
         **kwargs
     )
 
@@ -109,6 +116,7 @@ def get_drive_dataset(
 def get_drive_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    split: str,
     batch_size: int,
     resize_inputs: bool = False,
     download: bool = False,
@@ -118,7 +126,7 @@ def get_drive_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_drive_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
+        path=path, patch_shape=patch_shape, split=split, resize_inputs=resize_inputs, download=download, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
