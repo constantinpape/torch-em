@@ -48,10 +48,6 @@ def _get_papila_paths(path, task, expert_choice, download):
     image_paths = sorted(glob(os.path.join(data_dir, "FundusImages", "*.jpg")))
 
     gt_dir = os.path.join(data_dir, "ground_truth")
-    if os.path.exists(gt_dir):
-        gt_paths = sorted(glob(os.path.join(gt_dir, f"*_{task}_{expert_choice}.tif")))
-        return image_paths, gt_paths
-
     os.makedirs(gt_dir, exist_ok=True)
 
     patient_ids = [Path(image_path).stem for image_path in image_paths]
