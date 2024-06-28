@@ -1,26 +1,21 @@
-import os
-from glob import glob
+from torch_em.util.debug import check_loader
+from torch_em.data import MinInstanceSampler
+from torch_em.data.datasets.medical import get_toothfairy_loader
 
-import numpy as np
+
+ROOT = "/scratch/share/cidas/cca/data/toothfairy/"
 
 
 def check_toothfairy():
-    root = "/media/anwai/ANWAI/data/toothfairy/ToothFairy_Dataset/Dataset"
-    for pid in glob(os.path.join(root, "P*")):
-        dense_anns = os.path.join(pid, "gt_alpha.npy")
-        if not os.path.exists(dense_anns):
-            continue
+    loader = get_toothfairy_loader(
+        path=ROOT,
+        patch_shape=(1, 512, 512),
+        ndim=2,
+        batch_size=2,
+        sampler=MinInstanceSampler()
+    )
 
-        inputs = os.path.join(pid, "data.npy")
-
-        image = np.load(inputs)
-        gt = np.load(dense_anns)
-
-        import napari
-        v = napari.Viewer()
-        v.add_image(image)
-        v.add_image(gt)
-        napari.run()
+    check_loader(loader, 8, plt=True, save_path="./toothfairy.png")
 
 
 check_toothfairy()
