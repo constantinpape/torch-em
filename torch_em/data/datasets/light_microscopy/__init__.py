@@ -1,3 +1,4 @@
+from .cellpose import get_cellpose_loader, get_cellpose_dataset
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .ctc import get_ctc_segmentation_loader, get_ctc_segmentation_dataset
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
