@@ -88,10 +88,19 @@ def _preprocess_data(path, data_dir):
     return image_paths, gt_paths
 
 
-def _get_duke_liver_paths(path, download):
+def _get_duke_liver_paths(path, split, download):
     data_dir = get_duke_liver_data(path=path, download=download)
 
     image_paths, gt_paths = _preprocess_data(path=path, data_dir=data_dir)
+
+    if split == "train":
+        image_paths, gt_paths = image_paths[:250], gt_paths[:250]
+    elif split == "val":
+        image_paths, gt_paths = image_paths[250:260], gt_paths[250:260]
+    elif split == "test":
+        image_paths, gt_paths = image_paths[260:], gt_paths[260:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
 
     return image_paths, gt_paths
 
@@ -99,8 +108,9 @@ def _get_duke_liver_paths(path, download):
 def get_duke_liver_dataset(
     path,
     patch_shape,
-    resize_inputs,
-    download,
+    split,
+    resize_inputs=False,
+    download=False,
     **kwargs
 ):
     """Dataset for segmentation of liver in MRI.
@@ -112,7 +122,7 @@ def get_duke_liver_dataset(
     Please cite it if you use it in a publication.
     """
 
-    image_paths, gt_paths = _get_duke_liver_paths(path=path, download=download)
+    image_paths, gt_paths = _get_duke_liver_paths(path=path, split=split, download=download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -137,15 +147,16 @@ def get_duke_liver_loader(
     path,
     patch_shape,
     batch_size,
-    resize_inputs,
-    download,
+    split,
+    resize_inputs=False,
+    download=False,
     **kwargs
 ):
     """Dataloader for segmentation of liver in MRI. See `get_duke_liver_dataset` for details.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_duke_liver_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
+        path=path, patch_shape=patch_shape, split=split, resize_inputs=resize_inputs, download=download, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
     return loader
