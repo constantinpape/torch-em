@@ -9,11 +9,10 @@ ROOT = "/media/anwai/ANWAI/data/acdc"
 def check_acdc():
     loader = get_acdc_loader(
         path=ROOT,
-        patch_shape=(1, 256, 256),
+        patch_shape=(4, 256, 256),
         batch_size=2,
         split="train",
         download=True,
-        ndim=2,
         sampler=MinInstanceSampler(min_num_instances=4),
     )
 
