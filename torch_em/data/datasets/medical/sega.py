@@ -66,7 +66,7 @@ def _get_sega_paths(path, data_choice, download):
             else:
                 image_paths.append(volume_path)
 
-    # now let's make channels first for all volumes
+    # now let's wrap the volumes to nifti format
     fimage_dir = os.path.join(path, "data", "images")
     fgt_dir = os.path.join(path, "data", "labels")
 
@@ -90,9 +90,6 @@ def _get_sega_paths(path, data_choice, download):
 
         image = nrrd.read(image_path)[0]
         gt = nrrd.read(gt_path)[0]
-
-        # make channels first now
-        image, gt = image.transpose(2, 0, 1), gt.transpose(2, 0, 1)
 
         image_nifti = nib.Nifti2Image(image, np.eye(4))
         gt_nifti = nib.Nifti2Image(gt, np.eye(4))
