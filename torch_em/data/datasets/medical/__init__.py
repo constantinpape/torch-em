@@ -1,3 +1,4 @@
+from .acdc import get_acdc_dataset, get_acdc_loader
 from .autopet import get_autopet_loader
 from .amos import get_amos_dataset, get_amos_loader
 from .btcv import get_btcv_dataset, get_btcv_loader
