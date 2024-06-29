@@ -9,9 +9,9 @@ def check_duke_liver():
     from micro_sam.training import identity
     loader = get_duke_liver_loader(
         path=ROOT,
-        patch_shape=(1, 512, 512),
+        patch_shape=(32, 512, 512),
         batch_size=2,
-        resize_inputs=True,
+        split="train",
         download=False,
         raw_transform=identity,
 
