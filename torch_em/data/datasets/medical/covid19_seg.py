@@ -46,7 +46,7 @@ def get_covid19_seg_data(path, task, download):
     util.download_source(
         path=im_zip_path, url=URL["images"], download=download, checksum=CHECKSUM["images"]
     )
-    util.unzip(zip_path=im_zip_path, dst=im_dir)
+    util.unzip(zip_path=im_zip_path, dst=im_dir, remove=False)
 
     # download the gt
     util.download_source(
@@ -55,6 +55,15 @@ def get_covid19_seg_data(path, task, download):
     util.unzip(zip_path=gt_zip_path, dst=gt_dir)
 
     return im_dir, gt_dir
+
+
+def _get_covid19_seg_paths(path, task, download):
+    image_dir, gt_dir = get_covid19_seg_data(path=path, task=task, download=download)
+
+    image_paths = sorted(glob(os.path.join(image_dir, "*.nii.gz")))
+    gt_paths = sorted(glob(os.path.join(gt_dir, "*.nii.gz")))
+
+    return image_paths, gt_paths
 
 
 def get_covid19_seg_dataset(
@@ -76,10 +85,7 @@ def get_covid19_seg_dataset(
     else:
         assert task in ["lung", "infection", "lung_and_infection"], f"{task} is not a valid task."
 
-    image_dir, gt_dir = get_covid19_seg_data(path=path, task=task, download=download)
-
-    image_paths = sorted(glob(os.path.join(image_dir, "*.nii.gz")))
-    gt_paths = sorted(glob(os.path.join(gt_dir, "*.nii.gz")))\
+    image_paths, gt_paths = _get_covid19_seg_paths(path, task, download)
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
@@ -87,6 +93,7 @@ def get_covid19_seg_dataset(
         label_paths=gt_paths,
         label_key="data",
         patch_shape=patch_shape,
+        is_seg_dataset=True,
         **kwargs
     )
 
