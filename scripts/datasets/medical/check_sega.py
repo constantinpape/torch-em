@@ -9,11 +9,9 @@ ROOT = "/media/anwai/ANWAI/data/sega"
 def check_sega():
     loader = get_sega_loader(
         path=ROOT,
-        patch_shape=(1, 512, 512),
+        patch_shape=(32, 512, 512),
         batch_size=2,
-        ndim=2,
         data_choice="KiTS",
-        resize_inputs=True,
         download=True,
         sampler=MinInstanceSampler(),
     )
