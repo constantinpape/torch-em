@@ -85,7 +85,7 @@ def _preprocess_data(path, data_dir):
             nib.save(image, image_path)
             nib.save(gt, gt_path)
 
-    return image_paths, gt_paths
+    return natsorted(image_paths), natsorted(gt_paths)
 
 
 def _get_duke_liver_paths(path, split, download):
