@@ -154,7 +154,7 @@ def download_source_empiar(path, access_id, download):
     return download_path
 
 
-def download_source_kaggle(path, dataset_name, download):
+def download_source_kaggle(path, dataset_name, download, competition=False):
     if not download:
         raise RuntimeError(f"Cannot fine the data at {path}, but download was set to False.")
 
@@ -168,7 +168,11 @@ def download_source_kaggle(path, dataset_name, download):
 
     api = KaggleApi()
     api.authenticate()
-    api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
+
+    if competition:
+        api.competition_download_files(competition=dataset_name, path=path, quiet=False)
+    else:
+        api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
 
 
 def download_source_tcia(path, url, dst, csv_filename, download):
@@ -194,6 +198,36 @@ def update_kwargs(kwargs, key, value, msg=None):
         warn(msg)
     kwargs[key] = value
     return kwargs
+
+
+def unzip_tarfile(tar_path, dst, remove=True):
+    import tarfile
+
+    if tar_path.endswith(".tar.gz"):
+        access_mode = "r:gz"
+    elif tar_path.endswith(".tar"):
+        access_mode = "r:"
+    else:
+        raise ValueError(
+            "The provided file isn't a supported archive to unpack. ",
+            f"Please check the file: {tar_path}"
+        )
+
+    tar = tarfile.open(tar_path, access_mode)
+    tar.extractall(dst)
+    tar.close()
+
+    if remove:
+        os.remove(tar_path)
+
+
+def unzip_rarfile(rar_path, dst, remove=True):
+    import rarfile
+    with rarfile.RarFile(rar_path) as f:
+        f.extractall(path=dst)
+
+    if remove:
+        os.remove(rar_path)
 
 
 def unzip(zip_path, dst, remove=True):
@@ -250,7 +284,7 @@ def add_instance_label_transform(
     return kwargs, label_dtype
 
 
-def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kwargs=None):
+def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kwargs=None, ensure_rgb=None):
     """
     Checks for raw_transform and label_transform incoming values.
     If yes, it will automatically merge these two transforms to apply them together.
@@ -258,18 +292,24 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
     if resize_inputs:
         assert isinstance(resize_kwargs, dict)
         patch_shape = None
-
         raw_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_rgb=resize_kwargs["is_rgb"])
         label_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
 
-    if "raw_transform" in kwargs:
-        trafo = Compose(raw_trafo, kwargs["raw_transform"])
-        kwargs["raw_transform"] = trafo
+    if ensure_rgb is None:
+        raw_trafos = []
     else:
-        kwargs["raw_transform"] = Compose(raw_trafo, get_raw_transform())
+        assert not isinstance(ensure_rgb, bool), "'ensure_rgb' is expected to be a function."
+        raw_trafos = [ensure_rgb]
+
+    if "raw_transform" in kwargs:
+        raw_trafos.extend([raw_trafo, kwargs["raw_transform"]])
+    else:
+        raw_trafos.extend([raw_trafo, get_raw_transform()])
+
+    kwargs["raw_transform"] = Compose(*raw_trafos, is_multi_tensor=False)
 
     if "label_transform" in kwargs:
-        trafo = Compose(label_trafo, kwargs["label_transform"])
+        trafo = Compose(label_trafo, kwargs["label_transform"], is_multi_tensor=False)
         kwargs["label_transform"] = trafo
     else:
         kwargs["label_transform"] = label_trafo
