@@ -30,7 +30,7 @@ def get_spider_data(path, download):
     util.unzip(zip_path=zip_path, dst=data_dir)
 
     zip_path = os.path.join(path, "masks.zip")
-    util.download_source(path=zip_path, url=URL["images"], download=download, checksum=CHECKSUMS["images"])
+    util.download_source(path=zip_path, url=URL["masks"], download=download, checksum=CHECKSUMS["masks"])
     util.unzip(zip_path=zip_path, dst=data_dir)
 
     return data_dir
