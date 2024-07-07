@@ -1,3 +1,4 @@
+from .cellseg_3d import get_cellseg_3d_loader, get_cellseg_3d_dataset
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .ctc import get_ctc_segmentation_loader, get_ctc_segmentation_dataset
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
