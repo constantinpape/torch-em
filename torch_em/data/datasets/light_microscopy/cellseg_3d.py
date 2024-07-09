@@ -1,4 +1,4 @@
-"""This dataset contains annotation for nucleus segmentation in 3d fluorescence microscopy.
+"""This dataset contains annotation for nucleus segmentation in 3d fluorescence microscopy from mesoSPIM microscopy.
 
 This dataset is from the publication https://doi.org/10.1101/2024.05.17.594691 .
 Please cite it if you use this dataset in your research.

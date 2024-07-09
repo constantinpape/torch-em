@@ -1,5 +1,4 @@
-# https://github.com/juglab/EmbedSeg/releases/tag/v0.1.0
-"""This dataset contains annotation for nucleus segmentation in 3d fluorescence microscopy
+"""This dataset contains annotation for 3d fluorescence microscopy segmentation
 that were introduced by the EmbedSeg publication.
 
 This dataset is from the publication https://proceedings.mlr.press/v143/lalit21a.html.
@@ -29,17 +28,19 @@ CHECKSUMS = {
 
 
 def get_embedseg_data(path: Union[os.PathLike, str], name: str, download: bool) -> str:
-    """Download the CellSeg3d training data.
+    """Download the EmbedSeg training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        name:
-        split:
+        name: Name of the dataset to download.
         download: Whether to download the data if it is not present.
 
     Returns:
         The filepath to the training data.
     """
+    if name not in URLS:
+        raise ValueError(f"The dataset name must be in {list(URLS.keys())}. You provided {name}.")
+
     url = URLS[name]
     checksum = CHECKSUMS[name]
 
@@ -63,11 +64,13 @@ def get_embedseg_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the CellSeg3d dataset for segmenting nuclei in 3d fluorescence microscopy.
+    """Get an EmbedSeg dataset for 3d fluorescence microscopy segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
+        name: Name of the dataset to download.
+        split: The split to use for the dataset.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -97,12 +100,14 @@ def get_embedseg_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the CovidIF dataloder for segmenting nuclei or cells in immunofluorescence microscopy.
+    """Get an EmbedSeg dataloader for 3d fluorescence microscopy segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        name: Name of the dataset to download.
+        split: The split to use for the dataset.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
