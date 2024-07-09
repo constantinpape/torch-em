@@ -182,7 +182,7 @@ def predict_with_halo(
 
             if mask is not None:
                 mask_block, _ = _load_block(mask, offset, block_shape, halo, with_channels=False)
-                mask_block = mask_block[inner_bb]
+                mask_block = mask_block[inner_bb].astype("bool")
                 if mask_block.sum() == 0:
                     return
 
