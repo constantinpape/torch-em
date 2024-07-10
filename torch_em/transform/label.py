@@ -37,6 +37,25 @@ def label_consecutive(labels, with_background=True):
     return seg
 
 
+class MinSizeLabelTransform:
+    def __init__(self, min_size=None, ndim=None, ensure_zero=False):
+        self.min_size = min_size
+        self.ndim = ndim
+        self.ensure_zero = ensure_zero
+
+    def __call__(self, labels):
+        components = connected_components(labels, ndim=self.ndim, ensure_zero=self.ensure_zero)
+        if self.min_size is not None:
+            for component in np.unique(components)[1:]:  # Skip background (label 0)
+                component_mask = (components == component)
+                component_size = np.sum(component_mask)
+                if component_size < self.min_size:
+                    # make pixels to background
+                    components[component_mask] = 0
+
+        return components
+
+
 # TODO smoothing
 class BoundaryTransform:
     def __init__(self, mode="thick", add_binary_target=False, ndim=None):
