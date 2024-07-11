@@ -68,7 +68,14 @@ def ensure_tensor(tensor, dtype=None):
     if isinstance(tensor, np.ndarray):
         if np.dtype(tensor.dtype) in DTYPE_MAP:
             tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
-        tensor = torch.from_numpy(tensor)
+        # Try to convert the tensor, even if it has wrong byte-order
+        try:
+            tensor = torch.from_numpy(tensor)
+        except ValueError:
+            tensor = tensor.view(tensor.dtype.newbyteorder())
+            if np.dtype(tensor.dtype) in DTYPE_MAP:
+                tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
+            tensor = torch.from_numpy(tensor)
 
     assert torch.is_tensor(tensor), f"Cannot convert {type(tensor)} to torch"
     if dtype is not None:
