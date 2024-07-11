@@ -37,6 +37,22 @@ def label_consecutive(labels, with_background=True):
     return seg
 
 
+class MinSizeLabelTransform:
+    def __init__(self, min_size=None, ndim=None, ensure_zero=False):
+        self.min_size = min_size
+        self.ndim = ndim
+        self.ensure_zero = ensure_zero
+
+    def __call__(self, labels):
+        components = connected_components(labels, ndim=self.ndim, ensure_zero=self.ensure_zero)
+        if self.min_size is not None:
+            ids, sizes = np.unique(components, return_counts=True)
+            filter_ids = ids[sizes < self.min_size]
+            components[np.isin(components, filter_ids)] = 0
+            components, _, _ = skimage.segmentation.relabel_sequential(components)
+        return components
+
+
 # TODO smoothing
 class BoundaryTransform:
     def __init__(self, mode="thick", add_binary_target=False, ndim=None):
