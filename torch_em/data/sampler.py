@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List
+from typing import List, Optional
 
 
 class MinForegroundSampler:
@@ -86,7 +86,7 @@ class MinInstanceSampler:
         self,
         min_num_instances: int = 2,
         p_reject: float = 1.0,
-        min_size: int = None
+        min_size: Optional[int] = None
     ):
         self.min_num_instances = min_num_instances
         self.p_reject = p_reject
