@@ -44,8 +44,9 @@ def _get_hil_toothseg_paths(path, split, download):
     neu_gt_paths = []
     for gt_path in tqdm(gt_paths):
         neu_gt_path = os.path.join(neu_gt_dir, f"{Path(gt_path).stem}.tif")
+        neu_gt_paths.append(neu_gt_path)
         if os.path.exists(neu_gt_path):
-            neu_gt_paths.append(neu_gt_path)
+            continue
 
         rgb_gt = cv.imread(gt_path)
         rgb_gt = cv.cvtColor(rgb_gt, cv.COLOR_BGR2RGB)
