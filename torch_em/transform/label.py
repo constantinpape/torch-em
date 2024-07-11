@@ -46,13 +46,10 @@ class MinSizeLabelTransform:
     def __call__(self, labels):
         components = connected_components(labels, ndim=self.ndim, ensure_zero=self.ensure_zero)
         if self.min_size is not None:
-            for component in np.unique(components)[1:]:  # Skip background (label 0)
-                component_mask = (components == component)
-                component_size = np.sum(component_mask)
-                if component_size < self.min_size:
-                    # make pixels to background
-                    components[component_mask] = 0
-
+            ids, sizes = np.unique(components, return_counts=True)
+            filter_ids = ids[sizes < self.min_size]
+            components[np.isin(components, filter_ids)] = 0
+            components, _, _ = skimage.segmentation.relabel_sequential(components)
         return components
 
 
