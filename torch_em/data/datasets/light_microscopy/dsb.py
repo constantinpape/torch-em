@@ -24,7 +24,7 @@ CHECKSUMS = {
 
 
 def get_dsb_data(path: Union[os.PathLike, str], source: str, download: bool) -> str:
-    """Download the DeepBacs training data.
+    """Download the DSB training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
