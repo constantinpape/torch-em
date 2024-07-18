@@ -8,7 +8,9 @@ Please cite it if you use this dataset in your research.
 
 
 import os
-from typing import Union, Tuple, Literal, Optional
+from glob import glob
+from natsort import natsorted
+from typing import Union, Tuple, Literal
 
 from .. import util
 
@@ -17,7 +19,7 @@ import torch_em
 
 URL = "https://files.osf.io/v1/resources/xmury/providers/osfstorage/62f56c035775130690f25481/?zip="
 
-# NOTE: the checksums are not reliable from the osf project downloads. 
+# NOTE: the checksums are not reliable from the osf project downloads.
 # CHECKSUM = "7ae943ff5003b085a4cde7337bd9c69988b034cfe1a6d3f252b5268f1f4c0af7"
 CHECKSUM = None
 
@@ -49,15 +51,39 @@ def get_omnipose_data(
 
 
 def _get_omnipose_paths(path, split, data_choice, download):
-    image_paths, gt_paths = ...
-    return image_paths, gt_paths
+    data_dir = get_omnipose_data(path=path, download=download)
+    data_dir = os.path.join(data_dir, data_choice)
+
+    if split not in ["train", "test"]:
+        raise ValueError(f"'{split}' is not a valid split.")
+
+    if data_choice not in ["bact_fluor", "bact_phase", "worm", "worm_high_res"]:
+        raise ValueError(f"'{data_choice}' is not a valid choice of data.")
+
+    if data_choice.startswith("bact"):
+        base_dir = os.path.join(data_dir, f"{split}_sorted", "*")
+        gt_paths = glob(os.path.join(base_dir, "*_masks.tif"))
+        image_paths = glob(os.path.join(base_dir, "*.tif"))
+        for _path in image_paths.copy():
+            if _path.endswith("_masks.tif") or _path.endswith("_flows.tif"):
+                image_paths.remove(_path)
+
+    else:
+        base_dir = os.path.join(data_dir, split)
+        gt_paths = glob(os.path.join(base_dir, "*_masks.*"))
+        image_paths = glob(os.path.join(base_dir, "*"))
+        for _path in image_paths.copy():
+            if _path.endswith("_masks.tif") or _path.endswith("_masks.png") or _path.endswith("_flows.tif"):
+                image_paths.remove(_path)
+
+    return natsorted(image_paths), natsorted(gt_paths)
 
 
 def get_omnipose_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     split: Literal["train", "test"],
-    data_choice: Optional[Literal["bact_fluor", "bact_phase", "worm", "worm_high_res"]] = None,
+    data_choice: Literal["bact_fluor", "bact_phase", "worm", "worm_high_res"],
     download: bool = False,
     **kwargs
 ):
@@ -68,7 +94,7 @@ def get_omnipose_dataset(
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train' or 'test'.
         download: Whether to download the data if it is not present.
-        data_choice: The data choice
+        data_choice: The choice of specific data. Either 'bact_fluor', 'bact_phase', 'worm' or 'worm_high_res'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
@@ -93,7 +119,7 @@ def get_omnipose_loader(
     patch_shape: Tuple[int, int],
     batch_size: int,
     split: Literal["train", "test"],
-    data_choice: Optional[Literal["bact_fluor", "bact_phase", "worm", "worm_high_res"]] = None,
+    data_choice: Literal["bact_fluor", "bact_phase", "worm", "worm_high_res"],
     download: bool = False,
     **kwargs
 ):
@@ -105,7 +131,7 @@ def get_omnipose_loader(
         batch_size: The batch size for training.
         split: The data split to use. Either 'train' or 'test'.
         download: Whether to download the data if it is not present.
-        data_choice: The data choice
+        data_choice: The choice of specific data. Either 'bact_fluor', 'bact_phase', 'worm' or 'worm_high_res'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
