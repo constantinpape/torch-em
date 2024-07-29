@@ -7,7 +7,7 @@ import torch
 
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data
+from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data, ensure_patch_shape
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
@@ -133,13 +133,13 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         # Padding the patch to match the expected input shape.
         if self.patch_shape is not None and self.with_padding:
-            if any(sh < psh for sh, psh in zip(raw.shape, self.patch_shape)):
-                pw_raw = [(0, max(0, psh - sh)) for sh, psh in zip(raw.shape, self.patch_shape)]
-                raw = np.pad(raw, pw_raw)
-
-            if any(sh < psh for sh, psh in zip(labels.shape, self.patch_shape)):
-                pw = [(0, max(0, psh - sh)) for sh, psh in zip(raw.shape, self.patch_shape)]
-                labels = np.pad(labels, pw)
+            raw, labels = ensure_patch_shape(
+                raw=raw,
+                labels=labels,
+                patch_shape=self.patch_shape,
+                have_raw_channels=self._with_channels,
+                have_label_channels=self._with_label_channels,
+            )
 
         if self.sampler is not None:
             sample_id = 0

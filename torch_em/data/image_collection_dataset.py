@@ -4,8 +4,9 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 
-from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
-                    load_image, supports_memmap)
+from ..util import (
+    ensure_spatial_array, ensure_tensor_with_channels, load_image, supports_memmap, ensure_patch_shape
+)
 
 
 class ImageCollectionDataset(torch.utils.data.Dataset):
@@ -110,25 +111,6 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
 
-    def _ensure_patch_shape(self, raw, labels, have_raw_channels, have_label_channels, channel_first):
-        shape = raw.shape
-        if have_raw_channels and channel_first:
-            shape = shape[1:]
-        if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
-            pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
-
-            if have_raw_channels and channel_first:
-                pw_raw = [(0, 0), *pw]
-            elif have_raw_channels and not channel_first:
-                pw_raw = [*pw, (0, 0)]
-            else:
-                pw_raw = pw
-
-            # TODO: ensure padding for labels with channels, when supported (see `_get_sample` below)
-
-            raw, labels = np.pad(raw, pw_raw), np.pad(labels, pw)
-        return raw, labels
-
     def _load_data(self, raw_path, label_path):
         raw = load_image(raw_path, memmap=False)
         label = load_image(label_path, memmap=False)
@@ -147,7 +129,15 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
             channel_first = raw.shape[-1] > 16
 
         if self.patch_shape is not None and self.with_padding:
-            raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels, channel_first)
+            raw, label = ensure_patch_shape(
+                raw=raw,
+                labels=label,
+                patch_shape=self.patch_shape,
+                have_raw_channels=have_raw_channels,
+                have_label_channels=have_label_channels,
+                channel_first=channel_first
+            )
+
         shape = raw.shape
 
         prefix_box = tuple()
