@@ -1,3 +1,4 @@
+from math import ceil, floor
 from typing import Any, Dict, Optional, Sequence, Union
 
 import numpy as np
@@ -102,6 +103,53 @@ class ResizeInputs:
             **kwargs
         ).astype(inputs.dtype)
 
+        return inputs
+
+
+class ResizeLongestSideInputs:
+    def __init__(self, target_shape, target_length=512, is_label=False, is_rgb=False):
+        self.target_shape = target_shape
+        self.target_length = target_length
+        self.is_label = is_label
+        self.is_rgb = is_rgb
+
+    def _get_preprocess_shape(self, oldh, oldw):
+        """Inspired from Segment Anything."""
+        scale = self.target_length * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        neww = int(neww + 0.5)
+        newh = int(newh + 0.5)
+        return (newh, neww)
+
+    def __call__(self, inputs):
+        if self.is_label:  # kwargs needed for int data
+            kwargs = {"order": 0,  "anti_aliasing": False}
+        else:  # we use the default settings for float data
+            kwargs = {}
+
+        # Let's get the new shape with the longest side equal to the target length.
+        new_shape = self._get_preprocess_shape(inputs.shape[-2], inputs.shape[-1])
+
+        if self.is_rgb:
+            assert inputs.ndim == 3 and inputs.shape[0] == 3
+            patch_shape = (3, *new_shape)
+        else:
+            patch_shape = new_shape
+
+        inputs = resize(
+            image=inputs, output_shape=patch_shape, preserve_range=True, **kwargs
+        ).astype(inputs.dtype)
+
+        # Finally, we pad the remaining height to match the expected target shape.
+        pad_width = [(sh - dsh) / 2 for sh, dsh in zip(self.target_shape, new_shape)]
+        pad_width = (
+            (ceil(pad_width[0]), floor(pad_width[0])), (ceil(pad_width[1]), floor(pad_width[1]))
+        )
+        if self.is_rgb:
+            pad_width = ((0, 0), *pad_width)
+
+        inputs = np.pad(array=inputs, pad_width=pad_width, mode="constant")
+        print(inputs.shape)
         return inputs
 
 
