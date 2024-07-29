@@ -10,9 +10,8 @@ def check_cellpose():
         path=ROOT,
         split="train",
         patch_shape=(512, 512),
-        batch_size=2,
+        batch_size=1,
         choice="cyto",
-        download=True
     )
     check_loader(loader, 8, instance_labels=True)
 

@@ -1,3 +1,10 @@
+"""This dataset contains annotation for cell segmentation in fluorescene microscently-labeled microscopy images.
+
+This dataset is from the publication https://doi.org/10.1038/s41592-020-01018-x.
+Please cite it if you use this dataset in your research.
+"""
+
+
 import os
 from glob import glob
 from natsort import natsorted
@@ -35,12 +42,17 @@ def get_cellpose_dataset(
     download: bool = False,
     **kwargs
 ):
-    """Dataset for segmentation of cells in ...
+    """Get the CellPose dataset for cell segmentation.
 
-    Automatic download not possible
+    Args:
+        TODO
+
+    Returns:
+        The segmentation dataset.
     """
     assert choice in ["cyto", "cyto2"]
     assert split in ["train", "test"]
+
     if download:
         assert NotImplementedError(
             "The dataset cannot be automatically downloaded. ",
@@ -85,7 +97,13 @@ def get_cellpose_loader(
     download: bool = False,
     **kwargs
 ):
-    """Dataloader for segmentation of cells in ... See `get_cellpose_dataset` for details.
+    """Get the CellPose dataloader for cell segmentation.
+
+    Args:
+        TODO
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_cellpose_dataset(
