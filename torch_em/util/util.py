@@ -174,7 +174,7 @@ def ensure_patch_shape(
 
     # Extract the pad width and pad the label inputs
     if any(sh < psh for sh, psh in zip(labels_shape, patch_shape)):
-        pw = [(0, max(0, psh - sh)) for sh, psh in zip(raw_shape, patch_shape)]
+        pw = [(0, max(0, psh - sh)) for sh, psh in zip(labels_shape, patch_shape)]
 
         if have_label_channels and channel_first:
             pad_width = [(0, 0), *pw]
@@ -183,7 +183,7 @@ def ensure_patch_shape(
         else:
             pad_width = pw
 
-        labels = np.pad(array=raw, pad_width=pad_width)
+        labels = np.pad(array=labels, pad_width=pad_width)
 
     return raw, labels
 
