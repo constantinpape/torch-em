@@ -107,14 +107,17 @@ class ResizeInputs:
 
 
 class ResizeLongestSideInputs:
-    def __init__(self, target_shape, target_length=512, is_label=False, is_rgb=False):
+    def __init__(self, target_shape, is_label=False, is_rgb=False):
         self.target_shape = target_shape
-        self.target_length = target_length
+        self.target_length = target_shape[-1]
         self.is_label = is_label
         self.is_rgb = is_rgb
 
     def _get_preprocess_shape(self, oldh, oldw):
-        """Inspired from Segment Anything."""
+        """Inspired from Segment Anything.
+
+        - https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/utils/transforms.py
+        """
         scale = self.target_length * 1.0 / max(oldh, oldw)
         newh, neww = oldh * scale, oldw * scale
         neww = int(neww + 0.5)
