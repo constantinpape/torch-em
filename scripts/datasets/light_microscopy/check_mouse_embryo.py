@@ -1,20 +1,31 @@
-import os
-import sys
-
-from torch_em.data.datasets import get_mouse_embryo_loader
 from torch_em.util.debug import check_loader
+from torch_em.data.datasets import get_mouse_embryo_loader
 
-sys.path.append("..")
+
+ROOT = "/media/anwai/ANWAI/data/mouse_embryo"
 
 
 def check_mouse_embryo():
-    from util import ROOT
-
-    data_root = os.path.join(ROOT, "mouse_embryo")
-    loader = get_mouse_embryo_loader(data_root, "nuclei", "train", (8, 512, 512), 1, download=True)
+    loader = get_mouse_embryo_loader(
+        path=ROOT,
+        name="nuclei",
+        split="train",
+        patch_shape=(8, 512, 512),
+        batch_size=1,
+        download=True,
+        with_padding_per_patch=True,
+    )
     check_loader(loader, 8, instance_labels=True)
 
-    loader = get_mouse_embryo_loader(data_root, "membrane", "train", (8, 512, 512), 1, download=True)
+    loader = get_mouse_embryo_loader(
+        path=ROOT,
+        name="membrane",
+        split="train",
+        patch_shape=(8, 512, 512),
+        batch_size=1,
+        download=True,
+        with_padding_per_patch=True,
+    )
     check_loader(loader, 8, instance_labels=True)
 
 

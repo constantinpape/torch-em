@@ -253,6 +253,7 @@ def default_segmentation_dataset(
     with_channels=False,
     with_label_channels=False,
     verify_paths=True,
+    with_padding_per_patch=False,
 ):
     if verify_paths:
         check_paths(raw_paths, label_paths)
@@ -289,6 +290,7 @@ def default_segmentation_dataset(
             label_dtype=label_dtype,
             with_channels=with_channels,
             with_label_channels=with_label_channels,
+            with_padding_per_patch=with_padding_per_patch,
         )
     else:
         ds = _load_image_collection_dataset(

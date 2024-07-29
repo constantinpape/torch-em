@@ -181,7 +181,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
                 label_patch = np.array(label[bb])
                 sample_id += 1
 
-                # We need to avoid sampling from the same image over and over agagin,
+                # We need to avoid sampling from the same image over and over again,
                 # otherwise this will fail just because of one or a few empty images.
                 # Hence we update the image from which we sample sometimes.
                 if sample_id % self.max_sampling_attempts_image == 0:

@@ -42,6 +42,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         ndim: Optional[int] = None,
         with_channels: bool = False,
         with_label_channels: bool = False,
+        with_padding_per_patch: bool = False,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -81,6 +82,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.label_transform2 = label_transform2
         self.transform = transform
         self.sampler = sampler
+        self.with_padding_per_patch = with_padding_per_patch
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -123,10 +125,21 @@ class SegmentationDataset(torch.utils.data.Dataset):
     def _get_sample(self, index):
         if self.raw is None or self.labels is None:
             raise RuntimeError("SegmentationDataset has not been properly deserialized.")
+
         bb = self._sample_bounding_box()
         bb_raw = (slice(None),) + bb if self._with_channels else bb
         bb_labels = (slice(None),) + bb if self._with_label_channels else bb
         raw, labels = self.raw[bb_raw], self.labels[bb_labels]
+
+        # Padding the patch to match the expected input shape.
+        if self.patch_shape is not None and self.with_padding_per_patch:
+            if any(sh < psh for sh, psh in zip(raw.shape, self.patch_shape)):
+                pw_raw = [(0, max(0, psh - sh)) for sh, psh in zip(raw.shape, self.patch_shape)]
+                raw = np.pad(raw, pw_raw)
+
+            if any(sh < psh for sh, psh in zip(labels.shape, self.patch_shape)):
+                pw = [(0, max(0, psh - sh)) for sh, psh in zip(raw.shape, self.patch_shape)]
+                labels = np.pad(labels, pw)
 
         if self.sampler is not None:
             sample_id = 0
