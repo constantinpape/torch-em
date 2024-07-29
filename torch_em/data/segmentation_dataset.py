@@ -196,7 +196,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         except Exception:
             msg = f"SegmentationDataset could not be deserialized because of missing {raw_path}, {raw_key}.\n"
             msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
-            msg += "But it cannot be used for further training and wil throw an error."
+            msg += "But it cannot be used for further training and will throw an error."
             warnings.warn(msg)
             state["raw"] = None
 
@@ -209,7 +209,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         except Exception:
             msg = f"SegmentationDataset could not be deserialized because of missing {label_path}, {label_key}.\n"
             msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
-            msg += "But it cannot be used for further training and wil throw an error."
+            msg += "But it cannot be used for further training and will throw an error."
             warnings.warn(msg)
             state["labels"] = None
 
