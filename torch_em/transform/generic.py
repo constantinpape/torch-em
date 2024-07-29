@@ -149,7 +149,6 @@ class ResizeLongestSideInputs:
             pad_width = ((0, 0), *pad_width)
 
         inputs = np.pad(array=inputs, pad_width=pad_width, mode="constant")
-        print(inputs.shape)
         return inputs
 
 
