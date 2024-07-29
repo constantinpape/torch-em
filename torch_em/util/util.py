@@ -5,7 +5,6 @@ from collections import OrderedDict
 import numpy as np
 import torch
 import torch_em
-import matplotlib.pyplot as plt
 from matplotlib import colors
 
 # this is a fairly brittle way to check if a module is compiled.
@@ -69,7 +68,14 @@ def ensure_tensor(tensor, dtype=None):
     if isinstance(tensor, np.ndarray):
         if np.dtype(tensor.dtype) in DTYPE_MAP:
             tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
-        tensor = torch.from_numpy(tensor)
+        # Try to convert the tensor, even if it has wrong byte-order
+        try:
+            tensor = torch.from_numpy(tensor)
+        except ValueError:
+            tensor = tensor.view(tensor.dtype.newbyteorder())
+            if np.dtype(tensor.dtype) in DTYPE_MAP:
+                tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
+            tensor = torch.from_numpy(tensor)
 
     assert torch.is_tensor(tensor), f"Cannot convert {type(tensor)} to torch"
     if dtype is not None:
@@ -169,9 +175,9 @@ def get_constructor_arguments(obj):
     # TODO support common torch losses (e.g. CrossEntropy, BCE)
 
     warnings.warn(
-        f"Constructor arguments for {type(obj)} cannot be deduced." +
-        "For this object, empty constructor arguments will be used." +
-        "Hence, the trainer can probably not be correctly deserialized via 'DefaultTrainer.from_checkpoint'."
+        f"Constructor arguments for {type(obj)} cannot be deduced.\n" +
+        "For this object, empty constructor arguments will be used.\n" +
+        "The trainer can probably not be correctly deserialized via 'DefaultTrainer.from_checkpoint'."
     )
     return {}
 
@@ -248,7 +254,6 @@ def model_is_equal(model1, model2):
         if p1.data.ne(p2.data).sum() > 0:
             return False
     return True
-
 
 
 def get_random_colors(labels):
