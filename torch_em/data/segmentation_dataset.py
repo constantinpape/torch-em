@@ -42,7 +42,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         ndim: Optional[int] = None,
         with_channels: bool = False,
         with_label_channels: bool = False,
-        with_padding_per_patch: bool = False,
+        with_padding: bool = True,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -82,7 +82,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.label_transform2 = label_transform2
         self.transform = transform
         self.sampler = sampler
-        self.with_padding_per_patch = with_padding_per_patch
+        self.with_padding = with_padding
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -132,7 +132,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         raw, labels = self.raw[bb_raw], self.labels[bb_labels]
 
         # Padding the patch to match the expected input shape.
-        if self.patch_shape is not None and self.with_padding_per_patch:
+        if self.patch_shape is not None and self.with_padding:
             if any(sh < psh for sh, psh in zip(raw.shape, self.patch_shape)):
                 pw_raw = [(0, max(0, psh - sh)) for sh, psh in zip(raw.shape, self.patch_shape)]
                 raw = np.pad(raw, pw_raw)
