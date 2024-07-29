@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import torch
 
-from torch_em.transform import Tile
+from torch_em.transform import Tile, generic
 
 
 class TestTile(unittest.TestCase):
@@ -33,6 +33,18 @@ class TestTile(unittest.TestCase):
 
         actual = tile_aug(a)
         assert actual.shape == expected.shape
+
+    def test_resize_longest_inputs(self):
+        input_shape = (520, 704)
+        target_shape = (512, 512)
+
+        test_image = np.zeros(input_shape, dtype=np.float32)
+
+        raw_transform = generic.ResizeLongestSideInputs(target_shape=target_shape)
+        resized_image = raw_transform(inputs=test_image)
+
+        assert resized_image.shape == target_shape
+        assert resized_image.dtype == test_image.dtype
 
 
 if __name__ == "__main__":
