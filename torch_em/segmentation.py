@@ -308,6 +308,7 @@ def default_segmentation_dataset(
             sampler=sampler,
             dtype=dtype,
             label_dtype=label_dtype,
+            with_padding=with_padding,
         )
 
     return ds

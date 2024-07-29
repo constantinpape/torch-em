@@ -62,6 +62,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         n_samples: Optional[int] = None,
         sampler=None,
         full_check: bool = False,
+        with_padding=True,
     ):
         self._check_inputs(raw_image_paths, label_image_paths, full_check=full_check)
         self.raw_images = raw_image_paths
@@ -77,6 +78,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         self.label_transform2 = label_transform2
         self.transform = transform
         self.sampler = sampler
+        self.with_padding = with_padding
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -144,7 +146,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         if have_raw_channels:
             channel_first = raw.shape[-1] > 16
 
-        if self.patch_shape is not None:
+        if self.patch_shape is not None and self.with_padding:
             raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels, channel_first)
         shape = raw.shape
 
