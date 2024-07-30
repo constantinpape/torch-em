@@ -145,6 +145,49 @@ def ensure_spatial_array(array, ndim, dtype=None):
     return array
 
 
+def ensure_patch_shape(
+    raw, labels, patch_shape, have_raw_channels=False, have_label_channels=False, channel_first=True
+):
+    raw_shape = raw.shape
+    labels_shape = labels.shape
+
+    # In case the inputs has channels and they are channels first
+    # IMPORTANT: for ImageCollectionDataset
+    if have_raw_channels and channel_first:
+        raw_shape = raw_shape[1:]
+
+    if have_label_channels and channel_first:
+        labels_shape = labels_shape[1:]
+
+    # Extract the pad_width and pad the raw inputs
+    if any(sh < psh for sh, psh in zip(raw_shape, patch_shape)):
+        pw = [(0, max(0, psh - sh)) for sh, psh in zip(raw_shape, patch_shape)]
+
+        if have_raw_channels and channel_first:
+            pad_width = [(0, 0), *pw]
+        elif have_raw_channels and not channel_first:
+            pad_width = [*pw, (0, 0)]
+        else:
+            pad_width = pw
+
+        raw = np.pad(array=raw, pad_width=pad_width)
+
+    # Extract the pad width and pad the label inputs
+    if any(sh < psh for sh, psh in zip(labels_shape, patch_shape)):
+        pw = [(0, max(0, psh - sh)) for sh, psh in zip(labels_shape, patch_shape)]
+
+        if have_label_channels and channel_first:
+            pad_width = [(0, 0), *pw]
+        elif have_label_channels and not channel_first:
+            pad_width = [*pw, (0, 0)]
+        else:
+            pad_width = pw
+
+        labels = np.pad(array=labels, pad_width=pad_width)
+
+    return raw, labels
+
+
 def get_constructor_arguments(obj):
 
     # all relevant torch_em classes have 'init_kwargs' to
