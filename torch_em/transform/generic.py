@@ -112,23 +112,18 @@ class ResizeLongestSideInputs:
         self.is_label = is_label
         self.is_rgb = is_rgb
 
-    def _get_target_length(self):
         h, w = self.target_shape[-2], self.target_shape[-1]
-
-        # We currently support resize feature for square-shaped target shape only.
-        if not h == w:
+        if h != w:  # We currently support resize feature for square-shaped target shape only.
             raise ValueError("'ResizeLongestSideInputs' does not support non-square shaped target shapes.")
 
-        target_length = self.target_shape[-1]
-        return target_length
+        self.target_length = self.target_shape[-1]
 
     def _get_preprocess_shape(self, oldh, oldw):
         """Inspired from Segment Anything.
 
         - https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/utils/transforms.py
         """
-        target_length = self._get_target_length()
-        scale = target_length * 1.0 / max(oldh, oldw)
+        scale = self.target_length * 1.0 / max(oldh, oldw)
         newh, neww = oldh * scale, oldw * scale
         neww = int(neww + 0.5)
         newh = int(newh + 0.5)
