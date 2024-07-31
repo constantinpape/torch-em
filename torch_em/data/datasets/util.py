@@ -17,7 +17,7 @@ import torch
 
 import torch_em
 from torch_em.transform import get_raw_transform
-from torch_em.transform.generic import ResizeInputs, Compose
+from torch_em.transform.generic import ResizeLongestSideInputs, Compose
 
 try:
     import gdown
@@ -292,8 +292,8 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
     if resize_inputs:
         assert isinstance(resize_kwargs, dict)
         patch_shape = None
-        raw_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_rgb=resize_kwargs["is_rgb"])
-        label_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
+        raw_trafo = ResizeLongestSideInputs(target_shape=resize_kwargs["patch_shape"], is_rgb=resize_kwargs["is_rgb"])
+        label_trafo = ResizeLongestSideInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
 
     if ensure_rgb is None:
         raw_trafos = []
