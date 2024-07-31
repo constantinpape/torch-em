@@ -7,7 +7,7 @@ import torch
 
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data
+from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data, ensure_patch_shape
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
@@ -42,6 +42,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         ndim: Optional[int] = None,
         with_channels: bool = False,
         with_label_channels: bool = False,
+        with_padding: bool = True,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -81,6 +82,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.label_transform2 = label_transform2
         self.transform = transform
         self.sampler = sampler
+        self.with_padding = with_padding
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -123,10 +125,21 @@ class SegmentationDataset(torch.utils.data.Dataset):
     def _get_sample(self, index):
         if self.raw is None or self.labels is None:
             raise RuntimeError("SegmentationDataset has not been properly deserialized.")
+
         bb = self._sample_bounding_box()
         bb_raw = (slice(None),) + bb if self._with_channels else bb
         bb_labels = (slice(None),) + bb if self._with_label_channels else bb
         raw, labels = self.raw[bb_raw], self.labels[bb_labels]
+
+        # Padding the patch to match the expected input shape.
+        if self.patch_shape is not None and self.with_padding:
+            raw, labels = ensure_patch_shape(
+                raw=raw,
+                labels=labels,
+                patch_shape=self.patch_shape,
+                have_raw_channels=self._with_channels,
+                have_label_channels=self._with_label_channels,
+            )
 
         if self.sampler is not None:
             sample_id = 0
@@ -196,7 +209,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         except Exception:
             msg = f"SegmentationDataset could not be deserialized because of missing {raw_path}, {raw_key}.\n"
             msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
-            msg += "But it cannot be used for further training and wil throw an error."
+            msg += "But it cannot be used for further training and will throw an error."
             warnings.warn(msg)
             state["raw"] = None
 
@@ -209,7 +222,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         except Exception:
             msg = f"SegmentationDataset could not be deserialized because of missing {label_path}, {label_key}.\n"
             msg += "The dataset is deserialized in order to allow loading trained models from a checkpoint.\n"
-            msg += "But it cannot be used for further training and wil throw an error."
+            msg += "But it cannot be used for further training and will throw an error."
             warnings.warn(msg)
             state["labels"] = None
 
