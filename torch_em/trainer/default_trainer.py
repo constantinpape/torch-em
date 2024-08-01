@@ -58,7 +58,7 @@ class DefaultTrainer:
         self.loss = loss
         self.optimizer = optimizer
         self.metric = metric
-        self.device = device
+        self.device = torch.device(device)
         self.lr_scheduler = lr_scheduler
         self.log_image_interval = log_image_interval
         self.save_root = save_root
