@@ -118,7 +118,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
                 bb_start = [0] * len(self.shape)
                 patch_shape_for_bb = self.shape
             else:
-                bb_start = [np.random.randint(0, self.shape[0])] + [0] * len(self.shape[1:])
+                bb_start = [np.random.randint(0, self.shape[0] - self.z_ext)] + [0] * len(self.shape[1:])
                 patch_shape_for_bb = (self.z_ext, *self.shape[1:])
 
         else:

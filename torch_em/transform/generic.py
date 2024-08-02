@@ -142,7 +142,7 @@ class ResizeLongestSideInputs:
             assert inputs.ndim == 3 and inputs.shape[0] == 3
             patch_shape = (3, *new_shape)
         elif inputs.ndim == 3:  # for 3d inputs, we assume channels first
-            patch_shape = (inputs.shape[0], *patch_shape)
+            patch_shape = (inputs.shape[0], *new_shape)
         else:
             patch_shape = new_shape
 
