@@ -138,12 +138,15 @@ class ResizeLongestSideInputs:
         # Let's get the new shape with the longest side equal to the target length.
         new_shape = self._get_preprocess_shape(inputs.shape[-2], inputs.shape[-1])
 
-        if self.is_rgb:
+        if self.is_rgb:  # for rgb inputs, we assume channels first
             assert inputs.ndim == 3 and inputs.shape[0] == 3
             patch_shape = (3, *new_shape)
+        elif inputs.ndim == 3:  # for 3d inputs, we do not resize along the first (=z) axis
+            patch_shape = (inputs.shape[0], *new_shape)
         else:
             patch_shape = new_shape
 
+        # Next, we resize the input image along the longest side.
         inputs = resize(
             image=inputs, output_shape=patch_shape, preserve_range=True, **kwargs
         ).astype(inputs.dtype)
@@ -153,7 +156,7 @@ class ResizeLongestSideInputs:
         pad_width = (
             (ceil(pad_width[0]), floor(pad_width[0])), (ceil(pad_width[1]), floor(pad_width[1]))
         )
-        if self.is_rgb:
+        if self.is_rgb or inputs.ndim == 3:  # we do not pad across the first axis (= channel or z-axis) for rgb or 3d inputs
             pad_width = ((0, 0), *pad_width)
 
         inputs = np.pad(array=inputs, pad_width=pad_width, mode="constant")

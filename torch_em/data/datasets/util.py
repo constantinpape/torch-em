@@ -291,9 +291,18 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
     """
     if resize_inputs:
         assert isinstance(resize_kwargs, dict)
+
+        if len(resize_kwargs["patch_shape"]) == 3:
+            # we only need the XY dimensions to reshape the inputs along them.
+            target_shape = resize_kwargs["patch_shape"][1:]
+            # we provide the Z dimension value to return the desired number of slices and not the whole volume
+            kwargs["z_ext"] = resize_kwargs["patch_shape"][0]
+
+        raw_trafo = ResizeLongestSideInputs(target_shape=target_shape, is_rgb=resize_kwargs["is_rgb"])
+        label_trafo = ResizeLongestSideInputs(target_shape=target_shape, is_label=True)
+
+        # The patch shape provided to the dataset. Here, "None" means that the entire volume will be loaded.
         patch_shape = None
-        raw_trafo = ResizeLongestSideInputs(target_shape=resize_kwargs["patch_shape"], is_rgb=resize_kwargs["is_rgb"])
-        label_trafo = ResizeLongestSideInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
 
     if ensure_rgb is None:
         raw_trafos = []

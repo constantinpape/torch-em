@@ -254,6 +254,7 @@ def default_segmentation_dataset(
     with_label_channels=False,
     verify_paths=True,
     with_padding=True,
+    z_ext=None,
 ):
     if verify_paths:
         check_paths(raw_paths, label_paths)
@@ -291,6 +292,7 @@ def default_segmentation_dataset(
             with_channels=with_channels,
             with_label_channels=with_label_channels,
             with_padding=with_padding,
+            z_ext=z_ext,
         )
     else:
         ds = _load_image_collection_dataset(
