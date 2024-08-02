@@ -138,16 +138,15 @@ class ResizeLongestSideInputs:
         # Let's get the new shape with the longest side equal to the target length.
         new_shape = self._get_preprocess_shape(inputs.shape[-2], inputs.shape[-1])
 
-        if self.is_rgb:
+        if self.is_rgb:  # for rgb inputs, we assume channels first
             assert inputs.ndim == 3 and inputs.shape[0] == 3
             patch_shape = (3, *new_shape)
+        elif inputs.ndim == 3:  # for 3d inputs, we assume channels first
+            patch_shape = (inputs.shape[0], *patch_shape)
         else:
             patch_shape = new_shape
 
         # Next, we resize the input image along the longest side.
-        if inputs.ndim == 3:
-            patch_shape = (inputs.shape[0], *patch_shape)
-
         inputs = resize(
             image=inputs, output_shape=patch_shape, preserve_range=True, **kwargs
         ).astype(inputs.dtype)
