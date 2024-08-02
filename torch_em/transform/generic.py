@@ -141,7 +141,7 @@ class ResizeLongestSideInputs:
         if self.is_rgb:  # for rgb inputs, we assume channels first
             assert inputs.ndim == 3 and inputs.shape[0] == 3
             patch_shape = (3, *new_shape)
-        elif inputs.ndim == 3:  # for 3d inputs, we assume channels first
+        elif inputs.ndim == 3:  # for 3d inputs, we do not resize along the first (=z) axis
             patch_shape = (inputs.shape[0], *new_shape)
         else:
             patch_shape = new_shape
@@ -156,7 +156,7 @@ class ResizeLongestSideInputs:
         pad_width = (
             (ceil(pad_width[0]), floor(pad_width[0])), (ceil(pad_width[1]), floor(pad_width[1]))
         )
-        if self.is_rgb or inputs.ndim == 3:  # in either cases, we assume channels first.
+        if self.is_rgb or inputs.ndim == 3:  # we do not pad across the first axis (= channel or z-axis) for rgb or 3d inputs
             pad_width = ((0, 0), *pad_width)
 
         inputs = np.pad(array=inputs, pad_width=pad_width, mode="constant")
