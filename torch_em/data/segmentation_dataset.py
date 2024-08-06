@@ -144,6 +144,13 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         raw, labels = self._get_desired_raw_and_labels()
 
+        if self.sampler is not None:
+            sample_id = 0
+            while not self.sampler(raw, labels):
+                raw, labels = self._get_desired_raw_and_labels()
+                sample_id += 1
+                if sample_id > self.max_sampling_attempts:
+                    raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
         # Padding the patch to match the expected input shape.
         if self.patch_shape is not None and self.with_padding:
             raw, labels = ensure_patch_shape(
@@ -153,14 +160,6 @@ class SegmentationDataset(torch.utils.data.Dataset):
                 have_raw_channels=self._with_channels,
                 have_label_channels=self._with_label_channels,
             )
-
-        if self.sampler is not None:
-            sample_id = 0
-            while not self.sampler(raw, labels):
-                raw, labels = self._get_desired_raw_and_labels()
-                sample_id += 1
-                if sample_id > self.max_sampling_attempts:
-                    raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
         if self.patch_shape is not None and len(self.patch_shape) == self._ndim + 1:
