@@ -292,9 +292,10 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
     if resize_inputs:
         assert isinstance(resize_kwargs, dict)
 
+        target_shape = resize_kwargs.get("patch_shape")
         if len(resize_kwargs["patch_shape"]) == 3:
             # we only need the XY dimensions to reshape the inputs along them.
-            target_shape = resize_kwargs["patch_shape"][1:]
+            target_shape = target_shape[1:]
             # we provide the Z dimension value to return the desired number of slices and not the whole volume
             kwargs["z_ext"] = resize_kwargs["patch_shape"][0]
 
