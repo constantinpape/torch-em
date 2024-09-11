@@ -1,4 +1,9 @@
-"""
+"""Dataset for segmentation of structures in Cryo ET.
+
+The DeePict dataset contains annotations for several structures in CryoET.
+The dataset implemented here currently only provides access to the actin annotations.
+The dataset is part of the publication https://doi.org/10.1038/s41592-022-01746-2.
+Plase cite it if you use this dataset in your research.
 """
 
 import os
@@ -6,7 +11,7 @@ from glob import glob
 from shutil import rmtree
 from typing import Tuple, Union
 
-import numpy as np
+import mrcfile
 import torch_em
 from elf.io import open_file
 from .. import util
@@ -41,13 +46,19 @@ def _process_deepict_actin(input_path, output_path):
             annotations[annotation_name] = annotation_data
 
         tomo_path = os.path.join(tomo_folder, "CanonicalTomogram", f"{dataset}.mrc")
-        with open_file(tomo_path, "r") as f:
-            data = f["data"][:]
+        with mrcfile.open(tomo_path, "r") as f:
+            data = f.data[:]
 
         with open_file(ds_out, "a") as f:
             f.create_dataset("raw", data=data, compression="gzip")
             for name, annotation in annotations.items():
                 f.create_dataset(f"labels/original/{name}", data=annotation, compression="gzip")
+
+            # Create combined annotations for actin
+            actin_seg = annotations["actin_deepict_training_prediction"]
+            actin_seg2 = annotations["actin_ground_truth"]
+            actin_seg[actin_seg2 == 1] = 1
+            f.create_dataset("labels/actin", data=actin_seg, compression="gzip")
 
 
 def get_deepict_actin_data(path: Union[os.PathLike, str], download: bool) -> str:
@@ -62,8 +73,8 @@ def get_deepict_actin_data(path: Union[os.PathLike, str], download: bool) -> str
     """
     # Check if the processed data is already present.
     dataset_path = os.path.join(path, "deepict_actin")
-    # if os.path.exists(dataset_path):
-    #     return dataset_path
+    if os.path.exists(dataset_path):
+        return dataset_path
 
     # Otherwise download the data.
     dl_path = util.download_from_cryo_et_portal(path, ACTIN_ID, download)
@@ -71,8 +82,8 @@ def get_deepict_actin_data(path: Union[os.PathLike, str], download: bool) -> str
     # And then process it.
     _process_deepict_actin(dl_path, dataset_path)
 
-    # TODO
     # Clean up the original data after processing.
+    rmtree(dl_path)
 
     return dataset_path
 
@@ -80,14 +91,17 @@ def get_deepict_actin_data(path: Union[os.PathLike, str], download: bool) -> str
 def get_deepict_actin_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
+    label_key: str = "labels/actin",
     download: bool = False,
     **kwargs
 ):
-    """Get the dataset for EM neuron segmentation in ISBI 2012.
+    """Get the dataset for actin segmentation in Cryo ET data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
+        label_key: The key for the labels to load. By default this uses 'labels/actin',
+            which holds the best version of actin ground-truth images.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -98,8 +112,6 @@ def get_deepict_actin_dataset(
     data_path = get_deepict_actin_data(path, download)
 
     raw_key = "raw"
-    label_key = "labels/membranes"
-
     return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
 
 
@@ -107,15 +119,18 @@ def get_deepict_actin_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
     batch_size: int,
+    label_key: str = "labels/actin",
     download: bool = False,
     **kwargs
 ):
-    """Get the DataLoader for EM neuron segmentation in ISBI 2012.
+    """Get the DataLoader for actin segmentation in CryoET data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        label_key: The key for the labels to load. By default this uses 'labels/actin',
+            which holds the best version of actin ground-truth images.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -126,7 +141,7 @@ def get_deepict_actin_loader(
         torch_em.default_segmentation_dataset, **kwargs
     )
     dataset = get_deepict_actin_loader(
-        path, patch_shape, download=download, **ds_kwargs
+        path, patch_shape, label_key=label_key, download=download, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
     return loader
