@@ -11,7 +11,11 @@ from glob import glob
 from shutil import rmtree
 from typing import Tuple, Union
 
-import mrcfile
+try:
+    import mrcfile
+except ImportError:
+    mrcfile = None
+
 import torch_em
 from elf.io import open_file
 from .. import util
@@ -23,13 +27,17 @@ ACTIN_ID = 10002
 def _process_deepict_actin(input_path, output_path):
     os.makedirs(output_path, exist_ok=True)
 
-    datasets = ["00004", "00011", "00012"]
+    # datasets = ["00004", "00011", "00012"]
+    # There are issues with the 00011 dataset
+    datasets = ["00004", "00012"]
     for dataset in datasets:
         ds_folder = os.path.join(input_path, dataset)
         assert os.path.exists(ds_folder)
         ds_out = os.path.join(output_path, f"{dataset}.h5")
         if os.path.exists(ds_out):
             continue
+
+        assert mrcfile is not None, "Plese install mrcfile"
 
         tomo_folder = glob(os.path.join(ds_folder, "Tomograms", "VoxelSpacing*"))
         assert len(tomo_folder) == 1
@@ -38,16 +46,17 @@ def _process_deepict_actin(input_path, output_path):
         annotation_folder = os.path.join(tomo_folder, "Annotations")
         annotion_files = glob(os.path.join(annotation_folder, "*.zarr"))
 
+        tomo_path = os.path.join(tomo_folder, "CanonicalTomogram", f"{dataset}.mrc")
+        with mrcfile.open(tomo_path, "r") as f:
+            data = f.data[:]
+
         annotations = {}
         for annotation in annotion_files:
             with open_file(annotation, "r") as f:
                 annotation_data = f["0"][:].astype("uint8")
+            assert annotation-data.shape == data.shape
             annotation_name = os.path.basename(annotation).split("-")[1]
             annotations[annotation_name] = annotation_data
-
-        tomo_path = os.path.join(tomo_folder, "CanonicalTomogram", f"{dataset}.mrc")
-        with mrcfile.open(tomo_path, "r") as f:
-            data = f.data[:]
 
         with open_file(ds_out, "a") as f:
             f.create_dataset("raw", data=data, compression="gzip")
@@ -110,9 +119,11 @@ def get_deepict_actin_dataset(
     """
     assert len(patch_shape) == 3
     data_path = get_deepict_actin_data(path, download)
-
+    data_paths = sorted(glob(os.path.join(data_path, "*.h5")))
     raw_key = "raw"
-    return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(
+        data_paths, raw_key, data_paths, label_key, patch_shape, is_seg_dataset=True, **kwargs
+    )
 
 
 def get_deepict_actin_loader(
@@ -140,7 +151,7 @@ def get_deepict_actin_loader(
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
     )
-    dataset = get_deepict_actin_loader(
+    dataset = get_deepict_actin_dataset(
         path, patch_shape, label_key=label_key, download=download, **ds_kwargs
     )
     loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
