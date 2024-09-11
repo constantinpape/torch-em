@@ -2,13 +2,52 @@
 """
 
 import os
-from typing import List, Optional, Tuple, Union
+from glob import glob
+from shutil import rmtree
+from typing import Tuple, Union
 
+import numpy as np
 import torch_em
+from elf.io import open_file
 from .. import util
 
 
 ACTIN_ID = 10002
+
+
+def _process_deepict_actin(input_path, output_path):
+    os.makedirs(output_path, exist_ok=True)
+
+    datasets = ["00004", "00011", "00012"]
+    for dataset in datasets:
+        ds_folder = os.path.join(input_path, dataset)
+        assert os.path.exists(ds_folder)
+        ds_out = os.path.join(output_path, f"{dataset}.h5")
+        if os.path.exists(ds_out):
+            continue
+
+        tomo_folder = glob(os.path.join(ds_folder, "Tomograms", "VoxelSpacing*"))
+        assert len(tomo_folder) == 1
+        tomo_folder = tomo_folder[0]
+
+        annotation_folder = os.path.join(tomo_folder, "Annotations")
+        annotion_files = glob(os.path.join(annotation_folder, "*.zarr"))
+
+        annotations = {}
+        for annotation in annotion_files:
+            with open_file(annotation, "r") as f:
+                annotation_data = f["0"][:].astype("uint8")
+            annotation_name = os.path.basename(annotation).split("-")[1]
+            annotations[annotation_name] = annotation_data
+
+        tomo_path = os.path.join(tomo_folder, "CanonicalTomogram", f"{dataset}.mrc")
+        with open_file(tomo_path, "r") as f:
+            data = f["data"][:]
+
+        with open_file(ds_out, "a") as f:
+            f.create_dataset("raw", data=data, compression="gzip")
+            for name, annotation in annotations.items():
+                f.create_dataset(f"labels/original/{name}", data=annotation, compression="gzip")
 
 
 def get_deepict_actin_data(path: Union[os.PathLike, str], download: bool) -> str:
@@ -21,12 +60,21 @@ def get_deepict_actin_data(path: Union[os.PathLike, str], download: bool) -> str
     Returns:
         The path to the downloaded data.
     """
-    # TODO check if the processed data is there already
+    # Check if the processed data is already present.
+    dataset_path = os.path.join(path, "deepict_actin")
+    # if os.path.exists(dataset_path):
+    #     return dataset_path
 
-    util.download_from_cryo_et_portal(path, ACTIN_ID, download)
-    # TODO process the data
+    # Otherwise download the data.
+    dl_path = util.download_from_cryo_et_portal(path, ACTIN_ID, download)
 
-    return path
+    # And then process it.
+    _process_deepict_actin(dl_path, dataset_path)
+
+    # TODO
+    # Clean up the original data after processing.
+
+    return dataset_path
 
 
 def get_deepict_actin_dataset(
