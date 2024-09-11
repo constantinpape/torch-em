@@ -235,6 +235,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 )
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
                 self.logger.log_lr(self._iteration, lr)
+                self.logger.log_ct(self._iteration, self.pseudo_labeler.confidence_threshold)
 
             with torch.no_grad():
                 self._momentum_update()
@@ -245,6 +246,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 break
             progress.update(1)
 
+        # self.pseudo_labeler.step(loss, self._epoch) # NOTE: it's here!
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -348,6 +350,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             self.logger.log_validation_unsupervised(
                 self._iteration, metric_val, loss_val, x1, x2, pred, pseudo_labels, label_filter
             )
+
+        self.pseudo_labeler.step(metric_val, self._epoch) # NOTE: vielleicht doch lieber hier?
 
         return metric_val
 
