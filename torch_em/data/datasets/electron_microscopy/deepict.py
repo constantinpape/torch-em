@@ -54,7 +54,7 @@ def _process_deepict_actin(input_path, output_path):
         for annotation in annotion_files:
             with open_file(annotation, "r") as f:
                 annotation_data = f["0"][:].astype("uint8")
-            assert annotation-data.shape == data.shape
+            assert annotation_data.shape == data.shape
             annotation_name = os.path.basename(annotation).split("-")[1]
             annotations[annotation_name] = annotation_data
 
