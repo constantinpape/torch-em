@@ -12,13 +12,12 @@ from torch_em.data import MinTwoInstanceSampler, datasets
 from micro_sam.evaluation.livecell import _get_livecell_paths
 
 
-# for HLRN
-# ROOT = "/scratch/projects/nim00007/sam/data"
-# SAVE_DIR = "/scratch/share/cidas/cca/test/verify_normalization"
-
-# for local
-ROOT = "/media/anwai/ANWAI/data/"
-SAVE_DIR = "/media/anwai/ANWAI/predictions/verify_normalization"
+if os.path.exists("/scratch/share/cidas"):
+    ROOT = "/scratch/share/cidas/cca/data"
+    SAVE_DIR = "/scratch/share/cidas/cca/test/verify_normalization"
+else:
+    ROOT = "/media/anwai/ANWAI/data/"
+    SAVE_DIR = "/media/anwai/ANWAI/predictions/verify_normalization"
 
 
 def get_model(dataset, task, norm):
@@ -26,7 +25,7 @@ def get_model(dataset, task, norm):
 
     if dataset == "livecell":
         model_choice = "unet2d"
-    elif dataset in ["mouse_embryo", "mitoem", "plantseg"]:
+    elif dataset in ["gonuclear", "mitoem", "plantseg"]:
         model_choice = "unet3d"
     else:
         raise ValueError
@@ -81,6 +80,7 @@ def get_dataloaders(dataset, task):
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
             sampler=sampler,
+            download=True,
         )
         val_loader = datasets.get_livecell_loader(
             path=os.path.join(ROOT, "livecell"),
@@ -91,6 +91,7 @@ def get_dataloaders(dataset, task):
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
             sampler=sampler,
+            download=True,
         )
 
     elif dataset == "plantseg":
@@ -104,6 +105,7 @@ def get_dataloaders(dataset, task):
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
             sampler=sampler,
+            download=True,
         )
 
         val_loader = datasets.get_plantseg_loader(
@@ -116,6 +118,7 @@ def get_dataloaders(dataset, task):
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
             sampler=sampler,
+            download=True,
         )
 
     elif dataset == "mitoem":
@@ -128,6 +131,7 @@ def get_dataloaders(dataset, task):
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
             sampler=sampler,
+            download=True,
         )
 
         val_loader = datasets.get_mitoem_loader(
@@ -139,29 +143,27 @@ def get_dataloaders(dataset, task):
             boundaries=True if task == "boundaries" else False,
             num_workers=16,
             sampler=sampler,
+            download=True,
         )
 
-    elif dataset == "mouse_embryo":
-        train_loader = datasets.get_mouse_embryo_loader(
-            path=os.path.join(ROOT, "mouse-embryo"),
-            name="nuclei",
-            split="train",
+    elif dataset == "gonuclear":
+        train_loader = datasets.get_gonuclear_loader(
+            path=os.path.join(ROOT, "gonuclear"),
             patch_shape=(32, 256, 256),
             batch_size=2,
-            binary=True,
-            boundaries=True if task == "boundaries" else False,
+            segmentation_task="nuclei",
+            download=True,
+            sample_ids=[1135, 1136, 1137],
             num_workers=16,
             sampler=sampler,
         )
-
-        val_loader = datasets.get_mouse_embryo_loader(
-            path=os.path.join(ROOT, "mouse-embryo"),
-            name="nuclei",
-            split="val",
+        val_loader = datasets.get_gonuclear_loader(
+            path=os.path.join(ROOT, "gonuclear"),
             patch_shape=(32, 256, 256),
-            batch_size=1,
-            binary=True,
-            boundaries=True if task == "boundaries" else False,
+            batch_size=2,
+            segmentation_task="nuclei",
+            download=True,
+            sample_ids=[1139],
             num_workers=16,
             sampler=sampler,
         )
@@ -185,8 +187,8 @@ def get_test_images(dataset):
         return image_paths, gt_paths
 
     else:
-        if dataset == "mouse_embryo":
-            volume_paths = sorted(glob(os.path.join(ROOT, "mouse-embryo", "Nuclei", "test", "*.h5")))
+        if dataset == "gonuclear":
+            raise NotImplementedError
         elif dataset == "plantseg":
             volume_paths = sorted(glob(os.path.join(ROOT, "plantseg", "root_test", "*.h5")))
         elif dataset == "mitoem":

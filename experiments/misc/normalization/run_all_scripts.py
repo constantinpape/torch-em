@@ -1,5 +1,6 @@
 import os
 import shutil
+import itertools
 import subprocess
 from datetime import datetime
 
@@ -63,22 +64,20 @@ def submit_slurm(args):
     "Submit python script that needs gpus with given inputs on a slurm node."
     tmp_folder = "./gpu_jobs"
 
-    datasets = ["livecell", "plantseg", "mitoem", "mouse_embryo"]
+    datasets = ["livecell", "plantseg", "mitoem", "gonuclear"]
     tasks = ["binary", "boundaries"]
-    norms = ["OldDefault", "InstanceNorm"]
+    norms = ["InstanceNormTrackStats", "InstanceNorm"]
     phase = args.phase
 
-    for dataset in datasets:
-        for task in tasks:
-            for norm in norms:
-                write_batch_script(
-                    out_path=get_batch_script_names(tmp_folder),
-                    _name="unet-norm",
-                    dataset=dataset,
-                    phase=phase,
-                    task=task,
-                    norm=norm,
-                )
+    for (dataset, task, norm) in itertools.product(datasets, tasks, norms):
+        write_batch_script(
+            out_path=get_batch_script_names(tmp_folder),
+            _name="unet-norm",
+            dataset=dataset,
+            phase=phase,
+            task=task,
+            norm=norm,
+        )
 
 
 def main(args):

@@ -67,7 +67,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
         if dataset == "livecell":
             image = _load_image(image_path)
-        elif dataset in ["mouse_embryo", "plantseg", "mitoem"]:
+        elif dataset in ["gonuclear", "plantseg", "mitoem"]:
             image = _load_image(image_path, "raw")
 
         if _whole_vol_norm:
@@ -113,7 +113,7 @@ def run_evaluation(norm, dataset, task, save_root):
         if dataset == "livecell":
             image = _load_image(image_path)
             gt = _load_image(gt_path)
-        elif dataset in ["mouse_embryo", "plantseg"]:
+        elif dataset in ["gonuclear", "plantseg"]:
             image = _load_image(image_path, "raw")
             gt = _load_image(image_path, "label")
         else:  # mitoem
@@ -176,8 +176,8 @@ def run_analysis_per_dataset(dataset, task, save_root):
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
-    exp1_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "OldDefault", task)
-    exp2_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "InstanceNorm", task)
+    exp1_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "InstanceNorm", task)
+    exp2_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "InstanceNormTrackStats", task)
 
     dice_2d_samples = []
     image_ids = []
@@ -185,7 +185,7 @@ def run_analysis_per_dataset(dataset, task, save_root):
         if dataset == "livecell":
             image = _load_image(image_path)
             gt = _load_image(gt_path)
-        elif dataset in ["mouse_embryo", "plantseg"]:
+        elif dataset in ["gonuclear", "plantseg"]:
             image = _load_image(image_path, "raw")
             gt = _load_image(image_path, "label")
         else:  # mitoem
@@ -310,14 +310,14 @@ def main(args):
     save_root = os.path.join(SAVE_DIR, "models")
 
     if phase == "evaluate":
-        assert norm in ["OldDefault", "InstanceNorm"]
+        assert norm in ["InstanceNormTrackStats", "InstanceNorm"]
         run_evaluation(norm=norm, dataset=dataset, task=task, save_root=save_root)
 
     elif phase == "analysis":
         run_analysis_per_dataset(dataset=dataset, task=task, save_root=save_root)
 
     else:
-        assert norm in ["OldDefault", "InstanceNorm"]
+        assert norm in ["InstanceNormTrackStats", "InstanceNorm"]
         model = get_model(dataset=dataset, task=task, norm=norm)
         name = get_experiment_name(dataset=dataset, task=task, norm=norm, model_choice="unet")
         device = "cuda" if torch.cuda.is_available() else "cpu"
