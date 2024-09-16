@@ -7,7 +7,7 @@ Please cite it if you use this dataset in your research.
 import os
 from glob import glob
 from shutil import rmtree
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 import h5py
 import imageio.v3 as imageio
@@ -109,6 +109,9 @@ def get_gonuclear_dataset(
     patch_shape: Tuple[int, int],
     segmentation_task: str = "nuclei",
     sample_ids: Optional[Union[int, Tuple[int, ...]]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -120,6 +123,9 @@ def get_gonuclear_dataset(
         segmentation_task: The segmentation task. Either 'nuclei' or 'cells'.
         sample_ids: The sample ids to load. The valid sample ids are:
             1135, 1136, 1137, 1139, 1170. If none is given all samples will be loaded.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -147,6 +153,10 @@ def get_gonuclear_dataset(
     else:
         raise ValueError(f"Invalid segmentation task {segmentation_task}, expect one of 'cells' or 'nuclei'.")
 
+    kwargs, _ = util.add_instance_label_transform(
+        kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets,
+    )
+
     return torch_em.default_segmentation_dataset(
         paths, raw_key, paths, label_key, patch_shape, **kwargs
     )
@@ -158,10 +168,13 @@ def get_gonuclear_loader(
     batch_size: int,
     segmentation_task: str = "nuclei",
     sample_ids: Optional[Union[int, Tuple[int, ...]]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the GoNuclear dataloder for segmenting nuclei in 3d fluorescence microscopy.
+    """Get the GoNuclear dataloader for segmenting nuclei in 3d fluorescence microscopy.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -170,6 +183,9 @@ def get_gonuclear_loader(
         segmentation_task: The segmentation task. Either 'nuclei' or 'cells'.
         sample_ids: The sample ids to load. The valid sample ids are:
             1135, 1136, 1137, 1139, 1170. If none is given all samples will be loaded.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -178,7 +194,15 @@ def get_gonuclear_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_gonuclear_dataset(
-        path, patch_shape, sample_ids=sample_ids, segmentation_task=segmentation_task, download=download, **ds_kwargs,
+        path=path,
+        patch_shape=patch_shape,
+        segmentation_task=segmentation_task,
+        sample_ids=sample_ids,
+        offsets=offsets,
+        boundaries=boundaries,
+        binary=binary,
+        download=download,
+        **ds_kwargs,
     )
     loader = torch_em.get_data_loader(dataset, batch_size=batch_size, **loader_kwargs)
     return loader
