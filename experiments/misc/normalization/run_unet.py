@@ -23,6 +23,11 @@ from common import (
 def run_training(name, model, dataset, task, save_root, device):
     train_loader, val_loader = get_dataloaders(dataset=dataset, task=task)
 
+    from torch_em.util.debug import check_loader
+    check_loader(train_loader, 8)
+
+    breakpoint()
+
     loss = DiceLoss()
 
     trainer = torch_em.default_segmentation_trainer(
@@ -34,7 +39,7 @@ def run_training(name, model, dataset, task, save_root, device):
         loss=loss,
         metric=loss,
         device=device,
-        learning_rate=1e-4,
+        learning_rate=1e-5,
         mixed_precision=True,
         compile_model=False,
         log_image_interval=100,
@@ -107,6 +112,8 @@ def run_evaluation(norm, dataset, task, save_root):
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
     pred_dir = os.path.join(Path(save_root).parent, "prediction", dataset, norm, task)
+
+    # TODO: for plantseg: perform multicut watershed using boundaries.
 
     dsc_list, msa_list, sa50_list = [], [], []
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Evaluating", total=len(image_paths)):
