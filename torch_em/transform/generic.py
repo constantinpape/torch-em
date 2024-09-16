@@ -1,3 +1,4 @@
+from math import ceil, floor
 from typing import Any, Dict, Optional, Sequence, Union
 
 import numpy as np
@@ -102,6 +103,63 @@ class ResizeInputs:
             **kwargs
         ).astype(inputs.dtype)
 
+        return inputs
+
+
+class ResizeLongestSideInputs:
+    def __init__(self, target_shape, is_label=False, is_rgb=False):
+        self.target_shape = target_shape
+        self.is_label = is_label
+        self.is_rgb = is_rgb
+
+        h, w = self.target_shape[-2], self.target_shape[-1]
+        if h != w:  # We currently support resize feature for square-shaped target shape only.
+            raise ValueError("'ResizeLongestSideInputs' does not support non-square shaped target shapes.")
+
+        self.target_length = self.target_shape[-1]
+
+    def _get_preprocess_shape(self, oldh, oldw):
+        """Inspired from Segment Anything.
+
+        - https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/utils/transforms.py
+        """
+        scale = self.target_length * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        neww = int(neww + 0.5)
+        newh = int(newh + 0.5)
+        return (newh, neww)
+
+    def __call__(self, inputs):
+        if self.is_label:  # kwargs needed for int data
+            kwargs = {"order": 0,  "anti_aliasing": False}
+        else:  # we use the default settings for float data
+            kwargs = {}
+
+        # Let's get the new shape with the longest side equal to the target length.
+        new_shape = self._get_preprocess_shape(inputs.shape[-2], inputs.shape[-1])
+
+        if self.is_rgb:  # for rgb inputs, we assume channels first
+            assert inputs.ndim == 3 and inputs.shape[0] == 3
+            patch_shape = (3, *new_shape)
+        elif inputs.ndim == 3:  # for 3d inputs, we do not resize along the first (=z) axis
+            patch_shape = (inputs.shape[0], *new_shape)
+        else:
+            patch_shape = new_shape
+
+        # Next, we resize the input image along the longest side.
+        inputs = resize(
+            image=inputs, output_shape=patch_shape, preserve_range=True, **kwargs
+        ).astype(inputs.dtype)
+
+        # Finally, we pad the remaining height to match the expected target shape.
+        pad_width = [(sh - dsh) / 2 for sh, dsh in zip(self.target_shape, new_shape)]
+        pad_width = (
+            (ceil(pad_width[0]), floor(pad_width[0])), (ceil(pad_width[1]), floor(pad_width[1]))
+        )
+        if self.is_rgb or inputs.ndim == 3:  # we do not pad across the first axis (= channel or z-axis) for rgb or 3d inputs
+            pad_width = ((0, 0), *pad_width)
+
+        inputs = np.pad(array=inputs, pad_width=pad_width, mode="constant")
         return inputs
 
 

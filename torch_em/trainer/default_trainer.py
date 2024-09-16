@@ -6,12 +6,12 @@ import os
 import time
 import warnings
 from collections import OrderedDict
+from functools import partial
 from importlib import import_module
 from typing import Any, Callable, Dict, Optional, Union
 
 import numpy as np
 import torch
-import torch.cuda.amp as amp
 from tqdm import tqdm
 
 from .tensorboard_logger import TensorboardLogger
@@ -58,7 +58,7 @@ class DefaultTrainer:
         self.loss = loss
         self.optimizer = optimizer
         self.metric = metric
-        self.device = device
+        self.device = torch.device(device)
         self.lr_scheduler = lr_scheduler
         self.log_image_interval = log_image_interval
         self.save_root = save_root
@@ -73,7 +73,10 @@ class DefaultTrainer:
         self.early_stopping = early_stopping
         self.train_time = 0.0
 
-        self.scaler = amp.GradScaler() if mixed_precision else None
+        if mixed_precision:
+            self.scaler = torch.GradScaler("cpu" if self.device.type == "cpu" else "cuda")
+        else:
+            self.scaler = None
 
         self.logger_class = logger
         self.logger_kwargs = logger_kwargs
@@ -644,7 +647,10 @@ class DefaultTrainer:
         return self._train_epoch_impl(progress, contextlib.nullcontext, self._backprop)
 
     def _train_epoch_mixed(self, progress):
-        return self._train_epoch_impl(progress, amp.autocast, self._backprop_mixed)
+        return self._train_epoch_impl(
+            progress, partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda"),
+            self._backprop_mixed
+        )
 
     def _forward_and_loss(self, x, y):
         pred = self.model(x)
@@ -687,7 +693,9 @@ class DefaultTrainer:
         return self._validate_impl(contextlib.nullcontext)
 
     def _validate_mixed(self):
-        return self._validate_impl(amp.autocast)
+        return self._validate_impl(
+            partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda")
+        )
 
     def _validate_impl(self, forward_context):
         self.model.eval()

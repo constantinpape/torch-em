@@ -9,7 +9,7 @@ import os
 from shutil import copyfileobj
 from typing import List, Optional, Sequence, Tuple, Union
 
-import imageio
+import imageio.v3 as imageio
 import numpy as np
 import requests
 import vigra
