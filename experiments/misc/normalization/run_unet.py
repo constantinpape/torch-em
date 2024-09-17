@@ -19,6 +19,20 @@ from common import (
     get_dataloaders, get_model, get_experiment_name, get_test_images, dice_score, _load_image, SAVE_DIR
 )
 
+# Results:
+# GONUCLEAR
+# InstanceNormTrackStats: 0.4309 (instance segmentation), 0.8759 (binary segmentation)
+# InstanceNorm: 0.3932 (instance segmentation), 0.8981 (binary segmentation)
+
+# PLANTSEG
+# TODO
+
+# MITOEM
+# TODO
+
+# LIVECELL
+# TODO
+
 
 def run_training(name, model, dataset, task, save_root, device):
     n_iterations = int(2.5e4)
@@ -90,7 +104,9 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
         # save outputs
         with h5py.File(pred_path, "a") as f:
-            f.create_dataset("segmentation", shape=prediction.shape, data=prediction, compression="gzip")
+            f.create_dataset(
+                "segmentation", shape=prediction.shape, data=prediction, compression="gzip", compression_opts=9,
+            )
 
 
 def run_evaluation(norm, dataset, task, save_root):
