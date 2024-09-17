@@ -84,7 +84,7 @@ def get_dataloaders(dataset, task):
         val_loader = datasets.get_plantseg_loader(
             path=os.path.join(ROOT, "plantseg"),
             name="root",
-            split="test",
+            split="val",
             patch_shape=(32, 512, 512),
             batch_size=1,
             boundaries=True if task == "boundaries" else False,

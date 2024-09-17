@@ -9,7 +9,7 @@ import torch
 
 import torch_em
 from torch_em.loss import DiceLoss
-from torch_em.transform.raw import standardize
+from torch_em.transform.raw import normalize_percentile
 from torch_em.util.prediction import predict_with_halo
 from torch_em.util.segmentation import watershed_from_components
 
@@ -23,8 +23,6 @@ from common import (
 def run_training(name, model, dataset, task, save_root, device):
     n_iterations = int(2.5e4)
     train_loader, val_loader = get_dataloaders(dataset=dataset, task=task)
-
-    breakpoint()
 
     trainer = torch_em.default_segmentation_trainer(
         name=name,
@@ -72,7 +70,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
         image = _load_image(image_path, **load_kwargs)
 
         if _whole_vol_norm:
-            image = standardize(image)
+            image = normalize_percentile(image)
 
         if dataset == "livecell":
             tile, halo = (384, 384), (64, 64)
@@ -85,7 +83,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             gpu_ids=[device],
             block_shape=tile,
             halo=halo,
-            preprocess=None if _whole_vol_norm else standardize,
+            preprocess=None if _whole_vol_norm else normalize_percentile,
         )
 
         prediction = prediction.squeeze()
@@ -96,20 +94,16 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
 
 def run_evaluation(norm, dataset, task, save_root):
-    visualize = False
+    visualize = True
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
-
-    pred_dir = os.path.join(Path(save_root).parent, "prediction", dataset, norm, task)
-
-    # TODO: for plantseg: perform multicut watershed using boundaries.
 
     dsc_list, msa_list, sa50_list = [], [], []
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Evaluating", total=len(image_paths)):
         if dataset == "livecell":
             image, gt = _load_image(image_path), _load_image(gt_path)
         elif dataset == "gonuclear":
-            image, gt = _load_image(image_path, "raw/nuclei"), _load_image(image_path, "label/nuclei")
+            image, gt = _load_image(image_path, "raw/nuclei"), _load_image(image_path, "labels/nuclei")
         elif dataset == "plantseg":
             image, gt = _load_image(image_path, "raw"), _load_image(image_path, "label")
         elif dataset == "mitoem":
@@ -117,7 +111,9 @@ def run_evaluation(norm, dataset, task, save_root):
         else:
             raise ValueError
 
-        pred_path = os.path.join(pred_dir, f"{Path(image_path).stem}.h5")
+        pred_path = os.path.join(
+            Path(save_root).parent, "prediction", dataset, norm, task, f"{Path(image_path).stem}.h5"
+        )
 
         with h5py.File(pred_path, "r") as f:
             if task == "boundaries":
@@ -138,9 +134,9 @@ def run_evaluation(norm, dataset, task, save_root):
                     import napari
                     v = napari.Viewer()
                     v.add_image(image, name="Input Image")
+                    v.add_image(fg, name="Foreground")
+                    v.add_image(bd, name="Boundary")
                     v.add_labels(instances, name="Instances")
-                    v.add_labels(fg, name="Foreground")
-                    v.add_labels(bd, name="Boundary")
                     v.add_labels(gt, name="Ground Truth", visible=False)
                     napari.run()
 
@@ -333,7 +329,7 @@ def main(args):
                 name=name, model=model, norm=norm, dataset=dataset, task=task, save_root=save_root, device=device
             )
         else:
-            print(f"'{phase}' is not a valid mode. Choose from 'train' / 'predict' / 'evaluate'.")
+            raise ValueError
 
 
 if __name__ == "__main__":
