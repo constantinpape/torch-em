@@ -8,7 +8,7 @@ import imageio.v3 as imageio
 
 from torch_em.model import UNet2d, UNet3d
 from torch_em.data import MinTwoInstanceSampler, datasets
-from torch_em.transform.raw import normalize_percentile, get_raw_transform, get_default_mean_teacher_augmentations
+from torch_em.transform.raw import normalize_percentile, get_default_mean_teacher_augmentations
 
 from micro_sam.evaluation.livecell import _get_livecell_paths
 
@@ -47,8 +47,8 @@ def get_dataloaders(dataset, task):
     sampler = MinTwoInstanceSampler()
 
     loader_kwargs = {
-        "num_workers": 16, "download": True, "sampler": sampler, "raw_transform": None,
-        "transform": get_default_mean_teacher_augmentations(p=0.5, norm=normalize_percentile),
+        "num_workers": 16, "download": True, "sampler": sampler,
+        "raw_transform": get_default_mean_teacher_augmentations(p=0.3, norm=normalize_percentile),
     }
 
     if dataset == "livecell":
@@ -75,7 +75,7 @@ def get_dataloaders(dataset, task):
             path=os.path.join(ROOT, "plantseg"),
             name="root",
             split="train",
-            patch_shape=(32, 256, 256),
+            patch_shape=(32, 512, 512),
             batch_size=2,
             boundaries=True if task == "boundaries" else False,
             **loader_kwargs
@@ -84,8 +84,8 @@ def get_dataloaders(dataset, task):
         val_loader = datasets.get_plantseg_loader(
             path=os.path.join(ROOT, "plantseg"),
             name="root",
-            split="val",
-            patch_shape=(32, 256, 256),
+            split="test",
+            patch_shape=(32, 512, 512),
             batch_size=1,
             boundaries=True if task == "boundaries" else False,
             **loader_kwargs
@@ -94,7 +94,7 @@ def get_dataloaders(dataset, task):
         train_loader = datasets.get_mitoem_loader(
             path=os.path.join(ROOT, "mitoem"),
             splits="train",
-            patch_shape=(32, 256, 256),
+            patch_shape=(32, 512, 512),
             batch_size=2,
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
@@ -104,7 +104,7 @@ def get_dataloaders(dataset, task):
         val_loader = datasets.get_mitoem_loader(
             path=os.path.join(ROOT, "mitoem"),
             splits="val",
-            patch_shape=(32, 256, 256),
+            patch_shape=(32, 512, 512),
             batch_size=1,
             binary=True if task == "binary" else False,
             boundaries=True if task == "boundaries" else False,
@@ -113,7 +113,7 @@ def get_dataloaders(dataset, task):
     elif dataset == "gonuclear":
         train_loader = datasets.get_gonuclear_loader(
             path=os.path.join(ROOT, "gonuclear"),
-            patch_shape=(32, 256, 256),
+            patch_shape=(32, 512, 512),
             batch_size=2,
             segmentation_task="nuclei",
             binary=True if task == "binary" else False,
@@ -123,7 +123,7 @@ def get_dataloaders(dataset, task):
         )
         val_loader = datasets.get_gonuclear_loader(
             path=os.path.join(ROOT, "gonuclear"),
-            patch_shape=(32, 256, 256),
+            patch_shape=(32, 512, 512),
             batch_size=1,
             segmentation_task="nuclei",
             binary=True if task == "binary" else False,
@@ -150,7 +150,7 @@ def get_test_images(dataset):
         return image_paths, gt_paths
     else:
         if dataset == "gonuclear":
-            raise NotImplementedError
+            volume_paths = [os.path.join(ROOT, "gonuclear", "gonuclear_datasets", "1170.h5")]
         elif dataset == "plantseg":
             volume_paths = sorted(glob(os.path.join(ROOT, "plantseg", "root_test", "*.h5")))
         elif dataset == "mitoem":

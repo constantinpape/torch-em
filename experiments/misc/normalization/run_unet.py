@@ -21,14 +21,10 @@ from common import (
 
 
 def run_training(name, model, dataset, task, save_root, device):
+    n_iterations = int(2.5e4)
     train_loader, val_loader = get_dataloaders(dataset=dataset, task=task)
 
-    from torch_em.util.debug import check_loader
-    check_loader(train_loader, 8)
-
     breakpoint()
-
-    loss = DiceLoss()
 
     trainer = torch_em.default_segmentation_trainer(
         name=name,
@@ -36,15 +32,15 @@ def run_training(name, model, dataset, task, save_root, device):
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        loss=loss,
-        metric=loss,
+        loss=DiceLoss(),
+        metric=DiceLoss(),
         device=device,
-        learning_rate=1e-5,
+        learning_rate=5e-4,
         mixed_precision=True,
         compile_model=False,
         log_image_interval=100,
     )
-    trainer.fit(iterations=int(1e5))
+    trainer.fit(iterations=n_iterations)
 
 
 def run_inference(name, model, norm, dataset, task, save_root, device):
@@ -60,28 +56,28 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
     pred_dir = os.path.join(Path(save_root).parent, "prediction", dataset, norm, task)
     os.makedirs(pred_dir, exist_ok=True)
 
-    # NOTE: performs normalization on either the whole volume or per tile.
-    _whole_vol_norm = True
+    _whole_vol_norm = True  # NOTE: performs normalization on either the whole volume or per tile.
 
     for image_path in tqdm(image_paths, desc="Predicting"):
-        image_id = Path(image_path).stem
-        pred_path = os.path.join(pred_dir, f"{image_id}.h5")
-
+        pred_path = os.path.join(pred_dir, f"{Path(image_path).stem}.h5")
         if os.path.exists(pred_path):
             continue
 
-        if dataset == "livecell":
-            image = _load_image(image_path)
-        elif dataset in ["gonuclear", "plantseg", "mitoem"]:
-            image = _load_image(image_path, "raw")
+        load_kwargs = {}
+        if dataset == "gonuclear":
+            load_kwargs["key"] = "raw/nuclei"
+        elif dataset in ["plantseg", "mitoem"]:
+            load_kwargs["key"] = "raw"
+
+        image = _load_image(image_path, **load_kwargs)
 
         if _whole_vol_norm:
             image = standardize(image)
 
         if dataset == "livecell":
-            tile, halo = (512, 512), (64, 64)
+            tile, halo = (384, 384), (64, 64)
         else:
-            tile, halo = (64, 256, 256), (16, 64, 64)
+            tile, halo = (16, 384, 384), (8, 64, 64)
 
         prediction = predict_with_halo(
             input_=image,
@@ -89,7 +85,6 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             gpu_ids=[device],
             block_shape=tile,
             halo=halo,
-            disable_tqdm=False,
             preprocess=None if _whole_vol_norm else standardize,
         )
 
@@ -97,13 +92,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
         # save outputs
         with h5py.File(pred_path, "a") as f:
-            if task == "boundaries":
-                fg, bd = prediction
-                f.create_dataset("segmentation/foreground", shape=fg.shape, data=fg, compression="gzip")
-                f.create_dataset("segmentation/boundary", shape=bd.shape, data=bd, compression="gzip")
-            else:
-                outputs = prediction
-                f.create_dataset("segmentation/foreground", shape=outputs.shape, data=outputs, compression="gzip")
+            f.create_dataset("segmentation", shape=prediction.shape, data=prediction, compression="gzip")
 
 
 def run_evaluation(norm, dataset, task, save_root):
@@ -118,22 +107,27 @@ def run_evaluation(norm, dataset, task, save_root):
     dsc_list, msa_list, sa50_list = [], [], []
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Evaluating", total=len(image_paths)):
         if dataset == "livecell":
-            image = _load_image(image_path)
-            gt = _load_image(gt_path)
-        elif dataset in ["gonuclear", "plantseg"]:
-            image = _load_image(image_path, "raw")
-            gt = _load_image(image_path, "label")
-        else:  # mitoem
-            image = _load_image(image_path, "raw")
-            gt = _load_image(image_path, "labels")
+            image, gt = _load_image(image_path), _load_image(gt_path)
+        elif dataset == "gonuclear":
+            image, gt = _load_image(image_path, "raw/nuclei"), _load_image(image_path, "label/nuclei")
+        elif dataset == "plantseg":
+            image, gt = _load_image(image_path, "raw"), _load_image(image_path, "label")
+        elif dataset == "mitoem":
+            image, gt = _load_image(image_path, "raw"), _load_image(image_path, "labels")
+        else:
+            raise ValueError
 
-        image_id = Path(image_path).stem
-        pred_path = os.path.join(pred_dir, f"{image_id}.h5")
+        pred_path = os.path.join(pred_dir, f"{Path(image_path).stem}.h5")
 
         with h5py.File(pred_path, "r") as f:
             if task == "boundaries":
-                fg = f["segmentation/foreground"][:]
-                bd = f["segmentation/boundary"][:]
+                prediction = f['segmentation'][:]
+                if dataset == "plantseg":  # we only have boundary segmentation here.
+                    bd = prediction
+                    fg = np.ones_like(bd)
+                else:
+                    fg, bd = prediction
+
                 instances = watershed_from_components(boundaries=bd, foreground=fg)
 
                 msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
@@ -143,15 +137,15 @@ def run_evaluation(norm, dataset, task, save_root):
                 if visualize:
                     import napari
                     v = napari.Viewer()
-                    v.add_image(image)
-                    v.add_labels(instances)
-                    v.add_labels(fg > 0.5)
-                    v.add_labels(bd > 0.5)
-                    v.add_labels(gt, visible=False)
+                    v.add_image(image, name="Input Image")
+                    v.add_labels(instances, name="Instances")
+                    v.add_labels(fg, name="Foreground")
+                    v.add_labels(bd, name="Boundary")
+                    v.add_labels(gt, name="Ground Truth", visible=False)
                     napari.run()
 
             else:
-                prediction = f["segmentation/foreground"][:]
+                prediction = f["segmentation"][:]
                 prediction = (prediction > 0.5)  # threshold the predictions
 
                 gt = (gt > 0)   # binarise the instances
@@ -159,9 +153,9 @@ def run_evaluation(norm, dataset, task, save_root):
                 if visualize:
                     import napari
                     v = napari.Viewer()
-                    v.add_image(image)
-                    v.add_labels(prediction)
-                    v.add_labels(gt, visible=False)
+                    v.add_image(image, name="Input Image")
+                    v.add_labels(prediction, name="Foreground")
+                    v.add_labels(gt, name="Ground Truth", visible=False)
                     napari.run()
 
                 score = dice_score(gt=gt, seg=prediction)
@@ -312,6 +306,9 @@ def main(args):
     task = args.task
     norm = args.norm
 
+    if dataset == "plantseg" and task == "binary":
+        raise ValueError("The experiment for binary segmentation of 'PlantSeg (Root)' is not implemented.")
+
     assert task in ["binary", "boundaries"]
 
     save_root = os.path.join(SAVE_DIR, "models")
@@ -330,9 +327,7 @@ def main(args):
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
         if phase == "train":
-            run_training(
-                name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device
-            )
+            run_training(name=name, model=model, dataset=dataset, task=task, save_root=save_root, device=device)
         elif phase == "predict":
             run_inference(
                 name=name, model=model, norm=norm, dataset=dataset, task=task, save_root=save_root, device=device
@@ -347,17 +342,9 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-d", "--dataset", required=True, type=str, help="The choice of dataset."
-    )
-    parser.add_argument(
-        "-p", "--phase", required=True, type=str, help="The mode for running the scripts."
-    )
-    parser.add_argument(
-        "-t", "--task", required=True, type=str, help="The type of task for segmentation."
-    )
-    parser.add_argument(
-        "-n", "--norm", type=str, help="The choice of layer normalization."
-    )
+    parser.add_argument("-d", "--dataset", required=True, type=str, help="The choice of dataset.")
+    parser.add_argument("-p", "--phase", required=True, type=str, help="The mode for running the scripts.")
+    parser.add_argument("-t", "--task", required=True, type=str, help="The type of task for segmentation.")
+    parser.add_argument("-n", "--norm", type=str, help="The choice of layer normalization.")
     args = parser.parse_args()
     main(args)

@@ -5,21 +5,21 @@ import subprocess
 from datetime import datetime
 
 
-def write_batch_script(out_path, _name, dataset, phase, task, norm):
+def write_batch_script(out_path, _name, dataset, phase, task, norm, dry):
     "Writing scripts for different norm experiments."
     batch_script = f"""#!/bin/bash
 #SBATCH -t 2-00:00:00
 #SBATCH --mem 128G
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH -p grete:shared
-#SBATCH -G A100:1
+#SBATCH -p grete-h100:shared
+#SBATCH -G H100:1
 #SBATCH -A gzz0001
 #SBATCH -c 16
-#SBATCH --constraint=80gb
 #SBATCH --job-name=unet-{dataset}
 
-source activate sam \n"""
+source ~/.bashrc
+micromamba activate sam \n"""
 
     # python script
     python_script = "python run_unet.py "
@@ -43,8 +43,8 @@ source activate sam \n"""
     with open(_op, "w") as f:
         f.write(batch_script)
 
-    cmd = ["sbatch", _op]
-    subprocess.run(cmd)
+    if not dry:
+        subprocess.run(["sbatch", _op])
 
 
 def get_batch_script_names(tmp_folder):
@@ -62,21 +62,26 @@ def get_batch_script_names(tmp_folder):
 
 def submit_slurm(args):
     "Submit python script that needs gpus with given inputs on a slurm node."
-    tmp_folder = "./gpu_jobs"
-
     datasets = ["livecell", "plantseg", "mitoem", "gonuclear"]
     tasks = ["binary", "boundaries"]
     norms = ["InstanceNormTrackStats", "InstanceNorm"]
-    phase = args.phase
 
     for (dataset, task, norm) in itertools.product(datasets, tasks, norms):
+        if dataset == "plantseg" and task == "binary":  # for plantseg: binary is just all pixels as foreground
+            continue
+
+        # NOTE: we skip livecell for now: need to investigate augmentations there a bit
+        if dataset == "livecell":
+            continue
+
         write_batch_script(
-            out_path=get_batch_script_names(tmp_folder),
+            out_path=get_batch_script_names("./gpu_jobs"),
             _name="unet-norm",
             dataset=dataset,
-            phase=phase,
+            phase=args.phase,
             task=task,
             norm=norm,
+            dry=args.dry,
         )
 
 
@@ -93,5 +98,6 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--phase", required=True, type=str)
+    parser.add_argument("--dry", action="store_true")
     args = parser.parse_args()
     main(args)
