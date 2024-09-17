@@ -63,28 +63,18 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
     model.to(device)
     model.eval()
 
-    image_paths, _ = get_test_images(dataset=dataset)
+    image_paths, gt_paths = get_test_images(dataset=dataset)
 
     pred_dir = os.path.join(Path(save_root).parent, "prediction", dataset, norm, task)
     os.makedirs(pred_dir, exist_ok=True)
 
-    _whole_vol_norm = True  # NOTE: performs normalization on either the whole volume or per tile.
-
-    for image_path in tqdm(image_paths, desc="Predicting"):
+    for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting", total=len(image_paths)):
         pred_path = os.path.join(pred_dir, f"{Path(image_path).stem}.h5")
         if os.path.exists(pred_path):
             continue
 
-        load_kwargs = {}
-        if dataset == "gonuclear":
-            load_kwargs["key"] = "raw/nuclei"
-        elif dataset in ["plantseg", "mitoem"]:
-            load_kwargs["key"] = "raw"
-
-        image = _load_image(image_path, **load_kwargs)
-
-        if _whole_vol_norm:
-            image = normalize_percentile(image)
+        image, _ = _get_per_dataset_inputs(dataset, image_path, gt_path)
+        image = normalize_percentile(image)
 
         if dataset == "livecell":
             tile, halo = (384, 384), (64, 64)
@@ -97,43 +87,44 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             gpu_ids=[device],
             block_shape=tile,
             halo=halo,
-            preprocess=None if _whole_vol_norm else normalize_percentile,
+            preprocess=None,
         )
-
         prediction = prediction.squeeze()
 
         # save outputs
+        dname = "segmentation/prediction" if task == "boundaries" else "segmentation/foreground"
         with h5py.File(pred_path, "a") as f:
-            f.create_dataset(
-                "segmentation", shape=prediction.shape, data=prediction, compression="gzip", compression_opts=9,
-            )
+            f.create_dataset(dname, shape=prediction.shape, data=prediction, compression="gzip")
+
+
+def _get_per_dataset_inputs(dataset, image_path, gt_path):
+    if dataset == "livecell":
+        image, gt = _load_image(image_path), _load_image(gt_path)
+    elif dataset == "gonuclear":
+        image, gt = _load_image(image_path, "raw/nuclei"), _load_image(image_path, "labels/nuclei")
+    elif dataset == "plantseg":
+        image, gt = _load_image(image_path, "raw"), _load_image(image_path, "label")
+    elif dataset == "mitoem":
+        image, gt = _load_image(image_path, "raw"), _load_image(image_path, "labels")
+    else:
+        raise ValueError
+
+    return image, gt
 
 
 def run_evaluation(norm, dataset, task, save_root):
-    visualize = True
-
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
     dsc_list, msa_list, sa50_list = [], [], []
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Evaluating", total=len(image_paths)):
-        if dataset == "livecell":
-            image, gt = _load_image(image_path), _load_image(gt_path)
-        elif dataset == "gonuclear":
-            image, gt = _load_image(image_path, "raw/nuclei"), _load_image(image_path, "labels/nuclei")
-        elif dataset == "plantseg":
-            image, gt = _load_image(image_path, "raw"), _load_image(image_path, "label")
-        elif dataset == "mitoem":
-            image, gt = _load_image(image_path, "raw"), _load_image(image_path, "labels")
-        else:
-            raise ValueError
+        _, gt = _get_per_dataset_inputs(dataset, image_path, gt_path)
 
         pred_path = os.path.join(
             Path(save_root).parent, "prediction", dataset, norm, task, f"{Path(image_path).stem}.h5"
         )
-
-        with h5py.File(pred_path, "r") as f:
+        with h5py.File(pred_path, "r+") as f:
             if task == "boundaries":
-                prediction = f['segmentation'][:]
+                prediction = f['segmentation/prediction'][:]
                 if dataset == "plantseg":  # we only have boundary segmentation here.
                     bd = prediction
                     fg = np.ones_like(bd)
@@ -146,29 +137,14 @@ def run_evaluation(norm, dataset, task, save_root):
                 msa_list.append(msa)
                 sa50_list.append(sa[0])
 
-                if visualize:
-                    import napari
-                    v = napari.Viewer()
-                    v.add_image(image, name="Input Image")
-                    v.add_image(fg, name="Foreground")
-                    v.add_image(bd, name="Boundary")
-                    v.add_labels(instances, name="Instances")
-                    v.add_labels(gt, name="Ground Truth", visible=False)
-                    napari.run()
+                f.create_dataset("segmentation/foreground", shape=fg.shape, data=fg, compression="gzip")
+                f.create_dataset("segmentation/boundary", shape=bd.shape, data=bd, compression="gzip")
+                f.create_dataset("segmentation/instances", shape=instances.shape, data=instances, compression="gzip")
 
             else:
-                prediction = f["segmentation"][:]
+                prediction = f["segmentation/prediction"][:]
                 prediction = (prediction > 0.5)  # threshold the predictions
-
                 gt = (gt > 0)   # binarise the instances
-
-                if visualize:
-                    import napari
-                    v = napari.Viewer()
-                    v.add_image(image, name="Input Image")
-                    v.add_labels(prediction, name="Foreground")
-                    v.add_labels(gt, name="Ground Truth", visible=False)
-                    napari.run()
 
                 score = dice_score(gt=gt, seg=prediction)
                 assert score > 0 and score <= 1  # HACK: sanity check
@@ -177,7 +153,6 @@ def run_evaluation(norm, dataset, task, save_root):
     if task == "binary":
         mean_dice = np.mean(dsc_list)
         print(mean_dice)
-
     else:
         mean_msa = np.mean(msa_list)
         mean_sa50 = np.mean(sa50_list)
@@ -185,25 +160,13 @@ def run_evaluation(norm, dataset, task, save_root):
 
 
 def run_analysis_per_dataset(dataset, task, save_root):
-    k = 50  # determines the number of images to visualize
-
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
     exp1_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "InstanceNorm", task)
     exp2_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "InstanceNormTrackStats", task)
 
-    dice_2d_samples = []
-    image_ids = []
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Analysing", total=len(image_paths)):
-        if dataset == "livecell":
-            image = _load_image(image_path)
-            gt = _load_image(gt_path)
-        elif dataset in ["gonuclear", "plantseg"]:
-            image = _load_image(image_path, "raw")
-            gt = _load_image(image_path, "label")
-        else:  # mitoem
-            image = _load_image(image_path, "raw")
-            gt = _load_image(image_path, "labels")
+        image, gt = _get_per_dataset_inputs(dataset, image_path, gt_path)
 
         image_id = Path(image_path).stem
         pred_exp1_path = os.path.join(exp1_dir, f"{image_id}.h5")
@@ -213,6 +176,7 @@ def run_analysis_per_dataset(dataset, task, save_root):
             if task == "boundaries":
                 fg_exp1 = f1["segmentation/foreground"][:]
                 bd_exp1 = f1["segmentation/boundary"][:]
+                instances_exp1 = f1["segmentation/instances"][:]
             else:
                 fg_exp1 = f1["segmentation/foreground"][:]
 
@@ -220,96 +184,22 @@ def run_analysis_per_dataset(dataset, task, save_root):
             if task == "boundaries":
                 fg_exp2 = f2["segmentation/foreground"][:]
                 bd_exp2 = f2["segmentation/boundary"][:]
+                instances_exp2 = f2["segmentation/instances"][:]
             else:
                 fg_exp2 = f2["segmentation/foreground"][:]
 
-        # NOTE: visualize the whole volume as it is
-        # import napari
-        # v = napari.Viewer()
-        # v.add_image(image)
-        # v.add_image(fg_exp1, name="olddefault", visible=False)
-        # v.add_image(fg_exp2, name="InstanceNorm", visible=False)
-        # v.add_labels(gt)
-        # napari.run()
-
-        # continue
-
-        if image.ndim == 3:
-            # let's check the 10 worst performing slices on "OldDefault" and compare it with "InstanceNorm"
-            dice_scores = [
-                dice_score(gslice > 0, pslice > 0.5) for pslice, gslice in tqdm(zip(fg_exp1, gt), total=image.shape[0])
-            ]
-            k_worst = _get_k_worst_indices(dice_scores, k)
-
-            # now, let's visualize the respective slices
-            for idx, (islice, p1slice, p2slice, gslice) in enumerate(zip(image, fg_exp1, fg_exp2, gt)):
-                if idx not in k_worst:
-                    continue
-
-                import napari
-                v = napari.Viewer()
-                v.add_image(islice)
-                v.add_image(gslice, name="GT", visible=False)
-                v.add_image(p1slice, name="OldDefault", visible=False)
-                v.add_image(p2slice, name="InstanceNorm", visible=False)
-                napari.run()
-
-        else:
-            # store the dice score pair per experiment and visualize later
-            dice_2d_samples.append(dice_score(gt > 0, fg_exp1 > 0.5))
-            image_ids.append(image_id)
-
-            # NOTE: visualizing each 2d image
-            # import napari
-            # v = napari.Viewer()
-            # v.add_image(image)
-            # v.add_labels(gt)
-            # v.add_image(fg_exp1)
-            # napari.run()
-
-    if len(dice_2d_samples) > 0:
-        k_worst = _get_k_worst_indices(dice_2d_samples, k)
-        for idx in k_worst:
-            image_path = image_paths[idx]
-            gt_path = gt_paths[idx]
-
-            image_id = Path(image_path).stem
-
-            assert image_id == image_ids[idx]
-
-            pred_exp1_path = os.path.join(exp1_dir, f"{image_id}.h5")
-            pred_exp2_path = os.path.join(exp2_dir, f"{image_id}.h5")
-
-            with h5py.File(pred_exp1_path, "r") as f3:
-                if task == "boundaries":
-                    fg_exp1 = f3["segmentation/foreground"][:]
-                    bd_exp1 = f3["segmentation/boundary"][:]
-                else:
-                    fg_exp1 = f3["segmentation/foreground"][:]
-
-            with h5py.File(pred_exp2_path, "r") as f4:
-                if task == "boundaries":
-                    fg_exp2 = f4["segmentation/foreground"][:]
-                    bd_exp2 = f4["segmentation/boundary"][:]
-                else:
-                    fg_exp2 = f4["segmentation/foreground"][:]
-
-            import napari
-            v = napari.Viewer()
-            v.add_image(_load_image(image_path))
-            v.add_labels(_load_image(gt_path), name="GT")
-            v.add_image(fg_exp1, name="OldDefault", visible=False)
-            v.add_image(fg_exp2, name="InstanceNorm", visible=False)
-            napari.run()
-
-
-def _get_k_worst_indices(input_list, k):
-    _array = np.array(input_list)
-    non_zero_mask = (_array != 0)
-    non_zero_indices = np.where(non_zero_mask)[0]
-    non_zero_values = _array[non_zero_mask]
-    bottom_k_non_zero_indices = non_zero_indices[np.argsort(non_zero_values)[:k]]
-    return bottom_k_non_zero_indices
+        import napari
+        v = napari.Viewer()
+        v.add_image(image, name="Image")
+        v.add_image(fg_exp1, name="Foreground (InstanceNorm)", visible=False)
+        v.add_image(fg_exp2, name="Foreground (InstanceNormTrackStats)", visible=False)
+        if task == "boundaries":
+            v.add_image(bd_exp1, name="Boundary (InstanceNorm)", visible=False)
+            v.add_image(bd_exp2, name="Boundary (InstanceNormTrackStats)", visible=False)
+            v.add_image(instances_exp1, name="Instance Segmentation (InstanceNorm)")
+            v.add_image(instances_exp2, name="Instance Segmentation (InstanceNormTrackStats)")
+        v.add_labels(gt)
+        napari.run()
 
 
 def main(args):
