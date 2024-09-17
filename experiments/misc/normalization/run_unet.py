@@ -160,11 +160,10 @@ def run_evaluation(norm, dataset, task, save_root):
 
 
 def run_analysis_per_dataset(dataset, task, save_root):
-    image_paths, gt_paths = get_test_images(dataset=dataset)
-
     exp1_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "InstanceNorm", task)
     exp2_dir = os.path.join(Path(save_root).parent, "prediction", dataset, "InstanceNormTrackStats", task)
 
+    image_paths, gt_paths = get_test_images(dataset=dataset)
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Analysing", total=len(image_paths)):
         image, gt = _get_per_dataset_inputs(dataset, image_path, gt_path)
 
@@ -173,24 +172,21 @@ def run_analysis_per_dataset(dataset, task, save_root):
         pred_exp2_path = os.path.join(exp2_dir, f"{image_id}.h5")
 
         with h5py.File(pred_exp1_path, "r") as f1:
+            fg_exp1 = f1["segmentation/foreground"][:]
             if task == "boundaries":
-                fg_exp1 = f1["segmentation/foreground"][:]
                 bd_exp1 = f1["segmentation/boundary"][:]
                 instances_exp1 = f1["segmentation/instances"][:]
-            else:
-                fg_exp1 = f1["segmentation/foreground"][:]
 
         with h5py.File(pred_exp2_path, "r") as f2:
+            fg_exp2 = f2["segmentation/foreground"][:]
             if task == "boundaries":
-                fg_exp2 = f2["segmentation/foreground"][:]
                 bd_exp2 = f2["segmentation/boundary"][:]
                 instances_exp2 = f2["segmentation/instances"][:]
-            else:
-                fg_exp2 = f2["segmentation/foreground"][:]
 
         import napari
         v = napari.Viewer()
         v.add_image(image, name="Image")
+        v.add_labels(gt, name="Ground Truth Labels", visible=False)
         v.add_image(fg_exp1, name="Foreground (InstanceNorm)", visible=False)
         v.add_image(fg_exp2, name="Foreground (InstanceNormTrackStats)", visible=False)
         if task == "boundaries":
@@ -198,7 +194,6 @@ def run_analysis_per_dataset(dataset, task, save_root):
             v.add_image(bd_exp2, name="Boundary (InstanceNormTrackStats)", visible=False)
             v.add_image(instances_exp1, name="Instance Segmentation (InstanceNorm)")
             v.add_image(instances_exp2, name="Instance Segmentation (InstanceNormTrackStats)")
-        v.add_labels(gt)
         napari.run()
 
 
@@ -212,7 +207,6 @@ def main(args):
         raise ValueError("The experiment for binary segmentation of 'PlantSeg (Root)' is not implemented.")
 
     assert task in ["binary", "boundaries"]
-
     save_root = os.path.join(SAVE_DIR, "models")
 
     if phase == "evaluate":
