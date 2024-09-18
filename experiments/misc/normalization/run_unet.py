@@ -21,8 +21,8 @@ from common import (
 
 # Results:
 # GONUCLEAR
+# InstanceNorm:           0.3932 (instance segmentation), 0.8981 (binary segmentation)
 # InstanceNormTrackStats: 0.4309 (instance segmentation), 0.8759 (binary segmentation)
-# InstanceNorm: 0.3932 (instance segmentation), 0.8981 (binary segmentation)
 
 # PLANTSEG
 # TODO
@@ -37,6 +37,11 @@ from common import (
 def run_training(name, model, dataset, task, save_root, device):
     n_iterations = int(2.5e4)
     train_loader, val_loader = get_dataloaders(dataset=dataset, task=task)
+
+    from torch_em.util.debug import check_loader
+    check_loader(train_loader, 16)
+
+    breakpoint()
 
     trainer = torch_em.default_segmentation_trainer(
         name=name,
@@ -142,7 +147,7 @@ def run_evaluation(norm, dataset, task, save_root):
                 f.create_dataset("segmentation/instances", shape=instances.shape, data=instances, compression="gzip")
 
             else:
-                prediction = f["segmentation/prediction"][:]
+                prediction = f["segmentation/foreground"][:]
                 prediction = (prediction > 0.5)  # threshold the predictions
                 gt = (gt > 0)   # binarise the instances
 

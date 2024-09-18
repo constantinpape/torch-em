@@ -6,9 +6,11 @@ import z5py
 import numpy as np
 import imageio.v3 as imageio
 
+from torchvision import transforms
+
 from torch_em.model import UNet2d, UNet3d
 from torch_em.data import MinTwoInstanceSampler, datasets
-from torch_em.transform.raw import normalize_percentile, get_default_mean_teacher_augmentations
+from torch_em.transform import raw as fetch_transforms
 
 from micro_sam.evaluation.livecell import _get_livecell_paths
 
@@ -42,13 +44,41 @@ def get_experiment_name(dataset, task, norm, model_choice):
     return name
 
 
+class MultipleRawTransforms:
+    def __init__(self, p=0.3, norm=None, blur_kwargs={}, gaussian_kwargs={}, poisson_kwargs={}, contrast_kwargs={}):
+        self.norm = fetch_transforms.normalize_percentile if norm is None else norm
+        aug1 = transforms.Compose([
+            self.norm,
+            transforms.RandomApply([fetch_transforms.GaussianBlur(**blur_kwargs)], p=p),
+            transforms.RandomApply([fetch_transforms.PoissonNoise(**poisson_kwargs)], p=p/2),
+            # transforms.RandomApply([fetch_transforms.AdditivePoissonNoise(**poisson_kwargs)], p=p/2),
+            transforms.RandomApply([fetch_transforms.AdditiveGaussianNoise(**gaussian_kwargs)], p=p/2),
+        ])
+        aug2 = transforms.RandomApply([fetch_transforms.RandomContrast(**contrast_kwargs)], p)
+
+        self.raw_transform = fetch_transforms.get_raw_transform(
+            normalizer=self.norm, augmentation1=aug1, augmentation2=aug2
+        )
+
+    def __call__(self, raw):
+        raw = raw[None]  # NOTE: reason for doing this is to add an empty dimension to work with torch transforms.
+        raw = self.raw_transform(raw)
+        return raw
+
+
 def get_dataloaders(dataset, task):
     assert task in ["binary", "boundaries"]
     sampler = MinTwoInstanceSampler()
 
     loader_kwargs = {
         "num_workers": 16, "download": True, "sampler": sampler,
-        "raw_transform": get_default_mean_teacher_augmentations(p=0.3, norm=normalize_percentile),
+        "raw_transform": MultipleRawTransforms(
+            p=0.3,
+            # NOTE: for poisson noise below
+            poisson_kwargs={"multiplier": (20, 30)} if dataset == "livecell" else None,
+            # NOTE: for additive poisson noise below
+            # poisson_kwargs={"lam": (0.0, 0.3)} if dataset == "livecell" else None,
+        ),
     }
 
     if dataset == "livecell":
