@@ -1,3 +1,22 @@
+# Results (as of Sep. 18, 2024):
+# GONUCLEAR
+# InstanceNorm:           0.2657 (instance segmentation), 0.8981 (foreground segmentation)
+# InstanceNormTrackStats: 0.4238 (instance segmentation), 0.8759 (foreground segmentation)
+
+# PLANTSEG
+# InstanceNorm:           0.5946 (boundary segmentation)
+# InstanceNormTrackStats: 0.5538 (boundary segmentation)
+
+# MITOEM
+# InstanceNorm:           0.4856 (instance segmentation), 0.9197 (foreground segmentation)
+# InstanceNormTrackStats: 0.412 (instance segmentation), 0.9223 (foreground segmentation)
+
+# FIXME: augmentations still don't work as expected
+# LIVECELL
+# InstanceNorm:           0.2698 (instance segmentation), 0.9224 (foreground segmentation)
+# InstanceNormTrackStats: 0.1934 (instance segmentation), 0.8847 (foreground segmentation)
+
+
 import os
 from tqdm import tqdm
 from pathlib import Path
@@ -18,23 +37,6 @@ from elf.evaluation import mean_segmentation_accuracy
 from common import (
     get_dataloaders, get_model, get_experiment_name, get_test_images, dice_score, _load_image, SAVE_DIR
 )
-
-# Results:
-# GONUCLEAR
-# InstanceNorm:           0.2657 (instance segmentation), 0.8981 (foreground segmentation)
-# InstanceNormTrackStats: 0.4238 (instance segmentation), 0.8759 (foreground segmentation)
-
-# PLANTSEG
-# InstanceNorm:           0.5946 (boundary segmentation)
-# InstanceNormTrackStats: 0.5538 (boundary segmentation)
-
-# MITOEM
-# InstanceNorm:           ... (instance segmentation), 0.9197 (foreground segmentation)
-# InstanceNormTrackStats: ... (instance segmentation), 0.9223 (foreground segmentation)
-
-# LIVECELL
-# InstanceNorm:           ... (instance segmentation), ... (foreground segmentation)
-# InstanceNormTrackStats: ... (instance segmentation), ... (foreground segmentation)
 
 
 def run_training(name, model, dataset, task, save_root, device):
@@ -136,6 +138,7 @@ def run_evaluation(norm, dataset, task, save_root):
                     tile, halo = (16, 384, 384), (8, 64, 64)
 
                 # NOTE: performing instance segmentation over the entire volume is very slow!
+                # from torch_em.util.segmentation import watershed_from_components
                 # instances = watershed_from_components(boundaries=bd, foreground=fg)
 
                 from elf.parallel import seeded_watershed
@@ -150,9 +153,9 @@ def run_evaluation(norm, dataset, task, save_root):
                 msa_list.append(msa)
                 sa50_list.append(sa[0])
 
-                # f.create_dataset("segmentation/foreground", shape=fg.shape, data=fg, compression="gzip")
-                # f.create_dataset("segmentation/boundary", shape=bd.shape, data=bd, compression="gzip")
-                # f.create_dataset("segmentation/instances", shape=instances.shape, data=instances, compression="gzip")
+                f.create_dataset("segmentation/foreground", shape=fg.shape, data=fg, compression="gzip")
+                f.create_dataset("segmentation/boundary", shape=bd.shape, data=bd, compression="gzip")
+                f.create_dataset("segmentation/instances", shape=instances.shape, data=instances, compression="gzip")
 
             else:
                 if dataset == "plantseg":
@@ -190,15 +193,16 @@ def run_analysis_per_dataset(dataset, task, save_root):
         pred_exp1_path = os.path.join(exp1_dir, f"{image_id}.h5")
         pred_exp2_path = os.path.join(exp2_dir, f"{image_id}.h5")
 
+        fg_dname = "segmentation/prediction" if dataset == "plantseg" else "segmentation/foreground"
         with h5py.File(pred_exp1_path, "r") as f1:
-            fg_exp1 = f1["segmentation/foreground"][:]
-            if task == "boundaries":
+            fg_exp1 = f1[fg_dname][:]
+            if task == "boundaries" and dataset != "plantseg":
                 bd_exp1 = f1["segmentation/boundary"][:]
                 instances_exp1 = f1["segmentation/instances"][:]
 
         with h5py.File(pred_exp2_path, "r") as f2:
-            fg_exp2 = f2["segmentation/foreground"][:]
-            if task == "boundaries":
+            fg_exp2 = f2[fg_dname][:]
+            if task == "boundaries" and dataset != "plantseg":
                 bd_exp2 = f2["segmentation/boundary"][:]
                 instances_exp2 = f2["segmentation/instances"][:]
 
@@ -206,9 +210,12 @@ def run_analysis_per_dataset(dataset, task, save_root):
         v = napari.Viewer()
         v.add_image(image, name="Image")
         v.add_labels(gt, name="Ground Truth Labels", visible=False)
-        v.add_image(fg_exp1, name="Foreground (InstanceNorm)", visible=False)
-        v.add_image(fg_exp2, name="Foreground (InstanceNormTrackStats)", visible=False)
-        if task == "boundaries":
+
+        fg_iname = "Boundary" if dataset == "plantseg" else "Foreground"
+        v.add_image(fg_exp1, name=f"{fg_iname} (InstanceNorm)", visible=False)
+        v.add_image(fg_exp2, name=f"{fg_iname} (InstanceNormTrackStats)", visible=False)
+
+        if task == "boundaries" and dataset != "plantseg":
             v.add_image(bd_exp1, name="Boundary (InstanceNorm)", visible=False)
             v.add_image(bd_exp2, name="Boundary (InstanceNormTrackStats)", visible=False)
             v.add_image(instances_exp1, name="Instance Segmentation (InstanceNorm)")
