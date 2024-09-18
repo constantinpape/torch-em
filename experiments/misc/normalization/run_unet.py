@@ -38,11 +38,6 @@ def run_training(name, model, dataset, task, save_root, device):
     n_iterations = int(2.5e4)
     train_loader, val_loader = get_dataloaders(dataset=dataset, task=task)
 
-    from torch_em.util.debug import check_loader
-    check_loader(train_loader, 16)
-
-    breakpoint()
-
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         save_root=save_root,
