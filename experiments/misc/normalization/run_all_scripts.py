@@ -62,16 +62,16 @@ def get_batch_script_names(tmp_folder):
 
 def submit_slurm(args):
     "Submit python script that needs gpus with given inputs on a slurm node."
-    datasets = ["livecell", "plantseg", "mitoem", "gonuclear"]
+    if args.dataset is None:
+        datasets = ["livecell", "plantseg", "mitoem", "gonuclear"]
+    else:
+        datasets = [args.dataset]
+
     tasks = ["binary", "boundaries"]
     norms = ["InstanceNormTrackStats", "InstanceNorm"]
 
     for (dataset, task, norm) in itertools.product(datasets, tasks, norms):
         if dataset == "plantseg" and task == "binary":  # for plantseg: binary is just all pixels as foreground
-            continue
-
-        # NOTE: we skip livecell for now: need to investigate augmentations there a bit
-        if dataset == "livecell":
             continue
 
         write_batch_script(
@@ -97,6 +97,7 @@ def main(args):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--dataset", type=str, default=None)
     parser.add_argument("-p", "--phase", required=True, type=str)
     parser.add_argument("--dry", action="store_true")
     args = parser.parse_args()
