@@ -137,7 +137,7 @@ def run_evaluation(norm, dataset, task, save_root):
                 else:
                     tile, halo = (16, 384, 384), (8, 64, 64)
 
-                # NOTE: performing instance segmentation over the entire volume is very slow!
+                # NOTE: performing watershed over the entire volume at once is very slow!
                 # from torch_em.util.segmentation import watershed_from_components
                 # instances = watershed_from_components(boundaries=bd, foreground=fg)
 
