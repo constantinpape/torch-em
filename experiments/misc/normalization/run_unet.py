@@ -4,6 +4,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from skimage.segmentation import find_boundaries
 
 import torch
 
@@ -11,7 +12,6 @@ import torch_em
 from torch_em.loss import DiceLoss
 from torch_em.transform.raw import normalize_percentile
 from torch_em.util.prediction import predict_with_halo
-from torch_em.util.segmentation import watershed_from_components
 
 from elf.evaluation import mean_segmentation_accuracy
 
@@ -21,27 +21,25 @@ from common import (
 
 # Results:
 # GONUCLEAR
-# InstanceNorm:           0.3932 (instance segmentation), 0.8981 (binary segmentation)
-# InstanceNormTrackStats: 0.4309 (instance segmentation), 0.8759 (binary segmentation)
+# InstanceNorm:           0.2657 (instance segmentation), 0.8981 (foreground segmentation)
+# InstanceNormTrackStats: 0.4238 (instance segmentation), 0.8759 (foreground segmentation)
 
 # PLANTSEG
-# TODO
+# InstanceNorm:           0.5946 (boundary segmentation)
+# InstanceNormTrackStats: 0.5538 (boundary segmentation)
 
 # MITOEM
-# TODO
+# InstanceNorm:           ... (instance segmentation), 0.9197 (foreground segmentation)
+# InstanceNormTrackStats: ... (instance segmentation), 0.9223 (foreground segmentation)
 
 # LIVECELL
-# TODO
+# InstanceNorm:           ... (instance segmentation), ... (foreground segmentation)
+# InstanceNormTrackStats: ... (instance segmentation), ... (foreground segmentation)
 
 
 def run_training(name, model, dataset, task, save_root, device):
     n_iterations = int(2.5e4)
     train_loader, val_loader = get_dataloaders(dataset=dataset, task=task)
-
-    from torch_em.util.debug import check_loader
-    check_loader(train_loader, 16)
-
-    breakpoint()
 
     trainer = torch_em.default_segmentation_trainer(
         name=name,
@@ -128,40 +126,53 @@ def run_evaluation(norm, dataset, task, save_root):
             Path(save_root).parent, "prediction", dataset, norm, task, f"{Path(image_path).stem}.h5"
         )
         with h5py.File(pred_path, "r+") as f:
-            if task == "boundaries":
+            if task == "boundaries" and dataset != "plantseg":
                 prediction = f['segmentation/prediction'][:]
-                if dataset == "plantseg":  # we only have boundary segmentation here.
-                    bd = prediction
-                    fg = np.ones_like(bd)
-                else:
-                    fg, bd = prediction
+                fg, bd = prediction
 
-                instances = watershed_from_components(boundaries=bd, foreground=fg)
+                if dataset == "livecell":
+                    tile, halo = (384, 384), (64, 64)
+                else:
+                    tile, halo = (16, 384, 384), (8, 64, 64)
+
+                # NOTE: performing instance segmentation over the entire volume is very slow!
+                # instances = watershed_from_components(boundaries=bd, foreground=fg)
+
+                from elf.parallel import seeded_watershed
+                from skimage.measure import label as connected_components
+                seeds = connected_components((fg - bd) > 0.5)
+                mask = fg > 0.5
+                instances = seeded_watershed(
+                    hmap=bd, seeds=seeds, out=np.zeros_like(gt), block_shape=tile, halo=halo, mask=mask, verbose=True,
+                )
 
                 msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
                 msa_list.append(msa)
                 sa50_list.append(sa[0])
 
-                f.create_dataset("segmentation/foreground", shape=fg.shape, data=fg, compression="gzip")
-                f.create_dataset("segmentation/boundary", shape=bd.shape, data=bd, compression="gzip")
-                f.create_dataset("segmentation/instances", shape=instances.shape, data=instances, compression="gzip")
+                # f.create_dataset("segmentation/foreground", shape=fg.shape, data=fg, compression="gzip")
+                # f.create_dataset("segmentation/boundary", shape=bd.shape, data=bd, compression="gzip")
+                # f.create_dataset("segmentation/instances", shape=instances.shape, data=instances, compression="gzip")
 
             else:
-                prediction = f["segmentation/foreground"][:]
-                prediction = (prediction > 0.5)  # threshold the predictions
-                gt = (gt > 0)   # binarise the instances
+                if dataset == "plantseg":
+                    prediction = f["segmentation/prediction"][:]
+                    gt = find_boundaries(gt)
+                else:
+                    prediction = f["segmentation/foreground"][:]
+                    gt = (gt > 0)   # binarise the instances
 
-                score = dice_score(gt=gt, seg=prediction)
+                score = dice_score(gt=gt, seg=prediction > 0.5)
                 assert score > 0 and score <= 1  # HACK: sanity check
                 dsc_list.append(score)
 
-    if task == "binary":
+    if len(dsc_list) > 0:
         mean_dice = np.mean(dsc_list)
-        print(mean_dice)
+        print(f"Mean dice score: {mean_dice}")
     else:
         mean_msa = np.mean(msa_list)
         mean_sa50 = np.mean(sa50_list)
-        print(mean_msa, mean_sa50)
+        print(f"Mean mSA: {mean_msa}, mean SA50: {mean_sa50}")
 
 
 def run_analysis_per_dataset(dataset, task, save_root):
@@ -171,6 +182,9 @@ def run_analysis_per_dataset(dataset, task, save_root):
     image_paths, gt_paths = get_test_images(dataset=dataset)
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Analysing", total=len(image_paths)):
         image, gt = _get_per_dataset_inputs(dataset, image_path, gt_path)
+
+        if dataset == "plantseg":
+            gt = find_boundaries(gt)
 
         image_id = Path(image_path).stem
         pred_exp1_path = os.path.join(exp1_dir, f"{image_id}.h5")
