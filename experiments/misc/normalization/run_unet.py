@@ -60,6 +60,21 @@ def run_training(name, model, dataset, task, save_root, device):
     trainer.fit(iterations=n_iterations)
 
 
+def _extract_patchwise_max_intensity(raw, block_shape, halo):
+    import nifty.tools as nt
+    from torch_em.util.prediction import _load_block
+
+    blocking = nt.blocking([0] * raw.ndim, raw.shape, block_shape)
+    n_blocks = blocking.numberOfBlocks
+    for block_id in range(n_blocks):
+        block = blocking.getBlock(block_id)
+        offset = [beg for beg in block.begin]
+        inner_bb = tuple(slice(ha, ha + bs) for ha, bs in zip(halo, block.shape))
+
+        inp, _ = _load_block(raw, offset, block_shape, halo)
+        breakpoint()
+
+
 def run_inference(name, model, norm, dataset, task, save_root, device):
     checkpoint = os.path.join(save_root, "checkpoints", name, "best.pt")
     assert os.path.exists(checkpoint), checkpoint
@@ -75,16 +90,17 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting", total=len(image_paths)):
         pred_path = os.path.join(pred_dir, f"{Path(image_path).stem}.h5")
-        if os.path.exists(pred_path):
-            continue
-
-        image, _ = _get_per_dataset_inputs(dataset, image_path, gt_path)
-        image = normalize_percentile(image)
+        # if os.path.exists(pred_path):
+        #     continue
 
         if dataset == "livecell":
             tile, halo = (384, 384), (64, 64)
         else:
             tile, halo = (16, 384, 384), (8, 64, 64)
+
+        image, _ = _get_per_dataset_inputs(dataset, image_path, gt_path)
+        max_intensity = _extract_patchwise_max_intensity(image, tile, halo)
+        image = normalize_percentile(image)
 
         prediction = predict_with_halo(
             input_=image,
@@ -93,6 +109,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             block_shape=tile,
             halo=halo,
             preprocess=None,
+            skip_block=None,
         )
         prediction = prediction.squeeze()
 
