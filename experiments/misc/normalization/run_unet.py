@@ -124,7 +124,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
         # save outputs
         dname = "segmentation/prediction" if task == "boundaries" else "segmentation/foreground"
         with h5py.File(pred_path, "a") as f:
-            f.create_dataset(dname, shape=prediction.shape, data=prediction, compression="gzip")
+            f.create_dataset(dname, data=prediction, compression="gzip")
 
 
 def _get_per_dataset_inputs(dataset, image_path, gt_path):
@@ -178,9 +178,9 @@ def run_evaluation(norm, dataset, task, save_root):
                 msa_list.append(msa)
                 sa50_list.append(sa[0])
 
-                f.create_dataset("segmentation/foreground", shape=fg.shape, data=fg, compression="gzip")
-                f.create_dataset("segmentation/boundary", shape=bd.shape, data=bd, compression="gzip")
-                f.create_dataset("segmentation/instances", shape=instances.shape, data=instances, compression="gzip")
+                f.create_dataset("segmentation/foreground", data=fg, compression="gzip")
+                f.create_dataset("segmentation/boundary", data=bd, compression="gzip")
+                f.create_dataset("segmentation/instances", data=instances, compression="gzip")
 
             else:
                 if dataset == "plantseg":
