@@ -218,8 +218,8 @@ def run_analysis_per_dataset(dataset, task, save_root):
         if task == "boundaries" and dataset != "plantseg":
             v.add_image(bd_exp1, name="Boundary (InstanceNorm)", visible=False)
             v.add_image(bd_exp2, name="Boundary (InstanceNormTrackStats)", visible=False)
-            v.add_image(instances_exp1, name="Instance Segmentation (InstanceNorm)")
-            v.add_image(instances_exp2, name="Instance Segmentation (InstanceNormTrackStats)")
+            v.add_labels(instances_exp1, name="Instance Segmentation (InstanceNorm)")
+            v.add_labels(instances_exp2, name="Instance Segmentation (InstanceNormTrackStats)")
         napari.run()
 
 
