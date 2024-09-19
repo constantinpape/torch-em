@@ -27,7 +27,7 @@ URLS = {
     },
     "labels": {
         "human": "https://www.dropbox.com/s/dhf89bc14kemw4e/EM30-H-mito-train-val-v2.zip?dl=1",
-        "rat": "https://huggingface.co/datasets/pytc/MitoEM/blob/main/EM30-R-mito-train-val-v2.zip"
+        "rat": "https://huggingface.co/datasets/pytc/MitoEM/resolve/main/EM30-R-mito-train-val-v2.zip"
     }
 }
 CHECKSUMS = {
