@@ -10,10 +10,15 @@ from shutil import rmtree
 from typing import Optional, Tuple, Union, List
 
 import h5py
+import numpy as np
 import imageio.v3 as imageio
-import torch_em
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
+
 
 URL = "https://www.ebi.ac.uk/biostudies/files/S-BIAD1026/Nuclei_training_segmentation/Training%20image%20dataset_Tiff%20Files.zip"  # noqa
 CHECKSUM = "b103388a4aed01c7aadb2d5f49392d2dd08dd7cbeb2357b0c56355384ebb93a9"
@@ -64,6 +69,15 @@ def _process_data(in_folder, out_folder):
         nucleus_labels = _load_tif(os.path.join(folder, f"{sample}_n_stain_StarDist_goldGT"))
         nucleus_labels = nucleus_labels[:, ::-1]
         nucleus_raw, nucleus_labels = _clip_shape(nucleus_raw, nucleus_labels)
+
+        # Remove last frames with artifacts for two volumes (1137 and 1170).
+        if sample in ["1137", "1170"]:
+            nucleus_raw, nucleus_labels = nucleus_raw[:-1], nucleus_labels[:-1]
+            cell_raw, cell_labels = cell_raw[:-1], cell_labels[:-1]
+
+        # Fixing cell labels for one volume (1136) is misaligned.
+        if sample == "1136":
+            cell_labels = np.fliplr(cell_labels)
 
         with h5py.File(out_path, "w") as f:
             f.create_dataset("raw/cells", data=cell_raw, compression="gzip")
