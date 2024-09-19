@@ -20,6 +20,7 @@
 import os
 from tqdm import tqdm
 from pathlib import Path
+from functools import partial
 
 import h5py
 import numpy as np
@@ -66,13 +67,20 @@ def _extract_patchwise_max_intensity(raw, block_shape, halo):
 
     blocking = nt.blocking([0] * raw.ndim, raw.shape, block_shape)
     n_blocks = blocking.numberOfBlocks
+    max_intensities = []
     for block_id in range(n_blocks):
         block = blocking.getBlock(block_id)
         offset = [beg for beg in block.begin]
-        inner_bb = tuple(slice(ha, ha + bs) for ha, bs in zip(halo, block.shape))
 
         inp, _ = _load_block(raw, offset, block_shape, halo)
-        breakpoint()
+        max_intensities.append(inp.max())
+
+    return np.max(max_intensities)
+
+
+def _skip_empty_patches(inp, max_intensity):
+    expected_max_intensity = max_intensity / 2
+    return inp.max() > expected_max_intensity
 
 
 def run_inference(name, model, norm, dataset, task, save_root, device):
@@ -99,8 +107,8 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             tile, halo = (16, 384, 384), (8, 64, 64)
 
         image, _ = _get_per_dataset_inputs(dataset, image_path, gt_path)
-        max_intensity = _extract_patchwise_max_intensity(image, tile, halo)
         image = normalize_percentile(image)
+        max_intensity = _extract_patchwise_max_intensity(image, tile, halo)
 
         prediction = predict_with_halo(
             input_=image,
@@ -109,9 +117,11 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             block_shape=tile,
             halo=halo,
             preprocess=None,
-            skip_block=None,
+            skip_block=partial(_skip_empty_patches, max_intensity=max_intensity),
         )
         prediction = prediction.squeeze()
+
+        breakpoint()
 
         # save outputs
         dname = "segmentation/prediction" if task == "boundaries" else "segmentation/foreground"
