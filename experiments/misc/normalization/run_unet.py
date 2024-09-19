@@ -79,8 +79,8 @@ def _extract_patchwise_max_intensity(raw, block_shape, halo):
 
 
 def _skip_empty_patches(inp, max_intensity):
-    expected_max_intensity = max_intensity / 2
-    return inp.max() > expected_max_intensity
+    expected_max_intensity = max_intensity / 3
+    return inp.max() < expected_max_intensity
 
 
 def run_inference(name, model, norm, dataset, task, save_root, device):
@@ -120,8 +120,6 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             skip_block=partial(_skip_empty_patches, max_intensity=max_intensity),
         )
         prediction = prediction.squeeze()
-
-        breakpoint()
 
         # save outputs
         dname = "segmentation/prediction" if task == "boundaries" else "segmentation/foreground"
