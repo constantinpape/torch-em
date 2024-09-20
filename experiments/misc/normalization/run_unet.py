@@ -4,8 +4,8 @@
 # InstanceNormTrackStats: 0.4264 (instance segmentation), 0.8766 (foreground segmentation)
 
 # PLANTSEG
-# InstanceNorm:           0.5946 (boundary segmentation)
-# InstanceNormTrackStats: 0.5538 (boundary segmentation)
+# InstanceNorm:           0.3697 (instance segmentation), 0.5946 (boundary segmentation)
+# InstanceNormTrackStats: 0.4181 (instance segmentation), 0.5538 (boundary segmentation)
 
 # MITOEM
 # InstanceNorm:           0.4856 (instance segmentation), 0.9197 (foreground segmentation)
@@ -24,7 +24,6 @@ from functools import partial
 
 import h5py
 import numpy as np
-from skimage.segmentation import find_boundaries
 
 import torch
 
@@ -83,14 +82,13 @@ def _skip_empty_patches(inp, max_intensity):
     # expected_max_intensity = max_intensity / 3
     # return inp.max() < expected_max_intensity
 
-    # NOTE: another approach using histogram analysis
+    # NOTE: another approach using histograms
     iflat = inp.flatten()
-    hist, bin_edges = np.histogram(iflat, bins=50)
-    low_intensity_bin = np.digitize(0.05, bin_edges) - 1
-    low_intensity_count = np.sum(hist[:low_intensity_bin])
-    low_intensity_percent = (low_intensity_count / iflat.size)
-
-    return low_intensity_percent > 0.9
+    hist, bin_edges = np.histogram(iflat, bins=50)  # calculate the histogram
+    ibins = np.digitize(0.05, bin_edges) - 1  # finding bins correspondng to the desired low intensity threshold
+    icounts = np.sum(hist[:ibins])  # summing up voxel counts below the threshold
+    ipercent = (icounts / iflat.size)  # calculate percentage of voxels found
+    return ipercent > 0.9  # criterion of voxels below threshold exceeding more than 90% considered as an empty block
 
 
 def run_inference(name, model, norm, dataset, task, save_root, device):
@@ -265,13 +263,13 @@ def run_analysis_per_dataset(dataset, task, save_root):
         fg_dname = "segmentation/prediction" if dataset == "plantseg" else "segmentation/foreground"
         with h5py.File(pred_exp1_path, "r") as f1:
             fg_exp1 = f1[fg_dname][:]
-            if task == "boundaries":
+            if task == "boundaries" and dataset != "plantseg":
                 bd_exp1 = f1["segmentation/boundary"][:]
                 instances_exp1 = f1["segmentation/instances"][:]
 
         with h5py.File(pred_exp2_path, "r") as f2:
             fg_exp2 = f2[fg_dname][:]
-            if task == "boundaries":
+            if task == "boundaries" and dataset != "plantseg":
                 bd_exp2 = f2["segmentation/boundary"][:]
                 instances_exp2 = f2["segmentation/instances"][:]
 
