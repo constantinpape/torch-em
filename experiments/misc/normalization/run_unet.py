@@ -1,20 +1,15 @@
-# Results (as of Sep. 18, 2024):
+# Results (as of Sep. 20, 2024):
 # GONUCLEAR
 # InstanceNorm:           0.4236 (instance segmentation), 0.899 (foreground segmentation)
 # InstanceNormTrackStats: 0.4264 (instance segmentation), 0.8766 (foreground segmentation)
 
 # PLANTSEG
-# InstanceNorm:           0.3697 (instance segmentation), 0.5946 (boundary segmentation)
-# InstanceNormTrackStats: 0.4181 (instance segmentation), 0.5538 (boundary segmentation)
+# InstanceNorm:           0.3697 (instance segmentation)
+# InstanceNormTrackStats: 0.4181 (instance segmentation)
 
 # MITOEM
 # InstanceNorm:           0.4856 (instance segmentation), 0.9197 (foreground segmentation)
 # InstanceNormTrackStats: 0.412 (instance segmentation), 0.9223 (foreground segmentation)
-
-# FIXME: augmentations still don't work as expected
-# LIVECELL
-# InstanceNorm:           0.2698 (instance segmentation), 0.9224 (foreground segmentation)
-# InstanceNormTrackStats: 0.1934 (instance segmentation), 0.8847 (foreground segmentation)
 
 
 import os
