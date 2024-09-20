@@ -1,5 +1,5 @@
 # Results (as of Sep. 20, 2024):
-# GONUCLEAR
+# GONUCLEAR (ignoring empty patches)
 # InstanceNorm:           0.4236 (instance segmentation), 0.899 (foreground segmentation)
 # InstanceNormTrackStats: 0.4264 (instance segmentation), 0.8766 (foreground segmentation)
 
@@ -7,7 +7,7 @@
 # InstanceNorm:           0.3697 (instance segmentation)
 # InstanceNormTrackStats: 0.4181 (instance segmentation)
 
-# MITOEM
+# MITOEM (ignoring empty patches)
 # InstanceNorm:           0.4856 (instance segmentation), 0.9197 (foreground segmentation)
 # InstanceNormTrackStats: 0.412 (instance segmentation), 0.9223 (foreground segmentation)
 
@@ -258,13 +258,13 @@ def run_analysis_per_dataset(dataset, task, save_root):
         fg_dname = "segmentation/prediction" if dataset == "plantseg" else "segmentation/foreground"
         with h5py.File(pred_exp1_path, "r") as f1:
             fg_exp1 = f1[fg_dname][:]
-            if task == "boundaries" and dataset != "plantseg":
+            if task == "boundaries":
                 bd_exp1 = f1["segmentation/boundary"][:]
                 instances_exp1 = f1["segmentation/instances"][:]
 
         with h5py.File(pred_exp2_path, "r") as f2:
             fg_exp2 = f2[fg_dname][:]
-            if task == "boundaries" and dataset != "plantseg":
+            if task == "boundaries":
                 bd_exp2 = f2["segmentation/boundary"][:]
                 instances_exp2 = f2["segmentation/instances"][:]
 
@@ -277,9 +277,10 @@ def run_analysis_per_dataset(dataset, task, save_root):
         v.add_image(fg_exp1, name=f"{fg_iname} (InstanceNorm)", visible=False)
         v.add_image(fg_exp2, name=f"{fg_iname} (InstanceNormTrackStats)", visible=False)
 
-        if task == "boundaries" and dataset != "plantseg":
-            v.add_image(bd_exp1, name="Boundary (InstanceNorm)", visible=False)
-            v.add_image(bd_exp2, name="Boundary (InstanceNormTrackStats)", visible=False)
+        if task == "boundaries":
+            if dataset != "plantseg":
+                v.add_image(bd_exp1, name="Boundary (InstanceNorm)", visible=False)
+                v.add_image(bd_exp2, name="Boundary (InstanceNormTrackStats)", visible=False)
             v.add_labels(instances_exp1, name="Instance Segmentation (InstanceNorm)")
             v.add_labels(instances_exp2, name="Instance Segmentation (InstanceNormTrackStats)")
         napari.run()
