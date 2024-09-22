@@ -63,7 +63,7 @@ CROPPING_VOLUMES = {
     "Movie2_T00012_crop_gt.h5": slice(None, -39),
     "Movie2_T00014_crop_gt.h5": slice(None, -40),
     "Movie2_T00016_crop_gt.h5": slice(None, -42),
-    # root (val)
+    # root (test)
     "Movie2_T00020_crop_gt.h5": slice(None, -50),
     # ovules (train)
     "N_487_ds2x.h5": slice(17, None),
@@ -91,7 +91,8 @@ def _fix_inconsistent_volumes(data_path, name, split):
     for vol_path in tqdm(file_paths, desc="Fixing inconsistencies in volumes"):
         fname = os.path.basename(vol_path)
 
-        if fname == "Movie1_t00045_crop_gt.h5":  # to avoid duplicated volumes in 'train' and 'test'.
+        # avoid duplicated volumes in 'train' and 'test'.
+        if fname == "Movie1_t00045_crop_gt.h5" and (name == "plantseg" and split == "train"):
             os.remove(vol_path)
             continue
 
@@ -132,7 +133,7 @@ def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, 
         return out_path
     tmp_path = os.path.join(path, f"{name}_{split}.zip")
     util.download_source(tmp_path, url, download, checksum)
-    util.unzip(tmp_path, out_path, remove=False)
+    util.unzip(tmp_path, out_path, remove=True)
     _fix_inconsistent_volumes(out_path, name, split)
     return out_path
 
