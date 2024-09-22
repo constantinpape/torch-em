@@ -8,7 +8,8 @@ sys.path.append("..")
 
 
 def check_plantseg():
-    from util import ROOT
+    # from util import ROOT
+    ROOT = "/media/anwai/ANWAI/data"
 
     plantseg_root = os.path.join(ROOT, "plantseg")
 

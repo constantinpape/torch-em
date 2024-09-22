@@ -7,11 +7,17 @@ Please cite it if you use this dataset in your research.
 
 import os
 from glob import glob
+from tqdm import tqdm
 from typing import List, Optional, Tuple, Union
 
-import torch_em
+import h5py
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
+
 
 URLS = {
     "root": {
@@ -56,6 +62,51 @@ CHECKSUMS = {
 # NATIVE_RESOLUTION = (0.235, 0.075, 0.075)
 
 
+def _fix_inconsistent_volumes(data_path, name, split):
+    file_paths = glob(os.path.join(data_path, "*.h5"))
+    if name not in ["root", "ovules"] and split not in ["train", "val"]:
+        return
+
+    for vol_path in tqdm(file_paths, desc="Fixing inconsistencies in volumes"):
+        fname = os.path.basename(vol_path)
+
+        if fname == "Movie1_t00045_crop_gt.h5":  # to avoid duplicated volumes in 'train' and 'test'.
+            os.remove(vol_path)
+            continue
+
+        with h5py.File(vol_path, "r+") as f:
+            raw, labels = f["raw"], f["label"]
+
+            # root (train)
+            if fname == "Movie2_T00006_crop_gt.h5":
+                raw, labels = raw[4:], labels[4:]
+            elif fname == "Movie2_T00008_crop_gt.h5":
+                raw, labels = raw[:-18], labels[:-18]
+            elif fname == "Movie2_T00010_crop_gt.h5":
+                raw, labels = raw[:-32], labels[:-32]
+            elif fname == "Movie2_T00012_crop_gt.h5":
+                raw, labels = raw[:-39], labels[:-39]
+            elif fname == "Movie2_T00014_crop_gt.h5":
+                raw, labels = raw[:-40], labels[:-40]
+            elif fname == "Movie2_T00016_crop_gt.h5":
+                raw, labels = raw[:-42], labels[:-42]
+            # root (val)
+            elif fname == "Movie2_T00020_crop_gt.h5":
+                raw, labels = raw[:-50], labels[:-50]
+            # ovules (train)
+            elif fname == "N_487_ds2x.h5":
+                raw, labels = raw[17:], labels[17:]
+            # ovules
+            elif fname in [
+                "N_535_ds2x.h5", "N_534_ds2x.h5", "N_451_ds2x.h5", "N_425_ds2x.h5",  # train
+                "N_420_ds2x.h5",  # val
+            ]:
+                raw, labels = raw[:-1], labels[:-1]
+
+            raw[...] = raw
+            labels[...] = labels
+
+
 def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, split: str) -> str:
     """Download the PlantSeg training data.
 
@@ -77,6 +128,7 @@ def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, 
     tmp_path = os.path.join(path, f"{name}_{split}.zip")
     util.download_source(tmp_path, url, download, checksum)
     util.unzip(tmp_path, out_path, remove=True)
+    _fix_inconsistent_volumes(out_path, name, split)
     return out_path
 
 
@@ -119,6 +171,53 @@ def get_plantseg_dataset(
     )
 
     raw_key, label_key = "raw", "label"
+
+    for _path in file_paths:
+        fname = os.path.basename(_path)
+        print(_path)
+
+        with h5py.File(_path, "r") as f:
+            raw = f[raw_key]
+            labels = f[label_key]
+
+            if fname == "Movie2_T00006_crop_gt.h5":
+                raw, labels = raw[4:], labels[4:]
+            elif fname == "Movie2_T00008_crop_gt.h5":
+                raw, labels = raw[:-18], labels[:-18]
+            elif fname == "Movie2_T00010_crop_gt.h5":
+                raw, labels = raw[:-32], labels[:-32]
+            elif fname == "Movie2_T00012_crop_gt.h5":
+                raw, labels = raw[:-39], labels[:-39]
+            elif fname == "Movie2_T00014_crop_gt.h5":
+                raw, labels = raw[:-40], labels[:-40]
+            elif fname == "Movie2_T00016_crop_gt.h5":
+                raw, labels = raw[:-42], labels[:-42]
+
+            elif fname == "Movie2_T00020_crop_gt.h5":
+                raw, labels = raw[:-50], labels[:-50]
+
+            # train
+            elif fname == "N_535_ds2x.h5":
+                raw, labels = raw[:-1], labels[:-1]
+            elif fname == "N_534_ds2x.h5":
+                raw, labels = raw[:-1], labels[:-1]
+            elif fname == "N_487_ds2x.h5":
+                raw, labels = raw[17:], labels[17:]
+            elif fname == "N_451_ds2x.h5":
+                raw, labels = raw[:-1], labels[:-1]
+            elif fname == "N_425_ds2x.h5":
+                raw, labels = raw[:-1], labels[:-1]
+
+            # val
+            elif fname == "N_420_ds2x.h5":
+                raw, labels = raw[:-1], labels[:-1]
+
+            import napari
+            v = napari.Viewer()
+            v.add_image(raw)
+            v.add_labels(labels)
+            napari.run()
+
     return torch_em.default_segmentation_dataset(file_paths, raw_key, file_paths, label_key, patch_shape, **kwargs)
 
 
