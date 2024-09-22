@@ -211,7 +211,7 @@ def _get_kwargs(
             return save_path
 
         if is_list and isinstance(val, str):
-            val = val.replace(""", """)  # enable single quotes
+            val = val.replace("'", '"')  # enable single quotes
             val = json.loads(val)
         if is_list:
             assert isinstance(val, (list, tuple)), type(val)
