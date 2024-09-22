@@ -54,6 +54,27 @@ CHECKSUMS = {
         # "test": "a7272f6ad1d765af6d121e20f436ac4f3609f1a90b1cb2346aa938d8c52800b9",
     }
 }
+
+CROPPING_VOLUMES = {
+    # root (train)
+    "Movie2_T00006_crop_gt.h5": slice(4, None),
+    "Movie2_T00008_crop_gt.h5": slice(None, -18),
+    "Movie2_T00010_crop_gt.h5": slice(None, -32),
+    "Movie2_T00012_crop_gt.h5": slice(None, -39),
+    "Movie2_T00014_crop_gt.h5": slice(None, -40),
+    "Movie2_T00016_crop_gt.h5": slice(None, -42),
+    # root (val)
+    "Movie2_T00020_crop_gt.h5": slice(None, -50),
+    # ovules (train)
+    "N_487_ds2x.h5": slice(17, None),
+    "N_535_ds2x.h5": slice(None, -1),
+    "N_534_ds2x.h5": slice(None, -1),
+    "N_451_ds2x.h5": slice(None, -1),
+    "N_425_ds2x.h5": slice(None, -1),
+    # ovules (val)
+    "N_420_ds2x.h5": slice(None, -1),
+}
+
 # The resolution previous used for the resizing
 # I have removed this feature since it was not reliable,
 # but leaving this here for reference
@@ -70,6 +91,9 @@ def _fix_inconsistent_volumes(data_path, name, split):
     for vol_path in tqdm(file_paths, desc="Fixing inconsistencies in volumes"):
         fname = os.path.basename(vol_path)
 
+        if fname not in CROPPING_VOLUMES:
+            continue
+
         if fname == "Movie1_t00045_crop_gt.h5":  # to avoid duplicated volumes in 'train' and 'test'.
             os.remove(vol_path)
             continue
@@ -77,34 +101,9 @@ def _fix_inconsistent_volumes(data_path, name, split):
         with h5py.File(vol_path, "r+") as f:
             raw, labels = f["raw"], f["label"]
 
-            # root (train)
-            if fname == "Movie2_T00006_crop_gt.h5":
-                raw, labels = raw[4:], labels[4:]
-            elif fname == "Movie2_T00008_crop_gt.h5":
-                raw, labels = raw[:-18], labels[:-18]
-            elif fname == "Movie2_T00010_crop_gt.h5":
-                raw, labels = raw[:-32], labels[:-32]
-            elif fname == "Movie2_T00012_crop_gt.h5":
-                raw, labels = raw[:-39], labels[:-39]
-            elif fname == "Movie2_T00014_crop_gt.h5":
-                raw, labels = raw[:-40], labels[:-40]
-            elif fname == "Movie2_T00016_crop_gt.h5":
-                raw, labels = raw[:-42], labels[:-42]
-            # root (val)
-            elif fname == "Movie2_T00020_crop_gt.h5":
-                raw, labels = raw[:-50], labels[:-50]
-            # ovules (train)
-            elif fname == "N_487_ds2x.h5":
-                raw, labels = raw[17:], labels[17:]
-            # ovules
-            elif fname in [
-                "N_535_ds2x.h5", "N_534_ds2x.h5", "N_451_ds2x.h5", "N_425_ds2x.h5",  # train
-                "N_420_ds2x.h5",  # val
-            ]:
-                raw, labels = raw[:-1], labels[:-1]
-
-            raw[...] = raw
-            labels[...] = labels
+            crop_slices = CROPPING_VOLUMES[fname]
+            raw[...] = raw[crop_slices]
+            labels[...] = labels[crop_slices]
 
 
 def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, split: str) -> str:
@@ -173,44 +172,9 @@ def get_plantseg_dataset(
     raw_key, label_key = "raw", "label"
 
     for _path in file_paths:
-        fname = os.path.basename(_path)
-        print(_path)
-
         with h5py.File(_path, "r") as f:
             raw = f[raw_key]
             labels = f[label_key]
-
-            if fname == "Movie2_T00006_crop_gt.h5":
-                raw, labels = raw[4:], labels[4:]
-            elif fname == "Movie2_T00008_crop_gt.h5":
-                raw, labels = raw[:-18], labels[:-18]
-            elif fname == "Movie2_T00010_crop_gt.h5":
-                raw, labels = raw[:-32], labels[:-32]
-            elif fname == "Movie2_T00012_crop_gt.h5":
-                raw, labels = raw[:-39], labels[:-39]
-            elif fname == "Movie2_T00014_crop_gt.h5":
-                raw, labels = raw[:-40], labels[:-40]
-            elif fname == "Movie2_T00016_crop_gt.h5":
-                raw, labels = raw[:-42], labels[:-42]
-
-            elif fname == "Movie2_T00020_crop_gt.h5":
-                raw, labels = raw[:-50], labels[:-50]
-
-            # train
-            elif fname == "N_535_ds2x.h5":
-                raw, labels = raw[:-1], labels[:-1]
-            elif fname == "N_534_ds2x.h5":
-                raw, labels = raw[:-1], labels[:-1]
-            elif fname == "N_487_ds2x.h5":
-                raw, labels = raw[17:], labels[17:]
-            elif fname == "N_451_ds2x.h5":
-                raw, labels = raw[:-1], labels[:-1]
-            elif fname == "N_425_ds2x.h5":
-                raw, labels = raw[:-1], labels[:-1]
-
-            # val
-            elif fname == "N_420_ds2x.h5":
-                raw, labels = raw[:-1], labels[:-1]
 
             import napari
             v = napari.Viewer()
