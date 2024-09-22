@@ -92,7 +92,7 @@ def _fix_inconsistent_volumes(data_path, name, split):
         fname = os.path.basename(vol_path)
 
         # avoid duplicated volumes in 'train' and 'test'.
-        if fname == "Movie1_t00045_crop_gt.h5" and (name == "plantseg" and split == "train"):
+        if fname == "Movie1_t00045_crop_gt.h5" and (name == "root" and split == "train"):
             os.remove(vol_path)
             continue
 
