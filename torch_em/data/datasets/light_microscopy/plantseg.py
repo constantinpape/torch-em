@@ -91,19 +91,25 @@ def _fix_inconsistent_volumes(data_path, name, split):
     for vol_path in tqdm(file_paths, desc="Fixing inconsistencies in volumes"):
         fname = os.path.basename(vol_path)
 
-        if fname not in CROPPING_VOLUMES:
-            continue
-
         if fname == "Movie1_t00045_crop_gt.h5":  # to avoid duplicated volumes in 'train' and 'test'.
             os.remove(vol_path)
+            continue
+
+        if fname not in CROPPING_VOLUMES:
             continue
 
         with h5py.File(vol_path, "r+") as f:
             raw, labels = f["raw"], f["label"]
 
             crop_slices = CROPPING_VOLUMES[fname]
-            raw[...] = raw[crop_slices]
-            labels[...] = labels[crop_slices]
+            resized_raw, resized_labels = raw[:][crop_slices], labels[:][crop_slices]
+
+            cropped_shape = resized_raw.shape
+            raw.resize(cropped_shape)
+            labels.resize(cropped_shape)
+
+            raw[...] = resized_raw
+            labels[...] = resized_labels
 
 
 def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, split: str) -> str:
@@ -126,7 +132,7 @@ def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, 
         return out_path
     tmp_path = os.path.join(path, f"{name}_{split}.zip")
     util.download_source(tmp_path, url, download, checksum)
-    util.unzip(tmp_path, out_path, remove=True)
+    util.unzip(tmp_path, out_path, remove=False)
     _fix_inconsistent_volumes(out_path, name, split)
     return out_path
 
@@ -170,18 +176,6 @@ def get_plantseg_dataset(
     )
 
     raw_key, label_key = "raw", "label"
-
-    for _path in file_paths:
-        with h5py.File(_path, "r") as f:
-            raw = f[raw_key]
-            labels = f[label_key]
-
-            import napari
-            v = napari.Viewer()
-            v.add_image(raw)
-            v.add_labels(labels)
-            napari.run()
-
     return torch_em.default_segmentation_dataset(file_paths, raw_key, file_paths, label_key, patch_shape, **kwargs)
 
 
