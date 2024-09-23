@@ -189,8 +189,12 @@ def get_test_images(dataset):
         return image_paths, gt_paths
     else:
         if dataset == "gonuclear":
+            datasets.gonuclear.get_gonuclear_data(path=os.path.join(ROOT, "gonuclear"), download=True)
             volume_paths = [os.path.join(ROOT, "gonuclear", "gonuclear_datasets", "1170.h5")]
         elif dataset == "plantseg":
+            datasets.plantseg.get_plantseg_data(
+                path=os.path.join(ROOT, "plantseg"), download=True, name="root", split="test"
+            )
             volume_paths = sorted(glob(os.path.join(ROOT, "plantseg", "root_test", "*.h5")))
         elif dataset == "mitoem":
             volume_paths = sorted(glob(os.path.join(ROOT, "mitoem", "*_val.n5")))

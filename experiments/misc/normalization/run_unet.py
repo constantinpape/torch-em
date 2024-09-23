@@ -1,13 +1,17 @@
-# Results (as of Sep. 20, 2024):
-# GONUCLEAR (ignoring empty patches)
+# Results (as of Sep. 23, 2024):
+# GONUCLEAR
+# - (without ignoring empty patches)
+# InstanceNorm:           0.2674 (instance segmentation), 0.898 (foreground segmentation)
+# InstanceNormTrackStats: 0.4264 (instance segmentation), 0.8766 (foreground segmentation)
+# - (ignoring empty patches)
 # InstanceNorm:           0.4236 (instance segmentation), 0.899 (foreground segmentation)
 # InstanceNormTrackStats: 0.4264 (instance segmentation), 0.8766 (foreground segmentation)
 
 # PLANTSEG
-# InstanceNorm:           0.3697 (instance segmentation)
-# InstanceNormTrackStats: 0.4181 (instance segmentation)
+# InstanceNorm:           ... (boundary segmentation)
+# InstanceNormTrackStats: ... (boundary segmentation)
 
-# MITOEM (ignoring empty patches)
+# MITOEM (same results with and without ignoring empty patches)
 # InstanceNorm:           0.4856 (instance segmentation), 0.9197 (foreground segmentation)
 # InstanceNormTrackStats: 0.412 (instance segmentation), 0.9223 (foreground segmentation)
 
@@ -170,20 +174,22 @@ def run_evaluation(norm, dataset, task, save_root):
                 else:
                     tile, halo = (16, 384, 384), (8, 64, 64)
 
-                seeds = connected_components((fg - bd) > 0.5)
-                mask = fg > 0.5
-                instances = seeded_watershed(
-                    hmap=bd, seeds=seeds, out=np.zeros_like(gt),
-                    block_shape=tile, halo=halo, mask=mask, verbose=True,
-                )
+                if "instances" in f["segmentation"]:
+                    instances = f["segmentation/instances"]
+                else:
+                    seeds = connected_components((fg - bd) > 0.5)
+                    mask = fg > 0.5
+                    instances = seeded_watershed(
+                        hmap=bd, seeds=seeds, out=np.zeros_like(gt),
+                        block_shape=tile, halo=halo, mask=mask, verbose=True,
+                    )
+                    f.create_dataset("segmentation/foreground", data=fg, compression="gzip")
+                    f.create_dataset("segmentation/boundary", data=bd, compression="gzip")
+                    f.create_dataset("segmentation/instances", data=instances, compression="gzip")
 
                 msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
                 msa_list.append(msa)
                 sa50_list.append(sa[0])
-
-                f.create_dataset("segmentation/foreground", data=fg, compression="gzip")
-                f.create_dataset("segmentation/boundary", data=bd, compression="gzip")
-                f.create_dataset("segmentation/instances", data=instances, compression="gzip")
 
             else:
                 if dataset == "plantseg":
@@ -240,10 +246,9 @@ def run_analysis_per_dataset(dataset, task, save_root):
         v.add_image(fg_exp1, name=f"{fg_iname} (InstanceNorm)", visible=False)
         v.add_image(fg_exp2, name=f"{fg_iname} (InstanceNormTrackStats)", visible=False)
 
-        if task == "boundaries":
-            if dataset != "plantseg":
-                v.add_image(bd_exp1, name="Boundary (InstanceNorm)", visible=False)
-                v.add_image(bd_exp2, name="Boundary (InstanceNormTrackStats)", visible=False)
+        if task == "boundaries" and dataset != "plantseg":
+            v.add_image(bd_exp1, name="Boundary (InstanceNorm)", visible=False)
+            v.add_image(bd_exp2, name="Boundary (InstanceNormTrackStats)", visible=False)
             v.add_labels(instances_exp1, name="Instance Segmentation (InstanceNorm)")
             v.add_labels(instances_exp2, name="Instance Segmentation (InstanceNormTrackStats)")
         napari.run()
