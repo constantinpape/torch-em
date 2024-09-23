@@ -45,19 +45,30 @@ def get_experiment_name(dataset, task, norm, model_choice):
 
 
 class MultipleRawTransforms:
-    def __init__(self, p=0.3, norm=None, blur_kwargs={}, gaussian_kwargs={}, poisson_kwargs={}, contrast_kwargs={}):
+    def __init__(
+        self, p=0.3, norm=None, blur_kwargs={}, gaussian_kwargs={},
+        poisson_kwargs={}, additive_poisson_kwargs={}, contrast_kwargs={}
+    ):
         self.norm = fetch_transforms.normalize_percentile if norm is None else norm
-        aug1 = transforms.Compose([
-            self.norm,
-            transforms.RandomApply([fetch_transforms.GaussianBlur(**blur_kwargs)], p=p),
-            transforms.RandomApply([fetch_transforms.PoissonNoise(**poisson_kwargs)], p=p/2),
-            # transforms.RandomApply([fetch_transforms.AdditivePoissonNoise(**poisson_kwargs)], p=p/2),
-            transforms.RandomApply([fetch_transforms.AdditiveGaussianNoise(**gaussian_kwargs)], p=p/2),
-        ])
-        aug2 = transforms.RandomApply([fetch_transforms.RandomContrast(**contrast_kwargs)], p)
+        augs = [self.norm]
+
+        if gaussian_kwargs is not None:
+            augs.append(transforms.RandomApply([fetch_transforms.GaussianBlur(**blur_kwargs)], p=p))
+        if poisson_kwargs is not None:
+            augs.append(transforms.RandomApply([fetch_transforms.PoissonNoise(**poisson_kwargs)], p=p/2))
+        if additive_poisson_kwargs is not None:
+            augs.append(
+                transforms.RandomApply([fetch_transforms.AdditivePoissonNoise(**additive_poisson_kwargs)], p=p/2)
+            )
+        if gaussian_kwargs is not None:
+            augs.append(transforms.RandomApply([fetch_transforms.AdditiveGaussianNoise(**gaussian_kwargs)], p=p/2))
+        if contrast_kwargs is not None:
+            aug2 = transforms.RandomApply([fetch_transforms.RandomContrast(**contrast_kwargs)], p)
 
         self.raw_transform = fetch_transforms.get_raw_transform(
-            normalizer=self.norm, augmentation1=aug1, augmentation2=aug2
+            normalizer=self.norm,
+            augmentation1=transforms.Compose(augs),
+            augmentation2=aug2
         )
 
     def __call__(self, raw):
@@ -74,10 +85,8 @@ def get_dataloaders(dataset, task):
         "num_workers": 16, "download": True, "sampler": sampler,
         "raw_transform": MultipleRawTransforms(
             p=0.3,
-            # NOTE: for poisson noise below
-            poisson_kwargs={"multiplier": (20, 30)} if dataset == "livecell" else None,
-            # NOTE: for additive poisson noise below
-            # poisson_kwargs={"lam": (0.0, 0.3)} if dataset == "livecell" else None,
+            poisson_kwargs=None if dataset == "livecell" else {},
+            additive_poisson_kwargs={"lam": (0.0, 0.2)} if dataset == "livecell" else {},
         ),
     }
 
