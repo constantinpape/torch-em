@@ -23,6 +23,7 @@ from functools import partial
 
 import h5py
 import numpy as np
+from skimage.segmentation import find_boundaries
 from skimage.measure import label as connected_components
 
 import torch
@@ -194,10 +195,10 @@ def run_evaluation(norm, dataset, task, save_root):
             else:
                 if dataset == "plantseg":
                     prediction = f["segmentation/prediction"][:]
+                    gt = find_boundaries(gt)
                 else:
                     prediction = f["segmentation/foreground"][:]
-
-                gt = (gt > 0)   # binarise the instances
+                    gt = (gt > 0)   # binarise the instances
 
                 score = dice_score(gt=gt, seg=prediction > 0.5)
                 assert score > 0 and score <= 1  # HACK: sanity check
