@@ -19,6 +19,7 @@ from functools import partial
 
 import h5py
 import numpy as np
+from skimage.measure import label as connected_components
 
 import torch
 
@@ -27,6 +28,7 @@ from torch_em.loss import DiceLoss
 from torch_em.transform.raw import normalize_percentile
 from torch_em.util.prediction import predict_with_halo
 
+from elf.parallel import seeded_watershed
 from elf.evaluation import mean_segmentation_accuracy
 
 from common import (
@@ -87,6 +89,8 @@ def _skip_empty_patches(inp, max_intensity):
 
 
 def run_inference(name, model, norm, dataset, task, save_root, device):
+    _do_skip_blocks = False  # skip empty blocks
+
     checkpoint = os.path.join(save_root, "checkpoints", name, "best.pt")
     assert os.path.exists(checkpoint), checkpoint
 
@@ -101,8 +105,8 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
     for image_path, gt_path in tqdm(zip(image_paths, gt_paths), desc="Predicting", total=len(image_paths)):
         pred_path = os.path.join(pred_dir, f"{Path(image_path).stem}.h5")
-        # if os.path.exists(pred_path):
-        #     continue
+        if os.path.exists(pred_path):
+            continue
 
         if dataset == "livecell":
             tile, halo = (384, 384), (64, 64)
@@ -111,7 +115,8 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
 
         image, _ = _get_per_dataset_inputs(dataset, image_path, gt_path)
         image = normalize_percentile(image)
-        max_intensity = _extract_patchwise_max_intensity(image, tile, halo)
+        if _do_skip_blocks:
+            max_intensity = _extract_patchwise_max_intensity(image, tile, halo)
 
         prediction = predict_with_halo(
             input_=image,
@@ -120,7 +125,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             block_shape=tile,
             halo=halo,
             preprocess=None,
-            skip_block=partial(_skip_empty_patches, max_intensity=max_intensity),
+            skip_block=partial(_skip_empty_patches, max_intensity=max_intensity) if _do_skip_blocks else None,
         )
         prediction = prediction.squeeze()
 
@@ -156,67 +161,21 @@ def run_evaluation(norm, dataset, task, save_root):
             Path(save_root).parent, "prediction", dataset, norm, task, f"{Path(image_path).stem}.h5"
         )
         with h5py.File(pred_path, "r+") as f:
-            if task == "boundaries":
+            if task == "boundaries" and dataset != "plantseg":
                 prediction = f['segmentation/prediction'][:]
-                if dataset == "plantseg":
-                    bd = prediction
-                    fg = np.ones_like(bd)
-                else:
-                    fg, bd = prediction
+                fg, bd = prediction
 
                 if dataset == "livecell":
                     tile, halo = (384, 384), (64, 64)
                 else:
                     tile, halo = (16, 384, 384), (8, 64, 64)
 
-                # NOTE: performing watershed over the entire volume at once is very slow!
-                # from torch_em.util.segmentation import watershed_from_components
-                # instances = watershed_from_components(boundaries=bd, foreground=fg)
-
-                if dataset == "plantseg":
-                    import elf.segmentation.multicut as mc
-                    import elf.segmentation.watershed as ws
-                    import elf.segmentation.features as feats
-
-                    ws_seg, max_id = ws.distance_transform_watershed(input_=bd, threshold=0.25, sigma_seeds=2.0)
-
-                    # compute the region adjacency graph
-                    rag = feats.compute_rag(ws_seg)
-
-                    # compute the edge costs
-                    costs = feats.compute_boundary_features(rag, bd)[:, 0]
-
-                    # transform the edge costs from [0, 1] to [-inf, inf], which is necessary for
-                    # the multicut. This is done by interpreting the values as probabilities for
-                    # an edge being 'true' and then taking the negative log-likelihood.
-                    # in addition, we weight the costs by the size of the corresponding edge
-                    # for z and xy edges
-                    z_edges = feats.compute_z_edge_mask(rag, ws_seg)
-                    xy_edges = np.logical_not(z_edges)
-                    edge_population = [z_edges, xy_edges]
-                    edge_sizes = feats.compute_boundary_mean_and_length(rag, bd)[:, 1]
-
-                    costs = mc.transform_probabilities_to_costs(
-                        costs, edge_sizes=edge_sizes, edge_populations=edge_population
-                    )
-
-                    # run the multicut partitioning.
-                    # here, we use the kernighan lin heuristics to solve the problem, introduced in
-                    # http://xilinx.asia/_hdl/4/eda.ee.ucla.edu/EE201A-04Spring/kl.pdf
-                    node_labels = mc.multicut_kernighan_lin(rag, costs)
-
-                    # map the results back to pixels to obtain the final segmentation
-                    instances = feats.project_node_labels_to_pixels(rag, node_labels)
-
-                else:
-                    from elf.parallel import seeded_watershed
-                    from skimage.measure import label as connected_components
-                    seeds = connected_components((fg - bd) > 0.5)
-                    mask = fg > 0.5
-                    instances = seeded_watershed(
-                        hmap=bd, seeds=seeds, out=np.zeros_like(gt),
-                        block_shape=tile, halo=halo, mask=mask, verbose=True,
-                    )
+                seeds = connected_components((fg - bd) > 0.5)
+                mask = fg > 0.5
+                instances = seeded_watershed(
+                    hmap=bd, seeds=seeds, out=np.zeros_like(gt),
+                    block_shape=tile, halo=halo, mask=mask, verbose=True,
+                )
 
                 msa, sa = mean_segmentation_accuracy(segmentation=instances, groundtruth=gt, return_accuracies=True)
                 msa_list.append(msa)
@@ -227,7 +186,11 @@ def run_evaluation(norm, dataset, task, save_root):
                 f.create_dataset("segmentation/instances", data=instances, compression="gzip")
 
             else:
-                prediction = f["segmentation/foreground"][:]
+                if dataset == "plantseg":
+                    prediction = f["segmentation/prediction"][:]
+                else:
+                    prediction = f["segmentation/foreground"][:]
+
                 gt = (gt > 0)   # binarise the instances
 
                 score = dice_score(gt=gt, seg=prediction > 0.5)
@@ -258,13 +221,13 @@ def run_analysis_per_dataset(dataset, task, save_root):
         fg_dname = "segmentation/prediction" if dataset == "plantseg" else "segmentation/foreground"
         with h5py.File(pred_exp1_path, "r") as f1:
             fg_exp1 = f1[fg_dname][:]
-            if task == "boundaries":
+            if task == "boundaries" and dataset != "plantseg":
                 bd_exp1 = f1["segmentation/boundary"][:]
                 instances_exp1 = f1["segmentation/instances"][:]
 
         with h5py.File(pred_exp2_path, "r") as f2:
             fg_exp2 = f2[fg_dname][:]
-            if task == "boundaries":
+            if task == "boundaries" and dataset != "plantseg":
                 bd_exp2 = f2["segmentation/boundary"][:]
                 instances_exp2 = f2["segmentation/instances"][:]
 
