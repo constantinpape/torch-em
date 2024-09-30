@@ -134,7 +134,12 @@ class ResizeLongestSideInputs:
         newh = int(newh + 0.5)
         return (newh, neww)
 
-    def _convert_transformed_inputs_to_original_shape(self, resized_inputs):
+    def convert_transformed_inputs_to_original_shape(self, resized_inputs):
+        if not hasattr(self, "pre_pad_shape"):
+            raise AttributeError(
+                "'convert_transformed_inputs_to_original_shape' is only valid after the '__call__' method has run."
+            )
+
         # First step is to remove the padded region
         inputs = resized_inputs[tuple(self.pre_pad_shape)]
         # Next, we resize the inputs to original shape
