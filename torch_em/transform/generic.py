@@ -136,7 +136,7 @@ class ResizeLongestSideInputs:
 
     def convert_transformed_inputs_to_original_shape(self, resized_inputs):
         if not hasattr(self, "pre_pad_shape"):
-            raise AttributeError(
+            raise RuntimeError(
                 "'convert_transformed_inputs_to_original_shape' is only valid after the '__call__' method has run."
             )
 
