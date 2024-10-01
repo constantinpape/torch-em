@@ -95,13 +95,18 @@ def _skip_empty_patches(inp, max_intensity):
 
 def run_inference(name, model, norm, dataset, task, save_root, device):
     _do_skip_blocks = False  # skip empty blocks
+    _eval_mode = True
 
     checkpoint = os.path.join(save_root, "checkpoints", name, "best.pt")
     assert os.path.exists(checkpoint), checkpoint
 
     model.load_state_dict(torch.load(checkpoint, map_location=torch.device("cpu"))["model_state"])
     model.to(device)
-    model.eval()
+
+    if _eval_mode:
+        model.eval()
+    else:
+        model.train()
 
     image_paths, gt_paths = get_test_images(dataset=dataset)
 
@@ -122,6 +127,9 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
         image = normalize_percentile(image)
         if _do_skip_blocks:
             max_intensity = _extract_patchwise_max_intensity(image, tile, halo)
+            skip_block = partial(_skip_empty_patches, max_intensity=max_intensity)
+        else:
+            skip_block = None
 
         prediction = predict_with_halo(
             input_=image,
@@ -130,7 +138,7 @@ def run_inference(name, model, norm, dataset, task, save_root, device):
             block_shape=tile,
             halo=halo,
             preprocess=None,
-            skip_block=partial(_skip_empty_patches, max_intensity=max_intensity) if _do_skip_blocks else None,
+            skip_block=skip_block,
         )
         prediction = prediction.squeeze()
 
@@ -206,11 +214,11 @@ def run_evaluation(norm, dataset, task, save_root):
 
     if len(dsc_list) > 0:
         mean_dice = np.mean(dsc_list)
-        print(f"Mean dice score: {mean_dice}")
+        print(f"Mean dice score for '{dataset}' for the setting: '{task}'-'{norm}: {mean_dice}")
     else:
         mean_msa = np.mean(msa_list)
         mean_sa50 = np.mean(sa50_list)
-        print(f"Mean mSA: {mean_msa}, mean SA50: {mean_sa50}")
+        print(f"Mean mSA for '{dataset}' for the setting: '{task}'-'{norm}: {mean_msa}, mean SA50: {mean_sa50}")
 
 
 def run_analysis_per_dataset(dataset, task, save_root):
