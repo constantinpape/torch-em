@@ -118,6 +118,11 @@ class ResizeLongestSideInputs:
 
         self.target_length = self.target_shape[-1]
 
+        if self.is_label:  # kwargs needed for int data
+            self.kwargs = {"order": 0,  "anti_aliasing": False}
+        else:  # we use the default settings for float data
+            self.kwargs = {}
+
     def _get_preprocess_shape(self, oldh, oldw):
         """Inspired from Segment Anything.
 
@@ -129,11 +134,23 @@ class ResizeLongestSideInputs:
         newh = int(newh + 0.5)
         return (newh, neww)
 
+    def convert_transformed_inputs_to_original_shape(self, resized_inputs):
+        if not hasattr(self, "pre_pad_shape"):
+            raise RuntimeError(
+                "'convert_transformed_inputs_to_original_shape' is only valid after the '__call__' method has run."
+            )
+
+        # First step is to remove the padded region
+        inputs = resized_inputs[tuple(self.pre_pad_shape)]
+        # Next, we resize the inputs to original shape
+        inputs = resize(
+            image=inputs, output_shape=self.original_shape, preserve_range=True, **self.kwargs
+        )
+        return inputs
+
     def __call__(self, inputs):
-        if self.is_label:  # kwargs needed for int data
-            kwargs = {"order": 0,  "anti_aliasing": False}
-        else:  # we use the default settings for float data
-            kwargs = {}
+        # NOTE: We store this in case we would like to transform the inputs back to original shape.
+        self.original_shape = inputs.shape
 
         # Let's get the new shape with the longest side equal to the target length.
         new_shape = self._get_preprocess_shape(inputs.shape[-2], inputs.shape[-1])
@@ -148,7 +165,7 @@ class ResizeLongestSideInputs:
 
         # Next, we resize the input image along the longest side.
         inputs = resize(
-            image=inputs, output_shape=patch_shape, preserve_range=True, **kwargs
+            image=inputs, output_shape=patch_shape, preserve_range=True, **self.kwargs
         ).astype(inputs.dtype)
 
         # Finally, we pad the remaining height to match the expected target shape.
@@ -156,8 +173,12 @@ class ResizeLongestSideInputs:
         pad_width = (
             (ceil(pad_width[0]), floor(pad_width[0])), (ceil(pad_width[1]), floor(pad_width[1]))
         )
-        if self.is_rgb or inputs.ndim == 3:  # we do not pad across the first axis (= channel or z-axis) for rgb or 3d inputs
+        # we do not pad across the first axis (= channel or z-axis) for rgb or 3d inputs
+        if self.is_rgb or inputs.ndim == 3:
             pad_width = ((0, 0), *pad_width)
+
+        # NOTE: We store this in case we would like to unpad the inputs.
+        self.pre_pad_shape = [slice(pw[0], -pw[1] if pw[1] > 0 else None) for pw in pad_width]
 
         inputs = np.pad(array=inputs, pad_width=pad_width, mode="constant")
         return inputs
