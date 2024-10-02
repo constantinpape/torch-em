@@ -8,8 +8,7 @@ sys.path.append("..")
 
 
 def check_hpa():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data/hpa"
+    from util import ROOT
 
     loader = get_hpa_segmentation_loader(
         path=os.path.join(ROOT, "hpa"),
