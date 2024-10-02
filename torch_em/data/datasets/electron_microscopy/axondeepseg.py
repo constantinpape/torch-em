@@ -10,11 +10,12 @@ from shutil import rmtree
 from typing import Optional, Tuple, Union
 
 import imageio
-import h5py
 import numpy as np
-import torch_em
 
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 URLS = {
@@ -28,6 +29,8 @@ CHECKSUMS = {
 
 
 def _preprocess_sem_data(out_path):
+    import h5py
+
     # preprocess the data to get it to a better data format
     data_root = os.path.join(out_path, "data_axondeepseg_sem-master")
     assert os.path.exists(data_root)
@@ -86,6 +89,8 @@ def _preprocess_sem_data(out_path):
 
 
 def _preprocess_tem_data(out_path):
+    import h5py
+
     data_root = os.path.join(out_path, "TEM_dataset")
     folder_names = os.listdir(data_root)
     folders = [os.path.join(data_root, fname) for fname in folder_names

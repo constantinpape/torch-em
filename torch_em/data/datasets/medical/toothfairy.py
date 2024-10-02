@@ -4,7 +4,6 @@ from tqdm import tqdm
 from natsort import natsorted
 
 import numpy as np
-import nibabel as nib
 
 import torch_em
 
@@ -22,6 +21,8 @@ def get_toothfairy_data(path, download):
 
 
 def _get_toothfairy_paths(path, download):
+    import nibabel as nib
+
     data_dir = get_toothfairy_data(path, download)
 
     images_dir = os.path.join(path, "data", "images")

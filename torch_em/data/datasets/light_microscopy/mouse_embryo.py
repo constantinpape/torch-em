@@ -9,8 +9,10 @@ import os
 from glob import glob
 from typing import List, Optional, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 URL = "https://zenodo.org/record/6546550/files/MouseEmbryos.zip?download=1"

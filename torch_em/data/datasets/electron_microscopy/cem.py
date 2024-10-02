@@ -25,16 +25,18 @@ Note that we have implemented automatic download, but this leads to dependency
 issues, so we recommend to download the data manually and then run the loaders with the correct path.
 """
 
-import json
 import os
+import json
 from glob import glob
 from typing import List, Tuple, Union
 
-import imageio.v3 as imageio
 import numpy as np
-import torch_em
+import imageio.v3 as imageio
 from sklearn.model_selection import train_test_split
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
 
 from .. import util
 

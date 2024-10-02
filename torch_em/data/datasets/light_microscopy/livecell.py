@@ -6,18 +6,19 @@ Please cite it if you use this dataset in your research.
 """
 
 import os
+import requests
+from tqdm import tqdm
 from shutil import copyfileobj
 from typing import List, Optional, Sequence, Tuple, Union
 
-import imageio.v3 as imageio
 import numpy as np
-import requests
-import vigra
-from tqdm import tqdm
+import imageio.v3 as imageio
 
-import torch_em
 import torch.utils.data
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 try:
@@ -65,6 +66,8 @@ def _download_annotation_file(path, split, download):
 
 
 def _annotations_to_instances(coco, image_metadata, category_ids):
+    import vigra
+
     # create and save the segmentation
     annotation_ids = coco.getAnnIds(imgIds=image_metadata["id"], catIds=category_ids)
     annotations = coco.loadAnns(annotation_ids)

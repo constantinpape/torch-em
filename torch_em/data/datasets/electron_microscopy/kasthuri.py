@@ -6,18 +6,19 @@ We use the version of the dataset from https://sites.google.com/view/connectomic
 """
 
 import os
-from concurrent import futures
 from glob import glob
+from tqdm import tqdm
 from shutil import rmtree
+from concurrent import futures
 from typing import Tuple, Union
 
 import imageio
-import h5py
 import numpy as np
+
 import torch_em
 
 from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
+
 from .. import util
 
 URL = "http://www.casser.io/files/kasthuri_pp.zip "
@@ -50,6 +51,8 @@ def _load_volume(path):
 
 
 def _create_data(root, inputs, out_path):
+    import h5py
+
     raw = _load_volume(os.path.join(root, inputs[0]))
     labels_argb = _load_volume(os.path.join(root, inputs[1]))
     assert labels_argb.ndim == 4

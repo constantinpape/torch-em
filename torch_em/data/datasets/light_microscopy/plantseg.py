@@ -10,8 +10,6 @@ from glob import glob
 from tqdm import tqdm
 from typing import List, Optional, Tuple, Union
 
-import h5py
-
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
@@ -84,6 +82,8 @@ CROPPING_VOLUMES = {
 
 
 def _fix_inconsistent_volumes(data_path, name, split):
+    import h5py
+
     file_paths = glob(os.path.join(data_path, "*.h5"))
     if name not in ["root", "ovules"] and split not in ["train", "val"]:
         return

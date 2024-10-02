@@ -15,7 +15,6 @@ from functools import partial
 from typing import List, Optional, Sequence, Tuple, Union
 
 import imageio
-import h5py
 import numpy as np
 from skimage import morphology
 from PIL import Image, ImageDraw
@@ -262,6 +261,8 @@ def _get_labels(annotation_file, shape, label="*"):
 
 
 def _process_image(in_folder, out_path, with_labels):
+    import h5py
+
     # TODO double check the default order and color matching
     # correspondence to the HPA kaggle data:
     # microtubules: red

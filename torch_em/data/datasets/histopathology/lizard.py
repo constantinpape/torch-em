@@ -1,14 +1,15 @@
 import os
 import warnings
 from glob import glob
+from tqdm import tqdm
 from shutil import rmtree
 
-import h5py
 import imageio.v3 as imageio
-import torch_em
 
 from scipy.io import loadmat
-from tqdm import tqdm
+
+import torch_em
+
 from .. import util
 
 # TODO: the links don't work anymore (?)
@@ -25,6 +26,8 @@ LABEL_CHECKSUM = "79f22ca83ca535682fba340cbc8bb66b74abd1ead4151ffc8593f204fcb97d
 
 
 def _extract_images(image_folder, label_folder, output_dir):
+    import h5py
+
     image_files = glob(os.path.join(image_folder, "*.png"))
     for image_file in tqdm(image_files, desc=f"Extract images from {image_folder}"):
         fname = os.path.basename(image_file)

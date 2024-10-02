@@ -15,9 +15,10 @@ from glob import glob
 from shutil import rmtree
 from typing import List, Optional, Union, Tuple
 
-import h5py
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 
@@ -35,6 +36,8 @@ def get_urocell_data(path: Union[os.PathLike, str], download: bool) -> str:
     Returns:
         The path to the downloaded data.
     """
+    import h5py
+
     if os.path.exists(path):
         return path
 
@@ -93,6 +96,8 @@ def get_urocell_data(path: Union[os.PathLike, str], download: bool) -> str:
 
 
 def _get_paths(path, target):
+    import h5py
+
     label_key = f"labels/{target}"
     all_paths = glob(os.path.join(path, "*.h5"))
     all_paths.sort()

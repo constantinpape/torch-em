@@ -8,7 +8,7 @@ from typing import List, Optional
 import imageio.v3 as imageio
 
 import torch_em
-from torch_em.data.datasets import util
+from .. import util
 
 
 URL = {
