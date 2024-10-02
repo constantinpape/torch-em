@@ -277,7 +277,11 @@ def load_model(checkpoint, model=None, name="best", state_key="model_state", dev
         model = get_trainer(checkpoint, name=name, device=device).model
 
     else:  # load the model state from the checkpoint
-        ckpt = os.path.join(checkpoint, f"{name}.pt")
+        if os.path.isdir(checkpoint):
+            ckpt = os.path.join(checkpoint, f"{name}.pt")
+        else:
+            ckpt = checkpoint
+
         state = torch.load(ckpt, map_location=device)[state_key]
         # to enable loading compiled models
         compiled_prefix = "_orig_mod."
