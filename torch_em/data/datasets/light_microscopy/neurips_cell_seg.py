@@ -9,13 +9,15 @@ Please cite it if you use the dataset in your research.
 """
 
 import os
-import numpy as np
 from glob import glob
 from typing import Union, Tuple, Any, Optional
 
+import numpy as np
+
 import torch
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
 
 from .. import util
 from ... import ImageCollectionDataset, RawImageCollectionDataset, ConcatDataset

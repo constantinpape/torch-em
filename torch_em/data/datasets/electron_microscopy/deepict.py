@@ -17,7 +17,7 @@ except ImportError:
     mrcfile = None
 
 import torch_em
-from elf.io import open_file
+
 from .. import util
 
 
@@ -25,6 +25,8 @@ ACTIN_ID = 10002
 
 
 def _process_deepict_actin(input_path, output_path):
+    from elf.io import open_file
+
     os.makedirs(output_path, exist_ok=True)
 
     # datasets = ["00004", "00011", "00012"]

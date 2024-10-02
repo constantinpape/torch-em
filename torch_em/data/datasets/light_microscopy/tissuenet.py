@@ -9,19 +9,22 @@ and download it yourself.
 
 import os
 from glob import glob
+from tqdm import tqdm
 from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
-import torch_em
-import z5py
 
-from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 
 def _create_split(path, split):
+    import z5py
+
     split_file = os.path.join(path, f"tissuenet_v1.1_{split}.npz")
     split_folder = os.path.join(path, split)
     os.makedirs(split_folder, exist_ok=True)
