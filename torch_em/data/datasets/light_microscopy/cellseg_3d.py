@@ -8,8 +8,10 @@ import os
 from glob import glob
 from typing import Optional, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 URL = "https://zenodo.org/records/11095111/files/DATASET_WITH_GT.zip?download=1"

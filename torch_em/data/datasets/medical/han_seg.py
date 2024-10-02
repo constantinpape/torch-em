@@ -5,10 +5,6 @@ from pathlib import Path
 from natsort import natsorted
 from typing import Union, Tuple
 
-import nrrd
-import numpy as np
-import nibabel as nib
-
 import torch_em
 
 from .. import util
@@ -35,6 +31,10 @@ def get_han_seg_data(path, download):
 
 
 def _get_han_seg_paths(path, download):
+    import nrrd
+    import numpy as np
+    import nibabel as nib
+
     data_dir = get_han_seg_data(path=path, download=download)
 
     image_dir = os.path.join(data_dir, "set_1", "preprocessed", "images")

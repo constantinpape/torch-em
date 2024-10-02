@@ -1,7 +1,6 @@
 import os
-import numpy as np
 
-import zarr
+import numpy as np
 
 import torch_em
 
@@ -83,6 +82,8 @@ def _download_asem_dataset(path, volume_ids, download):
 
 
 def _make_volumes_consistent(volume_path, organelle):
+    import zarr
+
     have_inconsistent_volumes = False
 
     # we shouldn't load the volumes which are already consistent

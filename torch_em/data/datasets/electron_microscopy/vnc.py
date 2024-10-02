@@ -10,11 +10,12 @@ from shutil import rmtree
 from typing import List, Optional, Union, Tuple
 
 import imageio
-import h5py
 import numpy as np
-import torch_em
 from skimage.measure import label
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
 
 from .. import util
 
@@ -41,6 +42,7 @@ def get_vnc_data(path: Union[os.PathLike, str], download: bool) -> str:
     Returns:
         The path to the downloaded data.
     """
+    import h5py
 
     train_path = os.path.join(path, "vnc_train.h5")
     test_path = os.path.join(path, "vnc_test.h5")
