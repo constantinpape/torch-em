@@ -8,20 +8,22 @@ Please cite it if you use this dataset in your research.
 import os
 import json
 import shutil
+from glob import glob
+from tqdm import tqdm
 from concurrent import futures
 from functools import partial
-from glob import glob
 from typing import List, Optional, Sequence, Tuple, Union
 
 import imageio
 import h5py
 import numpy as np
-import torch_em
+from skimage import morphology
 from PIL import Image, ImageDraw
 from skimage import draw as skimage_draw
-from skimage import morphology
-from tqdm import tqdm
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
 
 from .. import util
 
@@ -32,6 +34,7 @@ URLS = {
 CHECKSUMS = {
     "segmentation": "dcd6072293d88d49c71376d3d99f3f4f102e4ee83efb0187faa89c95ec49faa9"
 }
+VALID_CHANNELS = ["microtubules", "protein", "nuclei", "er"]
 
 
 def _download_hpa_data(path, name, download):
@@ -258,7 +261,7 @@ def _get_labels(annotation_file, shape, label="*"):
     raise RuntimeError
 
 
-def _process_image(in_folder, out_path, channels, with_labels):
+def _process_image(in_folder, out_path, with_labels):
     # TODO double check the default order and color matching
     # correspondence to the HPA kaggle data:
     # microtubules: red
@@ -266,14 +269,9 @@ def _process_image(in_folder, out_path, channels, with_labels):
     # er: yellow
     # protein: green
     # default order: rgby = micro, prot, nuclei, er
-    all_channels = {"microtubules", "protein", "nuclei", "er"}
-    assert len(list(set(channels) - all_channels)) == 0
-    raw = []
-    for chan in channels:
-        im_path = os.path.join(in_folder, f"{chan}.png")
-        assert os.path.exists(im_path), im_path
-        raw.append(imageio.imread(im_path)[None])
-    raw = np.concatenate(raw, axis=0)
+    raw = np.concatenate([
+        imageio.imread(os.path.join(in_folder, f"{chan}.png"))[None] for chan in VALID_CHANNELS
+    ], axis=0)
 
     if with_labels:
         annotation_file = os.path.join(in_folder, "annotation.json")
@@ -282,28 +280,35 @@ def _process_image(in_folder, out_path, channels, with_labels):
         assert labels.shape == raw.shape[1:]
 
     with h5py.File(out_path, "w") as f:
-        f.create_dataset("raw", data=raw, compression="gzip")
+        f.create_dataset("raw/microtubules", data=raw[0], compression="gzip")
+        f.create_dataset("raw/protein", data=raw[1], compression="gzip")
+        f.create_dataset("raw/nuclei", data=raw[2], compression="gzip")
+        f.create_dataset("raw/er", data=raw[3], compression="gzip")
         if with_labels:
             f.create_dataset("labels", data=labels, compression="gzip")
 
 
-def _process_split(root_in, root_out, channels, n_workers, with_labels):
+def _process_split(root_in, root_out, n_workers, with_labels):
     os.makedirs(root_out, exist_ok=True)
     inputs = glob(os.path.join(root_in, "*"))
     outputs = [os.path.join(root_out, f"{os.path.split(inp)[1]}.h5") for inp in inputs]
-    process = partial(_process_image, channels=channels, with_labels=with_labels)
+    process = partial(_process_image, with_labels=with_labels)
     with futures.ProcessPoolExecutor(n_workers) as pp:
         list(tqdm(pp.map(process, inputs, outputs), total=len(inputs), desc=f"Process data in {root_in}"))
 
 
-# save data as h5 with 4 channel raw data and labels extracted from the geo json
-def _process_hpa_data(path, channels, n_workers, remove):
+# save data as h5 in 4 separate channel raw data and labels extracted from the geo json
+def _process_hpa_data(path, n_workers, remove):
     in_path = os.path.join(path, "hpa_dataset_v2")
     assert os.path.exists(in_path), in_path
     for split in ("train", "test", "valid"):
         out_split = "val" if split == "valid" else split
-        _process_split(os.path.join(in_path, split), os.path.join(path, out_split),
-                       channels=channels, n_workers=n_workers, with_labels=split != "test")
+        _process_split(
+            root_in=os.path.join(in_path, split),
+            root_out=os.path.join(path, out_split),
+            n_workers=n_workers,
+            with_labels=(split != "test")
+        )
     if remove:
         shutil.rmtree(in_path)
 
@@ -318,7 +323,6 @@ def _check_data(path):
 def get_hpa_segmentation_data(
     path: Union[os.PathLike, str],
     download: bool,
-    channels: Sequence[str],
     n_workers_preproc: int = 8
 ) -> str:
     """Download the HPA training data.
@@ -326,8 +330,6 @@ def get_hpa_segmentation_data(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         download: Whether to download the data if it is not present.
-        channels: The image channels to extract. Available channels are
-            'microtubules', 'protein', 'nuclei' or 'er'.
         n_workers_preproc: The number of workers to use for preprocessing.
 
     Returns:
@@ -336,7 +338,7 @@ def get_hpa_segmentation_data(
     data_is_complete = _check_data(path)
     if not data_is_complete:
         _download_hpa_data(path, "segmentation", download)
-        _process_hpa_data(path, channels, n_workers_preproc, remove=True)
+        _process_hpa_data(path, n_workers_preproc, remove=True)
     return path
 
 
@@ -370,7 +372,12 @@ def get_hpa_segmentation_dataset(
     Returns:
        The segmentation dataset.
     """
-    get_hpa_segmentation_data(path, download, channels, n_workers_preproc)
+    assert isinstance(channels, list), "The 'channels' argument expects the desired channel(s) in a list."
+    for chan in channels:
+        if chan not in VALID_CHANNELS:
+            raise ValueError(f"'{chan}' is not a valid channel for HPA dataset.")
+
+    get_hpa_segmentation_data(path, download, n_workers_preproc)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
@@ -379,7 +386,7 @@ def get_hpa_segmentation_dataset(
     kwargs = util.update_kwargs(kwargs, "with_channels", True)
 
     paths = glob(os.path.join(path, split, "*.h5"))
-    raw_key = "raw"
+    raw_key = [f"raw/{chan}" for chan in channels]
     label_key = "labels"
 
     return torch_em.default_segmentation_dataset(paths, raw_key, paths, label_key, patch_shape, **kwargs)
