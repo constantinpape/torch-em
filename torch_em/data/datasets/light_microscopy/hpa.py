@@ -8,20 +8,22 @@ Please cite it if you use this dataset in your research.
 import os
 import json
 import shutil
+from glob import glob
+from tqdm import tqdm
 from concurrent import futures
 from functools import partial
-from glob import glob
 from typing import List, Optional, Sequence, Tuple, Union
 
 import imageio
 import h5py
 import numpy as np
-import torch_em
+from skimage import morphology
 from PIL import Image, ImageDraw
 from skimage import draw as skimage_draw
-from skimage import morphology
-from tqdm import tqdm
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
 
 from .. import util
 
@@ -32,6 +34,7 @@ URLS = {
 CHECKSUMS = {
     "segmentation": "dcd6072293d88d49c71376d3d99f3f4f102e4ee83efb0187faa89c95ec49faa9"
 }
+VALID_CHANNELS = ["microtubules", "protein", "nuclei", "er"]
 
 
 def _download_hpa_data(path, name, download):
@@ -266,9 +269,8 @@ def _process_image(in_folder, out_path, with_labels):
     # er: yellow
     # protein: green
     # default order: rgby = micro, prot, nuclei, er
-    all_channels = {"microtubules", "protein", "nuclei", "er"}
     raw = np.concatenate([
-        imageio.imread(os.path.join(in_folder, f"{chan}.png"))[None] for chan in all_channels
+        imageio.imread(os.path.join(in_folder, f"{chan}.png"))[None] for chan in VALID_CHANNELS
     ], axis=0)
 
     if with_labels:
@@ -370,6 +372,11 @@ def get_hpa_segmentation_dataset(
     Returns:
        The segmentation dataset.
     """
+    assert isinstance(channels, list), "The 'channels' argument expects the desired channel(s) in a list."
+    for chan in channels:
+        if chan not in VALID_CHANNELS:
+            raise ValueError(f"'{chan}' is not a valid channel for HPA dataset.")
+
     get_hpa_segmentation_data(path, download, n_workers_preproc)
 
     kwargs, _ = util.add_instance_label_transform(

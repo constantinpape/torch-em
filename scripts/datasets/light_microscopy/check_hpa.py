@@ -8,14 +8,15 @@ sys.path.append("..")
 
 
 def check_hpa():
-    from util import ROOT
+    # from util import ROOT
+    ROOT = "/media/anwai/ANWAI/data/hpa"
 
     loader = get_hpa_segmentation_loader(
         path=os.path.join(ROOT, "hpa"),
         split="train",
         patch_shape=(1024, 1024),
         batch_size=1,
-        channels=["protein"],
+        channels=["protein", "er"],
         download=True,
     )
     check_loader(loader, 8, instance_labels=True)
