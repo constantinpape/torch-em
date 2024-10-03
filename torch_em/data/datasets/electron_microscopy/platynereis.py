@@ -14,8 +14,11 @@ from glob import glob
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
-import torch_em
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 URLS = {

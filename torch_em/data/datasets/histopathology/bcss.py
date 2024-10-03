@@ -6,9 +6,11 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 
 import torch
+
 import torch_em
-from torch_em.data.datasets import util
 from torch_em.data import ImageCollectionDataset
+
+from .. import util
 
 
 URL = "https://drive.google.com/drive/folders/1zqbdkQF8i5cEmZOGmbdQm-EP8dRYtvss?usp=sharing"

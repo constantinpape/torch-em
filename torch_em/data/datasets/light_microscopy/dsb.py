@@ -9,8 +9,10 @@ import os
 from shutil import move
 from typing import List, Optional, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 DSB_URLS = {
@@ -24,7 +26,7 @@ CHECKSUMS = {
 
 
 def get_dsb_data(path: Union[os.PathLike, str], source: str, download: bool) -> str:
-    """Download the DeepBacs training data.
+    """Download the DSB training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
