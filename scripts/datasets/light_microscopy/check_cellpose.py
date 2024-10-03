@@ -15,7 +15,7 @@ def check_cellpose():
         split="train",
         patch_shape=(512, 512),
         batch_size=1,
-        choice="cyto2",
+        choice=None,
     )
     check_loader(loader, 8, instance_labels=True)
 

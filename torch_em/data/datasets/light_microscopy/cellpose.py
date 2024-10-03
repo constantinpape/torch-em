@@ -10,7 +10,7 @@ Please cite it if you use this dataset in your research.
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, Literal
+from typing import Union, Tuple, Literal, Optional
 
 import torch_em
 
@@ -20,7 +20,7 @@ from .. import util
 from .neurips_cell_seg import to_rgb
 
 
-URL = "https://www.cellpose.org/dataset"
+AVAILABLE_CHOICES = ["cyto", "cyto2"]
 
 
 def _get_cellpose_paths(data_dir):
@@ -37,6 +37,8 @@ def get_cellpose_data(
     download: bool = False,
 ):
     """Instruction to download CellPose data.
+
+    NOTE: Please download the dataset from "https://www.cellpose.org/dataset".
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
@@ -75,7 +77,7 @@ def get_cellpose_dataset(
     path: Union[os.PathLike, str],
     split: Literal["train", "test"],
     patch_shape: Tuple[int, int],
-    choice: Literal["cyto", "cyto2"] = "cyto",
+    choice: Optional[Literal["cyto", "cyto2"]] = None,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -92,11 +94,21 @@ def get_cellpose_dataset(
     Returns:
         The segmentation dataset.
     """
-    assert choice in ["cyto", "cyto2"]
     assert split in ["train", "test"]
 
-    data_dir = get_cellpose_data(path=path, split=split, choice=choice, download=download)
-    image_paths, gt_paths = _get_cellpose_paths(data_dir=data_dir)
+    if choice is None:
+        choice = AVAILABLE_CHOICES
+    else:
+        if not isinstance(choice, list):
+            choice = [choice]
+
+    image_paths, gt_paths = [], []
+    for per_choice in choice:
+        assert per_choice in AVAILABLE_CHOICES
+        data_dir = get_cellpose_data(path=path, split=split, choice=per_choice, download=download)
+        per_image_paths, per_gt_paths = _get_cellpose_paths(data_dir=data_dir)
+        image_paths.extend(per_image_paths)
+        gt_paths.extend(per_gt_paths)
 
     if "raw_transform" not in kwargs:
         raw_transform = torch_em.transform.get_raw_transform(augmentation2=to_rgb)
@@ -123,7 +135,7 @@ def get_cellpose_loader(
     split: Literal["train", "test"],
     patch_shape: Tuple[int, int],
     batch_size: int,
-    choice: Literal["cyto", "cyto2"] = "cyto",
+    choice: Optional[Literal["cyto", "cyto2"]] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
