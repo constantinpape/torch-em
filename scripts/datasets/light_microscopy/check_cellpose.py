@@ -1,17 +1,21 @@
+import os
+import sys
+
 from torch_em.util.debug import check_loader
-from torch_em.data.datasets.light_microscopy import get_cellpose_loader
+from torch_em.data.datasets import get_cellpose_loader
 
-
-ROOT = "/media/anwai/ANWAI/data/cellpose/"
+sys.path.append("..")
 
 
 def check_cellpose():
+    from util import ROOT
+
     loader = get_cellpose_loader(
-        path=ROOT,
+        path=os.path.join(ROOT, "cellpose"),
         split="train",
         patch_shape=(512, 512),
         batch_size=1,
-        choice="cyto",
+        choice="cyto2",
     )
     check_loader(loader, 8, instance_labels=True)
 
