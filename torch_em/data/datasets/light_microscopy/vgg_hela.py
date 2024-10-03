@@ -1,4 +1,4 @@
-"""This is a dataset for counting HeLA cells in phasecontrast microscopy.
+"""This is a dataset for counting HeLA cells in phase-contrast microscopy.
 
 It is described in the publication https://www.robots.ox.ac.uk/~vgg/publications/2012/Arteta12/.
 Please cite it if you use this dataset in your research.
@@ -9,12 +9,16 @@ from glob import glob
 from shutil import rmtree
 from typing import Tuple, Union
 
-import imageio.v3 as imageio
 import numpy as np
-import torch_em
+import imageio.v3 as imageio
 from scipy.io import loadmat
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
+
 
 URL = "https://www.robots.ox.ac.uk/~vgg/software/cell_detection/downloads/CellDetect_v1.0.tar.gz"
 CHECKSUM = "09825d6a8e287ddf2c4b1ef3d2f62585ec6876e3bfcd4b9bbcd3dd300e4be282"

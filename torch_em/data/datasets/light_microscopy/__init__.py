@@ -3,6 +3,7 @@ from .cellseg_3d import get_cellseg_3d_loader, get_cellseg_3d_dataset
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .ctc import get_ctc_segmentation_loader, get_ctc_segmentation_dataset
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
+from .dic_hepg2 import get_dic_hepg2_loader, get_dic_hepg2_dataset
 from .dsb import get_dsb_loader, get_dsb_dataset
 from .dynamicnuclearnet import get_dynamicnuclearnet_loader, get_dynamicnuclearnet_dataset
 from .embedseg_data import get_embedseg_loader, get_embedseg_dataset

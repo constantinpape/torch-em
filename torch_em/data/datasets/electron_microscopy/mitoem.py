@@ -6,18 +6,19 @@ If you use it in your research then please cite https://doi.org/10.1007/978-3-03
 """
 
 import os
+from tqdm import tqdm
 import multiprocessing
-from concurrent import futures
 from shutil import rmtree
+from concurrent import futures
 from typing import List, Optional, Sequence, Tuple, Union
 
 import imageio
 import numpy as np
+
 import torch_em
-import z5py
 
 from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
+
 from .. import util
 
 URLS = {
@@ -27,7 +28,7 @@ URLS = {
     },
     "labels": {
         "human": "https://www.dropbox.com/s/dhf89bc14kemw4e/EM30-H-mito-train-val-v2.zip?dl=1",
-        "rat": "https://huggingface.co/datasets/pytc/MitoEM/blob/main/EM30-R-mito-train-val-v2.zip"
+        "rat": "https://huggingface.co/datasets/pytc/MitoEM/resolve/main/EM30-R-mito-train-val-v2.zip"
     }
 }
 CHECKSUMS = {
@@ -78,6 +79,8 @@ def _load_vol(pattern, slice_ids, desc, n_threads, dtype=None):
 
 
 def _create_volume(out_path, im_folder, label_folder=None, z_start=None):
+    import z5py
+
     if label_folder is None:
         assert z_start is not None
         n_slices = len(get_slices(im_folder))

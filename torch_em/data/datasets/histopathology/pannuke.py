@@ -1,13 +1,13 @@
 import os
-import h5py
-import vigra
 import shutil
-import numpy as np
 from glob import glob
 from typing import List
 
+import numpy as np
+
 import torch_em
-from torch_em.data.datasets import util
+
+from .. import util
 
 
 # PanNuke Dataset - https://warwick.ac.uk/fac/cross_fac/tia/data/pannuke
@@ -52,6 +52,8 @@ def _convert_to_hdf5(path, fold):
                 (0: Background, 1: Neoplastic cells, 2: Inflammatory,
                  3: Connective/Soft tissue cells, 4: Dead Cells, 5: Epithelial)
     """
+    import h5py
+
     if os.path.exists(os.path.join(path, f"pannuke_{fold}.h5")):
         return
 
@@ -95,6 +97,8 @@ def _channels_to_instances(labels):
     Returns:
         - instance labels of dimensions -> (C x H x W)
     """
+    import vigra
+
     labels = labels.transpose(0, 3, 1, 2)  # to access with the shape S x 6 x H x W
     list_of_instances = []
 

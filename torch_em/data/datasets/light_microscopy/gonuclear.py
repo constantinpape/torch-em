@@ -7,13 +7,17 @@ Please cite it if you use this dataset in your research.
 import os
 from glob import glob
 from shutil import rmtree
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
-import h5py
+import numpy as np
 import imageio.v3 as imageio
-import torch_em
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
+
 
 URL = "https://www.ebi.ac.uk/biostudies/files/S-BIAD1026/Nuclei_training_segmentation/Training%20image%20dataset_Tiff%20Files.zip"  # noqa
 CHECKSUM = "b103388a4aed01c7aadb2d5f49392d2dd08dd7cbeb2357b0c56355384ebb93a9"
@@ -48,6 +52,8 @@ def _clip_shape(raw, labels):
 
 
 def _process_data(in_folder, out_folder):
+    import h5py
+
     os.makedirs(out_folder, exist_ok=True)
 
     sample_folders = glob(os.path.join(in_folder, "*"))
@@ -64,6 +70,15 @@ def _process_data(in_folder, out_folder):
         nucleus_labels = _load_tif(os.path.join(folder, f"{sample}_n_stain_StarDist_goldGT"))
         nucleus_labels = nucleus_labels[:, ::-1]
         nucleus_raw, nucleus_labels = _clip_shape(nucleus_raw, nucleus_labels)
+
+        # Remove last frames with artifacts for two volumes (1137 and 1170).
+        if sample in ["1137", "1170"]:
+            nucleus_raw, nucleus_labels = nucleus_raw[:-1], nucleus_labels[:-1]
+            cell_raw, cell_labels = cell_raw[:-1], cell_labels[:-1]
+
+        # Fixing cell labels for one volume (1136) is misaligned.
+        if sample == "1136":
+            cell_labels = np.fliplr(cell_labels)
 
         with h5py.File(out_path, "w") as f:
             f.create_dataset("raw/cells", data=cell_raw, compression="gzip")
@@ -109,6 +124,9 @@ def get_gonuclear_dataset(
     patch_shape: Tuple[int, int],
     segmentation_task: str = "nuclei",
     sample_ids: Optional[Union[int, Tuple[int, ...]]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -120,6 +138,9 @@ def get_gonuclear_dataset(
         segmentation_task: The segmentation task. Either 'nuclei' or 'cells'.
         sample_ids: The sample ids to load. The valid sample ids are:
             1135, 1136, 1137, 1139, 1170. If none is given all samples will be loaded.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -147,6 +168,10 @@ def get_gonuclear_dataset(
     else:
         raise ValueError(f"Invalid segmentation task {segmentation_task}, expect one of 'cells' or 'nuclei'.")
 
+    kwargs, _ = util.add_instance_label_transform(
+        kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets,
+    )
+
     return torch_em.default_segmentation_dataset(
         paths, raw_key, paths, label_key, patch_shape, **kwargs
     )
@@ -158,10 +183,13 @@ def get_gonuclear_loader(
     batch_size: int,
     segmentation_task: str = "nuclei",
     sample_ids: Optional[Union[int, Tuple[int, ...]]] = None,
+    offsets: Optional[List[List[int]]] = None,
+    boundaries: bool = False,
+    binary: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the GoNuclear dataloder for segmenting nuclei in 3d fluorescence microscopy.
+    """Get the GoNuclear dataloader for segmenting nuclei in 3d fluorescence microscopy.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -170,6 +198,9 @@ def get_gonuclear_loader(
         segmentation_task: The segmentation task. Either 'nuclei' or 'cells'.
         sample_ids: The sample ids to load. The valid sample ids are:
             1135, 1136, 1137, 1139, 1170. If none is given all samples will be loaded.
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -178,7 +209,15 @@ def get_gonuclear_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_gonuclear_dataset(
-        path, patch_shape, sample_ids=sample_ids, segmentation_task=segmentation_task, download=download, **ds_kwargs,
+        path=path,
+        patch_shape=patch_shape,
+        segmentation_task=segmentation_task,
+        sample_ids=sample_ids,
+        offsets=offsets,
+        boundaries=boundaries,
+        binary=binary,
+        download=download,
+        **ds_kwargs,
     )
     loader = torch_em.get_data_loader(dataset, batch_size=batch_size, **loader_kwargs)
     return loader

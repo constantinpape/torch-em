@@ -9,8 +9,8 @@ import os
 from glob import glob
 from typing import Tuple, Union
 
-import h5py
 import torch_em
+
 from torch.utils.data import Dataset, DataLoader
 
 from .. import util
@@ -19,6 +19,8 @@ URL = "https://drive.google.com/drive/folders/1_4CrlYvzx0ITnGlJOHdgcTRgeSkm9wT8"
 
 
 def _extract_split(image_folder, label_folder, output_folder):
+    import h5py
+
     os.makedirs(output_folder, exist_ok=True)
     image_files = sorted(glob(os.path.join(image_folder, "*.h5")))
     label_files = sorted(glob(os.path.join(label_folder, "*.h5")))

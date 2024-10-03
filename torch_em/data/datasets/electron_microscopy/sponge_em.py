@@ -10,8 +10,10 @@ import os
 from glob import glob
 from typing import Optional, Sequence, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 URL = "https://zenodo.org/record/8150818/files/sponge_em_train_data.zip?download=1"
