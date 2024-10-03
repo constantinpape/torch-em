@@ -1,21 +1,28 @@
+import os
+import sys
+
 from torch_em.util.debug import check_loader
 from torch_em.data import MinInstanceSampler
-from torch_em.data.datasets.light_microscopy import get_omnipose_loader
+from torch_em.data.datasets import get_omnipose_loader
 
-
-ROOT = "/media/anwai/ANWAI/data/omnipose"
+sys.path.append("..")
 
 
 def check_omnipose():
+    from util import ROOT
+
     loader = get_omnipose_loader(
-        path=ROOT,
+        path=os.path.join(ROOT, "omnipose"),
         batch_size=1,
         patch_shape=(1024, 1024),
         split="train",
-        data_choice="worm_high_res",
+        data_choice=None,
         sampler=MinInstanceSampler(),
+        shuffle=True,
+        download=True,
     )
-    check_loader(loader, 8)
+    check_loader(loader, 8, instance_labels=True)
 
 
-check_omnipose()
+if __name__ == "__main__":
+    check_omnipose()

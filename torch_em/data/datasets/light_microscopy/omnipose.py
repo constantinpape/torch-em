@@ -10,11 +10,13 @@ Please cite it if you use this dataset in your research.
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, Literal
+from typing import Union, Tuple, Literal, Optional, List
 
-from .. import util
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
+
+from .. import util
 
 
 URL = "https://files.osf.io/v1/resources/xmury/providers/osfstorage/62f56c035775130690f25481/?zip="
@@ -22,6 +24,8 @@ URL = "https://files.osf.io/v1/resources/xmury/providers/osfstorage/62f56c035775
 # NOTE: the checksums are not reliable from the osf project downloads.
 # CHECKSUM = "7ae943ff5003b085a4cde7337bd9c69988b034cfe1a6d3f252b5268f1f4c0af7"
 CHECKSUM = None
+
+DATA_CHOICES = ["bact_fluor", "bact_phase", "worm", "worm_high_res"]
 
 
 def get_omnipose_data(
@@ -35,7 +39,7 @@ def get_omnipose_data(
         download: Whether to download the data if it is not present.
 
     Return:
-        The path to the parent data directory of the respective choice of data.
+        The filepath to the data.
     """
     os.makedirs(path, exist_ok=True)
 
@@ -52,56 +56,66 @@ def get_omnipose_data(
 
 def _get_omnipose_paths(path, split, data_choice, download):
     data_dir = get_omnipose_data(path=path, download=download)
-    data_dir = os.path.join(data_dir, data_choice)
 
     if split not in ["train", "test"]:
         raise ValueError(f"'{split}' is not a valid split.")
 
-    if data_choice not in ["bact_fluor", "bact_phase", "worm", "worm_high_res"]:
-        raise ValueError(f"'{data_choice}' is not a valid choice of data.")
-
-    if data_choice.startswith("bact"):
-        base_dir = os.path.join(data_dir, f"{split}_sorted", "*")
-        gt_paths = glob(os.path.join(base_dir, "*_masks.tif"))
-        image_paths = glob(os.path.join(base_dir, "*.tif"))
-        for _path in image_paths.copy():
-            if _path.endswith("_masks.tif") or _path.endswith("_flows.tif"):
-                image_paths.remove(_path)
-
+    if data_choice is None:
+        data_choice = DATA_CHOICES
     else:
-        base_dir = os.path.join(data_dir, split)
-        gt_paths = glob(os.path.join(base_dir, "*_masks.*"))
-        image_paths = glob(os.path.join(base_dir, "*"))
+        if not isinstance(data_choice, list):
+            data_choice = [data_choice]
+
+    all_image_paths, all_gt_paths = [], []
+    for _chosen_data in data_choice:
+        if _chosen_data not in DATA_CHOICES:
+            raise ValueError(f"'{_chosen_data}' is not a valid choice of data.")
+
+        if _chosen_data.startswith("bact"):
+            base_dir = os.path.join(data_dir, _chosen_data, f"{split}_sorted", "*")
+            gt_paths = glob(os.path.join(base_dir, "*_masks.tif"))
+            image_paths = glob(os.path.join(base_dir, "*.tif"))
+
+        else:
+            base_dir = os.path.join(data_dir, _chosen_data, split)
+            gt_paths = glob(os.path.join(base_dir, "*_masks.*"))
+            image_paths = glob(os.path.join(base_dir, "*"))
+
         for _path in image_paths.copy():
+            # NOTE: Removing the masks and flows from the image paths.
             if _path.endswith("_masks.tif") or _path.endswith("_masks.png") or _path.endswith("_flows.tif"):
                 image_paths.remove(_path)
 
-    return natsorted(image_paths), natsorted(gt_paths)
+        all_image_paths.extend(natsorted(image_paths))
+        all_gt_paths.extend(natsorted(gt_paths))
+
+    return all_image_paths, all_gt_paths
 
 
 def get_omnipose_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     split: Literal["train", "test"],
-    data_choice: Literal["bact_fluor", "bact_phase", "worm", "worm_high_res"],
+    data_choice: Optional[Union[str, List[str]]] = None,
     download: bool = False,
     **kwargs
-):
+) -> Dataset:
     """Get the OmniPose dataset for segmenting bacteria and worms in microscopy images.
 
     Args:
-        path: Filepathg to a folder where the downloaded data will be saved.
+        path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train' or 'test'.
+        data_choice: The choice of specific data.
+            Either 'bact_fluor', 'bact_phase', 'worm' or 'worm_high_res'.
         download: Whether to download the data if it is not present.
-        data_choice: The choice of specific data. Either 'bact_fluor', 'bact_phase', 'worm' or 'worm_high_res'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
     image_paths, gt_paths = _get_omnipose_paths(path, split, data_choice, download)
-
+    print(len(image_paths), len(gt_paths))
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
@@ -119,19 +133,20 @@ def get_omnipose_loader(
     patch_shape: Tuple[int, int],
     batch_size: int,
     split: Literal["train", "test"],
-    data_choice: Literal["bact_fluor", "bact_phase", "worm", "worm_high_res"],
+    data_choice: Optional[Union[str, List[str]]] = None,
     download: bool = False,
     **kwargs
-):
+) -> DataLoader:
     """Get the OmniPose dataloader for segmenting bacteria and worms in microscopy images.
 
     Args:
-        path: Filepathg to a folder where the downloaded data will be saved.
+        path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
         split: The data split to use. Either 'train' or 'test'.
+        data_choice: The choice of specific data.
+            Either 'bact_fluor', 'bact_phase', 'worm' or 'worm_high_res'.
         download: Whether to download the data if it is not present.
-        data_choice: The choice of specific data. Either 'bact_fluor', 'bact_phase', 'worm' or 'worm_high_res'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
