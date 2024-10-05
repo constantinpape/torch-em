@@ -78,6 +78,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
                 # We only sample if we log images in this iteration.
                 samples = self._sample() if self._iteration % self.log_image_interval == 0 else None
+                y = y[:, :self.model.output_channels, ...]
                 self.logger.log_train(self._iteration, loss, lr, x, y, samples)
 
             self._iteration += 1
@@ -110,6 +111,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
 
         if self.logger is not None:
             samples = self._sample()
+            y = y[:, :self.model.output_channels, ...]
             self.logger.log_validation(self._iteration, metric_val, loss_val, x, y, samples)
 
         return metric_val
