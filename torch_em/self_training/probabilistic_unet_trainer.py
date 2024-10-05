@@ -21,12 +21,12 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
     """
 
     def __init__(
-            self,
-            clipping_value=None,
-            prior_samples=16,
-            loss=None,
-            loss_and_metric=None,
-            **kwargs
+        self,
+        clipping_value=None,
+        prior_samples=16,
+        loss=None,
+        loss_and_metric=None,
+        **kwargs
     ):
         super().__init__(loss=loss, metric=DummyLoss(), **kwargs)
         assert loss, loss_and_metric is not None
@@ -76,6 +76,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
 
             if self.logger is not None:
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
+                # We only sample if we log images in this iteration.
                 samples = self._sample() if self._iteration % self.log_image_interval == 0 else None
                 self.logger.log_train(self._iteration, loss, lr, x, y, samples)
 
