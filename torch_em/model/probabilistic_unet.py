@@ -200,7 +200,6 @@ class Fcomb(nn.Module):
         num_filters,
         latent_dim,
         num_output_channels,
-        num_classes,
         no_convs_fcomb,
         initializers,
         use_tile=True,
@@ -209,8 +208,7 @@ class Fcomb(nn.Module):
 
         super().__init__()
 
-        self.num_channels = num_output_channels
-        self.num_classes = num_classes
+        self.num_output_channels = num_output_channels
         self.channel_axis = 1
         self.spatial_axes = [2, 3]
         self.num_filters = num_filters
@@ -237,7 +235,7 @@ class Fcomb(nn.Module):
 
             self.layers = nn.Sequential(*layers)
 
-            self.last_layer = nn.Conv2d(self.num_filters[0], self.num_classes, kernel_size=1)
+            self.last_layer = nn.Conv2d(self.num_filters[0], self.num_output_channels, kernel_size=1)
 
             if initializers['w'] == 'orthogonal':
                 self.layers.apply(init_weights_orthogonal_normal)
@@ -284,16 +282,18 @@ class ProbabilisticUNet(nn.Module):
 
     The following elements are initialized to get our desired network:
     input_channels: the number of channels in the image (1 for grayscale and 3 for RGB)
-    num_classes: the number of classes to predict
+    output_channels: the number of channels to predict.
+    num_classes: the number of classes (raters) for the posterior
     num_filters: is a list consisting of the amount of filters layer
     latent_dim: dimension of the latent space
-    no_cons_per_block: no convs per block in the (convolutional) encoder of prior and posterior
+    no_convs_per_block: no convs per block in the (convolutional) encoder of prior and posterior
     beta: KL and reconstruction loss are weighted using a KL weighting factor (β)
     consensus_masking: activates consensus masking in the reconstruction loss
     rl_swap: switches the reconstruction loss to dice loss from the default (binary cross-entroy loss)
 
     Parameters:
         input_channels [int] - (default: 1)
+        output_channels [int] - (default: 1)
         num_classes [int] - (default: 1)
         num_filters [list] - (default: [32, 64, 128, 192])
         latent_dim [int] - (default: 6)
@@ -307,6 +307,7 @@ class ProbabilisticUNet(nn.Module):
     def __init__(
         self,
         input_channels=1,
+        output_channels=1,
         num_classes=1,
         num_filters=[32, 64, 128, 192],
         latent_dim=6,
@@ -320,6 +321,7 @@ class ProbabilisticUNet(nn.Module):
         super().__init__()
 
         self.input_channels = input_channels
+        self.output_channels = output_channels
         self.num_classes = num_classes
         self.num_filters = num_filters
         self.latent_dim = latent_dim
@@ -364,8 +366,7 @@ class ProbabilisticUNet(nn.Module):
         self.fcomb = Fcomb(
             self.num_filters,
             self.latent_dim,
-            self.input_channels,
-            self.num_classes,
+            self.output_channels,
             self.no_convs_fcomb,
             {'w': 'orthogonal', 'b': 'normal'},
             use_tile=True,
@@ -455,8 +456,11 @@ class ProbabilisticUNet(nn.Module):
         )
 
         # Here we use the posterior sample sampled above
-        self.reconstruction = self.reconstruct(use_posterior_mean=reconstruct_posterior_mean,
-                                               calculate_posterior=False, z_posterior=z_posterior)
+        self.reconstruction = self.reconstruct(
+            use_posterior_mean=reconstruct_posterior_mean,
+            calculate_posterior=False,
+            z_posterior=z_posterior
+        )
 
         if self.consensus_masking is True and consm is not None:
             reconstruction_loss = criterion(self.reconstruction * consm, segm * consm)

@@ -78,12 +78,18 @@ class ProbabilisticUNetLoss(nn.Module):
         # TODO : Implement a generic utility function for all Probabilistic UNet schemes (ELBO, GECO, etc.)
         loss [nn.Module] - the loss function to be used. (default: None)
     """
-    def __init__(self, loss=None):
+    def __init__(self, loss=None, output_channels=None):
         super().__init__()
         self.loss = loss
+        self.output_channels = output_channels
 
     def __call__(self, model, input_, labels, label_filter=None):
         model.forward(input_, labels)
+
+        # NOTE: 'output_channels' ensures to compute loss over only one label set (in case of multi-rater annotation).
+        # In the current experiment, we consider the first label out of the bunch.
+        if self.output_channels is not None:
+            labels = labels[:, :self.output_channels, ...]
 
         if self.loss is None:
             elbo = model.elbo(labels, label_filter)
@@ -105,15 +111,28 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
         activation [nn.Module, callable] - the activation function to be applied to the prediction
             before evaluating the average predictions. (default: None)
     """
-    def __init__(self, loss=None, metric=DiceLoss(), activation=torch.nn.Sigmoid(), prior_samples=16):
+    def __init__(
+        self,
+        loss=None,
+        metric=DiceLoss(),
+        activation=torch.nn.Sigmoid(),
+        prior_samples=16,
+        output_channels=None,
+    ):
         super().__init__()
         self.activation = activation
         self.metric = metric
         self.loss = loss
         self.prior_samples = prior_samples
+        self.output_channels = output_channels
 
     def __call__(self, model, input_, labels, label_filter=None):
         model.forward(input_, labels)
+
+        # NOTE: 'output_channels' ensures to compute loss over only one label set (in case of multi-rater annotation).
+        # In the current experiment, we consider the first label out of the bunch.
+        if self.output_channels is not None:
+            labels = labels[:, :self.output_channels, ...]
 
         if self.loss is None:
             elbo = model.elbo(labels, label_filter)
