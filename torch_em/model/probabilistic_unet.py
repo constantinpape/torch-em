@@ -1,6 +1,8 @@
 # This code is based on the original TensorFlow implementation: https://github.com/SimonKohl/probabilistic_unet
 # The below implementation is from: https://github.com/stefanknegt/Probabilistic-Unet-Pytorch
 
+from typing import Union
+
 import numpy as np
 
 import torch
@@ -21,7 +23,7 @@ def truncated_normal_(tensor, mean=0, std=1):
 
 
 def init_weights(m):
-    if type(m) == nn.Conv2d or type(m) == nn.ConvTranspose2d:
+    if isinstance(m, Union[nn.Conv2d, nn.ConvTranspose2d]):
         nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
         # nn.init.normal_(m.weight, std=0.001)
         # nn.init.normal_(m.bias, std=0.001)
@@ -29,7 +31,7 @@ def init_weights(m):
 
 
 def init_weights_orthogonal_normal(m):
-    if type(m) == nn.Conv2d or type(m) == nn.ConvTranspose2d:
+    if isinstance(m, Union[nn.Conv2d, nn.ConvTranspose2d]):
         nn.init.orthogonal_(m.weight)
         truncated_normal_(m.bias, mean=0, std=0.001)
         # nn.init.normal_(m.bias, std=0.001)
@@ -126,13 +128,13 @@ class AxisAlignedConvGaussian(nn.Module):
             self.name = 'Prior'
 
         self.encoder = Encoder(
-                                self.input_channels,
-                                self.num_filters,
-                                self.no_convs_per_block,
-                                initializers,
-                                posterior=self.posterior,
-                                num_classes=num_classes
-                            )
+            self.input_channels,
+            self.num_filters,
+            self.no_convs_per_block,
+            initializers,
+            posterior=self.posterior,
+            num_classes=num_classes
+        )
 
         self.conv_layer = nn.Conv2d(num_filters[-1], 2 * self.latent_dim, (1, 1), stride=1)
         self.show_img = 0
@@ -254,8 +256,8 @@ class Fcomb(nn.Module):
         repeat_idx[dim] = n_tile
         a = a.repeat(*(repeat_idx))
         order_index = torch.LongTensor(
-                                    np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)])
-                                ).to(self.device)
+            np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)])
+        ).to(self.device)
         return torch.index_select(a, dim, order_index)
 
     def forward(self, feature_map, z):
@@ -335,40 +337,40 @@ class ProbabilisticUNet(nn.Module):
             self.device = device
 
         self.unet = UNet2d(
-                            in_channels=self.input_channels,
-                            out_channels=None,
-                            depth=len(self.num_filters),
-                            initial_features=num_filters[0]
-                        ).to(self.device)
+            in_channels=self.input_channels,
+            out_channels=None,
+            depth=len(self.num_filters),
+            initial_features=num_filters[0]
+        ).to(self.device)
 
         self.prior = AxisAlignedConvGaussian(
-                            self.input_channels,
-                            self.num_filters,
-                            self.no_convs_per_block,
-                            self.latent_dim,
-                            self.initializers
-                        ).to(self.device)
+            self.input_channels,
+            self.num_filters,
+            self.no_convs_per_block,
+            self.latent_dim,
+            self.initializers
+        ).to(self.device)
 
         self.posterior = AxisAlignedConvGaussian(
-                            self.input_channels,
-                            self.num_filters,
-                            self.no_convs_per_block,
-                            self.latent_dim,
-                            self.initializers,
-                            posterior=True,
-                            num_classes=num_classes
-                        ).to(self.device)
+            self.input_channels,
+            self.num_filters,
+            self.no_convs_per_block,
+            self.latent_dim,
+            self.initializers,
+            posterior=True,
+            num_classes=num_classes
+        ).to(self.device)
 
         self.fcomb = Fcomb(
-                            self.num_filters,
-                            self.latent_dim,
-                            self.input_channels,
-                            self.num_classes,
-                            self.no_convs_fcomb,
-                            {'w': 'orthogonal', 'b': 'normal'},
-                            use_tile=True,
-                            device=self.device
-                        ).to(self.device)
+            self.num_filters,
+            self.latent_dim,
+            self.input_channels,
+            self.num_classes,
+            self.no_convs_fcomb,
+            {'w': 'orthogonal', 'b': 'normal'},
+            use_tile=True,
+            device=self.device
+        ).to(self.device)
 
     def _check_shape(self, patch):
         spatial_shape = tuple(patch.shape)[2:]
@@ -449,8 +451,8 @@ class ProbabilisticUNet(nn.Module):
         z_posterior = self.posterior_latent_space.rsample()
 
         self.kl = torch.mean(
-                        self.kl_divergence(analytic=analytic_kl, calculate_posterior=False, z_posterior=z_posterior)
-                    )
+            self.kl_divergence(analytic=analytic_kl, calculate_posterior=False, z_posterior=z_posterior)
+        )
 
         # Here we use the posterior sample sampled above
         self.reconstruction = self.reconstruct(use_posterior_mean=reconstruct_posterior_mean,
