@@ -70,7 +70,7 @@ def _assort_val_set(path, bac_type):
         shutil.move(src_val_label_path, dst_val_label_path)
 
 
-def get_deebacs_data(path: Union[os.PathLike, str], bac_type: str, download: bool) -> str:
+def get_deepbacs_data(path: Union[os.PathLike, str], bac_type: str, download: bool) -> str:
     f"""Download the DeepBacs training data.
 
     Args:
@@ -123,7 +123,7 @@ def get_deepbacs_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    f"""Get the CTC dataset for cell segmentation.
+    f"""Get the DeepBacs dataset for bacteria segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -138,7 +138,7 @@ def get_deepbacs_dataset(
        The segmentation dataset.
     """
     assert split in ("train", "val", "test")
-    get_deebacs_data(path, bac_type, download)
+    get_deepbacs_data(path, bac_type, download)
     image_folder, label_folder = _get_paths(path, bac_type, split)
     dataset = torch_em.default_segmentation_dataset(
         image_folder, "*.tif", label_folder, "*.tif", patch_shape=patch_shape, **kwargs
@@ -155,7 +155,7 @@ def get_deepbacs_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    f"""Get the CTC dataset for cell segmentation.
+    f"""Get the DeepBacs dataset for bacteria segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
