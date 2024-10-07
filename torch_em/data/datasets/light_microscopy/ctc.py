@@ -132,7 +132,7 @@ def get_ctc_segmentation_dataset(
     download: bool = False,
     **kwargs,
 ) -> Dataset:
-    """Get the CTC dataset for cell segmentation.
+    f"""Get the CTC dataset for cell segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
