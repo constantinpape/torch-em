@@ -103,7 +103,6 @@ def get_sponge_em_loader(
         batch_size: The batch size for training.
         sample_ids: The sample to download, valid ids are 1, 2 and 3.
         download: Whether to download the data if it is not present.
-        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
