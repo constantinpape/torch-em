@@ -667,7 +667,7 @@ class DefaultTrainer:
         n_iter = 0
         t_per_iter = time.time()
         for x, y in self.train_loader:
-            x, y = x.to(self.device), y.to(self.device)
+            x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
 
             self.optimizer.zero_grad()
 
@@ -705,7 +705,7 @@ class DefaultTrainer:
 
         with torch.no_grad():
             for x, y in self.val_loader:
-                x, y = x.to(self.device), y.to(self.device)
+                x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
                 with forward_context():
                     pred, loss = self._forward_and_loss(x, y)
                     metric = self.metric(pred, y)

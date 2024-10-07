@@ -213,7 +213,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
 
         # Sample from both the supervised and unsupervised loader.
         for xu1, xu2 in self.unsupervised_train_loader:
-            xu1, xu2 = xu1.to(self.device), xu2.to(self.device)
+            xu1, xu2 = xu1.to(self.device, non_blocking=True), xu2.to(self.device, non_blocking=True)
 
             teacher_input, model_input = xu1, xu2
 
@@ -256,8 +256,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
 
         # Sample from both the supervised and unsupervised loader.
         for (xs, ys), (xu1, xu2) in zip(self.supervised_train_loader, self.unsupervised_train_loader):
-            xs, ys = xs.to(self.device), ys.to(self.device)
-            xu1, xu2 = xu1.to(self.device), xu2.to(self.device)
+            xs, ys = xs.to(self.device, non_blocking=True), ys.to(self.device, non_blocking=True)
+            xu1, xu2 = xu1.to(self.device, non_blocking=True), xu2.to(self.device, non_blocking=True)
 
             # Perform supervised training.
             self.optimizer.zero_grad()
@@ -310,7 +310,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         loss_val = 0.0
 
         for x, y in self.supervised_val_loader:
-            x, y = x.to(self.device), y.to(self.device)
+            x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
             with forward_context():
                 loss, metric = self.supervised_loss_and_metric(self.model, x, y)
             loss_val += loss.item()
@@ -331,7 +331,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         loss_val = 0.0
 
         for x1, x2 in self.unsupervised_val_loader:
-            x1, x2 = x1.to(self.device), x2.to(self.device)
+            x1, x2 = x1.to(self.device, non_blocking=True), x2.to(self.device, non_blocking=True)
             teacher_input, model_input = x1, x2
             with forward_context():
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
