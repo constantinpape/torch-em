@@ -1,8 +1,15 @@
+"""The Lizard dataset contains annotations for nucleus segmentation
+in histopathology images in H&E stained colon tissue.
+
+This dataset is from the publication https://doi.org/10.48550/arXiv.2108.11195.
+Please cite it if you use this dataset for your research.
+"""
+
 import os
-import warnings
 from glob import glob
 from tqdm import tqdm
 from shutil import rmtree
+from typing import Tuple, Union
 
 import imageio.v3 as imageio
 
@@ -11,18 +18,6 @@ from scipy.io import loadmat
 import torch_em
 
 from .. import util
-
-# TODO: the links don't work anymore (?)
-# workaround to still make this work (kaggle still has the dataset in the same structure):
-#   - download the zip files manually from here - https://www.kaggle.com/datasets/aadimator/lizard-dataset
-#   - Kaggle API (TODO) - `kaggle datasets download -d aadimator/lizard-dataset`
-URL1 = "https://warwick.ac.uk/fac/cross_fac/tia/data/lizard/lizard_images1.zip"
-URL2 = "https://warwick.ac.uk/fac/cross_fac/tia/data/lizard/lizard_images2.zip"
-LABEL_URL = "https://warwick.ac.uk/fac/cross_fac/tia/data/lizard/lizard_labels.zip"
-
-CHECKSUM1 = "d2c4e7c83dff634624c9c14d4a1a0b821d4e9ac41e05e3b36303d8f0c510113d"
-CHECKSUM2 = "9f529f30d9de66587167991a8bf75aaad07ce1d518b72e825c868ac7c33015ed"
-LABEL_CHECKSUM = "79f22ca83ca535682fba340cbc8bb66b74abd1ead4151ffc8593f204fcb97dec"
 
 
 def _extract_images(image_folder, label_folder, output_dir):
@@ -52,28 +47,26 @@ def _extract_images(image_folder, label_folder, output_dir):
             f.create_dataset("labels/classes", data=classes, compression="gzip")
 
 
-def _require_lizard_data(path, download):
+def get_lizard_data(path, download):
+    """Download the Lizard dataset for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+    """
+    util.download_source_kaggle(path=path, dataset_name="aadimator/lizard-dataset", download=download)
+    zip_path = os.path.join(path, "lizard-dataset.zip")
+    util.unzip(zip_path=zip_path, dst=path)
+
     image_files = glob(os.path.join(path, "*.h5"))
     if len(image_files) > 0:
         return
 
     os.makedirs(path, exist_ok=True)
 
-    zip_path = os.path.join(path, "lizard_images1.zip")
-    util.download_source(zip_path, URL1, download=download, checksum=CHECKSUM1)
-    util.unzip(zip_path, path, remove=True)
-
-    zip_path = os.path.join(path, "lizard_images2.zip")
-    util.download_source(zip_path, URL2, download=download, checksum=CHECKSUM2)
-    util.unzip(zip_path, path, remove=True)
-
-    zip_path = os.path.join(path, "lizard_labels.zip")
-    util.download_source(zip_path, LABEL_URL, download=download, checksum=LABEL_CHECKSUM)
-    util.unzip(zip_path, path, remove=True)
-
-    image_folder1 = os.path.join(path, "Lizard_Images1")
-    image_folder2 = os.path.join(path, "Lizard_Images2")
-    label_folder = os.path.join(path, "Lizard_Labels")
+    image_folder1 = os.path.join(path, "lizard_images1", "Lizard_Images1")
+    image_folder2 = os.path.join(path, "lizard_images2",  "Lizard_Images2")
+    label_folder = os.path.join(path, "lizard_labels", "Lizard_Labels")
 
     assert os.path.exists(image_folder1), image_folder1
     assert os.path.exists(image_folder2), image_folder2
@@ -82,24 +75,30 @@ def _require_lizard_data(path, download):
     _extract_images(image_folder1, os.path.join(label_folder, "Labels"), path)
     _extract_images(image_folder2, os.path.join(label_folder, "Labels"), path)
 
-    rmtree(image_folder1)
-    rmtree(image_folder2)
-    rmtree(label_folder)
+    rmtree(os.path.join(path, "lizard_images1"))
+    rmtree(os.path.join(path, "lizard_images2"))
+    rmtree(os.path.join(path, "lizard_labels"))
+    rmtree(os.path.join(path, "overlay"))
 
 
-def get_lizard_dataset(path, patch_shape, download=False, **kwargs):
-    """Dataset for the segmentation of nuclei in histopathology.
+def get_lizard_dataset(
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    download: bool = False,
+    **kwargs
+):
+    """Get the Lizard dataset for nucleus segmentation.
 
-    This dataset is from the publication https://doi.org/10.48550/arXiv.2108.11195.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    if download:
-        warnings.warn(
-            "The download link does not work right now. "
-            "Please manually download the zip files from https://www.kaggle.com/datasets/aadimator/lizard-dataset"
-        )
-
-    _require_lizard_data(path, download)
+    get_lizard_data(path, download)
 
     data_paths = glob(os.path.join(path, "*.h5"))
     data_paths.sort()
@@ -114,7 +113,13 @@ def get_lizard_dataset(path, patch_shape, download=False, **kwargs):
 # TODO implement loading the classification labels
 # TODO implement selecting different tissue types
 # TODO implement train / val / test split (is pre-defined in a csv)
-def get_lizard_loader(path, patch_shape, batch_size, download=False, **kwargs):
+def get_lizard_loader(
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    batch_size: int,
+    download: bool = False,
+    **kwargs
+):
     """Dataloader for the segmentation of nuclei in histopathology. See 'get_lizard_dataset' for details."""
     ds_kwargs, loader_kwargs = util.split_kwargs(
         torch_em.default_segmentation_dataset, **kwargs
