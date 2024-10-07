@@ -57,6 +57,43 @@ def _create_dataset(path, zip_path):
         _create_split(path, split)
 
 
+def get_dynamicnuclearnet_data(
+    path: Union[os.PathLike, str],
+    split: str,
+    download: bool = False,
+) -> str:
+    """Download the DynamicNuclearNet dataset.
+
+    NOTE: Automatic download is not supported for DynamicNuclearnet dataset.
+    Please download the dataset from https://datasets.deepcell.org/data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The path where inputs are stored per split.
+    """
+    splits = ["train", "val", "test"]
+    assert split in splits
+
+    # check if the dataset exists already
+    zip_path = os.path.join(path, "DynamicNuclearNet-segmentation-v1_0.zip")
+    if all([os.path.exists(os.path.join(path, split)) for split in splits]):  # yes it does
+        pass
+    elif os.path.exists(zip_path):  # no it does not, but we have the zip there and can unpack it
+        _create_dataset(path, zip_path)
+    else:
+        raise RuntimeError(
+            "We do not support automatic download for the dynamic nuclear net dataset yet. "
+            f"Please download the dataset from https://datasets.deepcell.org/data and put it here: {zip_path}"
+        )
+
+    split_folder = os.path.join(path, split)
+    return split_folder
+
+
 def get_dynamicnuclearnet_dataset(
     path: Union[os.PathLike, str],
     split: str,
@@ -76,22 +113,7 @@ def get_dynamicnuclearnet_dataset(
     Returns:
        The segmentation dataset.
     """
-    splits = ["train", "val", "test"]
-    assert split in splits
-
-    # check if the dataset exists already
-    zip_path = os.path.join(path, "DynamicNuclearNet-segmentation-v1_0.zip")
-    if all([os.path.exists(os.path.join(path, split)) for split in splits]):  # yes it does
-        pass
-    elif os.path.exists(zip_path):  # no it does not, but we have the zip there and can unpack it
-        _create_dataset(path, zip_path)
-    else:
-        raise RuntimeError(
-            "We do not support automatic download for the dynamic nuclear net dataset yet. "
-            f"Please download the dataset from https://datasets.deepcell.org/data and put it here: {zip_path}"
-        )
-
-    split_folder = os.path.join(path, split)
+    split_folder = get_dynamicnuclearnet_data(path, split, download)
     assert os.path.exists(split_folder)
     data_path = glob(os.path.join(split_folder, "*.zarr"))
     assert len(data_path) > 0
