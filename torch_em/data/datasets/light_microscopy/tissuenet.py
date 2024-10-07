@@ -60,6 +60,43 @@ def _create_dataset(path, zip_path):
         _create_split(path, split)
 
 
+def get_tissuenet_data(
+    path: Union[os.PathLike, str],
+    split: str,
+    download: bool = False,
+):
+    """Download the TissueNet dataset.
+
+    NOTE: Automatic download is not supported for TissueNet datset.
+    Please download the dataset from https://datasets.deepcell.org/data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The path where inputs are stored per split.
+    """
+    splits = ["train", "val", "test"]
+    assert split in splits
+
+    # check if the dataset exists already
+    zip_path = os.path.join(path, "tissuenet_v1.1.zip")
+    if all([os.path.exists(os.path.join(path, split)) for split in splits]):  # yes it does
+        pass
+    elif os.path.exists(zip_path):  # no it does not, but we have the zip there and can unpack it
+        _create_dataset(path, zip_path)
+    else:
+        raise RuntimeError(
+            "We do not support automatic download for the tissuenet datasets yet."
+            f"Please download the dataset from https://datasets.deepcell.org/data and put it here: {zip_path}"
+        )
+
+    split_folder = os.path.join(path, split)
+    return split_folder
+
+
 def get_tissuenet_dataset(
     path: Union[os.PathLike, str],
     split: str,
@@ -86,22 +123,7 @@ def get_tissuenet_dataset(
     assert raw_channel in ("nucleus", "cell", "rgb")
     assert label_channel in ("nucleus", "cell")
 
-    splits = ["train", "val", "test"]
-    assert split in splits
-
-    # check if the dataset exists already
-    zip_path = os.path.join(path, "tissuenet_v1.1.zip")
-    if all([os.path.exists(os.path.join(path, split)) for split in splits]):  # yes it does
-        pass
-    elif os.path.exists(zip_path):  # no it does not, but we have the zip there and can unpack it
-        _create_dataset(path, zip_path)
-    else:
-        raise RuntimeError(
-            "We do not support automatic download for the tissuenet datasets yet."
-            f"Please download the dataset from https://datasets.deepcell.org/data and put it here: {zip_path}"
-        )
-
-    split_folder = os.path.join(path, split)
+    split_folder = get_tissuenet_data(path, split, download)
     assert os.path.exists(split_folder)
     data_path = glob(os.path.join(split_folder, "*.zarr"))
     assert len(data_path) > 0
