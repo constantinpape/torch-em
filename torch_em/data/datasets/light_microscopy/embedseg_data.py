@@ -9,8 +9,10 @@ import os
 from glob import glob
 from typing import Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 URLS = {

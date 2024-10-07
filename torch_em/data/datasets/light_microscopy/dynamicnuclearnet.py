@@ -13,17 +13,19 @@ from tqdm import tqdm
 from glob import glob
 from typing import Tuple, Union
 
-import z5py
 import numpy as np
 import pandas as pd
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
 
 from .. import util
 
 
 def _create_split(path, split):
+    import z5py
+
     split_file = os.path.join(path, "DynamicNuclearNet-segmentation-v1_0", f"{split}.npz")
     split_folder = os.path.join(path, split)
     os.makedirs(split_folder, exist_ok=True)

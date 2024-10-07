@@ -9,8 +9,10 @@ import os
 from shutil import move
 from typing import List, Optional, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 DSB_URLS = {

@@ -9,7 +9,6 @@ from glob import glob
 from shutil import rmtree
 from typing import Optional, Tuple, Union, List
 
-import h5py
 import numpy as np
 import imageio.v3 as imageio
 
@@ -53,6 +52,8 @@ def _clip_shape(raw, labels):
 
 
 def _process_data(in_folder, out_folder):
+    import h5py
+
     os.makedirs(out_folder, exist_ok=True)
 
     sample_folders = glob(os.path.join(in_folder, "*"))

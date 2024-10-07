@@ -9,8 +9,10 @@ from glob import glob
 from shutil import copyfile
 from typing import Optional, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 

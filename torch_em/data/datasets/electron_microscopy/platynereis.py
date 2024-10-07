@@ -14,8 +14,11 @@ from glob import glob
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
-import torch_em
+
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 URLS = {
@@ -193,6 +196,7 @@ def get_platynereis_cilia_dataset(
     raw_key = "volumes/raw"
     label_key = "volumes/labels/segmentation"
 
+    kwargs = util.update_kwargs(kwargs, "rois", rois)
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, boundaries=boundaries, offsets=offsets, binary=binary,
     )

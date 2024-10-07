@@ -8,8 +8,10 @@ Please cite it if you use this dataset for a publication.
 import os
 from typing import List, Optional, Union, Tuple
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 SNEMI_URLS = {

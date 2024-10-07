@@ -6,10 +6,7 @@ from natsort import natsorted
 from typing import Union, Tuple
 
 import json
-import nrrd
 import numpy as np
-import nibabel as nib
-import pydicom as dicom
 
 import torch_em
 
@@ -44,6 +41,10 @@ def get_osic_pulmofib_data(path, download):
 
 
 def _get_osic_pulmofib_paths(path, download):
+    import nrrd
+    import nibabel as nib
+    import pydicom as dicom
+
     data_dir = get_osic_pulmofib_data(path=path, download=download)
 
     image_dir = os.path.join(data_dir, "preprocessed", "images")
