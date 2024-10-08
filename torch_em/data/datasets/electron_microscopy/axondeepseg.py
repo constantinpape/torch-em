@@ -159,7 +159,7 @@ def get_axondeepseg_dataset(
     split: Optional[str] = None,
     **kwargs,
 ) -> Dataset:
-    """Get dataset for segmnetation of myelinated axons.
+    """Get dataset for segmentation of myelinated axons.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
