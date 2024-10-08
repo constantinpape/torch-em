@@ -60,7 +60,7 @@ def _get_paths_and_rois(sample_ids, n_files, template, rois):
     return paths, data_rois
 
 
-def get_platy_data(path: Union[os.PathLike, str], name: str, download: bool) -> Tuple[str, int]:
+def get_platynereis_data(path: Union[os.PathLike, str], name: str, download: bool) -> Tuple[str, int]:
     """Download the platynereis dataset.
 
     Args:
@@ -122,7 +122,7 @@ def get_platynereis_cuticle_dataset(
     Returns:
         The segmentation dataset.
     """
-    cuticle_root, n_files = get_platy_data(path, "cuticle", download)
+    cuticle_root, n_files = get_platynereis_data(path, "cuticle", download)
 
     paths, data_rois = _get_paths_and_rois(sample_ids, n_files, os.path.join(cuticle_root, "train_data_%02i.n5"), rois)
     raw_key, label_key = "volumes/raw", "volumes/labels/segmentation"
@@ -190,7 +190,7 @@ def get_platynereis_cilia_dataset(
     Returns:
         The segmentation dataset.
     """
-    cilia_root, n_files = get_platy_data(path, "cilia", download)
+    cilia_root, n_files = get_platynereis_data(path, "cilia", download)
 
     paths, rois = _get_paths_and_rois(sample_ids, n_files, os.path.join(cilia_root, "train_data_cilia_%02i.h5"), rois)
     raw_key = "volumes/raw"
@@ -268,7 +268,7 @@ def get_platynereis_cell_dataset(
     Returns:
         The segmentation dataset.
     """
-    cell_root, n_files = get_platy_data(path, "cells", download)
+    cell_root, n_files = get_platynereis_data(path, "cells", download)
 
     template = os.path.join(cell_root, "train_data_membrane_%02i.n5")
     data_paths, data_rois = _get_paths_and_rois(sample_ids, n_files, template, rois)
@@ -348,7 +348,7 @@ def get_platynereis_nuclei_dataset(
     Returns:
         The segmentation dataset.
     """
-    nuc_root, n_files = get_platy_data(path, "nuclei", download)
+    nuc_root, n_files = get_platynereis_data(path, "nuclei", download)
 
     if sample_ids is None:
         sample_ids = list(range(1, n_files + 1))

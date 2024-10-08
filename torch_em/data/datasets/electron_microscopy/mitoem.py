@@ -222,7 +222,7 @@ def get_mitoem_loader(
     binary: bool = False,
     **kwargs,
 ) -> DataLoader:
-    """Get the MitoEM dataload for the segmentation of mitochondria in EM.
+    """Get the MitoEM dataloader for the segmentation of mitochondria in EM.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.

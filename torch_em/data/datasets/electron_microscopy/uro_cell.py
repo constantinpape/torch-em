@@ -26,7 +26,7 @@ URL = "https://github.com/MancaZerovnikMekuc/UroCell/archive/refs/heads/master.z
 CHECKSUM = "a48cf31b06114d7def642742b4fcbe76103483c069122abe10f377d71a1acabc"
 
 
-def get_urocell_data(path: Union[os.PathLike, str], download: bool) -> str:
+def get_uro_cell_data(path: Union[os.PathLike, str], download: bool) -> str:
     """Download the UroCell training data.
 
     Args:
@@ -132,7 +132,7 @@ def get_uro_cell_dataset(
        The segmentation dataset.
     """
     assert target in ("fv", "golgi", "lyso", "mito")
-    get_urocell_data(path, download)
+    get_uro_cell_data(path, download)
     paths, label_key = _get_paths(path, target)
 
     assert sum((offsets is not None, boundaries, binary)) <= 1, f"{offsets}, {boundaries}, {binary}"

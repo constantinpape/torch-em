@@ -171,7 +171,7 @@ def get_benchmark_data(
 ) -> Tuple[
     List[str], List[str], str, str, bool
 ]:
-    """Download the mitolab benechmark data.
+    """Download the mitolab benchmark data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -331,7 +331,7 @@ def get_benchmark_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the datasloader for one of the mitolab benchmark datasets.
+    """Get the dataloader for one of the mitolab benchmark datasets.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.

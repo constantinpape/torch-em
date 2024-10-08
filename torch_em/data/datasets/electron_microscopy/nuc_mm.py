@@ -7,7 +7,7 @@ Please cite it if you use this dataset for a publication.
 
 import os
 from glob import glob
-from typing import Tuple, Union
+from typing import Tuple, Union, Literal
 
 import torch_em
 
@@ -37,7 +37,11 @@ def _extract_split(image_folder, label_folder, output_folder):
             f.create_dataset("labels", data=seg, compression="gzip")
 
 
-def get_nuc_mm_data(path: Union[os.PathLike, str], sample: str, download: bool) -> str:
+def get_nuc_mm_data(
+    path: Union[os.PathLike, str],
+    sample: Literal['mouse', 'zebrafish'],
+    download: bool
+) -> str:
     """Download the NucMM training data.
 
     Args:
@@ -77,7 +81,7 @@ def get_nuc_mm_data(path: Union[os.PathLike, str], sample: str, download: bool) 
 
 def get_nuc_mm_dataset(
     path: Union[os.PathLike, str],
-    sample: str,
+    sample: Literal['mouse', 'zebrafish'],
     split: str,
     patch_shape: Tuple[int, int, int],
     download: bool = False,
@@ -87,7 +91,7 @@ def get_nuc_mm_dataset(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        sample: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        sample: The NucMM samples to use. The available samples are 'mouse' and 'zebrafish'.
         split: The split for the dataset, either 'train' or 'val'.
         patch_shape: The patch shape to use for training.
         download: Whether to download the data if it is not present.
@@ -110,7 +114,7 @@ def get_nuc_mm_dataset(
 
 def get_nuc_mm_loader(
     path: Union[os.PathLike, str],
-    sample: str,
+    sample: Literal['mouse', 'zebrafish'],
     split: str,
     patch_shape: Tuple[int, int, int],
     batch_size: int,
@@ -121,7 +125,7 @@ def get_nuc_mm_loader(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        sample: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        sample: The NucMM samples to use. The available samples are 'mouse' and 'zebrafish'.
         split: The split for the dataset, either 'train' or 'val'.
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
