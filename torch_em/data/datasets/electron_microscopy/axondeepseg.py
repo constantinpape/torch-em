@@ -1,5 +1,6 @@
 """AxonDeepSeg is a dataset for the segmentation of myelinated axons in EM.
 It contains two different data types: TEM and SEM.
+
 The dataset was published in https://doi.org/10.1038/s41598-018-22181-4.
 Please cite this publication if you use the dataset in your research.
 """
@@ -7,7 +8,7 @@ Please cite this publication if you use the dataset in your research.
 import os
 from glob import glob
 from shutil import rmtree
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Literal, List
 
 import imageio
 import numpy as np
@@ -116,8 +117,8 @@ def _preprocess_tem_data(out_path):
     rmtree(data_root)
 
 
-def get_axondeepseg_data(path: Union[str, os.PathLike], name: str, download: bool) -> str:
-    """Download the axondeepseg data.
+def get_axondeepseg_data(path: Union[str, os.PathLike], name: Literal["sem", "tem"], download: bool = False) -> str:
+    """Download the AxonDeepSeg data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -149,14 +150,47 @@ def get_axondeepseg_data(path: Union[str, os.PathLike], name: str, download: boo
     return out_path
 
 
+def get_axondeepseg_paths(
+    path: Union[str, os.PathLike],
+    name: Literal["sem", "tem"],
+    download: bool = False,
+    val_fraction: Optional[float] = None,
+    split: Optional[str] = None,
+) -> List[str]:
+    """Get paths to the AxonDeepSeg data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: The name of the dataset to download. Can be either 'sem' or 'tem'.
+        download: Whether to download the data if it is not present.
+        val_fraction: The fraction of the data to use for validation.
+        split: The data split. Either 'train' or 'val'.
+
+    Returns:
+        List of paths for all the data.
+    """
+    all_paths = []
+    for nn in name:
+        data_root = get_axondeepseg_data(path, nn, download)
+        paths = glob(os.path.join(data_root, "*.h5"))
+        paths.sort()
+        if val_fraction is not None:
+            assert split is not None
+            n_samples = int(len(paths) * (1 - val_fraction))
+            paths = paths[:n_samples] if split == "train" else paths[n_samples:]
+        all_paths.extend(paths)
+
+    return all_paths
+
+
 def get_axondeepseg_dataset(
     path: Union[str, os.PathLike],
-    name: str,
+    name: Literal["sem", "tem"],
     patch_shape: Tuple[int, int],
     download: bool = False,
     one_hot_encoding: bool = False,
     val_fraction: Optional[float] = None,
-    split: Optional[str] = None,
+    split: Optional[Literal['train', 'val']] = None,
     **kwargs,
 ) -> Dataset:
     """Get dataset for segmentation of myelinated axons.
@@ -178,16 +212,7 @@ def get_axondeepseg_dataset(
         name = [name]
     assert isinstance(name, (tuple, list))
 
-    all_paths = []
-    for nn in name:
-        data_root = get_axondeepseg_data(path, nn, download)
-        paths = glob(os.path.join(data_root, "*.h5"))
-        paths.sort()
-        if val_fraction is not None:
-            assert split is not None
-            n_samples = int(len(paths) * (1 - val_fraction))
-            paths = paths[:n_samples] if split == "train" else paths[n_samples:]
-        all_paths.extend(paths)
+    all_paths = get_axondeepseg_paths(path, name, download, val_fraction, split)
 
     if one_hot_encoding:
         if isinstance(one_hot_encoding, bool):
@@ -205,19 +230,25 @@ def get_axondeepseg_dataset(
         msg = "'one_hot' is set to True, but 'label_transform' is in the kwargs. It will be over-ridden."
         kwargs = util.update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
 
-    raw_key, label_key = "raw", "labels"
-    return torch_em.default_segmentation_dataset(all_paths, raw_key, all_paths, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(
+        raw_paths=all_paths,
+        raw_key="raw",
+        label_paths=all_paths,
+        label_key="labels",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
 
 def get_axondeepseg_loader(
     path: Union[str, os.PathLike],
-    name: str,
+    name: Literal["sem", "tem"],
     patch_shape: Tuple[int, int],
     batch_size: int,
     download: bool = False,
     one_hot_encoding: bool = False,
     val_fraction: Optional[float] = None,
-    split: Optional[str] = None,
+    split: Optional[Literal["train", "val"]] = None,
     **kwargs
 ) -> DataLoader:
     """Get dataloader for the segmentation of myelinated axons.

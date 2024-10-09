@@ -1,7 +1,7 @@
 """MitoEM is a dataset for segmenting mitochondria in electron microscopy.
-
 It contains two large annotated volumes, one from rat cortex, the other from human cortex.
 This dataset was used for a segmentation challenge at ISBI 2022.
+
 If you use it in your research then please cite https://doi.org/10.1007/978-3-030-59722-1_7.
 """
 
@@ -20,6 +20,7 @@ import torch_em
 from torch.utils.data import Dataset, DataLoader
 
 from .. import util
+
 
 URLS = {
     "raw": {
@@ -136,9 +137,7 @@ def _require_mitoem_sample(path, sample, download):
     rmtree(val_folder)
 
 
-def get_mitoem_data(
-    path: Union[os.PathLike, str], samples: Sequence[str], splits: Sequence[str], download: bool
-) -> List[str]:
+def get_mitoem_data(path: Union[os.PathLike, str], samples: Sequence[str], splits: Sequence[str], download: bool):
     """Download the MitoEM training data.
 
     Args:
@@ -146,9 +145,6 @@ def get_mitoem_data(
         samples: The samples to download. The available samples are 'human' and 'rat'.
         splits: The data splits to download. The available splits are 'train', 'val' and 'test'.
         download: Whether to download the data if it is not present.
-
-    Returns:
-        The paths to the downloaded and converted files.
     """
     if isinstance(splits, str):
         splits = [splits]
@@ -156,7 +152,6 @@ def get_mitoem_data(
     assert len(set(samples) - {"human", "rat"}) == 0, f"{samples}"
     os.makedirs(path, exist_ok=True)
 
-    data_paths = []
     for sample in samples:
         if not _check_data(path, sample):
             print("The MitoEM data for sample", sample, "is not available yet and will be downloaded and created.")
@@ -167,7 +162,27 @@ def get_mitoem_data(
         for split in splits:
             split_path = os.path.join(path, f"{sample}_{split}.n5")
             assert os.path.exists(split_path), split_path
-            data_paths.append(split_path)
+
+
+def get_mitoem_paths(
+    path: Union[os.PathLike, str],
+    splits: Sequence[str],
+    samples: Sequence[str] = ("human", "rat"),
+    download: bool = False,
+) -> List[str]:
+    """Get paths for MitoEM data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        samples: The samples to download. The available samples are 'human' and 'rat'.
+        splits: The data splits to download. The available splits are 'train', 'val' and 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepaths for the stored data.
+    """
+    get_mitoem_data(path, samples, splits, download)
+    data_paths = [os.path.join(path, f"{sample}_{split}.n5") for split in splits for sample in samples]
     return data_paths
 
 
@@ -200,14 +215,20 @@ def get_mitoem_dataset(
     """
     assert len(patch_shape) == 3
 
-    data_paths = get_mitoem_data(path, samples, splits, download)
+    data_paths = get_mitoem_paths(path, samples, splits, download)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )
-    raw_key = "raw"
-    label_key = "labels"
-    return torch_em.default_segmentation_dataset(data_paths, raw_key, data_paths, label_key, patch_shape, **kwargs)
+
+    return torch_em.default_segmentation_dataset(
+        raw_paths=data_paths,
+        raw_key="raw",
+        label_paths=data_paths,
+        label_key="labels",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
 
 def get_mitoem_loader(
@@ -239,14 +260,9 @@ def get_mitoem_loader(
     Returns:
        The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_mitoem_dataset(
-        path, splits, patch_shape,
-        samples=samples, download=download,
-        offsets=offsets, boundaries=boundaries, binary=binary,
-        **ds_kwargs
+        path, splits, patch_shape, samples=samples, download=download,
+        offsets=offsets, boundaries=boundaries, binary=binary, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

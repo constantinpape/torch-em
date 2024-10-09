@@ -3,8 +3,8 @@
 - Golgi Apparatus
 - Lysosomes
 - Mitochondria
-
 It contains several FIB-SEM volumes with annotations.
+
 This dataset is from the publication https://doi.org/10.1016/j.compbiomed.2020.103693.
 Please cite it if you use this dataset for a publication.
 """
@@ -26,7 +26,7 @@ URL = "https://github.com/MancaZerovnikMekuc/UroCell/archive/refs/heads/master.z
 CHECKSUM = "a48cf31b06114d7def642742b4fcbe76103483c069122abe10f377d71a1acabc"
 
 
-def get_uro_cell_data(path: Union[os.PathLike, str], download: bool) -> str:
+def get_uro_cell_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Download the UroCell training data.
 
     Args:
@@ -95,14 +95,34 @@ def get_uro_cell_data(path: Union[os.PathLike, str], download: bool) -> str:
     return path
 
 
-def _get_paths(path, target):
+def get_uro_cell_paths(
+    path: Union[os.PathLike], target: str, download: bool = False, return_label_key: bool = False,
+) -> List[str]:
+    """Get paths to the UroCell data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        target: The segmentation target, corresponding to the organelle to segment.
+            Available organelles are 'fv', 'golgi', 'lyso' and 'mito'.
+        download: Whether to download the data if it is not present.
+        return_label_key: Whether to return the label key.
+
+    Returns:
+        List of filepaths to the stored data.
+    """
     import h5py
+
+    get_uro_cell_data(path, download)
 
     label_key = f"labels/{target}"
     all_paths = glob(os.path.join(path, "*.h5"))
     all_paths.sort()
     paths = [path for path in all_paths if label_key in h5py.File(path, "r")]
-    return paths, label_key
+
+    if return_label_key:
+        return paths, label_key
+    else:
+        return paths
 
 
 def get_uro_cell_dataset(
@@ -132,8 +152,8 @@ def get_uro_cell_dataset(
        The segmentation dataset.
     """
     assert target in ("fv", "golgi", "lyso", "mito")
-    get_uro_cell_data(path, download)
-    paths, label_key = _get_paths(path, target)
+
+    paths, label_key = get_uro_cell_paths(path, target, download, return_label_key=True)
 
     assert sum((offsets is not None, boundaries, binary)) <= 1, f"{offsets}, {boundaries}, {binary}"
     if offsets is not None:
@@ -142,10 +162,9 @@ def get_uro_cell_dataset(
                 f"{target} does not have instance labels, affinities will be computed based on binary segmentation."
             )
         # we add a binary target channel for foreground background segmentation
-        label_transform = torch_em.transform.label.AffinityTransform(offsets=offsets,
-                                                                     ignore_label=None,
-                                                                     add_binary_target=True,
-                                                                     add_mask=True)
+        label_transform = torch_em.transform.label.AffinityTransform(
+            offsets=offsets, ignore_label=None, add_binary_target=True, add_mask=True
+        )
         msg = "Offsets are passed, but 'label_transform2' is in the kwargs. It will be over-ridden."
         kwargs = util.update_kwargs(kwargs, 'label_transform2', label_transform, msg=msg)
     elif boundaries:
@@ -161,9 +180,14 @@ def get_uro_cell_dataset(
         msg = "Binary is set to true, but 'label_transform' is in the kwargs. It will be over-ridden."
         kwargs = util.update_kwargs(kwargs, 'label_transform', label_transform, msg=msg)
 
-    raw_key = "raw"
     return torch_em.default_segmentation_dataset(
-        paths, raw_key, paths, label_key, patch_shape, is_seg_dataset=True, **kwargs
+        raw_paths=paths,
+        raw_key="raw",
+        label_paths=paths,
+        label_key=label_key,
+        patch_shape=patch_shape,
+        is_seg_dataset=True,
+        **kwargs
     )
 
 
@@ -195,9 +219,7 @@ def get_uro_cell_loader(
     Returns:
        The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     ds = get_uro_cell_dataset(
         path, target, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **ds_kwargs
     )

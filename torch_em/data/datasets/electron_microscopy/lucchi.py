@@ -10,7 +10,7 @@ from glob import glob
 from tqdm import tqdm
 from shutil import rmtree
 from concurrent import futures
-from typing import Tuple, Union
+from typing import Tuple, Union, Literal
 
 import imageio
 import numpy as np
@@ -20,6 +20,7 @@ import torch_em
 from torch.utils.data import Dataset, DataLoader
 
 from .. import util
+
 
 URL = "http://www.casser.io/files/lucchi_pp.zip"
 CHECKSUM = "770ce9e98fc6f29c1b1a250c637e6c5125f2b5f1260e5a7687b55a79e2e8844d"
@@ -64,8 +65,8 @@ def _create_data(root, inputs, out_path):
         f.create_dataset("labels", data=labels.astype("uint8"), compression="gzip")
 
 
-def get_lucchi_data(path: Union[os.PathLike, str], split: str, download: bool) -> str:
-    """Download the lucchi dataset.
+def get_lucchi_data(path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False) -> str:
+    """Download the Lucchi dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -98,14 +99,30 @@ def get_lucchi_data(path: Union[os.PathLike, str], split: str, download: bool) -
     return data_path
 
 
+def get_lucchi_paths(path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False) -> str:
+    """Get paths to the Lucchi data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split. Either 'train' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath for the stored data.
+    """
+    get_lucchi_data(path, split, download)
+    data_path = os.path.join(path, f"lucchi_{split}.h5")
+    return data_path
+
+
 def get_lucchi_dataset(
     path: Union[os.PathLike, str],
-    split: str,
+    split: Literal["train", "test"],
     patch_shape: Tuple[int, int, int],
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get dataset for EM mitochondrion segmentation in the lucchi dataset.
+    """Get dataset for EM mitochondrion segmentation in the Lucchi dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -118,20 +135,28 @@ def get_lucchi_dataset(
         The segmentation dataset.
     """
     assert split in ("train", "test")
-    data_path = get_lucchi_data(path, split, download)
-    raw_key, label_key = "raw", "labels"
-    return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+
+    data_path = get_lucchi_paths(path, split, download)
+
+    return torch_em.default_segmentation_dataset(
+        raw_paths=data_path,
+        raw_key="raw",
+        label_paths=data_path,
+        label_key="labels",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
 
 def get_lucchi_loader(
     path: Union[os.PathLike, str],
-    split: str,
+    split: Literal["train", "test"],
     patch_shape: Tuple[int, int, int],
     batch_size: int,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get dataloader for EM mitochondrion segmentation in the lucchi dataset.
+    """Get dataloader for EM mitochondrion segmentation in the Lucchi dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -144,9 +169,6 @@ def get_lucchi_loader(
     Returns:
         The PyTorch DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_lucchi_dataset(path, split, patch_shape, download=download, **ds_kwargs)
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

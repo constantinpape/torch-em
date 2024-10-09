@@ -100,7 +100,24 @@ def get_deepbacs_data(path: Union[os.PathLike, str], bac_type: str, download: bo
     return data_folder
 
 
-def _get_deepbacs_paths(path, bac_type, split):
+def get_deepbacs_paths(
+    path: Union[os.PathLike, str], bac_type: str, split: str, download: bool = False
+) -> Tuple[str, str]:
+    f"""Get paths to the DeepBacs data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        bac_type: The bacteria type. The available types are:
+            {', '.join(URLS.keys())}
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath to the folder where image data is stored.
+        Filepath to the folder where label data is stored.
+    """
+    get_deepbacs_data(path, bac_type, download)
+
     # the bacteria types other than mixed are a bit more complicated so we don't have the dataloaders for them yet
     # mixed is the combination of all other types
     if split == "train":
@@ -110,8 +127,10 @@ def _get_deepbacs_paths(path, bac_type, split):
 
     if bac_type != "mixed":
         raise NotImplementedError(f"Currently only the bacteria type 'mixed' is supported, not {bac_type}")
+
     image_folder = os.path.join(path, bac_type, dir_choice, "source")
     label_folder = os.path.join(path, bac_type, dir_choice, "target")
+
     return image_folder, label_folder
 
 
@@ -138,12 +157,17 @@ def get_deepbacs_dataset(
        The segmentation dataset.
     """
     assert split in ("train", "val", "test")
-    get_deepbacs_data(path, bac_type, download)
-    image_folder, label_folder = _get_deepbacs_paths(path, bac_type, split)
-    dataset = torch_em.default_segmentation_dataset(
-        image_folder, "*.tif", label_folder, "*.tif", patch_shape=patch_shape, **kwargs
+
+    image_folder, label_folder = get_deepbacs_paths(path, bac_type, split, download)
+
+    return torch_em.default_segmentation_dataset(
+        raw_paths=image_folder,
+        raw_key="*.tif",
+        label_paths=label_folder,
+        label_key="*.tif",
+        patch_shape=patch_shape,
+        **kwargs
     )
-    return dataset
 
 
 def get_deepbacs_loader(
@@ -172,5 +196,4 @@ def get_deepbacs_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_deepbacs_dataset(path, split, patch_shape, bac_type=bac_type, download=download, **ds_kwargs)
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

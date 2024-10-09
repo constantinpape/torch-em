@@ -1,4 +1,5 @@
 """ASEM is a dataset for segmentation of cellular structures in FIB-SEM.
+
 The dataset was publised in https://doi.org/10.1083/jcb.202208005.
 Please cite this publication if you use the dataset in your research.
 """
@@ -7,6 +8,8 @@ import os
 from typing import Union, Tuple, Optional, List
 
 import numpy as np
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -54,11 +57,7 @@ ORGANELLES = {
 }
 
 
-def get_asem_data(
-    path: Union[os.PathLike, str],
-    volume_ids: List[str],
-    download: bool = False
-):
+def get_asem_data(path: Union[os.PathLike, str], volume_ids: List[str], download: bool = False):
     """Download the ASEM dataset.
 
     The dataset is located at https://open.quiltdata.com/b/asem-project.
@@ -67,19 +66,14 @@ def get_asem_data(
         path: Filepath to a folder where the downloaded data will be saved.
         volume_ids: List of volumes to download.
         download: Whether to download the data if it is not present.
-
-    Returns:
-        List of paths for all volume ids.
     """
     if download and not have_quilt:
         raise ModuleNotFoundError("Please install quilt3: 'pip install quilt3'.")
 
     b = q3.Bucket("s3://asem-project")
 
-    volume_paths = []
     for volume_id in volume_ids:
         volume_path = os.path.join(path, VOLUMES[volume_id])
-        volume_paths.append(volume_path)
         if os.path.exists(volume_path):
             continue
 
@@ -100,6 +94,20 @@ def get_asem_data(
         b.fetch(key=f"datasets/{VOLUMES[volume_id]}/.zgroup", path=f"{volume_path}/")
         b.fetch(key=f"datasets/{VOLUMES[volume_id]}/volumes/.zgroup", path=f"{volume_path}/volumes/")
 
+
+def get_asem_paths(path: Union[os.PathLike, str], volume_ids: List[str], download: bool = False) -> List[str]:
+    """Get paths to the ASEM data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        volume_ids: List of volumes to download.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of paths for all volume ids.
+    """
+    get_asem_data(path, volume_ids, download)
+    volume_paths = [os.path.join(path, VOLUMES[vol_id]) for vol_id in volume_ids]
     return volume_paths
 
 
@@ -170,14 +178,14 @@ def get_asem_dataset(
     organelles: Optional[Union[List[str], str]] = None,
     volume_ids: Optional[Union[List[str], str]] = None,
     **kwargs
-):
+) -> Dataset:
     """Get dataset for segmentation of organelles in FIB-SEM cells.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         download: Whether to download the data if it is not present.
-        orgnalles: The choice of organelles.
+        organelles: The choice of organelles.
         volume_ids: The choice of volumes.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -200,16 +208,17 @@ def get_asem_dataset(
                 assert volume_id in ORGANELLES[organelle], \
                     f"The chosen volume and organelle combination does not match: '{volume_id}' & '{organelle}'"
 
-        volume_paths = get_asem_data(path, volume_ids, download)
+        volume_paths = get_asem_paths(path, volume_ids, download)
 
         for volume_path in volume_paths:
             have_volumes_inconsistent = _make_volumes_consistent(volume_path, organelle)
 
-            raw_key = f"volumes/raw_{organelle}" if have_volumes_inconsistent else "volumes/raw"
             dataset = torch_em.default_segmentation_dataset(
-                volume_path, raw_key,
-                volume_path, f"volumes/labels/{organelle}",
-                patch_shape,
+                raw_paths=volume_path,
+                raw_key=f"volumes/raw_{organelle}" if have_volumes_inconsistent else "volumes/raw",
+                label_paths=volume_path,
+                label_key=f"volumes/labels/{organelle}",
+                patch_shape=patch_shape,
                 is_seg_dataset=True,
                 **kwargs
             )
@@ -227,7 +236,7 @@ def get_asem_loader(
     organelles: Optional[Union[List[str], str]] = None,
     volume_ids: Optional[Union[List[str], str]] = None,
     **kwargs
-):
+) -> DataLoader:
     """Get dataloader for the segmentation of organelles in FIB-SEM cells.
 
     Args:
@@ -235,7 +244,7 @@ def get_asem_loader(
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
         download: Whether to download the data if it is not present.
-        orgnalles: The choice of organelles.
+        organelles: The choice of organelles.
         volume_ids: The choice of volumes.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
