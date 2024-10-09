@@ -166,7 +166,7 @@ def get_livecell_data(path: Union[os.PathLike], download: bool = False):
 def get_livecell_paths(
     path: Union[os.PathLike, str],
     split: str,
-    download: bool,
+    download: bool = False,
     cell_types: Optional[Sequence[str]] = None,
     label_path: Optional[Union[os.PathLike, str]] = None
 ) -> Tuple[List[str], List[str]]:
