@@ -28,10 +28,7 @@ CHECKSUM = None
 DATA_CHOICES = ["bact_fluor", "bact_phase", "worm", "worm_high_res"]
 
 
-def get_omnipose_data(
-    path: Union[os.PathLike, str],
-    download: bool = False,
-):
+def get_omnipose_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Download the OmniPose dataset.
 
     Args:
@@ -39,7 +36,7 @@ def get_omnipose_data(
         download: Whether to download the data if it is not present.
 
     Return:
-        The filepath to the data.
+        The filepath where the data is downloaded.
     """
     os.makedirs(path, exist_ok=True)
 
@@ -54,7 +51,25 @@ def get_omnipose_data(
     return data_dir
 
 
-def _get_omnipose_paths(path, split, data_choice, download):
+def get_omnipose_paths(
+    path: Union[os.PathLike, str],
+    split: str,
+    data_choice: Optional[Union[str, List[str]]] = None,
+    download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the OmniPose data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train' or 'test'.
+        data_choice: The choice of specific data.
+            Either 'bact_fluor', 'bact_phase', 'worm' or 'worm_high_res'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_omnipose_data(path=path, download=download)
 
     if split not in ["train", "test"]:
@@ -114,9 +129,9 @@ def get_omnipose_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = _get_omnipose_paths(path, split, data_choice, download)
-    print(len(image_paths), len(gt_paths))
-    dataset = torch_em.default_segmentation_dataset(
+    image_paths, gt_paths = get_omnipose_paths(path, split, data_choice, download)
+
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
@@ -125,7 +140,6 @@ def get_omnipose_dataset(
         patch_shape=patch_shape,
         **kwargs
     )
-    return dataset
 
 
 def get_omnipose_loader(
@@ -156,5 +170,4 @@ def get_omnipose_loader(
     dataset = get_omnipose_dataset(
         path=path, patch_shape=patch_shape, split=split, data_choice=data_choice, download=download, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)

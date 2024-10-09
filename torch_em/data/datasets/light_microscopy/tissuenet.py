@@ -10,7 +10,7 @@ and download it yourself.
 import os
 from glob import glob
 from tqdm import tqdm
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 
 import numpy as np
 import pandas as pd
@@ -60,11 +60,7 @@ def _create_dataset(path, zip_path):
         _create_split(path, split)
 
 
-def get_tissuenet_data(
-    path: Union[os.PathLike, str],
-    split: str,
-    download: bool = False,
-):
+def get_tissuenet_data(path: Union[os.PathLike, str], split: str, download: bool = False) -> str:
     """Download the TissueNet dataset.
 
     NOTE: Automatic download is not supported for TissueNet datset.
@@ -97,6 +93,25 @@ def get_tissuenet_data(
     return split_folder
 
 
+def get_tissuenet_paths(path: Union[os.PathLike, str], split: str, download: bool = False) -> List[str]:
+    """Get paths to the TissueNet data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the data.
+    """
+    split_folder = get_tissuenet_data(path, split, download)
+    assert os.path.exists(split_folder)
+    data_paths = glob(os.path.join(split_folder, "*.zarr"))
+    assert len(data_paths) > 0
+
+    return data_paths
+
+
 def get_tissuenet_dataset(
     path: Union[os.PathLike, str],
     split: str,
@@ -123,19 +138,21 @@ def get_tissuenet_dataset(
     assert raw_channel in ("nucleus", "cell", "rgb")
     assert label_channel in ("nucleus", "cell")
 
-    split_folder = get_tissuenet_data(path, split, download)
-    assert os.path.exists(split_folder)
-    data_path = glob(os.path.join(split_folder, "*.zarr"))
-    assert len(data_path) > 0
-
-    raw_key, label_key = f"raw/{raw_channel}", f"labels/{label_channel}"
+    data_paths = get_tissuenet_paths(path, split, download)
 
     with_channels = True if raw_channel == "rgb" else False
     kwargs = util.update_kwargs(kwargs, "with_channels", with_channels)
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
     kwargs = util.update_kwargs(kwargs, "ndim", 2)
 
-    return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(
+        raw_paths=data_paths,
+        raw_key=f"raw/{raw_channel}",
+        label_paths=data_paths,
+        label_key=f"labels/{label_channel}",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
 
 # TODO enable loading specific tissue types etc. (from the 'meta' attributes)
@@ -168,5 +185,4 @@ def get_tissuenet_loader(
     dataset = get_tissuenet_dataset(
         path, split, patch_shape, raw_channel, label_channel, download, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -98,16 +98,13 @@ def get_gonuclear_data(path: Union[os.PathLike, str], download: bool) -> str:
     Returns:
         The filepath to the training data.
     """
-    url = URL
-    checksum = CHECKSUM
-
     data_path = os.path.join(path, "gonuclear_datasets")
     if os.path.exists(data_path):
         return data_path
 
     os.makedirs(path, exist_ok=True)
     zip_path = os.path.join(path, "gonuclear.zip")
-    util.download_source(zip_path, url, download, checksum)
+    util.download_source(zip_path, URL, download, CHECKSUM)
     util.unzip(zip_path, path, True)
 
     extracted_path = os.path.join(path, "Training image dataset_Tiff Files")
@@ -117,6 +114,37 @@ def get_gonuclear_data(path: Union[os.PathLike, str], download: bool) -> str:
 
     rmtree(extracted_path)
     return data_path
+
+
+def get_gonuclear_paths(
+    path: Union[os.PathLike, str],
+    sample_ids: Optional[Union[int, Tuple[int, ...]]] = None,
+    download: bool = False
+) -> List[str]:
+    """Get paths to the GoNuclear data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        sample_ids: The sample ids to load. The valid sample ids are:
+            1135, 1136, 1137, 1139, 1170. If none is given all samples will be loaded.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the stored data.
+    """
+    data_root = get_gonuclear_data(path, download)
+
+    if sample_ids is None:
+        paths = sorted(glob(os.path.join(data_root, "*.h5")))
+    else:
+        paths = []
+        for sample_id in sample_ids:
+            sample_path = os.path.join(data_root, f"{sample_id}.h5")
+            if not os.path.exists(sample_path):
+                raise ValueError(f"Invalid sample id {sample_id}.")
+            paths.append(sample_path)
+
+    return paths
 
 
 def get_gonuclear_dataset(
@@ -147,17 +175,7 @@ def get_gonuclear_dataset(
     Returns:
        The segmentation dataset.
     """
-    data_root = get_gonuclear_data(path, download)
-
-    if sample_ids is None:
-        paths = sorted(glob(os.path.join(data_root, "*.h5")))
-    else:
-        paths = []
-        for sample_id in sample_ids:
-            sample_path = os.path.join(data_root, f"{sample_id}.h5")
-            if not os.path.exists(sample_path):
-                raise ValueError(f"Invalid sample id {sample_id}.")
-            paths.append(sample_path)
+    paths = get_gonuclear_paths(path, sample_ids, download)
 
     if segmentation_task == "nuclei":
         raw_key = "raw/nuclei"
@@ -173,7 +191,12 @@ def get_gonuclear_dataset(
     )
 
     return torch_em.default_segmentation_dataset(
-        paths, raw_key, paths, label_key, patch_shape, **kwargs
+        raw_paths=paths,
+        raw_key=raw_key,
+        label_paths=paths,
+        label_key=label_key,
+        patch_shape=patch_shape,
+        **kwargs
     )
 
 
@@ -219,5 +242,4 @@ def get_gonuclear_loader(
         download=download,
         **ds_kwargs,
     )
-    loader = torch_em.get_data_loader(dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size=batch_size, **loader_kwargs)

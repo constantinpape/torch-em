@@ -8,7 +8,7 @@ Please cite it if you use this dataset for your research.
 import os
 import shutil
 from glob import glob
-from typing import Tuple, Union, Literal
+from typing import Tuple, Union, Literal, List
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -54,7 +54,22 @@ def get_orgasegment_data(
     return data_dir
 
 
-def _get_data_paths(path, split, download):
+def get_orgasegment_paths(
+    path: Union[os.PathLike, str],
+    split: Literal["train", "val", "eval"],
+    download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths for the OrgaSegment data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to download. Either 'train', 'val or 'eval'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths to the image data.
+        List of filepaths to the label data.
+    """
     data_dir = get_orgasegment_data(path=path, split=split, download=download)
 
     image_paths = sorted(glob(os.path.join(data_dir, "*_img.jpg")))
@@ -88,11 +103,10 @@ def get_orgasegment_dataset(
     """
     assert split in ["train", "val", "eval"]
 
-    image_paths, label_paths = _get_data_paths(path=path, split=split, download=download)
+    image_paths, label_paths = get_orgasegment_paths(path=path, split=split, download=download)
 
-    kwargs, _ = util.add_instance_label_transform(
-        kwargs, add_binary_target=True, binary=binary, boundaries=boundaries,
-    )
+    kwargs, _ = util.add_instance_label_transform(kwargs, add_binary_target=True, binary=binary, boundaries=boundaries)
+
     return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
@@ -138,5 +152,4 @@ def get_orgasegment_loader(
         download=download,
         **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
