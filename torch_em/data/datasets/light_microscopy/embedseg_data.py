@@ -7,13 +7,14 @@ Please cite it if you use this dataset in your research.
 
 import os
 from glob import glob
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
 from .. import util
+
 
 URLS = {
     "Mouse-Organoid-Cells-CBG": "https://github.com/juglab/EmbedSeg/releases/download/v0.1.0/Mouse-Organoid-Cells-CBG.zip",  # noqa
@@ -58,6 +59,31 @@ def get_embedseg_data(path: Union[os.PathLike, str], name: str, download: bool) 
     return data_path
 
 
+def get_embedseg_paths(
+    path: Union[os.PathLike, str], name: str, split: str, download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the EmbedSeg data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: Name of the dataset to download.
+        split: The split to use for the dataset.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the mage data.
+        List of filepaths for the label data.
+    """
+    data_root = get_embedseg_data(path, name, download)
+
+    raw_paths = sorted(glob(os.path.join(data_root, split, "images", "*.tif")))
+    label_paths = sorted(glob(os.path.join(data_root, split, "masks", "*.tif")))
+    assert len(raw_paths) > 0
+    assert len(raw_paths) == len(label_paths)
+
+    return raw_paths, label_paths
+
+
 def get_embedseg_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
@@ -66,7 +92,7 @@ def get_embedseg_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get an EmbedSeg dataset for 3d fluorescence microscopy segmentation.
+    """Get the EmbedSeg dataset for 3d fluorescence microscopy segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -79,17 +105,15 @@ def get_embedseg_dataset(
     Returns:
        The segmentation dataset.
     """
-    data_root = get_embedseg_data(path, name, download)
-
-    raw_paths = sorted(glob(os.path.join(data_root, split, "images", "*.tif")))
-    label_paths = sorted(glob(os.path.join(data_root, split, "masks", "*.tif")))
-    assert len(raw_paths) > 0
-    assert len(raw_paths) == len(label_paths)
-
-    raw_key, label_key = None, None
+    raw_paths, label_paths = get_embedseg_paths(path, name, split, download)
 
     return torch_em.default_segmentation_dataset(
-        raw_paths, raw_key, label_paths, label_key, patch_shape, **kwargs
+        raw_paths=raw_paths,
+        raw_key=None,
+        label_paths=label_paths,
+        label_key=None,
+        patch_shape=patch_shape,
+        **kwargs
     )
 
 
@@ -102,7 +126,7 @@ def get_embedseg_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get an EmbedSeg dataloader for 3d fluorescence microscopy segmentation.
+    """Get the EmbedSeg dataloader for 3d fluorescence microscopy segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -120,5 +144,4 @@ def get_embedseg_loader(
     dataset = get_embedseg_dataset(
         path, name=name, split=split, patch_shape=patch_shape, download=download, **ds_kwargs,
     )
-    loader = torch_em.get_data_loader(dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size=batch_size, **loader_kwargs)
