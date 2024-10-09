@@ -156,6 +156,11 @@ def _download_livecell_annotations(path, split, download, cell_types, label_path
     return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types)
 
 
+def _get_livecell_paths(path, split, download=False, cell_types=None, label_path=None):
+    image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
+    return image_paths, seg_paths
+
+
 def get_livecell_data(
     path: Union[os.PathLike, str],
     split: str,
@@ -177,7 +182,7 @@ def get_livecell_data(
         The paths to the label data.
     """
     _download_livecell_images(path, download)
-    image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
+    image_paths, seg_paths = _get_livecell_paths(path, split, download, cell_types, label_path)
     return image_paths, seg_paths
 
 

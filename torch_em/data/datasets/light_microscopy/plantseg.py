@@ -138,6 +138,12 @@ def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, 
     return out_path
 
 
+def _get_plantseg_paths(data_path):
+    file_paths = glob(os.path.join(data_path, "*.h5"))
+    file_paths.sort()
+    return file_paths
+
+
 def get_plantseg_dataset(
     path: Union[os.PathLike, str],
     name: str,
@@ -168,8 +174,7 @@ def get_plantseg_dataset(
     assert len(patch_shape) == 3
     data_path = get_plantseg_data(path, download, name, split)
 
-    file_paths = glob(os.path.join(data_path, "*.h5"))
-    file_paths.sort()
+    file_paths = _get_plantseg_paths(data_path)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=binary, binary=binary, boundaries=boundaries,

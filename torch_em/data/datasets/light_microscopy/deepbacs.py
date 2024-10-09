@@ -100,7 +100,7 @@ def get_deepbacs_data(path: Union[os.PathLike, str], bac_type: str, download: bo
     return data_folder
 
 
-def _get_paths(path, bac_type, split):
+def _get_deepbacs_paths(path, bac_type, split):
     # the bacteria types other than mixed are a bit more complicated so we don't have the dataloaders for them yet
     # mixed is the combination of all other types
     if split == "train":
@@ -139,7 +139,7 @@ def get_deepbacs_dataset(
     """
     assert split in ("train", "val", "test")
     get_deepbacs_data(path, bac_type, download)
-    image_folder, label_folder = _get_paths(path, bac_type, split)
+    image_folder, label_folder = _get_deepbacs_paths(path, bac_type, split)
     dataset = torch_em.default_segmentation_dataset(
         image_folder, "*.tif", label_folder, "*.tif", patch_shape=patch_shape, **kwargs
     )
