@@ -9,11 +9,13 @@ import os
 from glob import glob
 from tqdm import tqdm
 from shutil import rmtree
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 
 import imageio.v3 as imageio
 
 from scipy.io import loadmat
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -81,12 +83,26 @@ def get_lizard_data(path, download):
     rmtree(os.path.join(path, "overlay"))
 
 
+def get_lizard_paths(path: Union[os.PathLike], download: bool = False) -> List[str]:
+    """Get paths to the Lizard data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the stored data.
+    """
+    get_lizard_data(path, download)
+
+    data_paths = glob(os.path.join(path, "*.h5"))
+    data_paths.sort()
+    return data_paths
+
+
 def get_lizard_dataset(
-    path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
-    download: bool = False,
-    **kwargs
-):
+    path: Union[os.PathLike, str], patch_shape: Tuple[int, int], download: bool = False, **kwargs
+) -> Dataset:
     """Get the Lizard dataset for nucleus segmentation.
 
     Args:
@@ -98,15 +114,17 @@ def get_lizard_dataset(
     Returns:
         The segmentation dataset.
     """
-    get_lizard_data(path, download)
+    data_paths = get_lizard_paths(path, download)
 
-    data_paths = glob(os.path.join(path, "*.h5"))
-    data_paths.sort()
-
-    raw_key = "image"
-    label_key = "labels/segmentation"
     return torch_em.default_segmentation_dataset(
-        data_paths, raw_key, data_paths, label_key, patch_shape, ndim=2, with_channels=True, **kwargs
+        raw_paths=data_paths,
+        raw_key="image",
+        label_paths=data_paths,
+        label_key="labels/segmentation",
+        patch_shape=patch_shape,
+        ndim=2,
+        with_channels=True,
+        **kwargs
     )
 
 
@@ -114,15 +132,19 @@ def get_lizard_dataset(
 # TODO implement selecting different tissue types
 # TODO implement train / val / test split (is pre-defined in a csv)
 def get_lizard_loader(
-    path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
-    batch_size: int,
-    download: bool = False,
-    **kwargs
-):
-    """Dataloader for the segmentation of nuclei in histopathology. See 'get_lizard_dataset' for details."""
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    path: Union[os.PathLike, str], patch_shape: Tuple[int, int], batch_size: int, download: bool = False, **kwargs
+) -> DataLoader:
+    """Get the Lizard dataloader for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     ds = get_lizard_dataset(path, patch_shape, download=download, **ds_kwargs)
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)

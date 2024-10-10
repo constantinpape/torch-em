@@ -12,6 +12,8 @@ from typing import List, Union, Dict, Tuple
 
 import numpy as np
 
+from torch.utils.data import Dataset, DataLoader
+
 import torch_em
 
 from .. import util
@@ -156,6 +158,25 @@ def _channels_to_semantics(labels):
     return f_segmentation
 
 
+def get_pannuke_paths(
+    path: Union[os.PathLike, str], folds: List[str] = ["fold_1", "fold_2", "fold_3"], download: bool = False,
+) -> List[str]:
+    """Get paths to the PanNuke data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        folds: The data fold(s) of choice to be used.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths to the stored data.
+    """
+    get_pannuke_data(path, download, folds)
+
+    data_paths = [os.path.join(path, f"pannuke_{fold}.h5") for fold in folds]
+    return data_paths
+
+
 def get_pannuke_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
@@ -166,7 +187,7 @@ def get_pannuke_dataset(
     with_channels: bool = True,
     with_label_channels: bool = False,
     **kwargs
-):
+) -> Dataset:
     """Get the PanNuke dataset for nucleus segmentation.
 
     Args:
@@ -190,17 +211,18 @@ def get_pannuke_dataset(
     if rois is not None:
         assert isinstance(rois, dict)
 
-    get_pannuke_data(path, download, folds)
-
-    data_paths = [os.path.join(path, f"pannuke_{fold}.h5") for fold in folds]
-    data_rois = [rois.get(fold, np.s_[:, :, :]) for fold in folds]
-
-    raw_key = "images"
-    label_key = f"labels/{custom_label_choice}"
+    data_paths = get_pannuke_paths(path, folds, download)
 
     return torch_em.default_segmentation_dataset(
-        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois,
-        with_channels=with_channels, with_label_channels=with_label_channels, **kwargs
+        raw_paths=data_paths,
+        raw_key="images",
+        label_paths=data_paths,
+        label_key=f"labels/{custom_label_choice}",
+        patch_shape=patch_shape,
+        rois=[rois.get(fold, np.s_[:, :, :]) for fold in folds],
+        with_channels=with_channels,
+        with_label_channels=with_label_channels,
+        **kwargs
     )
 
 
@@ -213,7 +235,7 @@ def get_pannuke_loader(
     rois: Dict = {},
     custom_label_choice: str = "instances",
     **kwargs
-):
+) -> DataLoader:
     """Get the PanNuke dataloader for nucleus segmentation.
 
     Args:
@@ -230,7 +252,6 @@ def get_pannuke_loader(
         The DataLoader
     """
     dataset_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-
     ds = get_pannuke_dataset(
         path=path,
         patch_shape=patch_shape,
@@ -238,5 +259,6 @@ def get_pannuke_loader(
         rois=rois,
         download=download,
         custom_label_choice=custom_label_choice,
-        **dataset_kwargs)
+        **dataset_kwargs
+    )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
