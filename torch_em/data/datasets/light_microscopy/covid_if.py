@@ -93,7 +93,10 @@ def get_covid_if_dataset(
         sample_range: Id range of samples to load from the training dataset.
         target: The segmentation task. Either 'cells' or 'nuclei'.
         download: Whether to download the data if it is not present.
-        
+        offsets: Offset values for affinity computation used as target.
+        boundaries: Whether to compute boundaries as the target.
+        binary: Whether to use a binary segmentation target.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
        The segmentation dataset.
