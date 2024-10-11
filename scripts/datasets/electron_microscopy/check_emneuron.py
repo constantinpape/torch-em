@@ -8,8 +8,7 @@ sys.path.append("..")
 
 
 def check_emneuron():
-    # from util import ROOT
-    ROOT = "/scratch/share/cidas/cca/data"
+    from util import ROOT
 
     loader = get_emneuron_loader(
         path=os.path.join(ROOT, "emneuron"),
