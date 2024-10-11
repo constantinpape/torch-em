@@ -226,10 +226,16 @@ def unzip_tarfile(tar_path, dst, remove=True):
         os.remove(tar_path)
 
 
-def unzip_rarfile(rar_path, dst, remove=True):
+def unzip_rarfile(rar_path, dst, remove=True, use_rarfile=True):
     import rarfile
-    with rarfile.RarFile(rar_path) as f:
-        f.extractall(path=dst)
+    import aspose.zip as az
+
+    if use_rarfile:
+        with rarfile.RarFile(rar_path) as f:
+            f.extractall(path=dst)
+    else:
+        with az.rar.RarArchive(rar_path) as archive:
+            archive.extract_to_directory(dst)
 
     if remove:
         os.remove(rar_path)
