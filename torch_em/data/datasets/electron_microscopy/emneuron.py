@@ -1,4 +1,9 @@
-"""
+"""EMNeuron is a dataset for neuron segmentation in EM.
+It contains multiple annotated volumes from 14 domain sources.
+
+The dataset is hosted at https://huggingface.co/datasets/yanchaoz/EMNeuron.
+The dataset is published in https://papers.miccai.org/miccai-2024/677-Paper0518.html.
+Please cite this publication if you use the dataset in your research.
 """
 
 import os
@@ -62,7 +67,7 @@ def get_emneuron_paths(
     Returns:
         List of filepaths to the stored data.
     """
-    get_emneuron_data(path, download)
+    get_emneuron_data(path, split, download)
     if split == "train":
         label_paths = natsorted(glob(os.path.join(path, "labeled", "*", "*_MaskIns.tif")))
         raw_paths = [os.path.join(os.path.dirname(p), os.path.basename(p).replace("_MaskIns", "")) for p in label_paths]

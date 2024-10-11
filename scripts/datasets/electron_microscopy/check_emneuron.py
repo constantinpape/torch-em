@@ -8,7 +8,8 @@ sys.path.append("..")
 
 
 def check_emneuron():
-    from util import ROOT
+    # from util import ROOT
+    ROOT = "/scratch/share/cidas/cca/data"
 
     loader = get_emneuron_loader(
         path=os.path.join(ROOT, "emneuron"),
@@ -16,7 +17,7 @@ def check_emneuron():
         patch_shape=(8, 512, 512),
         split="val",
     )
-    check_loader(loader, 8, instance_labels=True)
+    check_loader(loader, 8, instance_labels=True, plt=True, save_path="./test.png")
 
 
 if __name__ == "__main__":
