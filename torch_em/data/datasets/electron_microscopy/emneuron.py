@@ -29,6 +29,14 @@ def _clean_redundant_files(path):
 def get_emneuron_data(path: Union[os.PathLike, str], split: Literal['train', 'val'], download: bool = False):
     """Get the EMNeuron data.
 
+    NOTE: The automatic download feature is currently not supported in `get_emneuron_data`.
+    You must follow the steps mentioned to download the data:
+    - Go to the official GitHub repository: https://github.com/yanchaoz/SegNeuron.
+    - Access the dataset link (hosted at HuggingFace): https://huggingface.co/datasets/yanchaoz/EMNeuron.
+    - Login / create your account to access the "Dataset Card".
+    - Go to "Files" in the dataset repo and download a) `labeled.rar` and b) `valid.rar`.
+    - Finally, provide the filepath to the folder where rar files are stored.
+
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         split: The split of the data to be used for training.
