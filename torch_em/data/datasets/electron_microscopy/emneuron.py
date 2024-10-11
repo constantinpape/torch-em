@@ -1,5 +1,5 @@
 """EMNeuron is a dataset for neuron segmentation in EM.
-It contains multiple annotated volumes from 14 domain sources.
+It contains multiple annotated volumes from 16 domain sources.
 
 The dataset is hosted at https://huggingface.co/datasets/yanchaoz/EMNeuron.
 The dataset is published in https://papers.miccai.org/miccai-2024/677-Paper0518.html.
