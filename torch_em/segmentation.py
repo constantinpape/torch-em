@@ -316,8 +316,9 @@ def default_segmentation_dataset(
     return ds
 
 
-def get_data_loader(dataset: torch.utils.data.Dataset, batch_size, **loader_kwargs) -> torch.utils.data.DataLoader:
-    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, **loader_kwargs)
+def get_data_loader(dataset: torch.utils.data.Dataset, batch_size: int, **loader_kwargs) -> torch.utils.data.DataLoader:
+    pin_memory = loader_kwargs.pop("pin_memory", True)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, pin_memory=pin_memory, **loader_kwargs)
     # monkey patch shuffle attribute to the loader
     loader.shuffle = loader_kwargs.get("shuffle", False)
     return loader

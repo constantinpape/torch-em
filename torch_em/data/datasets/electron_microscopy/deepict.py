@@ -1,7 +1,7 @@
 """Dataset for segmentation of structures in Cryo ET.
-
 The DeePict dataset contains annotations for several structures in CryoET.
 The dataset implemented here currently only provides access to the actin annotations.
+
 The dataset is part of the publication https://doi.org/10.1038/s41592-022-01746-2.
 Plase cite it if you use this dataset in your research.
 """
@@ -9,7 +9,9 @@ Plase cite it if you use this dataset in your research.
 import os
 from glob import glob
 from shutil import rmtree
-from typing import Tuple, Union
+from typing import Tuple, Union, List
+
+from torch.utils.data import Dataset, DataLoader
 
 try:
     import mrcfile
@@ -17,7 +19,7 @@ except ImportError:
     mrcfile = None
 
 import torch_em
-from elf.io import open_file
+
 from .. import util
 
 
@@ -25,6 +27,8 @@ ACTIN_ID = 10002
 
 
 def _process_deepict_actin(input_path, output_path):
+    from elf.io import open_file
+
     os.makedirs(output_path, exist_ok=True)
 
     # datasets = ["00004", "00011", "00012"]
@@ -71,7 +75,7 @@ def _process_deepict_actin(input_path, output_path):
 
 
 def get_deepict_actin_data(path: Union[os.PathLike, str], download: bool) -> str:
-    """Download the deepict actin dataset.
+    """Download the DeePict actin dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -97,13 +101,28 @@ def get_deepict_actin_data(path: Union[os.PathLike, str], download: bool) -> str
     return dataset_path
 
 
+def get_deepict_actin_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
+    """Get paths to DeePict actin data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepaths to the stored data.
+    """
+    get_deepict_actin_data(path, download)
+    data_paths = sorted(glob(os.path.join(path, "deepict_actin", "*.h5")))
+    return data_paths
+
+
 def get_deepict_actin_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
     label_key: str = "labels/actin",
     download: bool = False,
     **kwargs
-):
+) -> Dataset:
     """Get the dataset for actin segmentation in Cryo ET data.
 
     Args:
@@ -118,11 +137,17 @@ def get_deepict_actin_dataset(
        The segmentation dataset.
     """
     assert len(patch_shape) == 3
-    data_path = get_deepict_actin_data(path, download)
-    data_paths = sorted(glob(os.path.join(data_path, "*.h5")))
-    raw_key = "raw"
+
+    data_paths = get_deepict_actin_paths(path, download)
+
     return torch_em.default_segmentation_dataset(
-        data_paths, raw_key, data_paths, label_key, patch_shape, is_seg_dataset=True, **kwargs
+        raw_paths=data_paths,
+        raw_key="raw",
+        label_paths=data_paths,
+        label_key=label_key,
+        patch_shape=patch_shape,
+        is_seg_dataset=True,
+        **kwargs
     )
 
 
@@ -133,7 +158,7 @@ def get_deepict_actin_loader(
     label_key: str = "labels/actin",
     download: bool = False,
     **kwargs
-):
+) -> DataLoader:
     """Get the DataLoader for actin segmentation in CryoET data.
 
     Args:
@@ -148,11 +173,6 @@ def get_deepict_actin_loader(
     Returns:
         The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
-    dataset = get_deepict_actin_dataset(
-        path, patch_shape, label_key=label_key, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_deepict_actin_dataset(path, patch_shape, label_key=label_key, download=download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
