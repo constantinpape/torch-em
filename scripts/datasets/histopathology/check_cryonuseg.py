@@ -9,14 +9,13 @@ sys.path.append("..")
 
 
 def check_cryonuseg():
-    # from util import ROOT
-    ROOT = "/home/anwai/data"
+    from util import ROOT
 
     loader = get_cryonuseg_loader(
         path=os.path.join(ROOT, "cryonuseg"),
         patch_shape=(1, 512, 512),
         batch_size=1,
-        rater="b1",
+        rater="b3",
         download=True,
     )
     check_loader(loader, 8, rgb=True, instance_labels=True)
