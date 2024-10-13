@@ -9,13 +9,15 @@ Please cite it if you use the dataset in your research.
 """
 
 import os
-import numpy as np
 from glob import glob
-from typing import Union, Tuple, Any, Optional
+from typing import Union, Tuple, Any, Optional, List
+
+import numpy as np
 
 import torch
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
 
 from .. import util
 from ... import ImageCollectionDataset, RawImageCollectionDataset, ConcatDataset
@@ -85,7 +87,21 @@ def get_neurips_cellseg_data(root: Union[os.PathLike, str], split: str, download
     return target_dir
 
 
-def _get_image_and_label_paths(root, split, download):
+def get_neurips_cellseg_paths(
+    root: Union[os.PathLike, str], split: str, download: bool = False
+) -> Tuple[List[str], List[str]]:
+    f"""Get paths to NeurIPS CellSeg Challenge data.
+
+    Args:
+        root: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to download. Available splits are:
+            {', '.join(URL.keys())}
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     path = get_neurips_cellseg_data(root, split, download)
 
     image_folder = os.path.join(path, "images")
@@ -136,15 +152,16 @@ def get_neurips_cellseg_supervised_dataset(
         The segmentation dataset.
     """
     assert split in ("train", "val", "test"), split
-    image_paths, label_paths = _get_image_and_label_paths(root, split, download)
+    image_paths, label_paths = get_neurips_cellseg_paths(root, split, download)
 
     if raw_transform is None:
         trafo = to_rgb if make_rgb else None
         raw_transform = torch_em.transform.get_raw_transform(augmentation2=trafo)
+
     if transform is None:
         transform = torch_em.transform.get_augmentations(ndim=2)
 
-    ds = ImageCollectionDataset(
+    return ImageCollectionDataset(
         raw_image_paths=image_paths,
         label_image_paths=label_paths,
         patch_shape=patch_shape,
@@ -156,7 +173,6 @@ def get_neurips_cellseg_supervised_dataset(
         n_samples=n_samples,
         sampler=sampler
     )
-    return ds
 
 
 def get_neurips_cellseg_supervised_loader(

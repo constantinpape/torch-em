@@ -11,19 +11,21 @@ and download it yourself.
 import os
 from tqdm import tqdm
 from glob import glob
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 
-import z5py
 import numpy as np
 import pandas as pd
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
 
 from .. import util
 
 
 def _create_split(path, split):
+    import z5py
+
     split_file = os.path.join(path, "DynamicNuclearNet-segmentation-v1_0", f"{split}.npz")
     split_folder = os.path.join(path, split)
     os.makedirs(split_folder, exist_ok=True)
@@ -55,6 +57,62 @@ def _create_dataset(path, zip_path):
         _create_split(path, split)
 
 
+def get_dynamicnuclearnet_data(
+    path: Union[os.PathLike, str],
+    split: str,
+    download: bool = False,
+) -> str:
+    """Download the DynamicNuclearNet dataset.
+
+    NOTE: Automatic download is not supported for DynamicNuclearnet dataset.
+    Please download the dataset from https://datasets.deepcell.org/data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The path where inputs are stored per split.
+    """
+    splits = ["train", "val", "test"]
+    assert split in splits
+
+    # check if the dataset exists already
+    zip_path = os.path.join(path, "DynamicNuclearNet-segmentation-v1_0.zip")
+    if all([os.path.exists(os.path.join(path, split)) for split in splits]):  # yes it does
+        pass
+    elif os.path.exists(zip_path):  # no it does not, but we have the zip there and can unpack it
+        _create_dataset(path, zip_path)
+    else:
+        raise RuntimeError(
+            "We do not support automatic download for the dynamic nuclear net dataset yet. "
+            f"Please download the dataset from https://datasets.deepcell.org/data and put it here: {zip_path}"
+        )
+
+    split_folder = os.path.join(path, split)
+    return split_folder
+
+
+def get_dynamicnuclearnet_paths(path: Union[os.PathLike, str], split: str, download: bool = False) -> List[str]:
+    """Get paths to the DynamicNuclearNet data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the stored data.
+    """
+    split_folder = get_dynamicnuclearnet_data(path, split, download)
+    assert os.path.exists(split_folder)
+    data_paths = glob(os.path.join(split_folder, "*.zarr"))
+    assert len(data_paths) > 0
+
+    return data_paths
+
+
 def get_dynamicnuclearnet_dataset(
     path: Union[os.PathLike, str],
     split: str,
@@ -74,30 +132,17 @@ def get_dynamicnuclearnet_dataset(
     Returns:
        The segmentation dataset.
     """
-    splits = ["train", "val", "test"]
-    assert split in splits
-
-    # check if the dataset exists already
-    zip_path = os.path.join(path, "DynamicNuclearNet-segmentation-v1_0.zip")
-    if all([os.path.exists(os.path.join(path, split)) for split in splits]):  # yes it does
-        pass
-    elif os.path.exists(zip_path):  # no it does not, but we have the zip there and can unpack it
-        _create_dataset(path, zip_path)
-    else:
-        raise RuntimeError(
-            "We do not support automatic download for the dynamic nuclear net dataset yet. "
-            f"Please download the dataset from https://datasets.deepcell.org/data and put it here: {zip_path}"
-        )
-
-    split_folder = os.path.join(path, split)
-    assert os.path.exists(split_folder)
-    data_path = glob(os.path.join(split_folder, "*.zarr"))
-    assert len(data_path) > 0
-
-    raw_key, label_key = "raw", "labels"
+    data_paths = get_dynamicnuclearnet_paths(path, split, download)
 
     return torch_em.default_segmentation_dataset(
-        data_path, raw_key, data_path, label_key, patch_shape, is_seg_dataset=True, ndim=2, **kwargs
+        raw_paths=data_paths,
+        raw_key="raw",
+        label_paths=data_paths,
+        label_key="labels",
+        patch_shape=patch_shape,
+        is_seg_dataset=True,
+        ndim=2,
+        **kwargs
     )
 
 
@@ -124,5 +169,4 @@ def get_dynamicnuclearnet_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_dynamicnuclearnet_dataset(path, split, patch_shape, download, **ds_kwargs)
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
