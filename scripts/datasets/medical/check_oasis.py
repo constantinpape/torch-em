@@ -17,7 +17,7 @@ def check_oasis():
         batch_size=1,
         download=True,
     )
-    check_loader(loader, 8, plt=True, save_path="./test.png")
+    check_loader(loader, 8)
 
 
 if __name__ == "__main__":
