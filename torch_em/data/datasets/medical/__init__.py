@@ -15,6 +15,7 @@ from .han_seg import get_han_seg_dataset, get_han_seg_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .isic import get_isic_dataset, get_isic_loader
 from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
+from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
 from .montgomery import get_montgomery_dataset, get_montgomery_loader
