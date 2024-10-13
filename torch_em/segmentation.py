@@ -206,6 +206,7 @@ def default_segmentation_loader(
     is_seg_dataset=None,
     with_channels=False,
     with_label_channels=False,
+    verify_paths=True,
     **loader_kwargs,
 ):
     ds = default_segmentation_dataset(
@@ -227,6 +228,7 @@ def default_segmentation_loader(
         is_seg_dataset=is_seg_dataset,
         with_channels=with_channels,
         with_label_channels=with_label_channels,
+        verify_paths=verify_paths,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -250,8 +252,13 @@ def default_segmentation_dataset(
     is_seg_dataset=None,
     with_channels=False,
     with_label_channels=False,
+    verify_paths=True,
+    with_padding=True,
+    z_ext=None,
 ):
-    check_paths(raw_paths, label_paths)
+    if verify_paths:
+        check_paths(raw_paths, label_paths)
+
     if is_seg_dataset is None:
         is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
 
@@ -284,6 +291,8 @@ def default_segmentation_dataset(
             label_dtype=label_dtype,
             with_channels=with_channels,
             with_label_channels=with_label_channels,
+            with_padding=with_padding,
+            z_ext=z_ext,
         )
     else:
         ds = _load_image_collection_dataset(
@@ -301,13 +310,15 @@ def default_segmentation_dataset(
             sampler=sampler,
             dtype=dtype,
             label_dtype=label_dtype,
+            with_padding=with_padding,
         )
 
     return ds
 
 
-def get_data_loader(dataset: torch.utils.data.Dataset, batch_size, **loader_kwargs) -> torch.utils.data.DataLoader:
-    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, **loader_kwargs)
+def get_data_loader(dataset: torch.utils.data.Dataset, batch_size: int, **loader_kwargs) -> torch.utils.data.DataLoader:
+    pin_memory = loader_kwargs.pop("pin_memory", True)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, pin_memory=pin_memory, **loader_kwargs)
     # monkey patch shuffle attribute to the loader
     loader.shuffle = loader_kwargs.get("shuffle", False)
     return loader
@@ -338,6 +349,7 @@ def default_segmentation_trainer(
     id_=None,
     save_root=None,
     compile_model=None,
+    rank=None,
 ):
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, **optimizer_kwargs)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)
@@ -372,5 +384,6 @@ def default_segmentation_trainer(
         id_=id_,
         save_root=save_root,
         compile_model=compile_model,
+        rank=rank,
     )
     return trainer

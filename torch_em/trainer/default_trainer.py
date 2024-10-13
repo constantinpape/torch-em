@@ -6,12 +6,12 @@ import os
 import time
 import warnings
 from collections import OrderedDict
+from functools import partial
 from importlib import import_module
 from typing import Any, Callable, Dict, Optional, Union
 
 import numpy as np
 import torch
-import torch.cuda.amp as amp
 from tqdm import tqdm
 
 from .tensorboard_logger import TensorboardLogger
@@ -41,6 +41,7 @@ class DefaultTrainer:
         id_: Optional[str] = None,
         save_root: Optional[str] = None,
         compile_model: Optional[Union[bool, str]] = None,
+        rank: Optional[int] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
@@ -57,11 +58,12 @@ class DefaultTrainer:
         self.loss = loss
         self.optimizer = optimizer
         self.metric = metric
-        self.device = device
+        self.device = torch.device(device)
         self.lr_scheduler = lr_scheduler
         self.log_image_interval = log_image_interval
         self.save_root = save_root
         self.compile_model = compile_model
+        self.rank = rank
 
         self._iteration = 0
         self._epoch = 0
@@ -71,7 +73,10 @@ class DefaultTrainer:
         self.early_stopping = early_stopping
         self.train_time = 0.0
 
-        self.scaler = amp.GradScaler() if mixed_precision else None
+        if mixed_precision:
+            self.scaler = torch.GradScaler("cpu" if self.device.type == "cpu" else "cuda")
+        else:
+            self.scaler = None
 
         self.logger_class = logger
         self.logger_kwargs = logger_kwargs
@@ -477,7 +482,10 @@ class DefaultTrainer:
             save_dict.update({"scaler_state": self.scaler.state_dict()})
         if self.lr_scheduler is not None:
             save_dict.update({"scheduler_state": self.lr_scheduler.state_dict()})
-        torch.save(save_dict, save_path)
+
+        rank = getattr(self, "rank", None)
+        if rank is None or rank == 0:
+            torch.save(save_dict, save_path)
 
     def load_checkpoint(self, checkpoint="best"):
         if isinstance(checkpoint, str):
@@ -566,9 +574,15 @@ class DefaultTrainer:
         msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
         train_epochs = self.max_epoch - self._epoch
         t_start = time.time()
-        for _ in range(train_epochs):
+        for epoch in range(train_epochs):
 
-            # run training and validation for this epoch
+            # Ensure data is shuffled differently at each epoch.
+            try:
+                self.train_loader.sampler.set_epoch(epoch)
+            except AttributeError:
+                pass
+
+            # Run training and validation for this epoch
             t_per_iter = train_epoch(progress)
             current_metric = validate()
 
@@ -633,7 +647,10 @@ class DefaultTrainer:
         return self._train_epoch_impl(progress, contextlib.nullcontext, self._backprop)
 
     def _train_epoch_mixed(self, progress):
-        return self._train_epoch_impl(progress, amp.autocast, self._backprop_mixed)
+        return self._train_epoch_impl(
+            progress, partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda"),
+            self._backprop_mixed
+        )
 
     def _forward_and_loss(self, x, y):
         pred = self.model(x)
@@ -650,7 +667,7 @@ class DefaultTrainer:
         n_iter = 0
         t_per_iter = time.time()
         for x, y in self.train_loader:
-            x, y = x.to(self.device), y.to(self.device)
+            x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
 
             self.optimizer.zero_grad()
 
@@ -676,7 +693,9 @@ class DefaultTrainer:
         return self._validate_impl(contextlib.nullcontext)
 
     def _validate_mixed(self):
-        return self._validate_impl(amp.autocast)
+        return self._validate_impl(
+            partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda")
+        )
 
     def _validate_impl(self, forward_context):
         self.model.eval()
@@ -686,7 +705,7 @@ class DefaultTrainer:
 
         with torch.no_grad():
             for x, y in self.val_loader:
-                x, y = x.to(self.device), y.to(self.device)
+                x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
                 with forward_context():
                     pred, loss = self._forward_and_loss(x, y)
                     metric = self.metric(pred, y)
