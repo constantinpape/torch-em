@@ -18,6 +18,8 @@ from glob import glob
 from natsort import natsorted
 from typing import Union, Tuple, Literal, List
 
+import numpy as np
+
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
@@ -52,6 +54,19 @@ def get_segthy_data(path: Union[os.PathLike, str], source: Literal['MRI', 'US'],
     zip_path = os.path.join(path, f"{source}_data.zip")
     util.download_source(path=zip_path, url=URLS[source], download=download, checksum=CHECKSUMS[source])
     util.unzip(zip_path=zip_path, dst=path)
+
+    # NOTE: There is one label with an empty channel.
+    if source == "MRI":
+        lpath = os.path.join(data_dir, "MRI_thyroid_label", "005_MRI_thyroid_label.nii.gz")
+
+        import nibabel as nib
+        # Load the label volume and remove the empty channel.
+        label = nib.load(lpath).get_fdata()
+        label = label[..., 0]
+
+        # Store the updated label.
+        label_nifti = nib.Nifti2Image(label, np.eye(4))
+        nib.save(label_nifti, lpath)
 
 
 def get_segthy_paths(
@@ -110,13 +125,6 @@ def get_segthy_dataset(
         The segmentation dataset.
     """
     raw_paths, label_paths = get_segthy_paths(path, source, region, download)
-
-    # HACK
-    for rpath, lpath in zip(raw_paths, label_paths):
-        from tukra.io import read_image
-        print(read_image(rpath, ".nii").shape, read_image(lpath, ".nii").shape)
-
-    breakpoint()
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
