@@ -1,4 +1,21 @@
-"""
+"""The PANORAMA dataset contains annotation for PDAC lesion, veins, arteries, pancreas parenchyma,
+pancreatic duct and common bile duct segmentation in CT scans.
+
+The dataset is from the PANORAMA challenge: https://panorama.grand-challenge.org/.
+
+NOTE: The latest information for the label legends are located at:
+https://github.com/DIAGNijmegen/panorama_labels#label-legend.
+The label legends are described as follows:
+- background: 0
+- PDAC lesion: 1
+- veins: 2
+- arteries: 3
+- pancreas parenchyma: 4
+- pancreatic duct: 5
+- common bile duct: 6
+
+This dataset is from the article: https://doi.org/10.5281/zenodo.10599559
+Please cite it if you use this dataset in your research.
 """
 
 import os
@@ -31,7 +48,11 @@ CHECKSUMS = {
 
 
 def get_panorama_data(path: Union[os.PathLike, str], download: bool = False):
-    """
+    """Download the PANORAMA data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
     """
     os.makedirs(path, exist_ok=True)
 
@@ -70,7 +91,16 @@ def get_panorama_paths(
     annotation_choice: Optional[Literal["manual", "automatic"]] = None,
     download: bool = False
 ) -> Tuple[List[str], List[str]]:
-    """
+    """Get paths to the PANORAMA data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        annotation_choice: The source of annotation.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
     get_panorama_data(path, download)
 
@@ -102,7 +132,17 @@ def get_panorama_dataset(
     annotation_choice: Optional[Literal["manual", "automatic"]] = None,
     download: bool = False, **kwargs
 ) -> Dataset:
-    """
+    """Get the PANORAMA dataset for pancreatic lesion (and other structures) segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        annotation_choice: The source of annotation.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     raw_paths, label_paths = get_panorama_paths(path, annotation_choice, download)
 
@@ -124,7 +164,18 @@ def get_panorama_loader(
     annotation_choice: Optional[Literal["manual", "automatic"]] = None,
     download: bool = False, **kwargs
 ) -> DataLoader:
-    """
+    """Get the PANORAMA dataloader for pancreatic lesion (and other structures) segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        annotation_choice: The source of annotation.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_panorama_dataset(path, patch_shape, annotation_choice, download, **ds_kwargs)
