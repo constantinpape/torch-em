@@ -22,6 +22,7 @@ from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
+from .panorama import get_panorama_dataset, get_panorama_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
