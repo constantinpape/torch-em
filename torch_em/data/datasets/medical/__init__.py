@@ -15,6 +15,7 @@ from .han_seg import get_han_seg_dataset, get_han_seg_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .isic import get_isic_dataset, get_isic_loader
 from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
+from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
 from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
@@ -22,11 +23,13 @@ from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
+from .panorama import get_panorama_dataset, get_panorama_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .sega import get_sega_dataset, get_sega_loader
+from .segthy import get_segthy_dataset, get_segthy_loader
 from .siim_acr import get_siim_acr_dataset, get_siim_acr_loader
 from .spider import get_spider_dataset, get_spider_loader
 from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
