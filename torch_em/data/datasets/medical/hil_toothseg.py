@@ -1,13 +1,21 @@
+"""The HIL ToothSeg dataset contains annotations for teeth segmentation
+in panoramic dental radiographs.
+
+This dataset is from the publication https://www.mdpi.com/1424-8220/21/9/3110.
+Please cite it if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Literal, Tuple
+from typing import Union, Literal, Tuple, List
 
-import cv2 as cv
 import numpy as np
 import imageio.v3 as imageio
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -18,12 +26,18 @@ URL = "https://hitl-public-datasets.s3.eu-central-1.amazonaws.com/Teeth+Segmenta
 CHECKSUM = "3b628165a218a5e8d446d1313e6ecbe7cfc599a3d6418cd60b4fb78745becc2e"
 
 
-def get_hil_toothseg_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_hil_toothseg_data(path: Union[os.PathLike, str], download: bool = False):
+    """Download the HIL ToothSeg dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+    """
     data_dir = os.path.join(path, r"Teeth Segmentation PNG")
     if os.path.exists(data_dir):
         return data_dir
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "Teeth_Segmentation.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
@@ -32,7 +46,22 @@ def get_hil_toothseg_data(path, download):
     return data_dir
 
 
-def _get_hil_toothseg_paths(path, split, download):
+def get_hil_toothseg_paths(
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the HIL ToothSeg data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
+    import cv2 as cv
+
     data_dir = get_hil_toothseg_data(path=path, download=download)
 
     image_paths = natsorted(glob(os.path.join(data_dir, "d2", "img", "*")))
@@ -79,21 +108,26 @@ def _get_hil_toothseg_paths(path, split, download):
 
 def get_hil_toothseg_dataset(
     path: Union[os.PathLike, str],
-    split: Literal["train", "val", "test"],
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataset for segmentation of teeth in panoramic dental radiographs.
+) -> Dataset:
+    """Get the HIL ToothSeg dataset for teeth segmentation.
 
-    This dataset is from Lopez et al. - https://www.mdpi.com/1424-8220/21/9/3110.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        resize_inpts: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    The database is located at https://humansintheloop.org/resources/datasets/teeth-segmentation-dataset/.
-
-    Please cite it if you use this dataset in a publication.
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_hil_toothseg_paths(path=path, split=split, download=download)
+    image_paths, gt_paths = get_hil_toothseg_paths(path=path, split=split, download=download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -101,7 +135,7 @@ def get_hil_toothseg_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
@@ -111,23 +145,32 @@ def get_hil_toothseg_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_hil_toothseg_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
-    split: Literal["train", "val", "test"],
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for segmentation of teeth in panoramic dental radiographs. See `get_hil_toothseg_dataset` for details.
+) -> DataLoader:
+    """Get the HIL ToothSeg dataloader for teeth segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        resize_inpts: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_hil_toothseg_dataset(
         path=path, split=split, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
