@@ -8,7 +8,7 @@ from torch_em.data.datasets import get_leg_3d_us_loader
 sys.path.append("..")
 
 
-def check_panorama():
+def check_leg_3d_us():
     from util import ROOT
 
     loader = get_leg_3d_us_loader(
@@ -23,4 +23,4 @@ def check_panorama():
 
 
 if __name__ == "__main__":
-    check_panorama()
+    check_leg_3d_us()
