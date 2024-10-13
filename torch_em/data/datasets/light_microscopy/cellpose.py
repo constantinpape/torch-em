@@ -165,7 +165,7 @@ def get_cellpose_loader(
         batch_size: The batch size for training.
         choice: The choice of dataset. Either 'cyto' or 'cyto2'.
         download: Whether to download the data if it is not present.
-        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
         The DataLoader.
