@@ -1,6 +1,6 @@
 """The VNC dataset contains segmentation annotations for mitochondria in EM.
-
 It contains two volumes from TEM of the drosophila brain.
+
 Please cite https://doi.org/10.6084/m9.figshare.856713.v1 if you use this dataset in your publication.
 """
 
@@ -10,13 +10,15 @@ from shutil import rmtree
 from typing import List, Optional, Union, Tuple
 
 import imageio
-import h5py
 import numpy as np
-import torch_em
 from skimage.measure import label
+
 from torch.utils.data import Dataset, DataLoader
 
+import torch_em
+
 from .. import util
+
 
 URL = "https://github.com/unidesigner/groundtruth-drosophila-vnc/archive/refs/heads/master.zip"
 CHECKSUM = "f7bd0db03c86b64440a16b60360ad60c0a4411f89e2c021c7ee2c8d6af3d7e86"
@@ -41,6 +43,7 @@ def get_vnc_data(path: Union[os.PathLike, str], download: bool) -> str:
     Returns:
         The path to the downloaded data.
     """
+    import h5py
 
     train_path = os.path.join(path, "vnc_train.h5")
     test_path = os.path.join(path, "vnc_test.h5")
@@ -69,6 +72,21 @@ def get_vnc_data(path: Union[os.PathLike, str], download: bool) -> str:
     return path
 
 
+def get_vnc_mito_paths(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Get path to the VNC data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data is saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the stored data.
+    """
+    get_vnc_data(path, download)
+    data_path = os.path.join(path, "vnc_train.h5")
+    return data_path
+
+
 def get_vnc_mito_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
@@ -92,16 +110,20 @@ def get_vnc_mito_dataset(
     Returns:
        The segmentation dataset.
     """
-    get_vnc_data(path, download)
-    data_path = os.path.join(path, "vnc_train.h5")
+    data_path = get_vnc_mito_paths(path, download)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, boundaries=boundaries, offsets=offsets, binary=binary,
     )
 
-    raw_key = "raw"
-    label_key = "labels/mitochondria"
-    return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(
+        raw_paths=data_path,
+        raw_key="raw",
+        label_paths=data_path,
+        label_key="labels/mitochondria",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
 
 def get_vnc_mito_loader(
@@ -129,11 +151,9 @@ def get_vnc_mito_loader(
     Returns:
        The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     ds = get_vnc_mito_dataset(
-        path, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **kwargs
+        path, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary, **ds_kwargs
     )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
