@@ -21,6 +21,7 @@ from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
 from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .msd import get_msd_dataset, get_msd_loader
+from .oasis import get_oasis_dataset, get_oasis_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
