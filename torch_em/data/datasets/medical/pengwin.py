@@ -61,7 +61,7 @@ def get_pengwin_data(
         raise ValueError(f"'{modality}' is not a valid modality. Please choose from {MODALITIES}.")
 
     data_dir = os.path.join(path, "data")
-    if os.path.exists(data_dir):
+    if os.path.exists(os.path.join(data_dir, modality)):
         return data_dir
 
     os.makedirs(path, exist_ok=True)

@@ -10,14 +10,13 @@ sys.path.append("..")
 
 
 def check_pengwin():
-    # from util import ROOT
-    ROOT = "/scratch/share/cidas/cca/data"
+    from util import ROOT
 
     loader = get_pengwin_loader(
         path=os.path.join(ROOT, "pengwin"),
         patch_shape=(1, 512, 512),
         batch_size=2,
-        modality="CT",
+        modality="X-Ray",
         resize_inputs=False,
         download=True,
         sampler=MinInstanceSampler(),
