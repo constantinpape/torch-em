@@ -18,7 +18,7 @@ from .. import util
 
 
 URL = "https://zenodo.org/records/12687192/files/training_set.zip"
-CHECKSUM = "02e64b0d963c3a8ac7330c3161f5f76f25ae01a4072bd3032fb1c4048baec2df"
+CHECKSUM = "1126a2205553ae1d4fe5fbaee7ea732aacc4f5a92b96504ed521c23e5a0e3f89"
 
 
 def get_curvas_data(path: Union[os.PathLike, str], download: bool = False) -> str:
@@ -42,12 +42,8 @@ def get_curvas_data(path: Union[os.PathLike, str], download: bool = False) -> st
 
     # HACK: The zip file is broken. We fix it using the following script.
     fixed_zip_path = os.path.join(path, "training_set_fixed.zip")
-    subprocess.run(["zip", "--quiet", "-FF", zip_path, "--out", fixed_zip_path])
-
-    breakpoint()
-
-    util.unzip(zip_path=fixed_zip_path, dst=path)
-    os.remove(zip_path)
+    subprocess.run(["zip", "-FF", zip_path, "--out", fixed_zip_path])
+    subprocess.run(["unzip", fixed_zip_path, "-d", path])
 
     return data_dir
 
