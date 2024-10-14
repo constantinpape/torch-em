@@ -1,7 +1,17 @@
+"""The PENGWIN dataset contains annotation for pelvic bone fracture and
+fragments in CT and X-Ray images.
+
+This dataset is from the challenge: https://pengwin.grand-challenge.org/pengwin/.
+This dataset is related to the publication: https://doi.org/10.1007/978-3-031-43996-4_30.
+Please cite them if you use this dataset for your publication.
+"""
+
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, Literal
+from typing import Union, Tuple, Literal, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -34,29 +44,50 @@ TARGET_DIRS = {
 MODALITIES = ["CT", "X-Ray"]
 
 
-def get_pengwin_data(path, modality, download):
-    os.makedirs(path, exist_ok=True)
+def get_pengwin_data(
+    path: Union[os.PathLike, str], modality: Literal["CT", "X-Ray"], download: bool = False
+) -> str:
+    """Download the PENGWIN dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        modality: The choice of modality for inputs.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downlaoded.
+    """
+    if not isinstance(modality, str) and modality in MODALITIES:
+        raise ValueError(f"'{modality}' is not a valid modality. Please choose from {MODALITIES}.")
 
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
         return data_dir
 
-    urls = URLS[modality]
-    checksums = CHECKSUMS[modality]
-    dst_dirs = TARGET_DIRS[modality]
+    os.makedirs(path, exist_ok=True)
 
-    for url, checksum, dst_dir in zip(urls, checksums, dst_dirs):
+    for url, checksum, dst_dir in zip(URLS[modality], CHECKSUMS[modality], TARGET_DIRS[modality]):
         zip_path = os.path.join(path, os.path.split(url)[-1])
         util.download_source(path=zip_path, url=url, download=download, checksum=checksum)
-        util.unzip(zip_path=zip_path, dst=os.path.join(data_dir, dst_dir), remove=False)
+        util.unzip(zip_path=zip_path, dst=os.path.join(data_dir, dst_dir))
 
     return data_dir
 
 
-def _get_pengwin_paths(path, modality, download):
-    if not isinstance(modality, str) and modality in MODALITIES:
-        raise ValueError(f"Please choose a modality from {MODALITIES}.")
+def get_pengwin_paths(
+    path: Union[os.PathLike, str], modality: Literal["CT", "X-Ray"], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the PENGWIN data.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        modality: The choice of modality for inputs.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_pengwin_data(path=path, modality=modality, download=download)
 
     if modality == "CT":
@@ -77,16 +108,21 @@ def get_pengwin_dataset(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataset for segmentation of pelvic fracture in CT and X-Ray images.
+) -> Dataset:
+    """Get the PENGWIN dataset for pelvic fracture segmentation.
 
-    This dataset is from the PENGWIN Challenge:
-    - https://pengwin.grand-challenge.org/pengwin/
-    - Related publication: https://doi.org/10.1007/978-3-031-43996-4_30
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        modality: The choice of modality for inputs.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    Please cite it if you use this dataset in your publication.
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_pengwin_paths(path=path, modality=modality, download=download)
+    image_paths, gt_paths = get_pengwin_paths(path=path, modality=modality, download=download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -94,16 +130,9 @@ def get_pengwin_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
-        raw_paths=image_paths,
-        raw_key=None,
-        label_paths=gt_paths,
-        label_key=None,
-        patch_shape=patch_shape,
-        **kwargs
+    return torch_em.default_segmentation_dataset(
+        raw_paths=image_paths, raw_key=None, label_paths=gt_paths, label_key=None, patch_shape=patch_shape, **kwargs
     )
-
-    return dataset
 
 
 def get_pengwin_loader(
@@ -114,17 +143,20 @@ def get_pengwin_loader(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for segmentation of pelvic fracture in CT and X-Ray images. See `get_pengwin_dataset` for details.
+) -> DataLoader:
+    """Get the PENGWIN dataloader for pelvic fracture segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        modality: The choice of modality for inputs.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_pengwin_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        modality=modality,
-        resize_inputs=resize_inputs,
-        download=download,
-        **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_pengwin_dataset(path, patch_shape, modality, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
