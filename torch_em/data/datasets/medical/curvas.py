@@ -1,12 +1,13 @@
 """The CURVAS dataset contains annotations for pancreas, kidney and liver
 in abdominal CT scans.
 
-This dataset is from the challenge: https://www.sycaimedical.com/challenge.
-The dataset is located at: https://zenodo.org/records/11147560.
+This dataset is from the challenge: https://curvas.grand-challenge.org.
+The dataset is located at: https://zenodo.org/records/12687192.
 Please cite tem if you use this dataset for your research.
 """
 
 import os
+import subprocess
 from glob import glob
 from natsort import natsorted
 from typing import Tuple, Union, Literal, List
@@ -16,7 +17,7 @@ import torch_em
 from .. import util
 
 
-URL = "https://zenodo.org/records/11147560/files/training_data.zip"
+URL = "https://zenodo.org/records/12687192/files/training_set.zip"
 CHECKSUM = "02e64b0d963c3a8ac7330c3161f5f76f25ae01a4072bd3032fb1c4048baec2df"
 
 
@@ -36,9 +37,17 @@ def get_curvas_data(path: Union[os.PathLike, str], download: bool = False) -> st
 
     os.makedirs(path, exist_ok=True)
 
-    zip_path = os.path.join(path, "training_data.zip")
+    zip_path = os.path.join(path, "training_set.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
-    util.unzip(zip_path=zip_path, dst=path)
+
+    # HACK: The zip file is broken. We fix it using the following script.
+    fixed_zip_path = os.path.join(path, "training_set_fixed.zip")
+    subprocess.run(["zip", "--quiet", "-FF", zip_path, "--out", fixed_zip_path])
+
+    breakpoint()
+
+    util.unzip(zip_path=fixed_zip_path, dst=path)
+    os.remove(zip_path)
 
     return data_dir
 
