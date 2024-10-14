@@ -36,6 +36,13 @@ CHECKSUMS = {
     "cuticle": "464f75d30133e8864958049647fe3c2216ddf2d4327569738ad72d299c991843"
 }
 
+FILE_TEMPLATES = {
+    "cells": "train_data_membrane_%02i.n5",
+    "nuclei": "train_data_nuclei_%02i.h5",
+    "cilia": "train_data_cilia_%02i.h5",
+    "cuticle": "train_data_%02i.n5",
+}
+
 
 #
 # TODO data-loader for more classes:
@@ -91,7 +98,7 @@ def get_platynereis_data(path: Union[os.PathLike, str], name: str, download: boo
     return data_root, n_files
 
 
-def get_platynereis_paths(path, sample_ids, name, file_template, rois={}, download=False, return_rois=False):
+def get_platynereis_paths(path, sample_ids, name, rois={}, download=False, return_rois=False):
     """Get paths to the platynereis data.
 
     Args:
@@ -106,7 +113,7 @@ def get_platynereis_paths(path, sample_ids, name, file_template, rois={}, downlo
         The filepaths for the stored data.
     """
     root, n_files = get_platynereis_data(path, name, download)
-    template = os.path.join(root, file_template)
+    template = os.path.join(root, FILE_TEMPLATES[name])
 
     if sample_ids is None:
         sample_ids = list(range(1, n_files + 1))
@@ -144,13 +151,7 @@ def get_platynereis_cuticle_dataset(
         The segmentation dataset.
     """
     paths, data_rois = get_platynereis_paths(
-        path=path,
-        sample_ids=sample_ids,
-        name="cuticle",
-        file_template="train_data_%02i.n5",
-        rois=rois,
-        download=download,
-        return_rois=True,
+        path=path, sample_ids=sample_ids, name="cuticle", rois=rois, download=download, return_rois=True,
     )
     return torch_em.default_segmentation_dataset(
         raw_paths=paths,
@@ -221,13 +222,7 @@ def get_platynereis_cilia_dataset(
         The segmentation dataset.
     """
     paths, rois = get_platynereis_paths(
-        path=path,
-        sample_ids=sample_ids,
-        name="cilia",
-        file_template="train_data_cilia_%02i.h5",
-        rois=rois,
-        download=download,
-        return_rois=True,
+        path=path, sample_ids=sample_ids, name="cilia", rois=rois, download=download, return_rois=True,
     )
     kwargs = util.update_kwargs(kwargs, "rois", rois)
     kwargs, _ = util.add_instance_label_transform(
@@ -307,13 +302,7 @@ def get_platynereis_cell_dataset(
         The segmentation dataset.
     """
     data_paths, data_rois = get_platynereis_paths(
-        path=path,
-        sample_ids=sample_ids,
-        name="cells",
-        file_template="train_data_membrane_%02i.n5",
-        rois=rois,
-        download=download,
-        return_rois=True,
+        path=path, sample_ids=sample_ids, name="cells", rois=rois, download=download, return_rois=True,
     )
 
     kwargs = util.update_kwargs(kwargs, "rois", data_rois)
@@ -402,13 +391,7 @@ def get_platynereis_nuclei_dataset(
     sample_ids.sort()
 
     data_paths, data_rois = get_platynereis_paths(
-        path=path,
-        sample_ids=sample_ids,
-        name="nuclei",
-        file_template="train_data_nuclei_%02i.h5",
-        rois=rois,
-        download=download,
-        return_rois=True,
+        path=path, sample_ids=sample_ids, name="nuclei", rois=rois, download=download, return_rois=True,
     )
 
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
