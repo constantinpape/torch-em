@@ -2,6 +2,7 @@
 
 It contains three annotated volumes from the adult fruit-fly brain.
 It was held as a challenge at MICCAI 2016. For details on the dataset check out https://cremi.org/.
+Please cite the challenge if you use the dataset in your research.
 """
 # TODO add support for realigned volumes
 
@@ -9,10 +10,13 @@ import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import torch_em
+
 from torch.utils.data import Dataset, DataLoader
 
+import torch_em
+
 from .. import util
+
 
 CREMI_URLS = {
     "original": {
@@ -34,12 +38,7 @@ CHECKSUMS = {
 }
 
 
-def get_cremi_data(
-    path: Union[os.PathLike, str],
-    samples: Tuple[str],
-    download: bool,
-    use_realigned: bool = False,
-) -> List[str]:
+def get_cremi_data(path: Union[os.PathLike, str], samples: Tuple[str], download: bool, use_realigned: bool = False):
     """Download the CREMI training data.
 
     Args:
@@ -47,9 +46,6 @@ def get_cremi_data(
         samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
         download: Whether to download the data if it is not present.
         use_realigned: Use the realigned instead of the original training data.
-
-    Returns:
-        The filepaths to the training data.
     """
     if use_realigned:
         # we need to sample batches in this case
@@ -60,14 +56,33 @@ def get_cremi_data(
         checksums = CHECKSUMS["original"]
 
     os.makedirs(path, exist_ok=True)
-    data_paths = []
     for name in samples:
         url = urls[name]
         checksum = checksums[name]
         data_path = os.path.join(path, f"sample{name}.h5")
         # CREMI SSL certificates expired, so we need to disable verification
         util.download_source(data_path, url, download, checksum, verify=False)
-        data_paths.append(data_path)
+
+
+def get_cremi_paths(
+    path: Union[os.PathLike, str],
+    samples: Tuple[str, ...] = ("A", "B", "C"),
+    use_realigned: bool = False,
+    download: bool = False
+) -> List[str]:
+    """Get paths to the CREMI data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        use_realigned: Use the realigned instead of the original training data.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepaths to the training data.
+    """
+    get_cremi_data(path, samples, download, use_realigned)
+    data_paths = [os.path.join(path, f"sample{name}.h5") for name in samples]
     return data_paths
 
 
@@ -109,7 +124,7 @@ def get_cremi_dataset(
     if rois is not None:
         assert isinstance(rois, dict)
 
-    data_paths = get_cremi_data(path, samples, download, use_realigned)
+    data_paths = get_cremi_paths(path, samples, use_realigned, download)
     data_rois = [rois.get(name, np.s_[:, :, :]) for name in samples]
 
     if defect_augmentation_kwargs is not None and "artifact_source" not in defect_augmentation_kwargs:
@@ -119,14 +134,13 @@ def get_cremi_dataset(
         defect_path = os.path.join(path, "cremi_defects.h5")
         util.download_source(defect_path, url, download, checksum)
         defect_patch_shape = (1,) + tuple(patch_shape[1:])
-        artifact_source = torch_em.transform.get_artifact_source(defect_path, defect_patch_shape,
-                                                                 min_mask_fraction=0.75,
-                                                                 raw_key="defect_sections/raw",
-                                                                 mask_key="defect_sections/mask")
+        artifact_source = torch_em.transform.get_artifact_source(
+            defect_path, defect_patch_shape,
+            min_mask_fraction=0.75,
+            raw_key="defect_sections/raw",
+            mask_key="defect_sections/mask"
+        )
         defect_augmentation_kwargs.update({"artifact_source": artifact_source})
-
-    raw_key = "volumes/raw"
-    label_key = "volumes/labels/neuron_ids"
 
     # defect augmentations
     if defect_augmentation_kwargs is not None:
@@ -140,7 +154,13 @@ def get_cremi_dataset(
     )
 
     return torch_em.default_segmentation_dataset(
-        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois, **kwargs
+        raw_paths=data_paths,
+        raw_key="volumes/raw",
+        label_paths=data_paths,
+        label_key="volumes/labels/neuron_ids",
+        patch_shape=patch_shape,
+        rois=data_rois,
+        **kwargs
     )
 
 
@@ -180,9 +200,7 @@ def get_cremi_loader(
     Returns:
         The DataLoader.
     """
-    dataset_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    dataset_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     ds = get_cremi_dataset(
         path=path,
         patch_shape=patch_shape,
