@@ -1,7 +1,15 @@
+"""The CURVAS dataset contains annotations for pancreas, kidney and liver
+in abdominal CT scans.
+
+This dataset is from the challenge: https://www.sycaimedical.com/challenge.
+The dataset is located at: https://zenodo.org/records/11147560.
+Please cite tem if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Tuple, Union
+from typing import Tuple, Union, Literal, List
 
 import torch_em
 
@@ -12,12 +20,21 @@ URL = "https://zenodo.org/records/11147560/files/training_data.zip"
 CHECKSUM = "02e64b0d963c3a8ac7330c3161f5f76f25ae01a4072bd3032fb1c4048baec2df"
 
 
-def get_curvas_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_curvas_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the CURVAS dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "training_set")
     if os.path.exists(data_dir):
         return data_dir
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "training_data.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
@@ -26,11 +43,24 @@ def get_curvas_data(path, download):
     return data_dir
 
 
-def _get_curvas_paths(path, rater, download):
+def get_curvas_paths(
+    path: Union[os.PathLike, str], rater: Literal["1"] = "1", download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the CURVAS data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        rater: The choice of rater providing the annotations.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_curvas_data(path=path, download=download)
 
     if not isinstance(rater, list):
-        rater = [str(rater)]
+        rater = [rater]
 
     assert len(rater) == 1, "The segmentations for multiple raters is not supported at the moment."
 
@@ -45,22 +75,25 @@ def _get_curvas_paths(path, rater, download):
 def get_curvas_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
-    rater: Union[int, list] = ["1"],
+    rater: Literal["1"] = "1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
-    """Dataset for segmentation of pancreas, kidney and liver in abdominal CT scans.
+    """Get the CURVAS dataset for pancreas, kidney and liver segmentation.
 
-    NOTE: This dataset has multiple raters annotating the aforementioned organs for all patients.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        rater: The choice of rater providing the annotations.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    The dataset is located at:
-    - https://www.sycaimedical.com/challenge
-    - https://zenodo.org/records/11147560
-
-    Please cite it if you use this dataset for a publication.
+    Returns:
+        The segmentationd dataset.
     """
-    image_paths, gt_paths = _get_curvas_paths(path, rater, download)
+    image_paths, gt_paths = get_curvas_paths(path, rater, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -84,17 +117,25 @@ def get_curvas_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     batch_size: int,
-    rater: Union[int, list] = ["1"],
+    rater: Literal["1"] = "1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
-    """Dataloader for segmentation of pancreas, kidney and liver in abdominal CT scans.
-    See `get_curvas_dataset` for details.
+    """Get the CURVAS dataloader for pancreas, kidney and liver segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        rater: The choice of rater providing the annotations.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch dataloader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_curvas_dataset(
-        path=path, patch_shape=patch_shape, rater=rater, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_curvas_dataset(path, patch_shape, rater, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
