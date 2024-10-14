@@ -7,7 +7,7 @@ import torch
 
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_tensor_with_channels, load_data
+from ..util import ensure_tensor_with_channels, ensure_patch_shape_without_labels, load_data
 
 
 class RawDataset(torch.utils.data.Dataset):
@@ -107,7 +107,13 @@ class RawDataset(torch.utils.data.Dataset):
                 sample_id += 1
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
-
+        if self.patch_shape is not None and self.with_padding:
+            raw = ensure_patch_shape_without_labels(
+                raw=raw,
+                patch_shape=self.patch_shape,
+                have_raw_channels=self._with_channels,
+                have_label_channels=self._with_label_channels,
+            )
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
         if len(self.patch_shape) == self._ndim + 1:
             raw = raw.squeeze(1 if self._with_channels else 0)
