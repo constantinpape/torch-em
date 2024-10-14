@@ -29,6 +29,7 @@ from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
 from .papila import get_papila_dataset, get_papila_loader
+from .pengwin import get_pengwin_dataset, get_pengwin_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
