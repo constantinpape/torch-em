@@ -1,7 +1,16 @@
+"""The Acouslic AI dataset contains annotations for fetal segmentation
+in ultrasound images.
+
+This dataset is from the challenge: https://acouslic-ai.grand-challenge.org/.
+Please cite the challenge if you use this dataset for your publication.
+"""
+
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Tuple, Union
+from typing import Tuple, Union, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -12,7 +21,16 @@ URL = "https://zenodo.org/records/11005384/files/acouslic-ai-train-set.zip"
 CHECKSUM = "187602dd243a3a872502b57b8ea56e28c67a9ded547b6e816b00c6d41f8b8767"
 
 
-def get_acouslic_ai_data(path, download):
+def get_acouslic_ai_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the Acouslic AI dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downlaoded.
+    """
     os.makedirs(path, exist_ok=True)
 
     data_dir = os.path.join(path, "data")
@@ -26,7 +44,17 @@ def get_acouslic_ai_data(path, download):
     return data_dir
 
 
-def _get_acouslic_ai_paths(path, download):
+def get_acouslic_ai_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[str], List[str]]:
+    """Get paths to the Acouslic AI data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_acouslic_ai_data(path=path, download=download)
 
     image_paths = natsorted(glob(os.path.join(data_dir, "images", "stacked_fetal_ultrasound", "*.mha")))
@@ -41,14 +69,20 @@ def get_acouslic_ai_dataset(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataset for segmentation of fetal abdominal circumference in ultrasound images.
+) -> Dataset:
+    """Get the Acouslic AI dataset for fetal segmentation.
 
-    This dataset is from the ACOUSLIC-AI Challenge: https://acouslic-ai.grand-challenge.org/
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    Please cite it if you this dataset for your publication.
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_acouslic_ai_paths(path=path, download=download)
+    image_paths, gt_paths = get_acouslic_ai_paths(path=path, download=download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -56,7 +90,7 @@ def get_acouslic_ai_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
@@ -64,8 +98,6 @@ def get_acouslic_ai_dataset(
         patch_shape=patch_shape,
         **kwargs
     )
-
-    return dataset
 
 
 def get_acouslic_ai_loader(
@@ -75,9 +107,18 @@ def get_acouslic_ai_loader(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for segmentation of fetal abdominal circumference in ultrasound images.
-    See `get_acouslic_ai_dataset` for details.
+) -> DataLoader:
+    """Get the Acouslic AI dataloader for fetal segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_acouslic_ai_dataset(
