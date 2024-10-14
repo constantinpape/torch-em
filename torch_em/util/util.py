@@ -175,14 +175,15 @@ def ensure_patch_shape(
     raw, labels, patch_shape, have_raw_channels=False, have_label_channels=False, channel_first=True
 ):
     raw_shape = raw.shape
-    labels_shape = labels.shape
+    if labels is not None:
+        labels_shape = labels.shape
 
     # In case the inputs has channels and they are channels first
     # IMPORTANT: for ImageCollectionDataset
     if have_raw_channels and channel_first:
         raw_shape = raw_shape[1:]
 
-    if have_label_channels and channel_first:
+    if have_label_channels and channel_first and labels is not None:
         labels_shape = labels_shape[1:]
 
     # Extract the pad_width and pad the raw inputs
@@ -199,7 +200,7 @@ def ensure_patch_shape(
         raw = np.pad(array=raw, pad_width=pad_width)
 
     # Extract the pad width and pad the label inputs
-    if any(sh < psh for sh, psh in zip(labels_shape, patch_shape)):
+    if labels is not None and any(sh < psh for sh, psh in zip(labels_shape, patch_shape)):
         pw = [(0, max(0, psh - sh)) for sh, psh in zip(labels_shape, patch_shape)]
 
         if have_label_channels and channel_first:
@@ -210,8 +211,10 @@ def ensure_patch_shape(
             pad_width = pw
 
         labels = np.pad(array=labels, pad_width=pad_width)
-
-    return raw, labels
+    if labels is None:
+        return raw
+    else:
+        return raw, labels
 
 
 def get_constructor_arguments(obj):
