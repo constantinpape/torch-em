@@ -3,7 +3,8 @@ from .reporting import get_training_summary
 from .training import parser_helper
 from .util import (
     auto_compile, ensure_array, ensure_spatial_array, ensure_tensor, ensure_tensor_with_channels,
-    get_constructor_arguments, get_trainer, is_compiled, load_model, model_is_equal, ensure_patch_shape
+    get_constructor_arguments, get_trainer, is_compiled, load_model, model_is_equal, ensure_patch_shape,
+    ensure_patch_shape_without_labels
 )
 
 # NOTE: we don't import the modelzoo convenience functions here.
