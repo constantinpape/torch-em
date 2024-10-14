@@ -9,6 +9,7 @@ from .cholecseg8k import get_cholecseg8k_dataset, get_cholecseg8k_loader
 from .covid19_seg import get_covid19_seg_dataset, get_covid19_seg_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
 from .drive import get_drive_dataset, get_drive_loader
+from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
 from .duke_liver import get_duke_liver_dataset, get_duke_liver_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
 from .han_seg import get_han_seg_dataset, get_han_seg_loader
