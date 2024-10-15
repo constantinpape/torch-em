@@ -41,7 +41,7 @@ def get_chaos_data(
         download: Whether to download the data if it is not present.
 
     Returns:
-        Filepath where the data is downlaoded.
+        Filepath where the data is downloaded.
     """
     assert split == "train", "'train' is the only split with ground truth annotations."
 
