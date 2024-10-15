@@ -68,7 +68,14 @@ def ensure_tensor(tensor, dtype=None):
     if isinstance(tensor, np.ndarray):
         if np.dtype(tensor.dtype) in DTYPE_MAP:
             tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
-        tensor = torch.from_numpy(tensor)
+        # Try to convert the tensor, even if it has wrong byte-order
+        try:
+            tensor = torch.from_numpy(tensor)
+        except ValueError:
+            tensor = tensor.view(tensor.dtype.newbyteorder())
+            if np.dtype(tensor.dtype) in DTYPE_MAP:
+                tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
+            tensor = torch.from_numpy(tensor)
 
     assert torch.is_tensor(tensor), f"Cannot convert {type(tensor)} to torch"
     if dtype is not None:
@@ -136,6 +143,49 @@ def ensure_spatial_array(array, ndim, dtype=None):
             assert array.shape[:2] == (1, 1)
             array = array[0, 0]
     return array
+
+
+def ensure_patch_shape(
+    raw, labels, patch_shape, have_raw_channels=False, have_label_channels=False, channel_first=True
+):
+    raw_shape = raw.shape
+    labels_shape = labels.shape
+
+    # In case the inputs has channels and they are channels first
+    # IMPORTANT: for ImageCollectionDataset
+    if have_raw_channels and channel_first:
+        raw_shape = raw_shape[1:]
+
+    if have_label_channels and channel_first:
+        labels_shape = labels_shape[1:]
+
+    # Extract the pad_width and pad the raw inputs
+    if any(sh < psh for sh, psh in zip(raw_shape, patch_shape)):
+        pw = [(0, max(0, psh - sh)) for sh, psh in zip(raw_shape, patch_shape)]
+
+        if have_raw_channels and channel_first:
+            pad_width = [(0, 0), *pw]
+        elif have_raw_channels and not channel_first:
+            pad_width = [*pw, (0, 0)]
+        else:
+            pad_width = pw
+
+        raw = np.pad(array=raw, pad_width=pad_width)
+
+    # Extract the pad width and pad the label inputs
+    if any(sh < psh for sh, psh in zip(labels_shape, patch_shape)):
+        pw = [(0, max(0, psh - sh)) for sh, psh in zip(labels_shape, patch_shape)]
+
+        if have_label_channels and channel_first:
+            pad_width = [(0, 0), *pw]
+        elif have_label_channels and not channel_first:
+            pad_width = [*pw, (0, 0)]
+        else:
+            pad_width = pw
+
+        labels = np.pad(array=labels, pad_width=pad_width)
+
+    return raw, labels
 
 
 def get_constructor_arguments(obj):
@@ -227,7 +277,11 @@ def load_model(checkpoint, model=None, name="best", state_key="model_state", dev
         model = get_trainer(checkpoint, name=name, device=device).model
 
     else:  # load the model state from the checkpoint
-        ckpt = os.path.join(checkpoint, f"{name}.pt")
+        if os.path.isdir(checkpoint):
+            ckpt = os.path.join(checkpoint, f"{name}.pt")
+        else:
+            ckpt = checkpoint
+
         state = torch.load(ckpt, map_location=device)[state_key]
         # to enable loading compiled models
         compiled_prefix = "_orig_mod."

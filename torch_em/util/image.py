@@ -70,11 +70,19 @@ class MultiDatasetWrapper:
 
 def load_data(path, key, mode="r"):
     have_single_file = isinstance(path, str)
-    if key is None and have_single_file:
-        return load_image(path)
-    elif key is None and not have_single_file:
-        return np.stack([load_image(p) for p in path])
-    elif key is not None and have_single_file:
-        return open_file(path, mode=mode)[key]
-    elif key is not None and not have_single_file:
-        return MultiDatasetWrapper(*[open_file(p, mode=mode)[key] for p in path])
+    have_single_key = isinstance(key, str)
+
+    if key is None:
+        if have_single_file:
+            return load_image(path)
+        else:
+            return np.stack([load_image(p) for p in path])
+    else:
+        if have_single_key and have_single_file:
+            return open_file(path, mode=mode)[key]
+        elif have_single_key and not have_single_file:
+            return MultiDatasetWrapper(*[open_file(p, mode=mode)[key] for p in path])
+        elif not have_single_key and have_single_file:
+            return MultiDatasetWrapper(*[open_file(path, mode=mode)[k] for k in key])
+        else:  # have multipe keys and multiple files
+            return MultiDatasetWrapper(*[open_file(p, mode=mode)[k] for k in key for p in path])
