@@ -112,7 +112,7 @@ class RawDataset(torch.utils.data.Dataset):
                 raw=raw,
                 labels=None,
                 patch_shape=self.patch_shape,
-                with_channels=self._with_channels
+                have_raw_channels=self._with_channels
             )
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
         if len(self.patch_shape) == self._ndim + 1:
