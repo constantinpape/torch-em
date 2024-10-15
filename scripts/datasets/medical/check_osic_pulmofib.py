@@ -8,9 +8,10 @@ ROOT = "/media/anwai/ANWAI/data/osic_pulmofib"
 def check_osic_pulmofib():
     loader = get_osic_pulmofib_loader(
         path=ROOT,
-        patch_shape=(1, 512, 512),
+        patch_shape=(4, 256, 256),
+        ndim=3,
         batch_size=2,
-        resize_inputs=False,
+        resize_inputs=True,
         download=True,
     )
 

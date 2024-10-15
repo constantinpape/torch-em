@@ -66,7 +66,38 @@ def _get_sega_paths(path, data_choice, download):
             else:
                 image_paths.append(volume_path)
 
-    return natsorted(image_paths), natsorted(gt_paths)
+    # now let's wrap the volumes to nifti format
+    fimage_dir = os.path.join(path, "data", "images")
+    fgt_dir = os.path.join(path, "data", "labels")
+
+    os.makedirs(fimage_dir, exist_ok=True)
+    os.makedirs(fgt_dir, exist_ok=True)
+
+    fimage_paths, fgt_paths = [], []
+    for image_path, gt_path in zip(natsorted(image_paths), natsorted(gt_paths)):
+        fimage_path = os.path.join(fimage_dir, f"{Path(image_path).stem}.nii.gz")
+        fgt_path = os.path.join(fgt_dir, f"{Path(image_path).stem}.nii.gz")
+
+        fimage_paths.append(fimage_path)
+        fgt_paths.append(fgt_path)
+
+        if os.path.exists(fimage_path) and os.path.exists(fgt_path):
+            continue
+
+        import nrrd
+        import numpy as np
+        import nibabel as nib
+
+        image = nrrd.read(image_path)[0]
+        gt = nrrd.read(gt_path)[0]
+
+        image_nifti = nib.Nifti2Image(image, np.eye(4))
+        gt_nifti = nib.Nifti2Image(gt, np.eye(4))
+
+        nib.save(image_nifti, fimage_path)
+        nib.save(gt_nifti, fgt_path)
+
+    return natsorted(fimage_paths), natsorted(fgt_paths)
 
 
 def get_sega_dataset(
@@ -92,10 +123,11 @@ def get_sega_dataset(
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
-        raw_key=None,
+        raw_key="data",
         label_paths=gt_paths,
-        label_key=None,
+        label_key="data",
         patch_shape=patch_shape,
+        is_seg_dataset=True,
         **kwargs
     )
 

@@ -8,8 +8,6 @@ from urllib.parse import urljoin
 
 import numpy as np
 import pandas as pd
-import nibabel as nib
-import pydicom as dicom
 
 import torch_em
 
@@ -71,6 +69,9 @@ def get_plethora_data(path, task, download):
 
 
 def _assort_plethora_inputs(image_dir, gt_dir, task, csv_path):
+    import nibabel as nib
+    import pydicom as dicom
+
     df = pd.read_csv(csv_path)
 
     task_gt_dir = os.path.join(gt_dir, )

@@ -25,18 +25,21 @@ Note that we have implemented automatic download, but this leads to dependency
 issues, so we recommend to download the data manually and then run the loaders with the correct path.
 """
 
-import json
 import os
+import json
 from glob import glob
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Literal
 
-import imageio.v3 as imageio
 import numpy as np
-import torch_em
+import imageio.v3 as imageio
 from sklearn.model_selection import train_test_split
+
 from torch.utils.data import Dataset, DataLoader
 
+import torch_em
+
 from .. import util
+
 
 BENCHMARK_DATASETS = {
     1: "mito_benchmarks/c_elegans",
@@ -56,20 +59,6 @@ BENCHMARK_SHAPES = {
     6: (1260, 1081, 1200),
     7: (224, 224),  # NOTE: this is the minimal square shape that fits
 }
-
-
-def _get_mitolab_data(path, download):
-    access_id = "11037"
-    data_path = util.download_source_empiar(path, access_id, download)
-
-    zip_path = os.path.join(data_path, "data/cem_mitolab.zip")
-    if os.path.exists(zip_path):
-        util.unzip(zip_path, data_path, remove=True)
-
-    data_root = os.path.join(data_path, "cem_mitolab")
-    assert os.path.exists(data_root)
-
-    return data_root
 
 
 def _get_all_images(path):
@@ -122,14 +111,37 @@ def _get_non_empty_images(path):
     return raw_paths, label_paths
 
 
-def get_mitolab_data(
+def get_mitolab_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the MitoLab training data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath for the downloaded data.
+    """
+    access_id = "11037"
+    data_path = util.download_source_empiar(path, access_id, download)
+
+    zip_path = os.path.join(data_path, "data/cem_mitolab.zip")
+    if os.path.exists(zip_path):
+        util.unzip(zip_path, data_path, remove=True)
+
+    data_root = os.path.join(data_path, "cem_mitolab")
+    assert os.path.exists(data_root)
+
+    return data_root
+
+
+def get_mitolab_paths(
     path: Union[os.PathLike, str],
-    split: str,
-    val_fraction: float,
-    download: bool,
-    discard_empty_images: bool
+    split: Literal['train', 'val'],
+    val_fraction: float = 0.05,
+    download: bool = False,
+    discard_empty_images: bool = True,
 ) -> Tuple[List[str], List[str]]:
-    """Download the mitolab training data.
+    """Get the paths to MitoLab training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -142,7 +154,8 @@ def get_mitolab_data(
         List of the image data paths.
         List of the label data paths.
     """
-    data_path = _get_mitolab_data(path, download)
+    data_path = get_mitolab_data(path, download)
+
     if discard_empty_images:
         raw_paths, label_paths = _get_non_empty_images(data_path)
     else:
@@ -162,14 +175,27 @@ def get_mitolab_data(
     return raw_paths, label_paths
 
 
-def get_benchmark_data(
-    path: Union[os.PathLike, str],
-    dataset_id: int,
-    download: bool
-) -> Tuple[
-    List[str], List[str], str, str, bool
-]:
-    """Download the mitolab benechmark data.
+def get_benchmark_data(path: Union[os.PathLike, str], dataset_id: int, download: bool = False) -> str:
+    """Download the MitoLab benchmark data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        dataset_id: The id of the benchmark dataset to download.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath for the stored data.
+    """
+    access_id = "10982"
+    data_path = util.download_source_empiar(path, access_id, download)
+    dataset_path = os.path.join(data_path, "data", BENCHMARK_DATASETS[dataset_id])
+    return dataset_path
+
+
+def get_benchmark_paths(
+    path: Union[os.PathLike, str], dataset_id: int, download: bool = False
+) -> Tuple[List[str], List[str], str, str, bool]:
+    """Get paths to the MitoLab benchmark data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -183,9 +209,7 @@ def get_benchmark_data(
         The label data key.
         Whether this is a segmentation dataset.
     """
-    access_id = "10982"
-    data_path = util.download_source_empiar(path, access_id, download)
-    dataset_path = os.path.join(data_path, "data", BENCHMARK_DATASETS[dataset_id])
+    dataset_path = get_benchmark_data(path, dataset_id, download)
 
     # these are the 3d datasets
     if dataset_id in range(1, 7):
@@ -212,14 +236,14 @@ def get_benchmark_data(
 
 def get_mitolab_dataset(
     path: Union[os.PathLike, str],
-    split: str,
+    split: Literal['train', 'val'],
     patch_shape: Tuple[int, int] = (224, 224),
     val_fraction: float = 0.05,
     download: bool = False,
     discard_empty_images: bool = True,
     **kwargs
 ) -> Dataset:
-    """Get the dataset for the mitolab training data.
+    """Get the dataset for the MitoLab training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -235,11 +259,18 @@ def get_mitolab_dataset(
     """
     assert split in ("train", "val", None)
     assert os.path.exists(path)
-    raw_paths, label_paths = get_mitolab_data(path, split, val_fraction, download, discard_empty_images)
+
+    raw_paths, label_paths = get_mitolab_paths(path, split, val_fraction, download, discard_empty_images)
+
     return torch_em.default_segmentation_dataset(
-        raw_paths=raw_paths, raw_key=None,
-        label_paths=label_paths, label_key=None,
-        patch_shape=patch_shape, is_seg_dataset=False, ndim=2, **kwargs
+        raw_paths=raw_paths,
+        raw_key=None,
+        label_paths=label_paths,
+        label_key=None,
+        patch_shape=patch_shape,
+        is_seg_dataset=False,
+        ndim=2,
+        **kwargs
     )
 
 
@@ -248,11 +279,7 @@ def get_cem15m_dataset(path):
 
 
 def get_benchmark_dataset(
-    path,
-    dataset_id,
-    patch_shape,
-    download=False,
-    **kwargs,
+    path: Union[os.PathLike, str], dataset_id: int, patch_shape: Tuple[int, int], download: bool = False, **kwargs
 ) -> Dataset:
     """Get the dataset for one of the mitolab benchmark datasets.
 
@@ -268,12 +295,17 @@ def get_benchmark_dataset(
     """
     if dataset_id not in range(1, 8):
         raise ValueError(f"Invalid dataset id {dataset_id}, expected id in range [1, 7].")
-    raw_paths, label_paths, raw_key, label_key, is_seg_dataset = get_benchmark_data(path, dataset_id, download)
+
+    raw_paths, label_paths, raw_key, label_key, is_seg_dataset = get_benchmark_paths(path, dataset_id, download)
+
     return torch_em.default_segmentation_dataset(
-        raw_paths=raw_paths, raw_key=raw_key,
-        label_paths=label_paths, label_key=label_key,
+        raw_paths=raw_paths,
+        raw_key=raw_key,
+        label_paths=label_paths,
+        label_key=label_key,
         patch_shape=patch_shape,
-        is_seg_dataset=is_seg_dataset, **kwargs,
+        is_seg_dataset=is_seg_dataset,
+        **kwargs,
     )
 
 
@@ -292,7 +324,7 @@ def get_mitolab_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the dataloader for the mitolab training data.
+    """Get the dataloader for the MitoLab training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -307,14 +339,17 @@ def get_mitolab_loader(
     Returns:
         The PyTorch DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_mitolab_dataset(
-        path, split, patch_shape, download=download, discard_empty_images=discard_empty_images, **ds_kwargs
+        path=path,
+        split=split,
+        patch_shape=patch_shape,
+        val_fraction=val_fraction,
+        download=download,
+        discard_empty_images=discard_empty_images,
+        **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
 
 
 def get_cem15m_loader(path):
@@ -329,7 +364,7 @@ def get_benchmark_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the datasloader for one of the mitolab benchmark datasets.
+    """Get the dataloader for one of the MitoLab benchmark datasets.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -342,12 +377,6 @@ def get_benchmark_loader(
     Returns:
         The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
-    dataset = get_benchmark_dataset(
-        path, dataset_id,
-        patch_shape=patch_shape, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_benchmark_dataset(path, dataset_id, patch_shape=patch_shape, download=download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

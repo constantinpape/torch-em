@@ -1,14 +1,48 @@
+"""This dataset contains annotations for tissue region segmentation in
+breast cancer histopathology images.
+
+NOTE: There are multiple semantic instances in tissue labels. Below mentioned are their respective index details:
+    - 0: outside_roi (~background)
+    - 1: tumor
+    - 2: stroma
+    - 3: lymphocytic_infiltrate
+    - 4: necrosis_or_debris
+    - 5: glandular_secretions
+    - 6: blood
+    - 7: exclude
+    - 8: metaplasia_NOS
+    - 9: fat
+    - 10: plasma_cells
+    - 11: other_immune_infiltrate
+    - 12: mucoid_material
+    - 13: normal_acinus_or_duct
+    - 14: lymphatics
+    - 15: undetermined
+    - 16: nerve
+    - 17: skin_adnexa
+    - 18: blood_vessel
+    - 19: angioinvasion
+    - 20: dcis
+    - 21: other
+
+This dataset is from https://bcsegmentation.grand-challenge.org/BCSS/.
+Please cite this paper (https://doi.org/10.1093/bioinformatics/btz083) if you use this dataset for a publication.
+"""
+
 import os
 import shutil
 from glob import glob
 from pathlib import Path
+from typing import Union, Optional, List, Tuple
 
 from sklearn.model_selection import train_test_split
 
 import torch
+from torch.utils.data import Dataset, DataLoader
+
 import torch_em
-from torch_em.data.datasets import util
-from torch_em.data import ImageCollectionDataset
+
+from .. import util
 
 
 URL = "https://drive.google.com/drive/folders/1zqbdkQF8i5cEmZOGmbdQm-EP8dRYtvss?usp=sharing"
@@ -61,7 +95,13 @@ def _get_image_and_label_paths(path):
     return image_paths, label_paths
 
 
-def _assort_bcss_data(path, download):
+def get_bcss_data(path: Union[os.PathLike, str], download: bool = False):
+    """Download the BCSS dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+    """
     if download:
         _download_bcss_dataset(path, download)
 
@@ -91,39 +131,22 @@ def _assort_bcss_data(path, download):
             shutil.copy(src=label_path, dst=dst_lab_path)
 
 
-def get_bcss_dataset(
-    path, patch_shape, split=None, val_fraction=0.2, download=False, label_dtype=torch.int64, **kwargs
-):
-    """Dataset for breast cancer tissue segmentation in histopathology.
+def get_bcsss_paths(
+    path: Union[os.PathLike, str], split: Optional[str] = None, val_fraction: float = 0.2, download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the BCSS data.
 
-    This dataset is from https://bcsegmentation.grand-challenge.org/BCSS/.
-    Please cite this paper (https://doi.org/10.1093/bioinformatics/btz083) if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        val_fraction: The fraction of data to be considered for validation split.
+        download: Whether to download the data if it is not present.
 
-    NOTE: There are multiple semantic instances in tissue labels. Below mentioned are their respective index details:
-        - 0: outside_roi (~background)
-        - 1: tumor
-        - 2: stroma
-        - 3: lymphocytic_infiltrate
-        - 4: necrosis_or_debris
-        - 5: glandular_secretions
-        - 6: blood
-        - 7: exclude
-        - 8: metaplasia_NOS
-        - 9: fat
-        - 10: plasma_cells
-        - 11: other_immune_infiltrate
-        - 12: mucoid_material
-        - 13: normal_acinus_or_duct
-        - 14: lymphatics
-        - 15: undetermined
-        - 16: nerve
-        - 17: skin_adnexa
-        - 18: blood_vessel
-        - 19: angioinvasion
-        - 20: dcis
-        - 21: other
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
-    _assort_bcss_data(path, download)
+    get_bcss_data(path, download)
 
     if split is None:
         image_paths = sorted(glob(os.path.join(path, "*", "images", "*")))
@@ -147,19 +170,73 @@ def get_bcss_dataset(
 
     assert len(image_paths) == len(label_paths)
 
-    dataset = ImageCollectionDataset(
-        image_paths, label_paths, patch_shape=patch_shape, label_dtype=label_dtype, **kwargs
+    return image_paths, label_paths
+
+
+def get_bcss_dataset(
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    split: Optional[str] = None,
+    val_fraction: float = 0.2,
+    download: bool = False,
+    label_dtype: torch.dtype = torch.int64,
+    **kwargs
+) -> Dataset:
+    """Get the BCSS dataset for breast cancer tissue segmentation in histopathology.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        val_fraction: The fraction of data to be considered for validation split.
+        download: Whether to download the data if it is not present.
+        label_dtype: The datatype of labels.
+        kwargs: kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
+    """
+    image_paths, label_paths = get_bcsss_paths(path, split, val_fraction, download)
+
+    return torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=label_paths,
+        label_key=None,
+        patch_shape=patch_shape,
+        label_dtype=label_dtype,
+        is_seg_dataset=False,
+        **kwargs
     )
-    return dataset
 
 
 def get_bcss_loader(
-        path, patch_shape, batch_size, split=None, val_fraction=0.2, download=False, label_dtype=torch.int64, **kwargs
-):
-    """Dataloader for breast cancer tissue segmentation in histopathology. See `get_bcss_dataset` for details."""
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    batch_size: int,
+    split: Optional[str] = None,
+    val_fraction: float = 0.2,
+    download: bool = False,
+    label_dtype: torch.dtype = torch.int64,
+    **kwargs
+) -> DataLoader:
+    """Get the BCSS dataloader for breast cancer tissue segmentation in histopathology.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        val_fraction: The fraction of data to be considered for validation split.
+        download: Whether to download the data if it is not present.
+        label_dtype: The datatype of labels.
+        kwargs: kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_bcss_dataset(
         path, patch_shape, split, val_fraction, download=download, label_dtype=label_dtype, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

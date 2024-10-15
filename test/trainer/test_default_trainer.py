@@ -49,7 +49,7 @@ class TestDefaultTrainer(unittest.TestCase):
             "metric": torch_em.loss.DiceLoss(),
             "optimizer": torch.optim.AdamW(model.parameters(), lr=1e-5),
             "device": torch.device("cpu"),
-            "mixed_precision": False,
+            "mixed_precision": True,
             "compile_model": compile_model,
         }
         return kwargs
