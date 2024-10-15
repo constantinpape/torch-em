@@ -120,7 +120,7 @@ def get_hil_toothseg_dataset(
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
-        resize_inpts: Whether to resize the inputs to the patch shape.
+        resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -162,7 +162,7 @@ def get_hil_toothseg_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
-        resize_inpts: Whether to resize the inputs to the patch shape.
+        resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
