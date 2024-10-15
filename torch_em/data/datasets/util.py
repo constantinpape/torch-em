@@ -110,8 +110,8 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
 
     if gdown is None:
         raise RuntimeError(
-            "Need gdown library to download data from google drive."
-            "Please install gdown and then rerun."
+            "Need gdown library to download data from google drive. "
+            "Please install gdown: 'mamba install gdown==4.6.3'."
         )
 
     print("Downloading the dataset. Might take a few minutes...")
@@ -120,7 +120,7 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
         gdown.download(url, path, quiet=False)
         _check_checksum(path, checksum)
     elif download_type == "folder":
-        assert version.parse(gdown.__version__) == version.parse("4.6.3"), "Please install `gdown==4.6.3`."
+        assert version.parse(gdown.__version__) == version.parse("4.6.3"), "Please install 'gdown==4.6.3'."
         gdown.download_folder.__globals__["MAX_NUMBER_FILES"] = expected_samples
         gdown.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
     else:
