@@ -1,7 +1,8 @@
-"""The HIL ToothSeg dataset contains annotations for teeth segmentation
-in panoramic dental radiographs.
+"""The KVASIR dataset contains annotations for polyp segmentation
+in colonoscopy images.
 
-This dataset is from the publication https://www.mdpi.com/1424-8220/21/9/3110.
+The dataset is located at: https://datasets.simula.no/kvasir-seg/.
+This dataset is from the publication https://doi.org/10.1007/978-3-030-37734-2_37.
 Please cite it if you use this dataset for your research.
 """
 
@@ -9,8 +10,7 @@ import os
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
-from natsort import natsorted
-from typing import Union, Literal, Tuple, List
+from typing import Union, Tuple, List
 
 import numpy as np
 import imageio.v3 as imageio
@@ -22,52 +22,50 @@ import torch_em
 from .. import util
 
 
-URL = "https://hitl-public-datasets.s3.eu-central-1.amazonaws.com/Teeth+Segmentation.zip"
-CHECKSUM = "3b628165a218a5e8d446d1313e6ecbe7cfc599a3d6418cd60b4fb78745becc2e"
+URL = "https://datasets.simula.no/downloads/kvasir-seg.zip"
+CHECKSUM = "03b30e21d584e04facf49397a2576738fd626815771afbbf788f74a7153478f7"
 
 
-def get_hil_toothseg_data(path: Union[os.PathLike, str], download: bool = False):
-    """Download the HIL ToothSeg dataset.
+def get_kvasir_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the KVASIR dataset.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
     """
-    data_dir = os.path.join(path, r"Teeth Segmentation PNG")
+    data_dir = os.path.join(path, "Kvasir-SEG")
     if os.path.exists(data_dir):
         return data_dir
 
     os.makedirs(path, exist_ok=True)
 
-    zip_path = os.path.join(path, "Teeth_Segmentation.zip")
+    zip_path = os.path.join(path, "kvasir-seg.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
     util.unzip(zip_path=zip_path, dst=path)
 
     return data_dir
 
 
-def get_hil_toothseg_paths(
-    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
-) -> Tuple[List[str], List[str]]:
-    """Get paths to the HIL ToothSeg data.
+def get_kvasir_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[str], List[str]]:
+    """Get paths to the KVASIR data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        split: The data split to use. Either 'train', 'val' or 'test'.
         download: Whether to download the data if it is not present.
 
     Returns:
         List of filepaths for the image data.
         List of filepaths for the label data.
     """
-    import cv2 as cv
+    data_dir = get_kvasir_data(path=path, download=download)
 
-    data_dir = get_hil_toothseg_data(path=path, download=download)
+    image_paths = sorted(glob(os.path.join(data_dir, "images", "*.jpg")))
+    gt_paths = sorted(glob(os.path.join(data_dir, "masks", "*.jpg")))
 
-    image_paths = natsorted(glob(os.path.join(data_dir, "d2", "img", "*")))
-    gt_paths = natsorted(glob(os.path.join(data_dir, "d2", "masks_machine", "*")))
-
-    neu_gt_dir = os.path.join(data_dir, "preprocessed", "gt")
+    neu_gt_dir = os.path.join(data_dir, "masks", "preprocessed")
     os.makedirs(neu_gt_dir, exist_ok=True)
 
     neu_gt_paths = []
@@ -77,49 +75,26 @@ def get_hil_toothseg_paths(
         if os.path.exists(neu_gt_path):
             continue
 
-        rgb_gt = cv.imread(gt_path)
-        rgb_gt = cv.cvtColor(rgb_gt, cv.COLOR_BGR2RGB)
-        incolors = np.unique(rgb_gt.reshape(-1, rgb_gt.shape[2]), axis=0)
-
-        # the first id is always background, let's remove it
-        if np.array_equal(incolors[0], np.array([0, 0, 0])):
-            incolors = incolors[1:]
-
-        instances = np.zeros(rgb_gt.shape[:2])
-
-        color_to_id = {tuple(cvalue): i for i, cvalue in enumerate(incolors, start=1)}
-        for cvalue, idx in color_to_id.items():
-            binary_map = (rgb_gt == cvalue).all(axis=2)
-            instances[binary_map] = idx
-
-        imageio.imwrite(neu_gt_path, instances)
-
-    if split == "train":
-        image_paths, neu_gt_paths = image_paths[:450], neu_gt_paths[:450]
-    elif split == "val":
-        image_paths, neu_gt_paths = image_paths[425:475], neu_gt_paths[425:475]
-    elif split == "test":
-        image_paths, neu_gt_paths = image_paths[475:], neu_gt_paths[475:]
-    else:
-        raise ValueError(f"{split} is not a valid split.")
+        gt = imageio.imread(gt_path)
+        gt = np.mean(gt, axis=-1)
+        gt = (gt >= 240).astype("uint8")
+        imageio.imwrite(neu_gt_path, gt, compression="zlib")
 
     return image_paths, neu_gt_paths
 
 
-def get_hil_toothseg_dataset(
+def get_kvasir_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the HIL ToothSeg dataset for teeth segmentation.
+    """Get the KVASIR dataset for polyp segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
-        split: The data split to use. Either 'train', 'val' or 'test'.
         resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -127,7 +102,7 @@ def get_hil_toothseg_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = get_hil_toothseg_paths(path=path, split=split, download=download)
+    image_paths, gt_paths = get_kvasir_paths(path, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -140,28 +115,26 @@ def get_hil_toothseg_dataset(
         raw_key=None,
         label_paths=gt_paths,
         label_key=None,
-        is_seg_dataset=False,
         patch_shape=patch_shape,
+        is_seg_dataset=False,
         **kwargs
     )
 
 
-def get_hil_toothseg_loader(
+def get_kvasir_loader(
     path: Union[os.PathLike, str],
-    batch_size: int,
     patch_shape: Tuple[int, int],
-    split: Literal["train", "val", "test"],
+    batch_size: int,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the HIL ToothSeg dataloader for teeth segmentation.
+    """Get the KVASIR dataloader for polyp segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
-        split: The data split to use. Either 'train', 'val' or 'test'.
         resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -170,7 +143,5 @@ def get_hil_toothseg_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_hil_toothseg_dataset(
-        path=path, split=split, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
+    dataset = get_kvasir_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
