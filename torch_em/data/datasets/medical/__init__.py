@@ -40,3 +40,4 @@ from .siim_acr import get_siim_acr_dataset, get_siim_acr_loader
 from .spider import get_spider_dataset, get_spider_loader
 from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
+from .verse import get_verse_dataset, get_verse_loader
