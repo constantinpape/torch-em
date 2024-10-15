@@ -1,12 +1,21 @@
+"""The JSRT dataset contains annotations for lung segmentation
+in chest X-Rays.
+
+The database is located at http://db.jsrt.or.jp/eng.php
+This dataset is from the publication https://doi.org/10.2214/ajr.174.1.1740071.
+Please cite it if you use this dataset for a publication.
+"""
+
 import os
 from glob import glob
 from pathlib import Path
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Literal, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
 from .. import util
-from ... import ImageCollectionDataset
 
 
 URL = {
@@ -30,12 +39,21 @@ DATA_DIR = {
 }
 
 
-def get_jsrt_data(path, download, choice):
-    os.makedirs(path, exist_ok=True)
+def get_jsrt_data(
+    path: Union[os.PathLike, str], choice: Literal["Segmentation01", "Segmentation02"], download: bool = False
+):
+    """Download the JSRT dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        choice: The choice of data subset. Either 'Segmentation01' or 'Segmentation02'.
+        download: Whether to download the data if it is not present.
+    """
     data_dir = os.path.join(path, DATA_DIR[choice])
     if os.path.exists(data_dir):
         return
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, ZIP_PATH[choice])
 
@@ -43,7 +61,27 @@ def get_jsrt_data(path, download, choice):
     util.unzip(zip_path=zip_path, dst=path)
 
 
-def _get_jsrt_paths(path, split, download, choice=None):
+def get_jsrt_paths(
+    path: Union[os.PathLike, str],
+    split: Literal['train', 'test'],
+    choice: Optional[Literal['Segmentation01', 'Segmentation02']] = None,
+    download: bool = False,
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the JSRT data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        split: The data split to use. Either 'train', or 'test'.
+        choice: The choice of data subset. Either 'Segmentation01' or 'Segmentation02'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
+    available_splits = ["train", "test"]
+    assert split in available_splits, f"{split} isn't a valid split choice. Please choose from {available_splits}."
+
     if choice is None:
         choice = list(URL.keys())
     else:
@@ -70,52 +108,62 @@ def _get_jsrt_paths(path, split, download, choice=None):
         image_paths.extend(all_image_paths)
         gt_paths.extend(all_gt_paths)
 
-        print(len(all_image_paths), len(all_gt_paths))
-
-    print(len(image_paths), len(gt_paths))
+    assert len(image_paths) == len(gt_paths)
 
     return image_paths, gt_paths
 
 
 def get_jsrt_dataset(
     path: Union[os.PathLike, str],
-    split: str,
     patch_shape: Tuple[int, int],
-    choice: Optional[str] = None,
+    split: Literal['train', 'test'],
+    choice: Optional[Literal['Segmentation01', 'Segmentation02']] = None,
     download: bool = False,
     **kwargs
-):
-    """Dataset for the segmentation of lungs in x-ray.
+) -> Dataset:
+    """Get the JSRT dataset for lung segmentation.
 
-    This dataset is from the publication https://doi.org/10.2214/ajr.174.1.1740071.
-    The database is located at http://db.jsrt.or.jp/eng.php
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        split: The data split to use. Either 'train', or 'test'.
+        choice: The choice of data subset. Either 'Segmentation01' or 'Segmentation02'.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    av_splits = ["train", "test"]
-    assert split in av_splits, f"{split} isn't a valid split choice. Please choose from {av_splits}."
+    image_paths, gt_paths = get_jsrt_paths(path, split, choice, download)
 
-    image_paths, gt_paths = _get_jsrt_paths(path=path, split=split, download=download, choice=choice)
-
-    dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths, label_image_paths=gt_paths, patch_shape=patch_shape, **kwargs
+    return torch_em.default_segmentation_dataset(
+        raw_paths=image_paths, raw_key=None, label_paths=gt_paths, label_key=None, patch_shape=patch_shape, **kwargs
     )
-    return dataset
 
 
 def get_jsrt_loader(
     path: Union[os.PathLike, str],
-    split: str,
     patch_shape: Tuple[int, int],
     batch_size: int,
-    choice: Optional[str] = None,
+    split: Literal['train', 'test'],
+    choice: Optional[Literal['Segmentation01', 'Segmentation02']] = None,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for the segmentation of lungs in x-ray. See 'get_jsrt_dataset' for details.
+) -> DataLoader:
+    """Get the JSRT dataloader for lung segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        split: The data split to use. Either 'train', or 'test'.
+        choice: The choice of data subset. Either 'Segmentation01' or 'Segmentation02'.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_jsrt_dataset(
-        path=path, split=split, patch_shape=patch_shape, choice=choice, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_jsrt_dataset(path, patch_shape, split, choice, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
