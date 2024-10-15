@@ -1,3 +1,4 @@
+from math import ceil, floor
 from typing import Any, Dict, Optional, Sequence, Union
 
 import numpy as np
@@ -34,13 +35,18 @@ class Tile(torch.nn.Module):
 
 # a simple way to compose transforms
 class Compose:
-    def __init__(self, *transforms):
+    def __init__(self, *transforms, is_multi_tensor=True):
         self.transforms = transforms
+        self.is_multi_tensor = is_multi_tensor
 
     def __call__(self, *inputs):
         outputs = self.transforms[0](*inputs)
         for trafo in self.transforms[1:]:
-            outputs = trafo(*outputs)
+            if self.is_multi_tensor:
+                outputs = trafo(*outputs)
+            else:
+                outputs = trafo(outputs)
+
         return outputs
 
 
@@ -97,6 +103,84 @@ class ResizeInputs:
             **kwargs
         ).astype(inputs.dtype)
 
+        return inputs
+
+
+class ResizeLongestSideInputs:
+    def __init__(self, target_shape, is_label=False, is_rgb=False):
+        self.target_shape = target_shape
+        self.is_label = is_label
+        self.is_rgb = is_rgb
+
+        h, w = self.target_shape[-2], self.target_shape[-1]
+        if h != w:  # We currently support resize feature for square-shaped target shape only.
+            raise ValueError("'ResizeLongestSideInputs' does not support non-square shaped target shapes.")
+
+        self.target_length = self.target_shape[-1]
+
+        if self.is_label:  # kwargs needed for int data
+            self.kwargs = {"order": 0,  "anti_aliasing": False}
+        else:  # we use the default settings for float data
+            self.kwargs = {}
+
+    def _get_preprocess_shape(self, oldh, oldw):
+        """Inspired from Segment Anything.
+
+        - https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/utils/transforms.py
+        """
+        scale = self.target_length * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        neww = int(neww + 0.5)
+        newh = int(newh + 0.5)
+        return (newh, neww)
+
+    def convert_transformed_inputs_to_original_shape(self, resized_inputs):
+        if not hasattr(self, "pre_pad_shape"):
+            raise RuntimeError(
+                "'convert_transformed_inputs_to_original_shape' is only valid after the '__call__' method has run."
+            )
+
+        # First step is to remove the padded region
+        inputs = resized_inputs[tuple(self.pre_pad_shape)]
+        # Next, we resize the inputs to original shape
+        inputs = resize(
+            image=inputs, output_shape=self.original_shape, preserve_range=True, **self.kwargs
+        )
+        return inputs
+
+    def __call__(self, inputs):
+        # NOTE: We store this in case we would like to transform the inputs back to original shape.
+        self.original_shape = inputs.shape
+
+        # Let's get the new shape with the longest side equal to the target length.
+        new_shape = self._get_preprocess_shape(inputs.shape[-2], inputs.shape[-1])
+
+        if self.is_rgb:  # for rgb inputs, we assume channels first
+            assert inputs.ndim == 3 and inputs.shape[0] == 3
+            patch_shape = (3, *new_shape)
+        elif inputs.ndim == 3:  # for 3d inputs, we do not resize along the first (=z) axis
+            patch_shape = (inputs.shape[0], *new_shape)
+        else:
+            patch_shape = new_shape
+
+        # Next, we resize the input image along the longest side.
+        inputs = resize(
+            image=inputs, output_shape=patch_shape, preserve_range=True, **self.kwargs
+        ).astype(inputs.dtype)
+
+        # Finally, we pad the remaining height to match the expected target shape.
+        pad_width = [(sh - dsh) / 2 for sh, dsh in zip(self.target_shape, new_shape)]
+        pad_width = (
+            (ceil(pad_width[0]), floor(pad_width[0])), (ceil(pad_width[1]), floor(pad_width[1]))
+        )
+        # we do not pad across the first axis (= channel or z-axis) for rgb or 3d inputs
+        if self.is_rgb or inputs.ndim == 3:
+            pad_width = ((0, 0), *pad_width)
+
+        # NOTE: We store this in case we would like to unpad the inputs.
+        self.pre_pad_shape = [slice(pw[0], -pw[1] if pw[1] > 0 else None) for pw in pad_width]
+
+        inputs = np.pad(array=inputs, pad_width=pad_width, mode="constant")
         return inputs
 
 

@@ -1,25 +1,38 @@
-import inspect
 import os
 import hashlib
-import zipfile
-import numpy as np
+import inspect
+import requests
 from tqdm import tqdm
 from warnings import warn
-from xml.dom import minidom
-from shutil import copyfileobj, which
 from subprocess import run
 from packaging import version
+from shutil import copyfileobj, which
 
+import zipfile
+import numpy as np
+from xml.dom import minidom
 from skimage.draw import polygon
 
 import torch
+
 import torch_em
-import requests
+from torch_em.transform import get_raw_transform
+from torch_em.transform.generic import ResizeLongestSideInputs, Compose
 
 try:
     import gdown
 except ImportError:
     gdown = None
+
+try:
+    from tcia_utils import nbia
+except ModuleNotFoundError:
+    nbia = None
+
+try:
+    from cryoet_data_portal import Client, Dataset
+except ImportError:
+    Client, Dataset = None, None
 
 
 BIOIMAGEIO_IDS = {
@@ -146,7 +159,7 @@ def download_source_empiar(path, access_id, download):
     return download_path
 
 
-def download_source_kaggle(path, dataset_name, download):
+def download_source_kaggle(path, dataset_name, download, competition=False):
     if not download:
         raise RuntimeError(f"Cannot fine the data at {path}, but download was set to False.")
 
@@ -160,7 +173,28 @@ def download_source_kaggle(path, dataset_name, download):
 
     api = KaggleApi()
     api.authenticate()
-    api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
+
+    if competition:
+        api.competition_download_files(competition=dataset_name, path=path, quiet=False)
+    else:
+        api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
+
+
+def download_source_tcia(path, url, dst, csv_filename, download):
+    if not download:
+        raise RuntimeError(f"Cannot fine the data at {path}, but download was set to False.")
+
+    assert url.endswith(".tcia"), f"{path} is not a TCIA Manifest."
+
+    # downloads the manifest file from the collection page
+    manifest = requests.get(url=url)
+    with open(path, "wb") as f:
+        f.write(manifest.content)
+
+    # this part extracts the UIDs from the manigests and downloads them.
+    nbia.downloadSeries(
+        series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename,
+    )
 
 
 def update_kwargs(kwargs, key, value, msg=None):
@@ -169,6 +203,42 @@ def update_kwargs(kwargs, key, value, msg=None):
         warn(msg)
     kwargs[key] = value
     return kwargs
+
+
+def unzip_tarfile(tar_path, dst, remove=True):
+    import tarfile
+
+    if tar_path.endswith(".tar.gz"):
+        access_mode = "r:gz"
+    elif tar_path.endswith(".tar"):
+        access_mode = "r:"
+    else:
+        raise ValueError(
+            "The provided file isn't a supported archive to unpack. ",
+            f"Please check the file: {tar_path}"
+        )
+
+    tar = tarfile.open(tar_path, access_mode)
+    tar.extractall(dst)
+    tar.close()
+
+    if remove:
+        os.remove(tar_path)
+
+
+def unzip_rarfile(rar_path, dst, remove=True, use_rarfile=True):
+    import rarfile
+    import aspose.zip as az
+
+    if use_rarfile:
+        with rarfile.RarFile(rar_path) as f:
+            f.extractall(path=dst)
+    else:
+        with az.rar.RarArchive(rar_path) as archive:
+            archive.extract_to_directory(dst)
+
+    if remove:
+        os.remove(rar_path)
 
 
 def unzip(zip_path, dst, remove=True):
@@ -223,6 +293,49 @@ def add_instance_label_transform(
         kwargs = update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
         label_dtype = torch.float32
     return kwargs, label_dtype
+
+
+def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kwargs=None, ensure_rgb=None):
+    """
+    Checks for raw_transform and label_transform incoming values.
+    If yes, it will automatically merge these two transforms to apply them together.
+    """
+    if resize_inputs:
+        assert isinstance(resize_kwargs, dict)
+
+        target_shape = resize_kwargs.get("patch_shape")
+        if len(resize_kwargs["patch_shape"]) == 3:
+            # we only need the XY dimensions to reshape the inputs along them.
+            target_shape = target_shape[1:]
+            # we provide the Z dimension value to return the desired number of slices and not the whole volume
+            kwargs["z_ext"] = resize_kwargs["patch_shape"][0]
+
+        raw_trafo = ResizeLongestSideInputs(target_shape=target_shape, is_rgb=resize_kwargs["is_rgb"])
+        label_trafo = ResizeLongestSideInputs(target_shape=target_shape, is_label=True)
+
+        # The patch shape provided to the dataset. Here, "None" means that the entire volume will be loaded.
+        patch_shape = None
+
+    if ensure_rgb is None:
+        raw_trafos = []
+    else:
+        assert not isinstance(ensure_rgb, bool), "'ensure_rgb' is expected to be a function."
+        raw_trafos = [ensure_rgb]
+
+    if "raw_transform" in kwargs:
+        raw_trafos.extend([raw_trafo, kwargs["raw_transform"]])
+    else:
+        raw_trafos.extend([raw_trafo, get_raw_transform()])
+
+    kwargs["raw_transform"] = Compose(*raw_trafos, is_multi_tensor=False)
+
+    if "label_transform" in kwargs:
+        trafo = Compose(label_trafo, kwargs["label_transform"], is_multi_tensor=False)
+        kwargs["label_transform"] = trafo
+    else:
+        kwargs["label_transform"] = label_trafo
+
+    return kwargs, patch_shape
 
 
 def generate_labeled_array_from_xml(shape, xml_file):
@@ -295,3 +408,21 @@ def convert_svs_to_array(path, location=(0, 0), level=0, img_size=None):
     img_arr = _slide.read_region(location=location, level=level, size=img_size, as_array=True)
 
     return img_arr
+
+
+def download_from_cryo_et_portal(path, dataset_id, download):
+    if Client is None or Dataset is None:
+        raise RuntimeError("Please install CryoETDataPortal via 'pip install cryoet-data-portal'")
+
+    output_path = os.path.join(path, str(dataset_id))
+    if os.path.exists(output_path):
+        return output_path
+
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    client = Client()
+    dataset = Dataset.get_by_id(client, dataset_id)
+    dataset.download_everything(dest_path=path)
+
+    return output_path
