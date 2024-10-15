@@ -353,9 +353,9 @@ def get_norm_layer(norm, dim, channels, n_groups=32):
     if norm is None:
         return None
     if norm == "InstanceNorm":
-        kwargs = {
-            "affine": True, "track_running_stats": True, "momentum": 0.01,
-        }
+        return nn.InstanceNorm2d(channels) if dim == 2 else nn.InstanceNorm3d(channels)
+    elif norm == "InstanceNormTrackStats":
+        kwargs = {"affine": True, "track_running_stats": True, "momentum": 0.01}
         return nn.InstanceNorm2d(channels, **kwargs) if dim == 2 else nn.InstanceNorm3d(channels, **kwargs)
     elif norm == "GroupNorm":
         return nn.GroupNorm(min(n_groups, channels), channels)

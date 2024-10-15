@@ -126,7 +126,7 @@ class UNETR(nn.Module):
                 features=features_decoder,
                 scale_factors=scale_factors[::-1],
                 conv_block_impl=ConvBlock2d,
-                sampler_impl=_upsampler
+                sampler_impl=_upsampler,
             )
         else:
             self.decoder = decoder
