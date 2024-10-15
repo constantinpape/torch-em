@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_jsrt():
-    # from util import ROOT
-    ROOT = "/scratch/share/cidas/cca/data"
+    from util import ROOT
 
     loader = get_jsrt_loader(
         path=os.path.join(ROOT, "jsrt"),
@@ -21,7 +20,7 @@ def check_jsrt():
         download=True,
     )
 
-    check_loader(loader, 8, plt=True, save_path="./test.png")
+    check_loader(loader, 8)
 
 
 if __name__ == "__main__":
