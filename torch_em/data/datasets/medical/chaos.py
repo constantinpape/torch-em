@@ -199,9 +199,12 @@ def get_chaos_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    return torch_em.default_segmentation_dataset(
+    dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths, raw_key="data", label_paths=gt_paths, label_key="data", patch_shape=patch_shape, **kwargs
     )
+    dataset.max_sampling_attempts = 5000
+
+    return dataset
 
 
 def get_chaos_loader(
