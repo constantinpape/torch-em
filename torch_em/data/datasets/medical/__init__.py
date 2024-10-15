@@ -15,17 +15,12 @@ from .dca1 import get_dca1_dataset, get_dca1_loader
 from .drive import get_drive_dataset, get_drive_loader
 from .duke_liver import get_duke_liver_dataset, get_duke_liver_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
-
-from .isles import get_isles_dataset, get_isles_loader
-from .jsrt import get_jsrt_dataset, get_jsrt_loader
-from .kvasir import get_kvasir_dataset, get_kvasir_loader
-
-
-
 from .han_seg import get_han_seg_dataset, get_han_seg_loader
 from .hil_toothseg import get_hil_toothseg_dataset, get_hil_toothseg_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .isic import get_isic_dataset, get_isic_loader
+from .isles import get_isles_dataset, get_isles_loader
+from .jsrt import get_jsrt_dataset, get_jsrt_loader
 from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
 from .kvasir import get_kvasir_dataset, get_kvasir_loader
 from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
