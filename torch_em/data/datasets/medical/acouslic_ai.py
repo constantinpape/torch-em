@@ -113,6 +113,7 @@ def get_acouslic_ai_loader(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
