@@ -1,6 +1,6 @@
 from .acdc import get_acdc_dataset, get_acdc_loader
 from .acouslic_ai import get_acouslic_ai_dataset, get_acouslic_ai_loader
-from .autopet import get_autopet_loader
+from .autopet import get_autopet_dataset, get_autopet_loader
 from .amos import get_amos_dataset, get_amos_loader
 from .btcv import get_btcv_dataset, get_btcv_loader
 from .busi import get_busi_dataset, get_busi_loader
@@ -13,19 +13,20 @@ from .covid_qu_ex import get_covid_qu_ex_dataset, get_covid_qu_ex_loader
 from .curvas import get_curvas_dataset, get_curvas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
 from .drive import get_drive_dataset, get_drive_loader
-from .jsrt import get_jsrt_dataset, get_jsrt_loader
-from .kvasir import get_kvasir_dataset, get_kvasir_loader
-from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
 from .duke_liver import get_duke_liver_dataset, get_duke_liver_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
 from .han_seg import get_han_seg_dataset, get_han_seg_loader
 from .hil_toothseg import get_hil_toothseg_dataset, get_hil_toothseg_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .isic import get_isic_dataset, get_isic_loader
+from .isles import get_isles_dataset, get_isles_loader
+from .jsrt import get_jsrt_dataset, get_jsrt_loader
 from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
+from .kvasir import get_kvasir_dataset, get_kvasir_loader
 from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
 from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
+from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
 from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .msd import get_msd_dataset, get_msd_loader
