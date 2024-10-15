@@ -158,9 +158,9 @@ def get_toothfairy_dataset(
 
     return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
-        raw_key="data",
+        raw_key="data" if version == "v1" else None,
         label_paths=gt_paths,
-        label_key="data",
+        label_key="data" if version == "v1" else None,
         is_seg_dataset=True,
         patch_shape=patch_shape,
         **kwargs
