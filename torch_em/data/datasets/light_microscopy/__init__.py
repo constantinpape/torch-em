@@ -20,4 +20,5 @@ from .orgasegment import get_orgasegment_dataset, get_orgasegment_loader
 from .organoidnet import get_organoidnet_dataset, get_organoidnet_loader
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
+from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
 from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
