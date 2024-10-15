@@ -1,9 +1,17 @@
+"""The OrganoIDNet dataset contains annotations of panceratic organoids.
+
+This dataset is from the publication https://doi.org/10.1007/s13402-024-00958-2.
+Please cite it if you use this dataset for a publication.
+"""
+
+
 import os
 import shutil
 import zipfile
-
 from glob import glob
-from typing import Tuple, Union
+from typing import Tuple, Union, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -14,7 +22,17 @@ URL = "https://zenodo.org/records/10643410/files/OrganoIDNetData.zip?download=1"
 CHECKSUM = "3cd9239bf74bda096ecb5b7bdb95f800c7fa30b9937f9aba6ddf98d754cbfa3d"
 
 
-def get_organoidnet_data(path, split, download):
+def get_organoidnet_data(path: Union[os.PathLike, str], split: str, download: bool = False) -> str:
+    """Download the OrganoIDNet dataset.
+
+    Args:
+        path: Filepath to the folder where the downloaded data will be saved.
+        split: The data split to use.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath where the data is downloaded.
+    """
     splits = ["Training", "Validation", "Test"]
     assert split in splits
 
@@ -52,7 +70,20 @@ def get_organoidnet_data(path, split, download):
     return data_dir
 
 
-def _get_data_paths(path, split, download):
+def get_organoidnet_paths(
+    path: Union[os.PathLike, str], split: str, download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the OrganoIDNet data.
+
+    Args:
+        path: Filepath to the folder where the downloaded data will be saved.
+        split: The data split to use.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_organoidnet_data(path=path, split=split, download=download)
 
     image_paths = sorted(glob(os.path.join(data_dir, "Images", "*.tif")))
@@ -62,18 +93,21 @@ def _get_data_paths(path, split, download):
 
 
 def get_organoidnet_dataset(
-    path: Union[os.PathLike, str],
-    split: str,
-    patch_shape: Tuple[int, int],
-    download: bool = False,
-    **kwargs
-):
-    """Dataset for the segmentation of panceratic organoids.
+    path: Union[os.PathLike, str], split: str, patch_shape: Tuple[int, int], download: bool = False, **kwargs
+) -> Dataset:
+    """Get the OrganoIDNet dataset for organoid segmentation in microscopy images.
 
-    This dataset is from the publication https://doi.org/10.1007/s13402-024-00958-2.
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, label_paths = _get_data_paths(path=path, split=split, download=download)
+    image_paths, label_paths = get_organoidnet_paths(path, split, download)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
@@ -93,17 +127,22 @@ def get_organoidnet_loader(
     batch_size: int,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for the segmentation of pancreatic organoids in brightfield images.
-    See `get_organoidnet_dataset` for details.
+) -> DataLoader:
+    """Get the OrganoIDNet dataset for organoid segmentation in microscopy images.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_organoidnet_dataset(
-        path=path,
-        split=split,
-        patch_shape=patch_shape,
-        download=download,
-        **ds_kwargs
+        path=path, split=split, patch_shape=patch_shape, download=download, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)

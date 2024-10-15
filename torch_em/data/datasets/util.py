@@ -29,6 +29,11 @@ try:
 except ModuleNotFoundError:
     nbia = None
 
+try:
+    from cryoet_data_portal import Client, Dataset
+except ImportError:
+    Client, Dataset = None, None
+
 
 BIOIMAGEIO_IDS = {
     "covid_if": "ilastik/covid_if_training_data",
@@ -221,10 +226,16 @@ def unzip_tarfile(tar_path, dst, remove=True):
         os.remove(tar_path)
 
 
-def unzip_rarfile(rar_path, dst, remove=True):
+def unzip_rarfile(rar_path, dst, remove=True, use_rarfile=True):
     import rarfile
-    with rarfile.RarFile(rar_path) as f:
-        f.extractall(path=dst)
+    import aspose.zip as az
+
+    if use_rarfile:
+        with rarfile.RarFile(rar_path) as f:
+            f.extractall(path=dst)
+    else:
+        with az.rar.RarArchive(rar_path) as archive:
+            archive.extract_to_directory(dst)
 
     if remove:
         os.remove(rar_path)
@@ -397,3 +408,21 @@ def convert_svs_to_array(path, location=(0, 0), level=0, img_size=None):
     img_arr = _slide.read_region(location=location, level=level, size=img_size, as_array=True)
 
     return img_arr
+
+
+def download_from_cryo_et_portal(path, dataset_id, download):
+    if Client is None or Dataset is None:
+        raise RuntimeError("Please install CryoETDataPortal via 'pip install cryoet-data-portal'")
+
+    output_path = os.path.join(path, str(dataset_id))
+    if os.path.exists(output_path):
+        return output_path
+
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    client = Client()
+    dataset = Dataset.get_by_id(client, dataset_id)
+    dataset.download_everything(dest_path=path)
+
+    return output_path

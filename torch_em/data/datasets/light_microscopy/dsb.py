@@ -9,9 +9,12 @@ import os
 from shutil import move
 from typing import List, Optional, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
+
 
 DSB_URLS = {
     "full": "",  # TODO
@@ -54,6 +57,28 @@ def get_dsb_data(path: Union[os.PathLike, str], source: str, download: bool) -> 
     return path
 
 
+def get_dsb_paths(path: Union[os.PathLike, str], split: str, source: str, download: bool = False) -> Tuple[str, str]:
+    """Get paths to the DSB data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train' or 'test'.
+        source: The source of the dataset. Can either be 'full' for the complete dataset,
+            or 'reduced' for the dataset excluding histopathology images.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath for the folder where the images are stored.
+        Filepath for the folder where the labels are stored.
+    """
+    get_dsb_data(path, source, download)
+
+    image_path = os.path.join(path, split, "images")
+    label_path = os.path.join(path, split, "masks")
+
+    return image_path, label_path
+
+
 def get_dsb_dataset(
     path: Union[os.PathLike, str],
     split: str,
@@ -83,17 +108,21 @@ def get_dsb_dataset(
        The segmentation dataset.
     """
     assert split in ("test", "train"), split
-    get_dsb_data(path, source, download)
 
-    image_path = os.path.join(path, split, "images")
-    label_path = os.path.join(path, split, "masks")
+    image_path, label_path = get_dsb_paths(path, split, source, download)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )
     kwargs = util.update_kwargs(kwargs, "ndim", 2)
+
     return torch_em.default_segmentation_dataset(
-        image_path, "*.tif", label_path, "*.tif", patch_shape, **kwargs
+        raw_paths=image_path,
+        raw_key="*.tif",
+        label_paths=label_path,
+        label_key="*.tif",
+        patch_shape=patch_shape,
+        **kwargs
     )
 
 
@@ -127,13 +156,10 @@ def get_dsb_loader(
     Returns:
         The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_dsb_dataset(
         path, split, patch_shape, download=download,
         offsets=offsets, boundaries=boundaries, binary=binary,
         source=source, **ds_kwargs,
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

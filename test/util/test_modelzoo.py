@@ -89,11 +89,9 @@ class TestModelzoo(unittest.TestCase):
 
         return output_path
 
-    @unittest.expectedFailure
     def test_export_single_channel(self):
         self._test_export(1, "single-chan")
 
-    @unittest.expectedFailure
     def test_export_multi_channel(self):
         self._test_export(4, "multi-chan")
 
