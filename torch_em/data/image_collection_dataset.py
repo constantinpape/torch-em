@@ -4,8 +4,9 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 
-from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
-                    load_image, supports_memmap)
+from ..util import (
+    ensure_spatial_array, ensure_tensor_with_channels, load_image, supports_memmap, ensure_patch_shape
+)
 
 
 class ImageCollectionDataset(torch.utils.data.Dataset):
@@ -62,13 +63,15 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         n_samples: Optional[int] = None,
         sampler=None,
         full_check: bool = False,
+        with_padding=True,
     ):
         self._check_inputs(raw_image_paths, label_image_paths, full_check=full_check)
         self.raw_images = raw_image_paths
         self.label_images = label_image_paths
         self._ndim = 2
 
-        assert len(patch_shape) == self._ndim
+        if patch_shape is not None:
+            assert len(patch_shape) == self._ndim
         self.patch_shape = patch_shape
 
         self.raw_transform = raw_transform
@@ -76,6 +79,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         self.label_transform2 = label_transform2
         self.transform = transform
         self.sampler = sampler
+        self.with_padding = with_padding
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -95,30 +99,17 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         return self._ndim
 
     def _sample_bounding_box(self, shape):
-        bb_start = [
-            np.random.randint(0, sh - psh) if sh - psh > 0 else 0
-            for sh, psh in zip(shape, self.patch_shape)
-        ]
-        return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
+        if self.patch_shape is None:
+            patch_shape_for_bb = shape
+            bb_start = [0] * len(shape)
+        else:
+            patch_shape_for_bb = self.patch_shape
+            bb_start = [
+                np.random.randint(0, sh - psh) if sh - psh > 0 else 0
+                for sh, psh in zip(shape, patch_shape_for_bb)
+            ]
 
-    def _ensure_patch_shape(self, raw, labels, have_raw_channels, have_label_channels, channel_first):
-        shape = raw.shape
-        if have_raw_channels and channel_first:
-            shape = shape[1:]
-        if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
-            pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
-
-            if have_raw_channels and channel_first:
-                pw_raw = [(0, 0), *pw]
-            elif have_raw_channels and not channel_first:
-                pw_raw = [*pw, (0, 0)]
-            else:
-                pw_raw = pw
-
-            # TODO: ensure padding for labels with channels, when supported (see `_get_sample` below)
-
-            raw, labels = np.pad(raw, pw_raw), np.pad(labels, pw)
-        return raw, labels
+        return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
 
     def _load_data(self, raw_path, label_path):
         raw = load_image(raw_path, memmap=False)
@@ -137,7 +128,16 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         if have_raw_channels:
             channel_first = raw.shape[-1] > 16
 
-        raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels, channel_first)
+        if self.patch_shape is not None and self.with_padding:
+            raw, label = ensure_patch_shape(
+                raw=raw,
+                labels=label,
+                patch_shape=self.patch_shape,
+                have_raw_channels=have_raw_channels,
+                have_label_channels=have_label_channels,
+                channel_first=channel_first
+            )
+
         shape = raw.shape
 
         prefix_box = tuple()
@@ -173,7 +173,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
                 label_patch = np.array(label[bb])
                 sample_id += 1
 
-                # We need to avoid sampling from the same image over and over agagin,
+                # We need to avoid sampling from the same image over and over again,
                 # otherwise this will fail just because of one or a few empty images.
                 # Hence we update the image from which we sample sometimes.
                 if sample_id % self.max_sampling_attempts_image == 0:
