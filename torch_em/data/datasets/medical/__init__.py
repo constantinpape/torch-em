@@ -12,6 +12,7 @@ from .covid_qu_ex import get_covid_qu_ex_dataset, get_covid_qu_ex_loader
 from .curvas import get_curvas_dataset, get_curvas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
 from .drive import get_drive_dataset, get_drive_loader
+from .jsrt import get_jsrt_dataset, get_jsrt_loader
 from .kvasir import get_kvasir_dataset, get_kvasir_loader
 from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
 from .duke_liver import get_duke_liver_dataset, get_duke_liver_loader
