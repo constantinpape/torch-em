@@ -35,6 +35,7 @@ from .papila import get_papila_dataset, get_papila_loader
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
+from .ravir import get_ravir_dataset, get_ravir_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .sega import get_sega_dataset, get_sega_loader
 from .segthy import get_segthy_dataset, get_segthy_loader
