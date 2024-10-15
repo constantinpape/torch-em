@@ -246,7 +246,6 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 break
             progress.update(1)
 
-        # self.pseudo_labeler.step(loss, self._epoch) # NOTE: it's here!
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -351,7 +350,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 self._iteration, metric_val, loss_val, x1, x2, pred, pseudo_labels, label_filter
             )
 
-        self.pseudo_labeler.step(metric_val, self._epoch) # NOTE: vielleicht doch lieber hier?
+        self.pseudo_labeler.step(metric_val, self._epoch) # NOTE: scheduler added in validation step
 
         return metric_val
 
