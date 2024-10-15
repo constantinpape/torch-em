@@ -1,7 +1,15 @@
+"""The RAVIR dataset contains annotations for segmentation of retinal arteries and veins
+in infrared reflectance imaging.
+
+The dataset is from the RAVIR challenge: https://ravir.grand-challenge.org/RAVIR/.
+This dataset is from the publication https://doi.org/10.1109/JBHI.2022.3163352.
+Please cite them if you use this dataset for your research.
+"""
+
 import os
 import shutil
 from glob import glob
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 
 import torch_em
 
@@ -12,12 +20,21 @@ URL = "https://drive.google.com/uc?export=download&id=1ZlZoSStvE9VCRq3bJiGhQH931
 CHECKSUM = "b9cc2e84660ab4ebeb583d510bd71057faf596a99ed6d1e27aee361e3a3f1381"
 
 
-def get_ravir_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_ravir_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the RAVIR dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "RAVIR_Dataset")
     if os.path.exists(data_dir):
         return data_dir
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "ravir.zip")
     util.download_source_gdrive(
@@ -25,7 +42,7 @@ def get_ravir_data(path, download):
     )
     util.unzip(zip_path=zip_path, dst=path)
 
-    # updating the folder structure a tiny bit
+    # Updating the folder structure.
     tmp_dir = os.path.join(path, r"RAVIR Dataset")
     assert os.path.exists(tmp_dir), "Something went wrong with the data download"
     shutil.move(tmp_dir, data_dir)
@@ -33,7 +50,17 @@ def get_ravir_data(path, download):
     return data_dir
 
 
-def _get_ravir_paths(path, download):
+def get_ravir_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[int], List[int]]:
+    """Get paths to the RAVIR dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_ravir_data(path=path, download=download)
 
     image_paths = sorted(glob(os.path.join(data_dir, "train", "training_images", "*")))
@@ -49,15 +76,19 @@ def get_ravir_dataset(
     resize_inputs: bool = False,
     **kwargs
 ):
-    """Dataset for segmentation of retinal arteries and veins in infrared reflectance (IR) imaging.
+    """Get the RAVIR dataset for segmentation of retinal arteries and veins.
 
-    This dataset comes from the "RAVIR" challenge:
-    - https://ravir.grand-challenge.org/RAVIR/
-    - https://doi.org/10.1109/JBHI.2022.3163352
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    Please cite it if you use this dataset for a publication.
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_ravir_paths(path=path, download=download)
+    image_paths, gt_paths = get_ravir_paths(path, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -65,7 +96,7 @@ def get_ravir_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
@@ -74,8 +105,6 @@ def get_ravir_dataset(
         is_seg_dataset=False,
         **kwargs
     )
-
-    return dataset
 
 
 def get_ravir_loader(
@@ -86,11 +115,18 @@ def get_ravir_loader(
     resize_inputs: bool = False,
     **kwargs
 ):
-    """Dataloader for segmentation of retinal arteries and veins in IR imaging. See `get_ravir_dataset` for details.
+    """Get the RAVIR dataloader for segmentation of retinal arteries and veins.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_ravir_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_ravir_dataset(path, patch_shape, download, resize_inputs, **ds_kwargs)
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
