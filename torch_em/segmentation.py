@@ -253,6 +253,8 @@ def default_segmentation_dataset(
     with_channels=False,
     with_label_channels=False,
     verify_paths=True,
+    with_padding=True,
+    z_ext=None,
 ):
     if verify_paths:
         check_paths(raw_paths, label_paths)
@@ -289,6 +291,8 @@ def default_segmentation_dataset(
             label_dtype=label_dtype,
             with_channels=with_channels,
             with_label_channels=with_label_channels,
+            with_padding=with_padding,
+            z_ext=z_ext,
         )
     else:
         ds = _load_image_collection_dataset(
@@ -306,13 +310,15 @@ def default_segmentation_dataset(
             sampler=sampler,
             dtype=dtype,
             label_dtype=label_dtype,
+            with_padding=with_padding,
         )
 
     return ds
 
 
-def get_data_loader(dataset: torch.utils.data.Dataset, batch_size, **loader_kwargs) -> torch.utils.data.DataLoader:
-    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, **loader_kwargs)
+def get_data_loader(dataset: torch.utils.data.Dataset, batch_size: int, **loader_kwargs) -> torch.utils.data.DataLoader:
+    pin_memory = loader_kwargs.pop("pin_memory", True)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, pin_memory=pin_memory, **loader_kwargs)
     # monkey patch shuffle attribute to the loader
     loader.shuffle = loader_kwargs.get("shuffle", False)
     return loader

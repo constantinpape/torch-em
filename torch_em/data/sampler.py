@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List
+from typing import List, Optional
 
 
 class MinForegroundSampler:
@@ -85,13 +85,18 @@ class MinInstanceSampler:
     def __init__(
         self,
         min_num_instances: int = 2,
-        p_reject: float = 1.0
+        p_reject: float = 1.0,
+        min_size: Optional[int] = None
     ):
         self.min_num_instances = min_num_instances
         self.p_reject = p_reject
+        self.min_size = min_size
 
     def __call__(self, x, y):
-        uniques = np.unique(y)
+        uniques, sizes = np.unique(y, return_counts=True)
+        if self.min_size is not None:
+            filter_ids = uniques[sizes >= self.min_size]
+            uniques = filter_ids
         if len(uniques) >= self.min_num_instances:
             return True
         else:
