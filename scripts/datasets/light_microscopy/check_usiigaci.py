@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_usiigaci():
-    # from util import ROOT
-    ROOT = "/scratch/share/cidas/cca/data"
+    from util import ROOT
 
     loader = get_usiigaci_loader(
         path=os.path.join(ROOT, "usiigaci"),
