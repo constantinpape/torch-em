@@ -82,8 +82,10 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         logger=SelfTrainingTensorboardLogger,
         momentum=0.999,
         reinit_teacher=None,
+        sampler=None,
         **kwargs
     ):
+        self.sampler = sampler
         # Do we have supervised data or not?
         if supervised_train_loader is None:
             # No. -> We use the unsupervised training logic.
@@ -220,6 +222,12 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
+
+            # If we have a sampler then check if the current batch matches the condition for inclusion in training.
+            if self.sampler is not None:
+                keep_batch = self.sampler(pseudo_labels, label_filter)
+                if not keep_batch:
+                    continue
 
             self.optimizer.zero_grad()
             # Perform unsupervised training
