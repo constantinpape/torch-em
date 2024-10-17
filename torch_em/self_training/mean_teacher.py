@@ -223,7 +223,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
 
-            # sample wether we use this prediction
+            # If we have a sampler then check if the current batch matches the condition for inclusion in training.
             if self.sampler is not None:
                 keep_batch = self.sampler(pseudo_labels, label_filter)
                 if not keep_batch:
