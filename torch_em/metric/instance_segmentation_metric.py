@@ -9,6 +9,8 @@ import torch.nn as nn
 import vigra
 from elf.segmentation.watershed import apply_size_filter
 
+print("Hello Anwai, please help")
+
 
 class BaseInstanceSegmentationMetric(nn.Module):
     def __init__(self, segmenter, metric, to_numpy=True):
