@@ -2,10 +2,10 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from sklearn.metrics import ConfusionMatrixDisplay
+from torch.utils.tensorboard import SummaryWriter
 from torch_em.trainer.logger_base import TorchEmLogger
 from torch_em.transform.raw import normalize
 
@@ -99,7 +99,7 @@ class ClassificationLogger(TorchEmLogger):
             os.path.join(save_root, "logs", trainer.name)
         os.makedirs(self.log_dir, exist_ok=True)
 
-        self.tb = torch.utils.tensorboard.SummaryWriter(self.log_dir)
+        self.tb = SummaryWriter(self.log_dir)
         self.log_image_interval = trainer.log_image_interval
 
     def add_image(self, x, y, pred, name, step):
