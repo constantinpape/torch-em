@@ -114,7 +114,7 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
             "Please install gdown: 'mamba install gdown==4.6.3'."
         )
 
-    print("Downloading the dataset. Might take a few minutes...")
+    print("Downloading the files. Might take a few minutes...")
 
     if download_type == "zip":
         gdown.download(url, path, quiet=False)
