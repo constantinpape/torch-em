@@ -155,7 +155,7 @@ def get_plantseg_paths(
     Returns:
         List of filepaths for the data.
     """
-    data_path = get_plantseg_data(path, download, name, split)
+    data_path = get_plantseg_data(path, name, split, download)
     file_paths = sorted(glob(os.path.join(data_path, "*.h5")))
     return file_paths
 
