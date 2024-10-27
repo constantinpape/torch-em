@@ -1,4 +1,11 @@
-"""
+"""This dataset contains annotations for cell segmentation for
+label-free live cell quantitative phase microscopy images.
+
+NOTE: This dataset also provides large unlabeled data for pretraining / self-supervised methods.
+
+The dataset is located at https://zenodo.org/records/5153251.
+This dataset is from the publication https://doi.org/10.1364/BOE.433212.
+Please cite it if you use this dataset in your research.
 """
 
 import os
@@ -27,8 +34,16 @@ VALID_CELL_TYPES = ["A2058", "G361", "HOB", "PC3", "PNT1A"]
 
 
 def get_vicar_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the VICAR dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the training data.
     """
-    """
+    # NOTE: We hard-code everything to the 'labeled' data split.
     data_dir = os.path.join(path, "labelled")
     if os.path.exists(data_dir):
         return data_dir
@@ -46,7 +61,16 @@ def get_vicar_paths(
     cell_types: Optional[Union[Sequence[str], str]] = None,
     download: bool = False
 ) -> Tuple[List[str], List[str]]:
-    """
+    """Get paths to the VICAR data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        cell_types: The choice of cell types. By default, selects all cell types.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
     data_dir = get_vicar_data(path, download)
 
@@ -76,7 +100,17 @@ def get_vicar_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the VICAR dataset for cell segmentation in quantitative phase microscopy.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        cell_types: The choice of cell types. By default, selects all cell types.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     raw_paths, label_paths = get_vicar_paths(path, cell_types, download)
 
@@ -99,7 +133,18 @@ def get_vicar_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the VICAR dataloader for cell segmentation in quantitative phase microscopy.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        cell_types: The choice of cell types. By default, selects all cell types.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_vicar_dataset(path, patch_shape, cell_types, download, **ds_kwargs)
