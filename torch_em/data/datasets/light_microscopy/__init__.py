@@ -23,3 +23,4 @@ from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
 from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
+from .vicar import get_vicar_loader, get_vicar_dataset
