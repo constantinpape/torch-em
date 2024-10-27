@@ -1,3 +1,4 @@
+from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .cartocell import get_cartocell_loader, get_cartocell_dataset
 from .cellpose import get_cellpose_loader, get_cellpose_dataset
 from .cellseg_3d import get_cellseg_3d_loader, get_cellseg_3d_dataset
