@@ -50,8 +50,9 @@ def get_vicar_data(path: Union[os.PathLike, str], download: bool = False) -> str
 
     os.makedirs(data_dir, exist_ok=True)
 
-    util.download_source(path=path, url=URL["labelled"], download=download, checksum=CHECKSUMS["labelled"])
-    util.unzip(zip_path=os.path.join(path, "labelled.zip"), dst=data_dir)
+    zip_path = os.path.join(path, "labelled.zip")
+    util.download_source(path=zip_path, url=URL["labelled"], download=download, checksum=CHECKSUMS["labelled"])
+    util.unzip(zip_path=zip_path, dst=data_dir)
 
     return data_dir
 
