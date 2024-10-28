@@ -1,4 +1,9 @@
-"""
+"""The SRSA-Net dataset contains annotations for nucleus segmentation
+in IHC stained TMA histological images from NSCLC patients.
+
+The dataset is located at https://doi.org/10.5281/zenodo.7647846.
+This dataset is from the publication https://doi.org/10.1016/j.bspc.2024.106143.
+Please cite it if you use this dataset for your research.
 """
 
 import os
@@ -38,7 +43,14 @@ def _preprocess_data(data_dir):
 
 
 def get_srsanet_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """
+    """Download the SRSA-Net dataset for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the downloaded data.
     """
     data_dir = os.path.join(path, "IHC_TMA_dataset")
     if os.path.exists(data_dir):
@@ -60,7 +72,16 @@ def get_srsanet_paths(
     split: Literal['train', 'val', 'test'],
     download: bool = False
 ) -> Tuple[List[int], List[int]]:
-    """
+    """Get paths to the SRSA-Net data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths to the image data.
+        List of filepaths to the label data.
     """
     data_dir = get_srsanet_data(path, download)
 
@@ -86,7 +107,17 @@ def get_srsanet_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the SRSA-Net dataset for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     raw_paths, label_paths = get_srsanet_paths(path, split, download)
 
@@ -109,7 +140,17 @@ def get_srsanet_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the SRSA-Net dataloader for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_srsanet_dataset(path, patch_shape, split, download, **ds_kwargs)
