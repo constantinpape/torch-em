@@ -1,4 +1,9 @@
-"""
+"""The LyNSeC dataset contains annotations for nucleus segmentation
+in IHC and H&E stained lymphoma tissue images.
+
+The dataset is located at https://doi.org/10.5281/zenodo.8065174.
+This dataset is from the publication https://doi.org/10.1016/j.compbiomed.2024.107978.
+Please cite it if you use this dataset in your research.
 """
 
 import os
@@ -51,7 +56,14 @@ def _preprocess_dataset(data_dir):
 
 
 def get_lynsec_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """
+    """Download the LyNSeC dataset for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the downloaded data.
     """
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
@@ -71,7 +83,16 @@ def get_lynsec_data(path: Union[os.PathLike, str], download: bool = False) -> st
 def get_lynsec_paths(
     path: Union[os.PathLike, str], choice: Optional[Literal['ihc', 'h&e']] = None, download: bool = False
 ) -> Tuple[List[str], List[str]]:
-    """
+    """Get paths to the LyNSec data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        choice: The choice of dataset.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths to the image data.
+        List of filepaths to the label data.
     """
     data_dir = get_lynsec_data(path, download)
 
@@ -91,7 +112,17 @@ def get_lynsec_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the LyNSeC dataset for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        choice: The choice of dataset.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     raw_paths, label_paths = get_lynsec_paths(path, choice, download)
 
@@ -114,7 +145,18 @@ def get_lynsec_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the LyNSeC dataloader for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        choice: The choice of dataset.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_lynsec_dataset(path, patch_shape, choice, download, **ds_kwargs)

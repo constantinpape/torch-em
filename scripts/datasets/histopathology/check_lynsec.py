@@ -8,8 +8,7 @@ sys.path.append("..")
 
 
 def check_lynsec():
-    # from util import ROOT
-    ROOT = "/home/anwai/data"
+    from util import ROOT
 
     loader = get_lynsec_loader(
         path=os.path.join(ROOT, "lynsec"),
