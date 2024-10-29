@@ -163,6 +163,7 @@ def get_arvidsson_loader(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
         download: Whether to download the data if it is not present.
