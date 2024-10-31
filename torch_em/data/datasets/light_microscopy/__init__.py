@@ -12,6 +12,7 @@ from .dynamicnuclearnet import get_dynamicnuclearnet_loader, get_dynamicnuclearn
 from .embedseg_data import get_embedseg_loader, get_embedseg_dataset
 from .gonuclear import get_gonuclear_loader, get_gonuclear_dataset
 from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
+from .ifnuclei import get_ifnuclei_loader, get_ifnuclei_dataset
 from .livecell import get_livecell_loader, get_livecell_dataset
 from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
 from .neurips_cell_seg import (
