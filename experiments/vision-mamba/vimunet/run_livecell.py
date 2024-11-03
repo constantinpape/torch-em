@@ -121,6 +121,7 @@ def run_livecell_training(args):
         metric=loss,
         log_image_interval=50,
         save_root=save_root,
+        mixed_precision=False,
         compile_model=False,
         scheduler_kwargs={"mode": "min", "factor": 0.9, "patience": 10}
     )

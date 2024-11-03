@@ -47,10 +47,14 @@ $ pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url htt
 $ git clone https://github.com/anwai98/Vim.git
 $ cd Vim
 $ pip install -r vim/vim_requirements.txt
-$ pip install -e causal_conv1d/
-$ pip install -e mamba/
+$ pip install -e causal-conv1d
+$ pip install -e mamba-1p1p1
 $ pip install -e .
 ```
+
+<!-- elf, kornia_rs, kornia, natsort, tensorboard -->
+<!-- export LD_LIBRARY_PATH=/scratch/usr/nimanwai/micromamba/envs/vimunet/lib/ -->
+<!-- pip install causal_conv1d==1.1.1 -->
 
 > NOTE: The installation is sometimes a bit tricky, but following the steps and keeping the footnotes in mind should do the trick.
 > We are working on providing an easier and more stable installation, [see this issue](https://github.com/constantinpape/torch-em/issues/237).
