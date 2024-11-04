@@ -1,4 +1,8 @@
-"""
+"""The PALM dataset contains annotations for optic disc and lesion segmentation
+in Fundus images.
+
+The dataset is from the publication https://doi.org/10.1038/s41597-024-02911-2.
+Please cite it if you use this dataset for your research.
 """
 
 import os
@@ -21,7 +25,14 @@ CHECKSUM = "21cd568a00a50287370572ea81b50847085819bd2f732331ee9cdc6367e6cd1f"
 
 
 def get_palm_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """
+    """Download the PALM data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
     """
     data_dir = os.path.join(path, "PALM")
     if os.path.exists(data_dir):
@@ -56,7 +67,17 @@ def get_palm_paths(
     label_choice: Literal["disc", "atrophy_lesion", "detachment_lesion"] = "disc",
     download: bool = False
 ) -> Tuple[List[str], List[str]]:
-    """
+    """Get paths to the PALM data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data split.
+        label_choice: The choice of label masks.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
     data_dir = get_palm_data(path, download)
 
@@ -91,7 +112,19 @@ def get_palm_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the PALM dataset for disc and lesion segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        label_choice: The choice of label masks.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     raw_paths, label_paths = get_palm_paths(path, split, label_choice, download)
 
@@ -122,7 +155,19 @@ def get_palm_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the PALM dataloader for disc and lesion segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        label_choice: The choice of label masks.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_palm_dataset(path, patch_shape, split, label_choice, resize_inputs, download, **ds_kwargs)
