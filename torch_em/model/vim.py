@@ -255,6 +255,8 @@ def get_vimunet_model(
 
     encoder.img_size = encoder.patch_embed.img_size[0]
 
+    # TODO: Update design so that: we have a backbone to fetch encoder and decoder flexibly
+    # and is ideally not named as "UNETR" but something as for example "EncoderDecoderNet"
     model = UNETR(
         encoder=encoder,
         out_channels=out_channels,
