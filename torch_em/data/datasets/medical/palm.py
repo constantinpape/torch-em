@@ -159,6 +159,7 @@ def get_palm_loader(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
         label_choice: The choice of label masks.
