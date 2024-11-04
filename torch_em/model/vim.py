@@ -196,20 +196,11 @@ class ViM(VisionMamba):
 
 def get_vim_encoder(model_type="vim_t", with_cls_token=True):
     if model_type == "vim_t":
-        # `vim_tiny_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_rope_also_residual_with_cls_token`
-        # *has an imagenet pretrained model
         embed_dim = 192
-        depth = 24
     elif model_type == "vim_s":
-        # `vim_small_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_rope_also_residual`
-        # AA: added a class token to the default models
         embed_dim = 384
-        depth = 24
     elif model_type == "vim_b":
-        # `vim_base_patch16_224_bimambav2_final_pool_mean_abs_pos_embed_rope_also_residual`
-        # AA: added a class token to the default models
         embed_dim = 768
-        depth = 24
     else:
         raise ValueError("Choose from 'vim_t' / 'vim_s' / 'vim_b'")
 
@@ -217,7 +208,7 @@ def get_vim_encoder(model_type="vim_t", with_cls_token=True):
         img_size=1024,
         patch_size=16,
         embed_dim=embed_dim,
-        depth=depth,
+        depth=24,
         rms_norm=True,
         residual_in_fp32=True,
         fused_add_norm=True,
