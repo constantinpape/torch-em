@@ -1,4 +1,9 @@
-"""
+"""The PSFHS dataset contains annotations for segmentation of pubic symphysis and fetal head
+in ultrasound images.
+
+This dataset is located at https://zenodo.org/records/10969427.
+The dataset is from the publication https://doi.org/10.1038/s41597-024-03266-4.
+Please cite it if you use this dataset for your research.
 """
 
 import os
@@ -18,7 +23,14 @@ CHECKSUM = "3f4a8126c84640e4d1b8a4e296d0dfd599cea6529b64b9ee00e5489bfd17ea95"
 
 
 def get_psfhs_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """
+    """Download the PSFHS data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
     """
     data_dir = os.path.join(path, "PSFHS")
     if os.path.exists(data_dir):
@@ -34,7 +46,15 @@ def get_psfhs_data(path: Union[os.PathLike, str], download: bool = False) -> str
 
 
 def get_psfhs_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[int], List[int]]:
-    """
+    """Get paths to the PSFHS dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
     data_dir = get_psfhs_data(path, download)
 
@@ -51,7 +71,17 @@ def get_psfhs_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the PSFHS dataset for segmentation of pubic symphysis and fetal head.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     raw_paths, label_paths = get_psfhs_paths(path, download)
 
@@ -82,7 +112,18 @@ def get_psfhs_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the PSFHS dataset for segmentation of pubic symphysis and fetal head.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_psfhs_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
