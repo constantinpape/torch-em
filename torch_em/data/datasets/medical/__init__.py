@@ -33,6 +33,7 @@ from .msd import get_msd_dataset, get_msd_loader
 from .oasis import get_oasis_dataset, get_oasis_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
+from .palm import get_palm_dataset, get_palm_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
