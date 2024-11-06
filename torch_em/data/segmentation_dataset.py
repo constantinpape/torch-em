@@ -53,6 +53,9 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.label_key = label_key
         self.labels = load_data(label_path, label_key)
 
+        if self.raw.shape != self.labels.shape:
+            print(raw_path, label_path)
+
         self._with_channels = with_channels
         self._with_label_channels = with_label_channels
 
