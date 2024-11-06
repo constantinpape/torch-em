@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_ct_cadaiver():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_ct_cadaiver_loader(
         path=os.path.join(ROOT, "ct_cadaiver"),
