@@ -122,7 +122,6 @@ def get_isic_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     split: Literal['train', 'val', 'test'],
-    make_rgb: bool = True,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -133,7 +132,6 @@ def get_isic_dataset(
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
-        make_rgb: Ensure all inputs are in RGB-format.
         resize_inputs: Whether to resize the inputs to the expected patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -143,13 +141,14 @@ def get_isic_dataset(
     """
     image_paths, gt_paths = get_isic_paths(path=path, split=split, download=download)
 
-    if make_rgb:
-        kwargs["raw_transform"] = to_rgb
-
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
         kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
-            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+            kwargs=kwargs,
+            patch_shape=patch_shape,
+            resize_inputs=resize_inputs,
+            resize_kwargs=resize_kwargs,
+            ensure_rgb=to_rgb,
         )
 
     return torch_em.default_segmentation_dataset(
@@ -168,7 +167,6 @@ def get_isic_loader(
     batch_size: int,
     patch_shape: Tuple[int, int],
     split: Literal['train', 'val', 'test'],
-    make_rgb: bool = True,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -180,7 +178,6 @@ def get_isic_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
-        make_rgb: Ensure all inputs are in RGB-format.
         resize_inputs: Whether to resize the inputs to the expected patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -189,5 +186,5 @@ def get_isic_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_isic_dataset(path, patch_shape, split, make_rgb, resize_inputs, download, **ds_kwargs)
+    dataset = get_isic_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

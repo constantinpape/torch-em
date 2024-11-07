@@ -121,6 +121,7 @@ def get_covid_qu_ex_dataset(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
         task: The choice for the subset of dataset. Either 'lung' or 'infection'.
         patient_type: The choice of subset of patients. Either 'covid19', 'non-covid' or 'normal'.

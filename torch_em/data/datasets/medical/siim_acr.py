@@ -78,6 +78,10 @@ def get_siim_acr_paths(
         else:
             raise ValueError(f"'{split}' is not a valid split.")
 
+    assert len(image_paths) == len(gt_paths)
+
+    print(len(image_paths), len(gt_paths))
+
     return image_paths, gt_paths
 
 

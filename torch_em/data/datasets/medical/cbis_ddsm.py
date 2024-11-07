@@ -19,37 +19,15 @@ import torch_em
 from .. import util
 
 
-def get_cbis_ddsm_data(
-    path: Union[os.PathLike, str],
-    split: Literal['Train', 'Test'],
-    task: Literal['Calc', 'Mass'],
-    tumour_type: Literal['MALIGNANT', 'BENIGN'],
-    download: bool = False
-) -> str:
+def get_cbis_ddsm_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Download the CBIS DDSM dataset.
      Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        split: The choice of data split.
-        task: The choice of labels for the specified task.
-        tumour_type: The choice of tumour type.
         download: Whether to download the data if it is not present.
 
     Returns:
         Filepath where the data is downloaded for the selected task.
     """
-    if split not in ["Train", "Val", "Test"]:
-        raise ValueError(f"'{split}' is not a valid split.")
-
-    if task is None:
-        task = "*"
-    else:
-        assert task in ["Calc", "Mass"], f"'{task}' is not a valid task."
-
-    if tumour_type is None:
-        tumour_type = "*"
-    else:
-        assert tumour_type in ["MALIGNANT", "BENIGN"], f"'{tumour_type}' is not a tumor type."
-
     data_dir = os.path.join(path, "DATA")
     if os.path.exists(data_dir):
         return data_dir
@@ -83,7 +61,20 @@ def get_cbis_ddsm_paths(
         List of filepaths for the image data.
         List of filepaths for the label data.
     """
-    data_dir = get_cbis_ddsm_data(path, split, task, tumour_type, download)
+    data_dir = get_cbis_ddsm_data(path, download)
+
+    if split not in ["Train", "Val", "Test"]:
+        raise ValueError(f"'{split}' is not a valid split.")
+
+    if task is None:
+        task = "*"
+    else:
+        assert task in ["Calc", "Mass"], f"'{task}' is not a valid task."
+
+    if tumour_type is None:
+        tumour_type = "*"
+    else:
+        assert tumour_type in ["MALIGNANT", "BENIGN"], f"'{tumour_type}' is not a tumor type."
 
     if split == "Test":
         target_dir = os.path.join(data_dir, task, split, tumour_type)
@@ -96,7 +87,7 @@ def get_cbis_ddsm_paths(
 
         if split == "Train":
             image_paths, gt_paths = image_paths[125:], gt_paths[125:]
-        else:  # validation split.
+        else:  # validation split (take the first 125 samples for validation)
             image_paths, gt_paths = image_paths[:125], gt_paths[:125]
 
     assert len(image_paths) == len(gt_paths)
@@ -107,7 +98,7 @@ def get_cbis_ddsm_paths(
 def get_cbis_ddsm_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    split: Literal["Train", "Test"],
+    split: Literal['Train', 'Val', 'Test'],
     task: Optional[Literal["Calc", "Mass"]] = None,
     tumour_type: Optional[Literal["MALIGNANT", "BENIGN"]] = None,
     resize_inputs: bool = False,
@@ -152,7 +143,7 @@ def get_cbis_ddsm_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    split: Literal["Train", "Test"],
+    split: Literal['Train', 'Val', 'Test'],
     task: Optional[Literal["Calc", "Mass"]] = None,
     tumour_type: Optional[Literal["MALIGNANT", "BENIGN"]] = None,
     resize_inputs: bool = False,
