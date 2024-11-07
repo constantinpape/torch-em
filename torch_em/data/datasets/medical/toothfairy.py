@@ -191,4 +191,4 @@ def get_toothfairy_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_toothfairy_dataset(path, patch_shape, version, resize_inputs, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

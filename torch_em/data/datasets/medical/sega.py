@@ -10,6 +10,8 @@ from pathlib import Path
 from natsort import natsorted
 from typing import Union, Tuple, Optional, Literal, List
 
+from torch.utils.data import Dataset, DataLoader
+
 import torch_em
 
 from .. import util
@@ -138,7 +140,7 @@ def get_sega_dataset(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
+) -> Dataset:
     """Get the SegA dataset for segmentation of aorta in computed tomography angiography (CTA) scans.
 
     Args:
@@ -160,7 +162,7 @@ def get_sega_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs,
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -170,22 +172,21 @@ def get_sega_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_sega_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
     data_choice: Optional[Literal["KiTS", "Rider", "Dongyang"]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
+) -> DataLoader:
     """Get the SegA dataloader for segmentation of aorta in computed tomography angiography (CTA) scans.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         data_choice: The choice of dataset.
         resize_inputs: Whether to resize the inputs to the patch shape.
@@ -197,4 +198,4 @@ def get_sega_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_sega_dataset(path, patch_shape, data_choice, resize_inputs, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -71,6 +71,7 @@ def get_segthy_data(path: Union[os.PathLike, str], source: Literal['MRI', 'US'],
 
 def get_segthy_paths(
     path: Union[os.PathLike, str],
+    split: Literal['train', 'val', 'test'],
     source: Literal['MRI', 'US'],
     region: Literal['thyroid', 'thyroid_and_vessels'] = "thyroid",
     download: bool = False
@@ -79,6 +80,7 @@ def get_segthy_paths(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
         source: The source of dataset. Either 'MRI' or 'US.
         region: The labeled regions for the corresponding volumes. Either 'thyroid' or 'thyroid_and_vessels'.
         download: Whether to download the data if it is not present.
@@ -100,12 +102,24 @@ def get_segthy_paths(
     raw_paths = natsorted(glob(os.path.join(path, f"{source}_volunteer_dataset", rdir, fext)))
     label_paths = natsorted(glob(os.path.join(path, f"{source}_volunteer_dataset", ldir, fext)))
 
+    print(len(raw_paths), len(label_paths))
+
+    if split == "train":
+        raw_paths, label_paths = raw_paths[:15], label_paths[:15]
+    elif split == "train":
+        raw_paths, label_paths = raw_paths[15:20], label_paths[15:20]
+    elif split == "train":
+        raw_paths, label_paths = raw_paths[20:], label_paths[20:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
+
     return raw_paths, label_paths
 
 
 def get_segthy_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     source: Literal['MRI', 'US'],
     region: Literal['thyroid', 'thyroid_and_vessels'] = "thyroid",
     download: bool = False,
@@ -116,6 +130,7 @@ def get_segthy_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         source: The source of dataset. Either 'MRI' or 'US.
         region: The labeled regions for the corresponding volumes. Either 'thyroid' or 'thyroid_and_vessels'.
         download: Whether to download the data if it is not present.
@@ -124,7 +139,7 @@ def get_segthy_dataset(
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_segthy_paths(path, source, region, download)
+    raw_paths, label_paths = get_segthy_paths(path, split, source, region, download)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -141,6 +156,7 @@ def get_segthy_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     source: Literal['MRI', 'US'],
     region: Literal['thyroid', 'thyroid_and_vessels'] = "thyroid",
     download: bool = False,
@@ -152,6 +168,7 @@ def get_segthy_loader(
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         source: The source of dataset. Either 'MRI' or 'US.
         region: The labeled regions for the corresponding volumes. Either 'thyroid' or 'thyroid_and_vessels'.
         download: Whether to download the data if it is not present.
@@ -161,5 +178,5 @@ def get_segthy_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_segthy_dataset(path, patch_shape, source, region, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_segthy_dataset(path, patch_shape, split, source, region, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

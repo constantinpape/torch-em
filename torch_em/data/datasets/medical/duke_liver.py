@@ -15,6 +15,8 @@ from typing import Union, Tuple, Literal, List
 
 import numpy as np
 
+from torch.utils.data import Dataset, DataLoader
+
 import torch_em
 
 from .. import util
@@ -145,7 +147,7 @@ def get_duke_liver_dataset(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
+) -> Dataset:
     """Get the Duke Liver dataset for segmentation of liver in MRI.
 
     Args:
@@ -186,7 +188,7 @@ def get_duke_liver_loader(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
+) -> DataLoader:
     """Get the Duke Liver dataloader for segmentation of liver in MRI.
 
     Args:
