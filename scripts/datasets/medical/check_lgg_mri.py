@@ -13,12 +13,12 @@ def check_lgg_mri():
 
     loader = get_lgg_mri_loader(
         path=os.path.join(ROOT, "lgg_mri"),
-        patch_shape=(4, 1024, 1024),
+        patch_shape=(4, 512, 512),
         ndim=3,
         split="train",
         batch_size=1,
         resize_inputs=True,
-        # channels="flair",
+        channels="flair",
         download=True,
     )
     check_loader(loader, 8, plt=True, save_path="./lgg_mri.png")

@@ -91,6 +91,7 @@ def get_leg_3d_us_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     split: Literal['train', 'val', 'test'],
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -100,6 +101,7 @@ def get_leg_3d_us_dataset(
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
+        resize_inputs:  Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -107,6 +109,12 @@ def get_leg_3d_us_dataset(
         The segmentation dataset.
     """
     raw_paths, label_paths = get_leg_3d_us_paths(path, split, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -124,6 +132,7 @@ def get_leg_3d_us_loader(
     batch_size: int,
     patch_shape: Tuple[int, ...],
     split: Literal['train', 'val', 'test'],
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -134,6 +143,7 @@ def get_leg_3d_us_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
+        resize_inputs:  Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -141,5 +151,5 @@ def get_leg_3d_us_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_leg_3d_us_dataset(path, patch_shape, split, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_leg_3d_us_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

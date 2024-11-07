@@ -2,7 +2,6 @@
 in FLAIR MRI scans.
 
 The dataset is located at https://www.kaggle.com/datasets/mateuszbuda/lgg-mri-segmentation.
-
 This dataset is from the publication https://www.nejm.org/doi/full/10.1056/NEJMoa1402121.
 Please cite it if you use this dataset in your research.
 """
@@ -26,6 +25,8 @@ from .. import util
 
 
 def _merge_slices_to_volumes(path):
+    import h5py
+
     volume_dir = os.path.join(path, "data")
     os.makedirs(volume_dir, exist_ok=True)
 
@@ -41,7 +42,6 @@ def _merge_slices_to_volumes(path):
 
         volume_path = os.path.join(volume_dir, f"{os.path.basename(patient_dir)}.h5")
 
-        import h5py
         with h5py.File(volume_path, "w") as f:
             f.create_dataset("raw/pre_contrast", data=raw[..., 0], compression="gzip")
             f.create_dataset("raw/flair", data=raw[..., 1], compression="gzip")
