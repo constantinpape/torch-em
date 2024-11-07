@@ -19,6 +19,7 @@ def check_segthy():
         ndim=2,
         download=True,
     )
+
     check_loader(loader, 8, plt=True, save_path="./test.png")
 
 

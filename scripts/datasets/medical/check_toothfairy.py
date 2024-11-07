@@ -25,4 +25,5 @@ def check_toothfairy():
     check_loader(loader, 8, plt=True, save_path="./toothfairy.png")
 
 
-check_toothfairy()
+if __name__ == "__main__":
+    check_toothfairy()

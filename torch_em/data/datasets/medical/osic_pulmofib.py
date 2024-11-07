@@ -1,9 +1,17 @@
+"""The OSIC PulmoFib dataset contains annotations for lung, heart and trachea in CT scans.
+
+This dataset is from OSIC Pulmonary Fibrosis Progression Challenge:
+- https://www.kaggle.com/c/osic-pulmonary-fibrosis-progression/data (dataset source)
+- https://www.kaggle.com/datasets/sandorkonya/ct-lung-heart-trachea-segmentation (segmentation source)
+Please cite them if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 
 import json
 import numpy as np
@@ -16,21 +24,30 @@ from .. import util
 ORGAN_IDS = {"heart": 1, "lung": 2, "trachea": 3}
 
 
-def get_osic_pulmofib_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_osic_pulmofib_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the OSIC PulmoFib dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
         return data_dir
 
-    # download the data first
+    os.makedirs(path, exist_ok=True)
+
+    # download the inputs
     zip_path = os.path.join(path, "osic-pulmonary-fibrosis-progression.zip")
     util.download_source_kaggle(
         path=path, dataset_name="osic-pulmonary-fibrosis-progression", download=download, competition=True
     )
     util.unzip(zip_path=zip_path, dst=data_dir, remove=False)
 
-    # download the ground truth next
+    # download the labels
     zip_path = os.path.join(path, "ct-lung-heart-trachea-segmentation.zip")
     util.download_source_kaggle(
         path=path, dataset_name="sandorkonya/ct-lung-heart-trachea-segmentation", download=download
@@ -40,7 +57,17 @@ def get_osic_pulmofib_data(path, download):
     return data_dir
 
 
-def _get_osic_pulmofib_paths(path, download):
+def get_osic_pulmofib_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[str], List[str]]:
+    """Get paths to the OSIC PulmoFib data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     import nrrd
     import nibabel as nib
     import pydicom as dicom
@@ -58,7 +85,7 @@ def _get_osic_pulmofib_paths(path, download):
 
     image_paths, gt_paths = [], []
     uid_paths = natsorted(glob(os.path.join(data_dir, "train", "*")))
-    for uid_path in tqdm(uid_paths):
+    for uid_path in tqdm(uid_paths, desc="Preprocessing inputs"):
         uid = uid_path.split("/")[-1]
 
         image_path = os.path.join(image_dir, f"{uid}.nii.gz")
@@ -125,14 +152,19 @@ def get_osic_pulmofib_dataset(
     download: bool = False,
     **kwargs
 ):
-    """Dataset for segmentation of lung, heart and trachea in CT scans.
+    """Get the OSIC PulmoFib dataset for segmentation of lung, heart and trachea.
 
-    This dataset is from OSIC Pulmonary Fibrosis Progression Challenge:
-    - https://www.kaggle.com/c/osic-pulmonary-fibrosis-progression/data (dataset source)
-    - https://www.kaggle.com/datasets/sandorkonya/ct-lung-heart-trachea-segmentation (segmentation source)
-    Please cite it if you use this dataset for a publication.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_osic_pulmofib_paths(path=path, download=download)
+    image_paths, gt_paths = get_osic_pulmofib_paths(path, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -140,7 +172,7 @@ def get_osic_pulmofib_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -148,8 +180,6 @@ def get_osic_pulmofib_dataset(
         patch_shape=patch_shape,
         **kwargs
     )
-
-    return dataset
 
 
 def get_osic_pulmofib_loader(
@@ -160,11 +190,18 @@ def get_osic_pulmofib_loader(
     download: bool = False,
     **kwargs
 ):
-    """Dataloader for segmentation of lung, heart and trachea in CT scans. See `get_osic_pulmofib_dataset` for details.
+    """Get the OSIC PulmoFib dataloader for segmentation of lung, heart and trachea.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_osic_pulmofib_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_osic_pulmofib_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)

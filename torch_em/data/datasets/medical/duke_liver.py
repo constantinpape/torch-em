@@ -1,7 +1,17 @@
+"""The Duke Liver dataset contains annotations for liver segmentation in MRI scans.
+
+NOTE: This dataset is located at https://doi.org/10.5281/zenodo.7774566.
+Please see 'get_duke_liver_data' for instructions on downloading the dataset.
+
+The dataset is from the publication https://doi.org/10.1148/ryai.220275.
+Please cite it if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from tqdm import tqdm
 from natsort import natsorted
+from typing import Union, Tuple, Literal, List
 
 import numpy as np
 
@@ -10,14 +20,23 @@ import torch_em
 from .. import util
 
 
-def get_duke_liver_data(path, download):
-    """The dataset is located at https://doi.org/10.5281/zenodo.7774566.
+def get_duke_liver_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Get the Duke Liver dataset.
+
+    The dataset is located at https://doi.org/10.5281/zenodo.7774566.
 
     Follow the instructions below to get access to the dataset.
     - Visit the zenodo site attached above.
     - Send a request message alongwith some details to get access to the dataset.
     - The authors would accept the request, then you can access the dataset.
     - Next, download the `Segmentation.zip` file and provide the path where the zip file is stored.
+
+    Args:
+        path: Filepath to a folder where the data needs to be downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is preprocessed.
     """
     if download:
         raise NotImplementedError(
@@ -30,6 +49,7 @@ def get_duke_liver_data(path, download):
 
     zip_path = os.path.join(path, "Segmentation.zip")
     util.unzip(zip_path=zip_path, dst=os.path.join(path, "data"), remove=False)
+
     return data_dir
 
 
@@ -43,9 +63,6 @@ def _preprocess_data(path, data_dir):
 
     os.makedirs(os.path.join(preprocess_dir, "images"), exist_ok=True)
     os.makedirs(os.path.join(preprocess_dir, "masks"), exist_ok=True)
-
-    import pydicom as dicom
-    import nibabel as nib
 
     image_paths, gt_paths = [], []
     for patient_dir in tqdm(glob(os.path.join(data_dir, "00*"))):
@@ -65,6 +82,9 @@ def _preprocess_data(path, data_dir):
 
             image_slice_paths = natsorted(glob(os.path.join(sub_id_dir, "images", "*.dicom")))
             gt_slice_paths = natsorted(glob(os.path.join(sub_id_dir, "masks", "*.dicom")))
+
+            import pydicom as dicom
+            import nibabel as nib
 
             images, gts = [], []
             for image_slice_path, gt_slice_path in zip(image_slice_paths, gt_slice_paths):
@@ -88,7 +108,20 @@ def _preprocess_data(path, data_dir):
     return natsorted(image_paths), natsorted(gt_paths)
 
 
-def _get_duke_liver_paths(path, split, download):
+def get_duke_liver_paths(
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the Duke Liver dataset.
+
+    Args:
+        path: Filepath to a folder where the data needs to be downloaded for further processing.
+        split: The choice of data split.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_duke_liver_data(path=path, download=download)
 
     image_paths, gt_paths = _preprocess_data(path=path, data_dir=data_dir)
@@ -106,23 +139,27 @@ def _get_duke_liver_paths(path, split, download):
 
 
 def get_duke_liver_dataset(
-    path,
-    patch_shape,
-    split,
-    resize_inputs=False,
-    download=False,
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
+    resize_inputs: bool = False,
+    download: bool = False,
     **kwargs
 ):
-    """Dataset for segmentation of liver in MRI.
+    """Get the Duke Liver dataset for segmentation of liver in MRI.
 
-    This dataset is from Macdonald et al. - https://doi.org/10.1148/ryai.220275.
+    Args:
+        path: Filepath to a folder where the data needs to be downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    The dataset is located at https://doi.org/10.5281/zenodo.7774566 (see `get_duke_liver_dataset` for details).
-
-    Please cite it if you use it in a publication.
+    Returns:
+        The segmentation dataset.
     """
-
-    image_paths, gt_paths = _get_duke_liver_paths(path=path, split=split, download=download)
+    image_paths, gt_paths = get_duke_liver_paths(path, split, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -130,7 +167,7 @@ def get_duke_liver_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -140,23 +177,29 @@ def get_duke_liver_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_duke_liver_loader(
-    path,
-    patch_shape,
-    batch_size,
-    split,
-    resize_inputs=False,
-    download=False,
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    batch_size: int,
+    split: Literal['train', 'val', 'test'],
+    resize_inputs: bool = False,
+    download: bool = False,
     **kwargs
 ):
-    """Dataloader for segmentation of liver in MRI. See `get_duke_liver_dataset` for details.
+    """Get the Duke Liver dataloader for segmentation of liver in MRI.
+
+    Args:
+        path: Filepath to a folder where the data needs to be downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_duke_liver_dataset(
-        path=path, patch_shape=patch_shape, split=split, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_duke_liver_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

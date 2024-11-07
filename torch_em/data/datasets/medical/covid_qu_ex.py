@@ -154,6 +154,8 @@ def get_covid_qu_ex_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
         task: The choice for the subset of dataset. Either 'lung' or 'infection'.
         patient_type: The choice of subset of patients. Either 'covid19', 'non-covid' or 'normal'.
@@ -169,4 +171,4 @@ def get_covid_qu_ex_loader(
     dataset = get_covid_qu_ex_dataset(
         path, patch_shape, split, task, patient_type, segmentation_mask, download, **ds_kwargs
     )
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
