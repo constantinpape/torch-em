@@ -19,7 +19,7 @@ from .. import util
 
 
 URL = "https://doi.gin.g-node.org/10.12751/g-node.tvzqc5/10.12751_g-node.tvzqc5.zip"
-CHECKSUM = ""
+CHECKSUM = "2626862599a3fcfe4ac0cefcea3af5b190625275036cc8eb4c9039cbd54e2d7c"
 
 
 def get_motum_data(path: Union[os.PathLike, str], download: bool = False) -> str:
