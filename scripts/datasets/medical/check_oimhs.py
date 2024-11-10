@@ -1,17 +1,22 @@
+import os
+import sys
+
 from torch_em.util.debug import check_loader
-from torch_em.data.datasets.medical import get_oimhs_loader
+from torch_em.data.datasets import get_oimhs_loader
 
 
-ROOT = "/scratch/share/cidas/cca/data/oimhs"
+sys.path.append("..")
 
 
 def check_oimhs():
+    from util import ROOT
+
     loader = get_oimhs_loader(
-        path=ROOT,
+        path=os.path.join(ROOT, "oimhs"),
         patch_shape=(512, 512),
         batch_size=2,
         split="test",
-        download=False,
+        download=True,
         resize_inputs=True,
     )
 
