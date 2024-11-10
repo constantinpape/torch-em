@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_osic_pulmofib():
-    # from util import ROOT
-    ROOT = "/scratch/share/cidas/cca/tmp"
+    from util import ROOT
 
     loader = get_osic_pulmofib_loader(
         path=os.path.join(ROOT, "osic_pulmofib"),
