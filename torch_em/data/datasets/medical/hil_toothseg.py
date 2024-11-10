@@ -26,7 +26,7 @@ URL = "https://hitl-public-datasets.s3.eu-central-1.amazonaws.com/Teeth+Segmenta
 CHECKSUM = "3b628165a218a5e8d446d1313e6ecbe7cfc599a3d6418cd60b4fb78745becc2e"
 
 
-def get_hil_toothseg_data(path: Union[os.PathLike, str], download: bool = False):
+def get_hil_toothseg_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Download the HIL ToothSeg dataset.
 
     Args:
@@ -71,7 +71,7 @@ def get_hil_toothseg_paths(
     os.makedirs(neu_gt_dir, exist_ok=True)
 
     neu_gt_paths = []
-    for gt_path in tqdm(gt_paths):
+    for gt_path in tqdm(gt_paths, desc="Preprocessing inputs"):
         neu_gt_path = os.path.join(neu_gt_dir, f"{Path(gt_path).stem}.tif")
         neu_gt_paths.append(neu_gt_path)
         if os.path.exists(neu_gt_path):
@@ -127,10 +127,10 @@ def get_hil_toothseg_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = get_hil_toothseg_paths(path=path, split=split, download=download)
+    image_paths, gt_paths = get_hil_toothseg_paths(path, split, download)
 
     if resize_inputs:
-        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
         kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
@@ -170,7 +170,5 @@ def get_hil_toothseg_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_hil_toothseg_dataset(
-        path=path, split=split, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_hil_toothseg_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

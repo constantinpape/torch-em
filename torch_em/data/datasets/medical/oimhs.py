@@ -1,14 +1,22 @@
+"""The OIMHS dataset contains annotations for macular hole and retinal region segmentation in OCT images.
+
+The dataset is from the publication https://doi.org/10.1038/s41597-023-02675-1.
+Please cite it if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple, Literal
+from typing import Union, Tuple, Literal, List
 
 import json
 import numpy as np
 import imageio.v3 as imageio
 from sklearn.model_selection import train_test_split
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -26,12 +34,21 @@ LABEL_MAPS = {
 }
 
 
-def get_oimhs_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_oimhs_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the OIMHS data.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
         return data_dir
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "oimhs_dataset.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
@@ -60,11 +77,25 @@ def _get_per_split_dirs(split_file, split):
     return data[split]
 
 
-def _get_oimhs_paths(path, split, download):
+def get_oimhs_paths(
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the OIMHS data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data split.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_oimhs_data(path=path, download=download)
 
     image_dir = os.path.join(data_dir, "preprocessed", "images")
     gt_dir = os.path.join(data_dir, "preprocessed", "gt")
+
     os.makedirs(image_dir, exist_ok=True)
     os.makedirs(gt_dir, exist_ok=True)
 
@@ -75,7 +106,7 @@ def _get_oimhs_paths(path, split, download):
     eye_dirs = _get_per_split_dirs(split_file=split_file, split=split)
 
     image_paths, gt_paths = [], []
-    for eye_dir in tqdm(eye_dirs):
+    for eye_dir in tqdm(eye_dirs, desc="Preprocessing inputs"):
         eye_id = os.path.split(eye_dir)[-1]
         all_oct_scan_paths = natsorted(glob(os.path.join(eye_dir, "*.png")))
         for per_scan_path in all_oct_scan_paths:
@@ -111,14 +142,21 @@ def get_oimhs_dataset(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataset for segmentation of macular hole and retinal regions in OCT scans.
+) -> Dataset:
+    """Get the OIMHS dataset for segmentation of macular hole and retinal regions in OCT scans.
 
-    The dataset is from Ye et al. - https://doi.org/10.1038/s41597-023-02675-1.
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    Please cite it if you use this dataset for your publication.
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_oimhs_paths(path=path, split=split, download=download)
+    image_paths, gt_paths = get_oimhs_paths(path, split, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -126,7 +164,7 @@ def get_oimhs_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
@@ -136,24 +174,30 @@ def get_oimhs_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_oimhs_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
     split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader  for segmentation of macular hole and retinal regions in OCT scans.
-    See `get_oimhs_dataset` for details.
+) -> DataLoader:
+    """Get the OIMHS dataloader for segmentation of macular hole and retinal regions in OCT scans.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_oimhs_dataset(
-        path=path, patch_shape=patch_shape, split=split, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_oimhs_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

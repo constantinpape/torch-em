@@ -14,10 +14,14 @@ def check_oasis():
     loader = get_oasis_loader(
         path=os.path.join(ROOT, "oasis"),
         patch_shape=(8, 512, 512),
+        split="train",
         batch_size=1,
+        label_annotations="4",
+        resize_inputs=True,
         download=True,
     )
-    check_loader(loader, 8)
+
+    check_loader(loader, 8, plt=True, save_path="./oasis.png")
 
 
 if __name__ == "__main__":

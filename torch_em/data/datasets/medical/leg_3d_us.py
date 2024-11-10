@@ -15,6 +15,7 @@ Please cite it if you use this dataset in your research.
 
 import os
 from glob import glob
+from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Tuple, Literal, List
 
@@ -63,6 +64,28 @@ def get_leg_3d_us_data(
     util.unzip(zip_path=zip_path, dst=path)
 
 
+def _preprocess_labels(label_paths):
+    neu_label_paths = []
+    for lpath in tqdm(label_paths, desc="Preprocessing labels"):
+        neu_label_path = lpath.replace(".mha", "_preprocessed.mha")
+        neu_label_paths.append(neu_label_path)
+        if os.path.exists(neu_label_path):
+            continue
+
+        import SimpleITK as sitk
+
+        labels = sitk.ReadImage(lpath)
+        larray = sitk.GetArrayFromImage(labels)
+
+        for i, lid in enumerate([100, 150, 200], start=1):
+            larray[larray == lid] = i
+
+        sitk_label = sitk.GetImageFromArray(larray)
+        sitk.WriteImage(sitk_label, neu_label_path)
+
+    return neu_label_paths
+
+
 def get_leg_3d_us_paths(
     path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
 ) -> Tuple[List[str], List[str]]:
@@ -74,13 +97,14 @@ def get_leg_3d_us_paths(
         download: Whether to download the data if it is not present.
 
     Returns:
-        List of filepathgs for the image data.
+        List of filepaths for the image data.
         List of filepaths for the label data.
     """
     get_leg_3d_us_data(path, split, download)
 
     raw_paths = natsorted(glob(os.path.join(path, split, "*", "x*.mha")))
     label_paths = [fpath.replace("x", "masksX") for fpath in raw_paths]
+    label_paths = _preprocess_labels(label_paths)
 
     assert len(raw_paths) == len(label_paths)
 
@@ -91,6 +115,7 @@ def get_leg_3d_us_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     split: Literal['train', 'val', 'test'],
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -100,6 +125,7 @@ def get_leg_3d_us_dataset(
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
+        resize_inputs:  Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -107,6 +133,12 @@ def get_leg_3d_us_dataset(
         The segmentation dataset.
     """
     raw_paths, label_paths = get_leg_3d_us_paths(path, split, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -124,6 +156,7 @@ def get_leg_3d_us_loader(
     batch_size: int,
     patch_shape: Tuple[int, ...],
     split: Literal['train', 'val', 'test'],
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -134,6 +167,7 @@ def get_leg_3d_us_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
+        resize_inputs:  Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -141,5 +175,5 @@ def get_leg_3d_us_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_leg_3d_us_dataset(path, patch_shape, split, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_leg_3d_us_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

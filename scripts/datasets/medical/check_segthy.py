@@ -15,10 +15,12 @@ def check_segthy():
         path=os.path.join(ROOT, "segthy"),
         patch_shape=(1, 512, 512),
         batch_size=1,
-        source="MRI",
+        split="train",
+        source="US",
         ndim=2,
         download=True,
     )
+
     check_loader(loader, 8, plt=True, save_path="./test.png")
 
 

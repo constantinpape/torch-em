@@ -1,7 +1,21 @@
+"""The ISIC dataset contains annotations for lesion segmentation in dermoscopy images.
+
+This dataset is located at https://challenge.isic-archive.com/data/#2018
+The dataset is related to the following publication(s):
+- https://doi.org/10.1038/sdata.2018.161
+- https://doi.org/10.48550/arXiv.1710.05006
+- https://doi.org/10.48550/arXiv.1902.03368
+
+Please cite them if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from pathlib import Path
-from typing import Union, Tuple
+from natsort import natsorted
+from typing import Union, Tuple, Literal, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -36,8 +50,21 @@ CHECKSUM = {
 }
 
 
-def get_isic_data(path, split, download):
-    os.makedirs(path, exist_ok=True)
+def get_isic_data(
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> Tuple[str, str]:
+    """Download the ISIC data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the image data is downloaded.
+        Filepath where the label data is downloaded.
+    """
+    assert split in list(URL["images"].keys()), f"{split} is not a valid split."
 
     im_url = URL["images"][split]
     im_checksum = CHECKSUM["images"][split]
@@ -51,11 +78,13 @@ def get_isic_data(path, split, download):
     imdir = os.path.join(path, Path(im_zipfile).stem)
     gtdir = os.path.join(path, Path(gt_zipfile).stem)
 
-    im_zip_path = os.path.join(path, im_zipfile)
-    gt_zip_path = os.path.join(path, gt_zipfile)
-
     if os.path.exists(imdir) and os.path.exists(gtdir):
         return imdir, gtdir
+
+    os.makedirs(path, exist_ok=True)
+
+    im_zip_path = os.path.join(path, im_zipfile)
+    gt_zip_path = os.path.join(path, gt_zipfile)
 
     # download the images
     util.download_source(path=im_zip_path, url=im_url, download=download, checksum=im_checksum)
@@ -67,11 +96,24 @@ def get_isic_data(path, split, download):
     return imdir, gtdir
 
 
-def _get_isic_paths(path, split, download):
+def get_isic_paths(
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the ISIC data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     image_dir, gt_dir = get_isic_data(path=path, split=split, download=download)
 
-    image_paths = sorted(glob(os.path.join(image_dir, "*.jpg")))
-    gt_paths = sorted(glob(os.path.join(gt_dir, "*.png")))
+    image_paths = natsorted(glob(os.path.join(image_dir, "*.jpg")))
+    gt_paths = natsorted(glob(os.path.join(gt_dir, "*.png")))
 
     return image_paths, gt_paths
 
@@ -79,37 +121,37 @@ def _get_isic_paths(path, split, download):
 def get_isic_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    split: str,
-    download: bool = False,
-    make_rgb: bool = True,
+    split: Literal['train', 'val', 'test'],
     resize_inputs: bool = False,
+    download: bool = False,
     **kwargs
-):
-    """Dataset for the segmentation of skin lesion in dermoscopy images.
+) -> Dataset:
+    """Get the ISIC dataset for skin lesion segmentation in dermoscopy images.
 
-    This dataset is related to the following publication(s):
-    - https://doi.org/10.1038/sdata.2018.161
-    - https://doi.org/10.48550/arXiv.1710.05006
-    - https://doi.org/10.48550/arXiv.1902.03368
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    The database is located at https://challenge.isic-archive.com/data/#2018
-
-    Please cite it if you use this dataset for a publication.
+    Returns:
+        The segmentation dataset.
     """
-    assert split in list(URL["images"].keys()), f"{split} is not a valid split."
-
-    image_paths, gt_paths = _get_isic_paths(path=path, split=split, download=download)
-
-    if make_rgb:
-        kwargs["raw_transform"] = to_rgb
+    image_paths, gt_paths = get_isic_paths(path=path, split=split, download=download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
         kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
-            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+            kwargs=kwargs,
+            patch_shape=patch_shape,
+            resize_inputs=resize_inputs,
+            resize_kwargs=resize_kwargs,
+            ensure_rgb=to_rgb,
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
@@ -118,30 +160,31 @@ def get_isic_dataset(
         is_seg_dataset=False,
         **kwargs
     )
-    return dataset
 
 
 def get_isic_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
-    split: str,
-    download: bool = False,
-    make_rgb: bool = True,
+    patch_shape: Tuple[int, int],
+    split: Literal['train', 'val', 'test'],
     resize_inputs: bool = False,
+    download: bool = False,
     **kwargs
-):
-    """Dataloader for the segmentation of skin lesion in dermoscopy images. See `get_isic_dataset` for details.
+) -> DataLoader:
+    """Get the ISIC dataloader for skin lesion segmentation in dermoscopy images.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_isic_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        split=split,
-        download=download,
-        make_rgb=make_rgb,
-        resize_inputs=resize_inputs,
-        **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_isic_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

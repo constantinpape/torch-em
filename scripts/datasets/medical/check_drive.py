@@ -1,20 +1,26 @@
+import os
+import sys
+
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_drive_loader
 
 
-ROOT = "/media/anwai/ANWAI/data/drive"
+sys.path.append("..")
 
 
 def check_drive():
+    from util import ROOT
+
     loader = get_drive_loader(
-        path=ROOT,
-        patch_shape=(256, 256),
-        batch_size=2,
+        path=os.path.join(ROOT, "drive"),
+        patch_shape=(512, 512),
+        split="train",
+        batch_size=1,
         resize_inputs=True,
         download=True,
     )
 
-    check_loader(loader, 8)
+    check_loader(loader, 8, plt=True, save_path="./drive.png")
 
 
 if __name__ == "__main__":

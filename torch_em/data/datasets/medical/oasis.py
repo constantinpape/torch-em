@@ -37,21 +37,23 @@ def get_oasis_data(path: Union[os.PathLike, str], download: bool = False):
         return
 
     os.makedirs(path, exist_ok=True)
-    util.download_source(path=path, url=URL, download=download, checksum=CHECKSUM)
     tar_path = os.path.join(path, "neurite-oasis.v1.0.tar")
+    util.download_source(path=tar_path, url=URL, download=download, checksum=CHECKSUM)
     util.unzip_tarfile(tar_path=tar_path, dst=data_path, remove=False)
 
 
 def get_oasis_paths(
     path: Union[os.PathLike, str],
+    split: Literal['train', 'val', 'test'],
     source: Literal['orig', 'norm'] = "orig",
     label_annotations: Literal['4', '35'] = "4",
     download: bool = False
-) -> Tuple[List[int], List[int]]:
+) -> Tuple[List[str], List[str]]:
     """Get paths to the OASIS data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
         source: The source of inputs. Either 'orig' (original brain scans) or 'norm' (skull stripped).
         label_annotations: The set of annotations. Either '4' (for tissues) or '35' (for anatomy).
         download: Whether to download the data if it is not present.
@@ -65,8 +67,17 @@ def get_oasis_paths(
     patient_dirs = glob(os.path.join(path, "data", "OASIS_*"))
     raw_paths, label_paths = [], []
     for pdir in patient_dirs:
-        raw_paths.append(os.path.join(pdir, f"seg{label_annotations}.nii.gz"))
-        label_paths.append(os.path.join(pdir, f"{source}.nii.gz"))
+        raw_paths.append(os.path.join(pdir, f"{source}.nii.gz"))
+        label_paths.append(os.path.join(pdir, f"seg{label_annotations}.nii.gz"))
+
+    if split == "train":
+        raw_paths, label_paths = raw_paths[:350], label_paths[:350]
+    elif split == "val":
+        raw_paths, label_paths = raw_paths[350:375], label_paths[350:375]
+    elif split == "test":
+        raw_paths, label_paths = raw_paths[375:], label_paths[375:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
 
     assert len(raw_paths) == len(label_paths)
 
@@ -76,8 +87,10 @@ def get_oasis_paths(
 def get_oasis_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     source: Literal['orig', 'norm'] = "orig",
     label_annotations: Literal['4', '35'] = "4",
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -86,15 +99,23 @@ def get_oasis_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         source: The source of inputs. Either 'orig' (original brain scans) or 'norm' (skull stripped).
         label_annotations: The set of annotations. Either '4' (for tissues) or '35' (for anatomy).
+        resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_oasis_paths(path, source, label_annotations, download)
+    raw_paths, label_paths = get_oasis_paths(path, split, source, label_annotations, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -111,8 +132,10 @@ def get_oasis_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     source: Literal['orig', 'norm'] = "orig",
     label_annotations: Literal['4', '35'] = "4",
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -122,8 +145,10 @@ def get_oasis_loader(
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         source: The source of inputs. Either 'orig' (original brain scans) or 'norm' (skull stripped).
         label_annotations: The set of annotations. Either '4' (for tissues) or '35' (for anatomy).
+        resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -131,5 +156,7 @@ def get_oasis_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_oasis_dataset(path, patch_shape, source, label_annotations, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_oasis_dataset(
+        path, patch_shape, split, source, label_annotations, resize_inputs, download, **ds_kwargs
+    )
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
