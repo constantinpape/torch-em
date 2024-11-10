@@ -1,7 +1,17 @@
+"""The Covid19Seg dataset contains annotations for lung and covid infection in CT scans.
+
+This dataset is located at https://doi.org/10.5281/zenodo.3757476.
+The dataset is from the publication https://doi.org/10.1002/mp.14676.
+Please cite it if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from pathlib import Path
-from typing import Union, Tuple, Optional
+from natsort import natsorted
+from typing import Union, Tuple, Optional, Literal, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -30,38 +40,65 @@ ZIP_FNAMES = {
 }
 
 
-def get_covid19_seg_data(path, task, download):
-    os.makedirs(path, exist_ok=True)
+def get_covid19_seg_data(
+    path: Union[os.PathLike, str], task: Literal['lung', 'infection', 'lung_and_infection'], download: bool = False
+) -> Tuple[str, str]:
+    """Download the Covid19Seg dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        task: The choice of labels for specific task.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the image data is downloaded.
+        Filepath where the label data is downloaded.
+    """
     im_dir = os.path.join(path, "images", Path(ZIP_FNAMES["images"]).stem)
     gt_dir = os.path.join(path, "gt", Path(ZIP_FNAMES[task]).stem)
 
     if os.path.exists(im_dir) and os.path.exists(gt_dir):
         return im_dir, gt_dir
 
+    os.makedirs(path, exist_ok=True)
+
     im_zip_path = os.path.join(path, ZIP_FNAMES["images"])
     gt_zip_path = os.path.join(path, ZIP_FNAMES[task])
 
     # download the images
-    util.download_source(
-        path=im_zip_path, url=URL["images"], download=download, checksum=CHECKSUM["images"]
-    )
+    util.download_source(path=im_zip_path, url=URL["images"], download=download, checksum=CHECKSUM["images"])
     util.unzip(zip_path=im_zip_path, dst=im_dir, remove=False)
 
-    # download the gt
-    util.download_source(
-        path=gt_zip_path, url=URL[task], download=download, checksum=CHECKSUM[task]
-    )
+    # download the labels
+    util.download_source(path=gt_zip_path, url=URL[task], download=download, checksum=CHECKSUM[task])
     util.unzip(zip_path=gt_zip_path, dst=gt_dir)
 
     return im_dir, gt_dir
 
 
-def _get_covid19_seg_paths(path, task, download):
+def get_covid19_seg_paths(
+    path: Union[os.PathLike, str], task: Literal['lung', 'infection', 'lung_and_infection'], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the Covid19Seg data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        task: The choice of labels for specific task.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
+    if task is None:
+        task = "lung_and_infection"
+    else:
+        assert task in ["lung", "infection", "lung_and_infection"], f"{task} is not a valid task."
+
     image_dir, gt_dir = get_covid19_seg_data(path=path, task=task, download=download)
 
-    image_paths = sorted(glob(os.path.join(image_dir, "*.nii.gz")))
-    gt_paths = sorted(glob(os.path.join(gt_dir, "*.nii.gz")))
+    image_paths = natsorted(glob(os.path.join(image_dir, "*.nii.gz")))
+    gt_paths = natsorted(glob(os.path.join(gt_dir, "*.nii.gz")))
 
     return image_paths, gt_paths
 
@@ -72,20 +109,21 @@ def get_covid19_seg_dataset(
     task: Optional[str] = None,
     download: bool = False,
     **kwargs
-):
-    """Dataset for lung and covid infection segmentation in CT scans.
+) -> Dataset:
+    """Get the Covid19Seg dataset for lung and covid infection segmentation in CT scans.
 
-    The database is located at https://doi.org/10.5281/zenodo.3757476.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        task: The choice of labels for specific task.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    This dataset is from Ma et al. - https://doi.org/10.1002/mp.14676.
-    Please cite it if you use this dataset for a publication.
+    Returns:
+        The segmentation dataset.
     """
-    if task is None:
-        task = "lung_and_infection"
-    else:
-        assert task in ["lung", "infection", "lung_and_infection"], f"{task} is not a valid task."
-
-    image_paths, gt_paths = _get_covid19_seg_paths(path, task, download)
+    image_paths, gt_paths = get_covid19_seg_paths(path, task, download)
 
     dataset = torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
@@ -107,12 +145,20 @@ def get_covid19_seg_loader(
     task: Optional[str] = None,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for lung and covid infection segmentation in CT scans. See `get_covid19_seg_dataset` for details.
+) -> DataLoader:
+    """Get the Covid19Seg dataloader for lung and covid infection segmentation in CT scans.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        task: The choice of labels for specific task.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_covid19_seg_dataset(
-        path=path, patch_shape=patch_shape, task=task, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_covid19_seg_dataset(path, patch_shape, task, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -16,6 +16,7 @@ def check_curvas():
         path=os.path.join(ROOT, "curvas"),
         patch_shape=(1, 512, 512),
         batch_size=2,
+        split="val",
         ndim=2,
         rater="1",
         resize_inputs=False,

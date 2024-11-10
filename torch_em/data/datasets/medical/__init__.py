@@ -10,6 +10,7 @@ from .chaos import get_chaos_dataset, get_chaos_loader
 from .cholecseg8k import get_cholecseg8k_dataset, get_cholecseg8k_loader
 from .covid19_seg import get_covid19_seg_dataset, get_covid19_seg_loader
 from .covid_qu_ex import get_covid_qu_ex_dataset, get_covid_qu_ex_loader
+from .ct_cadaiver import get_ct_cadaiver_dataset, get_ct_cadaiver_loader
 from .curvas import get_curvas_dataset, get_curvas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
 from .drive import get_drive_dataset, get_drive_loader
@@ -29,15 +30,18 @@ from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
 from .montgomery import get_montgomery_dataset, get_montgomery_loader
+from .motum import get_motum_dataset, get_motum_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .oasis import get_oasis_dataset, get_oasis_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
+from .palm import get_palm_dataset, get_palm_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
+from .psfhs import get_psfhs_dataset, get_psfhs_loader
 from .ravir import get_ravir_dataset, get_ravir_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .sega import get_sega_dataset, get_sega_loader

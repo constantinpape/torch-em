@@ -1,21 +1,27 @@
+import os
+import sys
+
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_osic_pulmofib_loader
 
 
-ROOT = "/media/anwai/ANWAI/data/osic_pulmofib"
+sys.path.append("..")
 
 
 def check_osic_pulmofib():
+    from util import ROOT
+
     loader = get_osic_pulmofib_loader(
-        path=ROOT,
-        patch_shape=(4, 256, 256),
+        path=os.path.join(ROOT, "osic_pulmofib"),
+        patch_shape=(4, 512, 512),
         ndim=3,
         batch_size=2,
+        split="train",
         resize_inputs=True,
         download=True,
     )
 
-    check_loader(loader, 8)
+    check_loader(loader, 8, plt=True, save_path="./osic_pulmofib.png")
 
 
 if __name__ == "__main__":

@@ -181,7 +181,6 @@ def get_chaos_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
-        batch_size: The batch size for training.
         split: The data split to use. Either 'train', or 'test'.
         modality: The choice of modality. Either 'CT' or 'MRI'.
         resize_inputs: Whether to resize inputs to the desired patch shape.
