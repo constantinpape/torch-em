@@ -11,7 +11,7 @@ from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Literal
 
 import json
 import numpy as np
@@ -57,21 +57,20 @@ def get_osic_pulmofib_data(path: Union[os.PathLike, str], download: bool = False
     return data_dir
 
 
-def get_osic_pulmofib_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[str], List[str]]:
+def get_osic_pulmofib_paths(
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> Tuple[List[str], List[str]]:
     """Get paths to the OSIC PulmoFib data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
 
     Returns:
         List of filepaths for the image data.
         List of filepaths for the label data.
     """
-    import nrrd
-    import nibabel as nib
-    import pydicom as dicom
-
     data_dir = get_osic_pulmofib_data(path=path, download=download)
 
     image_dir = os.path.join(data_dir, "preprocessed", "images")
@@ -97,6 +96,10 @@ def get_osic_pulmofib_paths(path: Union[os.PathLike, str], download: bool = Fals
                 gt_paths.append(gt_path)
 
             continue
+
+        import nrrd
+        import nibabel as nib
+        import pydicom as dicom
 
         # creating the volume out of individual dicom slices
         all_slices = []
@@ -142,12 +145,24 @@ def get_osic_pulmofib_paths(path: Union[os.PathLike, str], download: bool = Fals
         with open(cpath, "w") as f:
             json.dump(confirm_msg, f)
 
+    print(len(image_paths), len(gt_paths))
+
+    if split == "train":
+        image_paths, gt_paths = image_paths[:75], gt_paths[:75]
+    elif split == "val":
+        image_paths, gt_paths = image_paths[75:90], gt_paths[75:90]
+    elif split == "test":
+        image_paths, gt_paths = image_paths[90:], gt_paths[90:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
+
     return image_paths, gt_paths
 
 
 def get_osic_pulmofib_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -157,6 +172,7 @@ def get_osic_pulmofib_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -164,7 +180,7 @@ def get_osic_pulmofib_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = get_osic_pulmofib_paths(path, download)
+    image_paths, gt_paths = get_osic_pulmofib_paths(path, split, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -173,19 +189,15 @@ def get_osic_pulmofib_dataset(
         )
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths,
-        raw_key="data",
-        label_paths=gt_paths,
-        label_key="data",
-        patch_shape=patch_shape,
-        **kwargs
+        raw_paths=image_paths, raw_key="data", label_paths=gt_paths, label_key="data", patch_shape=patch_shape, **kwargs
     )
 
 
 def get_osic_pulmofib_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -194,7 +206,9 @@ def get_osic_pulmofib_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -203,5 +217,5 @@ def get_osic_pulmofib_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_osic_pulmofib_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_osic_pulmofib_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
