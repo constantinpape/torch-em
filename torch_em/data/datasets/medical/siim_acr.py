@@ -72,15 +72,13 @@ def get_siim_acr_paths(
         gt_paths = natsorted(glob(os.path.join(data_dir, "png_masks", "*_train_*.png")))
 
         if split == "train":
-            image_paths, gt_paths = image_paths[:100], gt_paths[:100]
+            image_paths, gt_paths = image_paths[600:], gt_paths[600:]
         elif split == "val":
-            image_paths, gt_paths = image_paths[100:], gt_paths[100:]
+            image_paths, gt_paths = image_paths[:600], gt_paths[:600]
         else:
             raise ValueError(f"'{split}' is not a valid split.")
 
     assert len(image_paths) == len(gt_paths)
-
-    print(len(image_paths), len(gt_paths))
 
     return image_paths, gt_paths
 

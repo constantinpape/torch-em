@@ -40,14 +40,14 @@ def get_duke_liver_data(path: Union[os.PathLike, str], download: bool = False) -
     Returns:
         Filepath where the data is preprocessed.
     """
+    data_dir = os.path.join(path, "data", "Segmentation")
+    if os.path.exists(data_dir):
+        return data_dir
+
     if download:
         raise NotImplementedError(
             "Automatic download for Duke Liver dataset is not possible. See `get_duke_liver_data` for details."
         )
-
-    data_dir = os.path.join(path, "data", "Segmentation")
-    if os.path.exists(data_dir):
-        return data_dir
 
     zip_path = os.path.join(path, "Segmentation.zip")
     util.unzip(zip_path=zip_path, dst=os.path.join(path, "data"), remove=False)

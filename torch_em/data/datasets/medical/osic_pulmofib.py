@@ -145,8 +145,6 @@ def get_osic_pulmofib_paths(
         with open(cpath, "w") as f:
             json.dump(confirm_msg, f)
 
-    print(len(image_paths), len(gt_paths))
-
     if split == "train":
         image_paths, gt_paths = image_paths[:75], gt_paths[:75]
     elif split == "val":
@@ -188,9 +186,20 @@ def get_osic_pulmofib_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths, raw_key="data", label_paths=gt_paths, label_key="data", patch_shape=patch_shape, **kwargs
+    dataset = torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key="data",
+        label_paths=gt_paths,
+        label_key="data",
+        patch_shape=patch_shape,
+        is_seg_dataset=True,
+        **kwargs
     )
+
+    for d in dataset.datasets:
+        d.max_sampling_attempts = 1000
+
+    return dataset
 
 
 def get_osic_pulmofib_loader(

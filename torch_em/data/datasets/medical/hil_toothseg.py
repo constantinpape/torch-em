@@ -71,7 +71,7 @@ def get_hil_toothseg_paths(
     os.makedirs(neu_gt_dir, exist_ok=True)
 
     neu_gt_paths = []
-    for gt_path in tqdm(gt_paths):
+    for gt_path in tqdm(gt_paths, desc="Preprocessing inputs"):
         neu_gt_path = os.path.join(neu_gt_dir, f"{Path(gt_path).stem}.tif")
         neu_gt_paths.append(neu_gt_path)
         if os.path.exists(neu_gt_path):
@@ -130,7 +130,7 @@ def get_hil_toothseg_dataset(
     image_paths, gt_paths = get_hil_toothseg_paths(path, split, download)
 
     if resize_inputs:
-        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
         kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )

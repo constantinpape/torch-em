@@ -13,10 +13,11 @@ def check_toothfairy():
     from util import ROOT
 
     loader = get_toothfairy_loader(
-        path=os.path.join(ROOT, "toothfairy"),
+        path=os.path.join(ROOT, "toothfairy2"),
         patch_shape=(1, 512, 512),
         ndim=2,
         batch_size=2,
+        split="train",
         version="v2",
         resize_inputs=False,
         sampler=MinInstanceSampler(),

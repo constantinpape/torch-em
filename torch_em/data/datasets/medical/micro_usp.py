@@ -62,8 +62,19 @@ def get_micro_usp_paths(
     """
     data_dir = get_micro_usp_data(path=path, download=download)
 
-    image_paths = natsorted(glob(os.path.join(data_dir, split, "micro_ultrasound_scans", "*.nii.gz")))
-    gt_paths = natsorted(glob(os.path.join(data_dir, split, "expert_annotations", "*.nii.gz")))
+    if split == "test":
+        image_paths = natsorted(glob(os.path.join(data_dir, split, "micro_ultrasound_scans", "*.nii.gz")))
+        gt_paths = natsorted(glob(os.path.join(data_dir, split, "expert_annotations", "*.nii.gz")))
+    else:
+        image_paths = natsorted(glob(os.path.join(data_dir, "train", "micro_ultrasound_scans", "*.nii.gz")))
+        gt_paths = natsorted(glob(os.path.join(data_dir, "train", "expert_annotations", "*.nii.gz")))
+
+        if split == "train":
+            image_paths, gt_paths = image_paths[:50], gt_paths[:50]
+        elif split == "val":
+            image_paths, gt_paths = image_paths[50:], gt_paths[50:]
+        else:
+            raise ValueError(f"'{split}' is not a valid split.")
 
     return image_paths, gt_paths
 

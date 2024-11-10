@@ -81,7 +81,7 @@ def _preprocess_toothfairy_inputs(path, data_dir):
     os.makedirs(gt_dir, exist_ok=True)
 
     image_paths, gt_paths = [], []
-    for patient_dir in tqdm(glob(os.path.join(data_dir, "P*"))):
+    for patient_dir in tqdm(glob(os.path.join(data_dir, "P*")), desc="Preprocessing inputs"):
         dense_anns_path = os.path.join(patient_dir, "gt_alpha.npy")
         if not os.path.exists(dense_anns_path):
             continue
@@ -104,13 +104,17 @@ def _preprocess_toothfairy_inputs(path, data_dir):
 
 
 def get_toothfairy_paths(
-    path: Union[os.PathLike, str], version: Literal["v1", "v2"] = "v2", download: bool = False
+    path: Union[os.PathLike, str],
+    split: Literal['train', 'val', 'test'],
+    version: Literal["v1", "v2"] = "v2",
+    download: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the ToothFairy data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        version: The version of dataset. Either v1 (ToothFairy) or v2 (ToothFairy2).
+        split: The choice of data split.
+        version: The version of dataset. Either 'v1' (ToothFairy) or 'v2' (ToothFairy2).
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -121,9 +125,28 @@ def get_toothfairy_paths(
 
     if version == "v1":
         image_paths, gt_paths = _preprocess_toothfairy_inputs(path, data_dir)
+
+        if split == "train":
+            image_paths, gt_paths = image_paths[:100], gt_paths[:100]
+        elif split == "val":
+            image_paths, gt_paths = image_paths[100:125], gt_paths[100:125]
+        elif split == "test":
+            image_paths, gt_paths = image_paths[125:], gt_paths[125:]
+        else:
+            raise ValueError(f"'{split}' is not a valid split.")
+
     else:
         image_paths = natsorted(glob(os.path.join(data_dir, "imagesTr", "*.mha")))
         gt_paths = natsorted(glob(os.path.join(data_dir, "labelsTr", "*.mha")))
+
+        if split == "train":
+            image_paths, gt_paths = image_paths[:400], gt_paths[:400]
+        elif split == "val":
+            image_paths, gt_paths = image_paths[400:425], gt_paths[400:425]
+        elif split == "test":
+            image_paths, gt_paths = image_paths[425:], gt_paths[425:]
+        else:
+            raise ValueError(f"'{split}' is not a valid split.")
 
     return image_paths, gt_paths
 
@@ -131,6 +154,7 @@ def get_toothfairy_paths(
 def get_toothfairy_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     version: Literal["v1", "v2"] = "v2",
     resize_inputs: bool = False,
     download: bool = False,
@@ -141,6 +165,8 @@ def get_toothfairy_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        version: The version of dataset. Either 'v1' (ToothFairy) or 'v2' (ToothFairy2).
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -148,7 +174,7 @@ def get_toothfairy_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = get_toothfairy_paths(path, version, download)
+    image_paths, gt_paths = get_toothfairy_paths(path, split, version, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -171,6 +197,7 @@ def get_toothfairy_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     version: Literal["v1", "v2"] = "v2",
     resize_inputs: bool = False,
     download: bool = False,
@@ -182,6 +209,8 @@ def get_toothfairy_loader(
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        version: The version of dataset. Either 'v1' (ToothFairy) or 'v2' (ToothFairy2).
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -190,5 +219,5 @@ def get_toothfairy_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_toothfairy_dataset(path, patch_shape, version, resize_inputs, download, **ds_kwargs)
+    dataset = get_toothfairy_dataset(path, patch_shape, split, version, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

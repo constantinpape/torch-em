@@ -15,6 +15,7 @@ Please cite it if you use this dataset in your research.
 
 import os
 from glob import glob
+from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Tuple, Literal, List
 
@@ -63,6 +64,28 @@ def get_leg_3d_us_data(
     util.unzip(zip_path=zip_path, dst=path)
 
 
+def _preprocess_labels(label_paths):
+    neu_label_paths = []
+    for lpath in tqdm(label_paths, desc="Preprocessing labels"):
+        neu_label_path = lpath.replace(".mha", "_preprocessed.mha")
+        neu_label_paths.append(neu_label_path)
+        if os.path.exists(neu_label_path):
+            continue
+
+        import SimpleITK as sitk
+
+        labels = sitk.ReadImage(lpath)
+        larray = sitk.GetArrayFromImage(labels)
+
+        for i, lid in enumerate([100, 150, 200], start=1):
+            larray[larray == lid] = i
+
+        sitk_label = sitk.GetImageFromArray(larray)
+        sitk.WriteImage(sitk_label, neu_label_path)
+
+    return neu_label_paths
+
+
 def get_leg_3d_us_paths(
     path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
 ) -> Tuple[List[str], List[str]]:
@@ -74,13 +97,14 @@ def get_leg_3d_us_paths(
         download: Whether to download the data if it is not present.
 
     Returns:
-        List of filepathgs for the image data.
+        List of filepaths for the image data.
         List of filepaths for the label data.
     """
     get_leg_3d_us_data(path, split, download)
 
     raw_paths = natsorted(glob(os.path.join(path, split, "*", "x*.mha")))
     label_paths = [fpath.replace("x", "masksX") for fpath in raw_paths]
+    label_paths = _preprocess_labels(label_paths)
 
     assert len(raw_paths) == len(label_paths)
 
