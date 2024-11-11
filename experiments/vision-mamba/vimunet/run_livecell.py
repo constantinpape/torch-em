@@ -22,93 +22,66 @@ from elf.evaluation import mean_segmentation_accuracy
 ROOT = "/scratch/usr/nimanwai"
 
 
-def get_loaders(args, patch_shape=(512, 512)):
-    if args.distances:
+def get_loaders(input, boundaries, distances):
+    label_trafo = None
+    if distances:
         label_trafo = torch_em.transform.label.PerObjectDistanceTransform(
-            distances=True,
-            boundary_distances=True,
-            directed_distances=False,
-            foreground=True,
-            min_size=25
+            distances=True, boundary_distances=True, directed_distances=False, foreground=True, min_size=25,
         )
-    else:
-        label_trafo = None
 
-    train_loader = get_livecell_loader(
-        path=args.input,
-        split="train",
-        patch_shape=patch_shape,
-        batch_size=2,
-        label_dtype=torch.float32,
-        boundaries=args.boundaries,
-        label_transform=label_trafo,
-        num_workers=16,
-        download=True,
-    )
-    val_loader = get_livecell_loader(
-        path=args.input,
-        split="val",
-        patch_shape=patch_shape,
-        batch_size=1,
-        label_dtype=torch.float32,
-        boundaries=args.boundaries,
-        label_transform=label_trafo,
-        num_workers=16,
-        download=True,
-    )
+    kwargs = {
+        "path": input,
+        "patch_shape": (512, 512),
+        "label_dtype": torch.float32,
+        "boundaries": boundaries,
+        "label_transform": label_trafo,
+        "num_workers": 16,
+        "download": True,
+        "shuffle": True,
+    }
+
+    train_loader = get_livecell_loader(split="train", batch_size=2, **kwargs)
+    val_loader = get_livecell_loader(split="val", batch_size=1, **kwargs)
     return train_loader, val_loader
 
 
-def get_output_channels(args):
-    if args.boundaries:
+def get_output_channels(boundaries):
+    if boundaries:
         output_channels = 2
     else:
         output_channels = 3
-
     return output_channels
 
 
-def get_loss_function(args):
-    if args.distances:
+def get_loss_function(distances):
+    if distances:
         loss = DiceBasedDistanceLoss(mask_distances_in_bg=True)
-
     else:
         loss = DiceLoss()
-
     return loss
 
 
-def get_save_root(args):
+def get_save_root(boundaries, model_type, save_root):
     # experiment_type
-    if args.boundaries:
+    if boundaries:
         experiment_type = "boundaries"
     else:
         experiment_type = "distances"
 
-    model_name = args.model_type
-
     # saving the model checkpoints
-    save_root = os.path.join(args.save_root, "scratch", experiment_type, model_name)
+    save_root = os.path.join(save_root, "scratch", experiment_type, model_type)
     return save_root
 
 
 def run_livecell_training(args):
     # the dataloaders for livecell dataset
-    train_loader, val_loader = get_loaders(args)
-
-    output_channels = get_output_channels(args)
+    train_loader, val_loader = get_loaders(input=args.input, boundaries=args.boundaries, distances=args.distances)
+    output_channels = get_output_channels(boundaries=args.boundaries)
+    loss = get_loss_function(distances=args.distances)
+    save_root = get_save_root(boundaries=args.boundaries, model_type=args.model_type, save_root=args.save_root)
 
     # the vision-mamba + decoder (UNet-based) model
-    model = get_vimunet_model(
-        out_channels=output_channels,
-        model_type=args.model_type,
-        with_cls_token=True,
-    )
-
-    save_root = get_save_root(args)
-
-    # loss function
-    loss = get_loss_function(args)
+    model = get_vimunet_model(out_channels=output_channels, model_type=args.model_type, with_cls_token=True)
 
     # trainer for the segmentation task
     trainer = torch_em.default_segmentation_trainer(
@@ -121,26 +94,21 @@ def run_livecell_training(args):
         metric=loss,
         log_image_interval=50,
         save_root=save_root,
-        mixed_precision=False,
         compile_model=False,
-        scheduler_kwargs={"mode": "min", "factor": 0.9, "patience": 10}
+        scheduler_kwargs={"mode": "min", "factor": 0.9, "patience": 10},
+        mixed_precision=False,
     )
     trainer.fit(iterations=int(1e5))
 
 
 def run_livecell_inference(args, device):
-    output_channels = get_output_channels(args)
-
-    save_root = get_save_root(args)
-
+    output_channels = get_output_channels(boundaries=args.boundaries)
+    save_root = get_save_root(boundaries=args.boundaries, model_type=args.model_type, save_root=args.save_root)
     checkpoint = os.path.join(save_root, "checkpoints", "livecell-vimunet", "best.pt")
 
     # the vision-mamba + decoder (UNet-based) model
     model = get_vimunet_model(
-        out_channels=output_channels,
-        model_type=args.model_type,
-        with_cls_token=True,
-        checkpoint=checkpoint,
+        out_channels=output_channels, model_type=args.model_type, with_cls_token=True, checkpoint=checkpoint,
     )
 
     # the splits are provided with the livecell dataset
@@ -185,6 +153,7 @@ def run_livecell_inference(args, device):
         "SA50": np.mean(sa50_list),
         "SA75": np.mean(sa75_list)
     }
+
     res_path = os.path.join(args.result_path, "results.csv")
     df = pd.DataFrame.from_dict([res])
     df.to_csv(res_path)
