@@ -40,7 +40,7 @@ $ pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url htt
 ```
 > Q1. Why use `pip`? - for installation consistency
 
-> Q2. Why choose CUDA 11.8? - Vim seems to prefer $\le$ 11.8 ([see here](https://github.com/hustvl/Vim/issues/51))
+> Q2. Why choose CUDA 11.8? - `Vim` seems to prefer $\le$ 11.8 ([see here](https://github.com/hustvl/Vim/issues/51))
 
 4. Install `ViM` and related dependencies (`causal-conv1d`\**, `mamba`, `Vim`\***):
 ```bash
@@ -54,8 +54,6 @@ $ pip install -e .
 ```
 
 <!-- elf, kornia_rs, kornia, natsort, tensorboard -->
-<!-- export LD_LIBRARY_PATH=/scratch/usr/nimanwai/micromamba/envs/vimunet/lib/ -->
-<!-- pip install causal_conv1d==1.1.1 -->
 
 > NOTE: The installation is sometimes a bit tricky, but following the steps and keeping the footnotes in mind should do the trick.
 > We are working on providing an easier and more stable installation, [see this issue](https://github.com/constantinpape/torch-em/issues/237).
@@ -70,7 +68,7 @@ $ pip install -e .
 - `GLIBCXX_<VERSION>` related issues:
     - Suggestion: Specify your path to the mamba environment to `LD_LIBRARY_PATH`. For example,
     ```bash
-    $ export LD_LIBRARY_PATH=/scratch/usr/nimanwai/mambaforge/lib/
+    $ export LD_LIBRARY_PATH=/scratch/usr/nimanwai/micromamba/envs/vimunet/lib/
     ```
 
 - `FileNotFoundError: [Error 2] No such file or directory: 'ldconfig'`:
