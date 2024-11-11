@@ -118,7 +118,7 @@ def run_livecell_inference(args, device):
     all_test_labels = glob(os.path.join(ROOT, "data", "livecell", "annotations", "livecell_test_images", "*", "*"))
 
     msa_list, sa50_list, sa75_list = [], [], []
-    for label_path in tqdm(all_test_labels):
+    for label_path in tqdm(all_test_labels, desc="Prediction for LIVECell"):
         labels = imageio.imread(label_path)
         image_id = os.path.split(label_path)[-1]
 
