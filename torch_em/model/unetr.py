@@ -5,8 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .unet import Decoder, ConvBlock2d, Upsampler2d
 from .vit import get_vision_transformer
+from .unet import Decoder, ConvBlock2d, Upsampler2d
 
 try:
     from micro_sam.util import get_sam_model
@@ -22,18 +22,15 @@ except ImportError:
 class UNETR(nn.Module):
 
     def _load_encoder_from_checkpoint(self, backbone, encoder, checkpoint):
-
+        """Function to load pretrained weights to the image encoder.
+        """
         if isinstance(checkpoint, str):
             if backbone == "sam" and isinstance(encoder, str):
                 # If we have a SAM encoder, then we first try to load the full SAM Model
                 # (using micro_sam) and otherwise fall back on directly loading the encoder state
                 # from the checkpoint
                 try:
-                    _, model = get_sam_model(
-                        model_type=encoder,
-                        checkpoint_path=checkpoint,
-                        return_sam=True
-                    )
+                    _, model = get_sam_model(model_type=encoder, checkpoint_path=checkpoint, return_sam=True)
                     encoder_state = model.image_encoder.state_dict()
                 except Exception:
                     # Try loading the encoder state directly from a checkpoint.
@@ -47,8 +44,7 @@ class UNETR(nn.Module):
                     k: v for k, v in encoder_state.items()
                     if (k != "mask_token" and not k.startswith("decoder"))
                 })
-
-                # let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
+                # Let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
                 current_encoder_state = self.encoder.state_dict()
                 if ("head.weight" in current_encoder_state) and ("head.bias" in current_encoder_state):
                     del self.encoder.head
@@ -72,7 +68,7 @@ class UNETR(nn.Module):
         final_activation: Optional[Union[str, nn.Module]] = None,
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
-        use_conv_transpose=True,
+        use_conv_transpose: bool = True,
     ) -> None:
         super().__init__()
 
@@ -150,15 +146,11 @@ class UNETR(nn.Module):
             self.deconv4 = Deconv2DBlock(features_decoder[2], features_decoder[3])
 
         self.base = ConvBlock2d(embed_dim, features_decoder[0])
-
         self.out_conv = nn.Conv2d(features_decoder[-1], out_channels, 1)
-
         self.deconv_out = _upsampler(
             scale_factor=2, in_channels=features_decoder[-1], out_channels=features_decoder[-1]
         )
-
         self.decoder_head = ConvBlock2d(2 * features_decoder[-1], features_decoder[-1])
-
         self.final_activation = self._get_activation(final_activation)
 
     def _get_activation(self, activation):

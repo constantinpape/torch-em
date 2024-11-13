@@ -40,14 +40,14 @@ def get_piccolo_data(path: Union[os.PathLike, str], download: bool = False) -> s
     Returns:
         Filepath where the data is downloaded.
     """
+    data_dir = os.path.join(path, r"piccolo dataset-release0.1")
+    if os.path.exists(data_dir):
+        return data_dir
+
     if download:
         raise NotImplementedError(
             "Automatic download is not possible for this dataset. See 'get_piccolo_data' for details."
         )
-
-    data_dir = os.path.join(path, r"piccolo dataset-release0.1")
-    if os.path.exists(data_dir):
-        return data_dir
 
     rar_file = os.path.join(path, r"piccolo dataset_widefield-release0.1.rar")
     if not os.path.exists(rar_file):
