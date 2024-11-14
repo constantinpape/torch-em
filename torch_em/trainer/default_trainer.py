@@ -556,13 +556,19 @@ class DefaultTrainer:
         """
         best_metric = self._initialize(iterations, load_from_checkpoint, epochs)
 
-        if not overwrite_training and self._verify_if_training_completed():
-            print(
-                f"The model is trained for {self.max_iteration} iterations / {self.max_epoch} epochs "
-                "and 'overwrite_training' is set to 'False'."
-            )
-            print(f"The checkpoints are located at '{os.path.abspath(self.checkpoint_folder)}'.")
-            return
+        if not overwrite_training:
+            if load_from_checkpoint is not None:
+                raise ValueError(
+                    "We do not support 'overwrite_training=False' and 'load_from_checkpoint' at the same time."
+                )
+
+            if self._verify_if_training_completed():
+                print(
+                    f"The model is trained for {self.max_iteration} iterations / {self.max_epoch} epochs "
+                    "and 'overwrite_training' is set to 'False'."
+                )
+                print(f"The checkpoints are located at '{os.path.abspath(self.checkpoint_folder)}'.")
+                return
 
         print(
             "Start fitting for",
