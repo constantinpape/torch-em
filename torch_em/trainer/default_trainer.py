@@ -524,6 +524,13 @@ class DefaultTrainer:
 
         return save_dict
 
+    def _verify_if_training_completed(self, checkpoint="latest"):
+        save_path = os.path.join(self.checkpoint_folder, f"{checkpoint}.pt")
+        save_dict = torch.load(save_path) if os.path.exists(save_path) else None
+        if save_dict and self.max_iteration == save_dict.get("iteration"):
+            return True
+        return False
+
     def fit(
         self,
         iterations=None,
@@ -531,6 +538,7 @@ class DefaultTrainer:
         epochs=None,
         save_every_kth_epoch=None,
         progress=None,
+        overwrite_training=True,
     ):
         """Run neural network training.
 
@@ -544,8 +552,24 @@ class DefaultTrainer:
                 The corresponding checkpoints will be saved with the naming scheme 'epoch-{epoch}.pt'. (default: None)
             progress [progress_bar] - optional progress bar for integration with external tools.
                 Expected to follow the tqdm interface.
+            overwrite_training [bool] - Whether to overwrite the trained model.
         """
         best_metric = self._initialize(iterations, load_from_checkpoint, epochs)
+
+        if not overwrite_training:
+            if load_from_checkpoint is not None:
+                raise ValueError(
+                    "We do not support 'overwrite_training=False' and 'load_from_checkpoint' at the same time."
+                )
+
+            if self._verify_if_training_completed():
+                print(
+                    f"The model is trained for {self.max_iteration} iterations / {self.max_epoch} epochs "
+                    "and 'overwrite_training' is set to 'False'."
+                )
+                print(f"The checkpoints are located at '{os.path.abspath(self.checkpoint_folder)}'.")
+                return
+
         print(
             "Start fitting for",
             self.max_iteration - self._iteration,
