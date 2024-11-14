@@ -1,8 +1,8 @@
-import torch
-import torch.nn as nn
-
 from typing import Tuple
 from functools import partial
+
+import torch
+import torch.nn as nn
 
 # we catch ImportErrors here because segment_anything, micro_sam and timm should
 # only be optional dependencies for torch_em

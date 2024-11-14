@@ -45,7 +45,7 @@ def get_cbis_ddsm_paths(
     path: Union[os.PathLike, str],
     split: Literal['Train', 'Val', 'Test'],
     task: Literal['Calc', 'Mass'],
-    tumour_type: Literal['MALIGNANT', 'BENIGN'],
+    tumour_type: Optional[Literal["MALIGNANT", "BENIGN"]] = None,
     download: bool = False
 ):
     """Get paths to the CBIS DDSM data.
