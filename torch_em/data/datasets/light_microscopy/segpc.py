@@ -1,4 +1,5 @@
-"""
+"""The SegPC dataset contains annotations for cytoplasm and nucleus segmentation in microscopy images
+of multiple myeloma plasma cells.
 
 This dataset is located at https://ieee-dataport.org/open-access/segpc-2021-segmentation-multiple-myeloma-plasma-cells-microscopic-images.  # noqa
 The dataset is from the publication https://doi.org/10.1016/j.media.2022.102677.
