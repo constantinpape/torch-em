@@ -46,9 +46,9 @@ def get_segpc_data(path: Union[os.PathLike, str], split: Literal['train', 'valid
             "Please see 'get_segpc_data' in 'torch_em/data/datasets/light_microscopy/segpc.py for details."
         )
 
-    # zip_path = os.path.join(path, "TCIA_SegPC_dataset.zip")
-    # os.path.exists(zip_path), f"The manually downloaded zip file should be placed at '{path}'."
-    # util.unzip(zip_path=zip_path, dst=path, remove=False)
+    zip_path = os.path.join(path, "TCIA_SegPC_dataset.zip")
+    os.path.exists(zip_path), f"The manually downloaded zip file should be placed at '{path}'."
+    util.unzip(zip_path=zip_path, dst=path, remove=False)
 
     # Unzip the split-wise zip files.
     if split not in ['train', 'validation']:
