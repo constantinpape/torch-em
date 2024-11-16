@@ -84,6 +84,9 @@ def get_puma_data(
 ):
     """
     """
+    if annotations not in ["nuclei", "tissue"]:
+        raise ValueError(f"'{annotations}' is not a valid annotation for the data.")
+
     data_dir = os.path.join(path, "annotations", annotations)
     if os.path.exists(data_dir):
         return
@@ -140,6 +143,7 @@ def get_puma_dataset(
         patch_shape=patch_shape,
         with_channels=True,
         is_seg_dataset=True,
+        ndim=2,
         **kwargs
     )
 
