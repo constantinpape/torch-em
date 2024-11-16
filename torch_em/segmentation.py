@@ -163,6 +163,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
             roi = len(raw_paths) * [None]
         assert len(roi) == len(raw_paths)
         for i, (raw_path, label_path, this_roi) in enumerate(zip(raw_paths, label_paths, roi)):
+            print(raw_path, label_path, this_roi)
             rpath, lpath = _get_paths(raw_path, raw_key, label_path, label_key, this_roi)
             dset = ImageCollectionDataset(rpath, lpath, patch_shape=patch_shape, n_samples=samples_per_ds[i], **kwargs)
             ds.append(dset)

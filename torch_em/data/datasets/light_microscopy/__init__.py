@@ -24,6 +24,7 @@ from .omnipose import get_omnipose_dataset, get_omnipose_loader
 from .orgasegment import get_orgasegment_dataset, get_orgasegment_loader
 from .organoidnet import get_organoidnet_dataset, get_organoidnet_loader
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
+from .segpc import get_segpc_loader, get_segpc_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .toiam import get_toiam_loader, get_toiam_dataset
 from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
