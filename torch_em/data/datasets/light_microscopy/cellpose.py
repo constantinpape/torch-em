@@ -45,7 +45,7 @@ def get_cellpose_data(
     if download:
         assert NotImplementedError(
             "The dataset cannot be automatically downloaded. ",
-            "Please see 'get_cellpose_data' in 'torch_em/data/datasets/cellpose.py' for details."
+            "Please see 'get_cellpose_data' in 'torch_em/data/datasets/light_microscopy/cellpose.py' for details."
         )
 
     per_choice_dir = os.path.join(path, choice)  # path where the unzipped files will be stored
