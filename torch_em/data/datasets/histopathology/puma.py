@@ -1,4 +1,11 @@
-"""
+"""The PUMA dataset contains annotations for nucleus and tissue segmentation
+in melanoma H&E stained histopathology images.
+
+This dataset is located at https://zenodo.org/records/13859989.
+This is part of the PUMA Grand Challenge: https://puma.grand-challenge.org/
+- Preprint with details about the data: https://doi.org/10.1101/2024.10.07.24315039
+
+Please cite them if you use this dataset for your research.
 """
 
 import os
@@ -82,7 +89,12 @@ def get_puma_data(
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
     download: bool = False
 ):
-    """
+    """Download the PUMA data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        annotations: The choice of annotations.
+        download: Whether to download the data if it is not present.
     """
     if annotations not in ["nuclei", "tissue"]:
         raise ValueError(f"'{annotations}' is not a valid annotation for the data.")
@@ -117,7 +129,15 @@ def get_puma_paths(
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
     download: bool = False
 ) -> List[str]:
-    """
+    """Get paths to the PUMA dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        annotations: The choice of annotations.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the input data.
     """
     get_puma_data(path, annotations, download)
     volume_paths = natsorted(glob(os.path.join(path, "preprocessed", "*.h5")))
@@ -131,7 +151,17 @@ def get_puma_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the PUMA dataset for nuclei and tissue segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        annotations: The choice of annotations.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     volume_paths = get_puma_paths(path, annotations, download)
 
@@ -156,7 +186,18 @@ def get_puma_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the PUMA dataloader for nuclei and tissue segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        annotations: The choice of annotations.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_puma_dataset(path, patch_shape, annotations, download, **ds_kwargs)
