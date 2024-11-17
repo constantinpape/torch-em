@@ -208,14 +208,14 @@ def update_kwargs(kwargs, key, value, msg=None):
 def unzip_tarfile(tar_path, dst, remove=True):
     import tarfile
 
-    if tar_path.endswith(".tar.gz"):
+    if tar_path.endswith(".tar.gz") or tar_path.endswith(".tgz"):
         access_mode = "r:gz"
     elif tar_path.endswith(".tar"):
         access_mode = "r:"
     else:
         raise ValueError(
-            "The provided file isn't a supported archive to unpack. ",
-            f"Please check the file: {tar_path}"
+            "The provided file isn't a supported archive to unpack. "
+            f"Please check the file: {tar_path}."
         )
 
     tar = tarfile.open(tar_path, access_mode)
