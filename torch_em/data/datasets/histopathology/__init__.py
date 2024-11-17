@@ -1,4 +1,5 @@
 from .bcss import get_bcss_loader, get_bcss_dataset
+from .cpm import get_cpm_loader, get_cpm_dataset
 from .cryonuseg import get_cryonuseg_loader, get_cryonuseg_dataset
 from .janowczyk import get_janowczyk_loader, get_janowczyk_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset

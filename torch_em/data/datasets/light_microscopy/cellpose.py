@@ -43,8 +43,8 @@ def get_cellpose_data(
         The filepath to the data.
     """
     if download:
-        assert NotImplementedError(
-            "The dataset cannot be automatically downloaded. ",
+        raise NotImplementedError(
+            "The dataset cannot be automatically downloaded. "
             "Please see 'get_cellpose_data' in 'torch_em/data/datasets/light_microscopy/cellpose.py' for details."
         )
 
