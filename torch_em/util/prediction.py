@@ -4,7 +4,10 @@ from copy import deepcopy
 import nifty.tools as nt
 import numpy as np
 import torch
-from tqdm import tqdm
+try:
+    from napari.utils import progress as tqdm
+except ImportError:
+    from tqdm import tqdm
 
 from ..transform.raw import standardize
 
