@@ -27,6 +27,99 @@ import torch_em
 from .. import util
 
 
+def _stitch_segmentation(segmentation, tile_shape):
+    import nifty.tools as nt
+    from nifty.ground_truth import overlap
+
+    from elf.segmentation.features import compute_rag, project_node_labels_to_pixels
+    from elf.segmentation.multicut import compute_edge_costs, multicut_decomposition
+
+    shape = segmentation.shape
+    ndim = len(shape)
+    blocking = nt.blocking([0] * ndim, shape, tile_shape)
+    n_blocks = blocking.numberOfBlocks
+    halo = (1, 1)
+
+    block_segs = []
+    for block_id in tqdm(range(n_blocks), desc="Get tiles"):
+        block = blocking.getBlockWithHalo(block_id, list(halo))
+        bb = tuple(slice(beg, end) for beg, end in zip(block.outerBlock.begin, block.outerBlock.end))
+        block_seg = segmentation[bb]
+        block_segs.append(block_seg)
+
+    seg_ids = np.unique(segmentation)
+    rag = compute_rag(segmentation)
+    edge_disaffinities = np.full(rag.numberOfEdges, 0.9, dtype="float32")
+
+    for block_id in tqdm(range(n_blocks), desc="Stitch tiles with overlap"):
+        for axis in range(ndim):
+            ngb_id = blocking.getNeighborId(block_id, axis, lower=True)
+            if ngb_id == -1:
+                continue
+
+            this_block = blocking.getBlockWithHalo(block_id, list(halo))
+            ngb_block = blocking.getBlockWithHalo(ngb_id, list(halo))
+
+            this_seg, ngb_seg = block_segs[block_id], block_segs[ngb_id]
+
+            face = tuple(
+                slice(beg_out, end_out) if d != axis else slice(beg_out, beg_in + halo[d])
+                for d, (beg_out, end_out, beg_in) in enumerate(
+                    zip(this_block.outerBlock.begin, this_block.outerBlock.end, this_block.innerBlock.begin)
+                )
+            )
+
+            this_face_bb = tuple(
+                slice(fa.start - offset, fa.stop - offset) for fa, offset in zip(face, this_block.outerBlock.begin)
+            )
+            ngb_face_bb = tuple(
+                slice(fa.start - offset, fa.stop - offset) for fa, offset in zip(face, ngb_block.outerBlock.begin)
+            )
+            this_face = this_seg[this_face_bb]
+            ngb_face = ngb_seg[ngb_face_bb]
+            assert this_face.shape == ngb_face.shape, (this_face.shape, ngb_face.shape)
+
+            # COMMENT: I visualized the faces, seems like they look as expected.
+
+            # NOTE: I have a feeling that the overlap method is either not working for here or I am missing something.
+            overlap_comp = overlap(this_face, ngb_face)
+            this_ids = np.unique(this_face)
+            overlaps = {this_id: overlap_comp.overlapArraysNormalized(this_id, sorted=False) for this_id in this_ids}
+            overlap_ids = {this_id: ovlps[0] for this_id, ovlps in overlaps.items()}
+            overlap_values = {this_id: ovlps[1] for this_id, ovlps in overlaps.items()}
+            overlap_uv_ids = np.array([
+                [this_id, ovlp_id] for this_id, ovlp_ids in overlap_ids.items() for ovlp_id in ovlp_ids
+            ])
+            overlap_values = np.array([ovlp for ovlps in overlap_values.values() for ovlp in ovlps], dtype="float32")
+            assert len(overlap_uv_ids) == len(overlap_values)
+
+            valid_uv_ids = np.isin(overlap_uv_ids, seg_ids).all(axis=1)
+            if valid_uv_ids.sum() == 0:
+                continue
+            overlap_uv_ids, overlap_values = overlap_uv_ids[valid_uv_ids], overlap_values[valid_uv_ids]
+            assert len(overlap_uv_ids) == len(overlap_values)
+
+            edge_ids = rag.findEdges(overlap_uv_ids)
+            # NOTE: All edges I receive seem to be '-1' (something is wrong with computing 'overlap_uv_ids')
+            valid_edges = edge_ids != -1
+            if valid_edges.sum() == 0:
+                continue
+            edge_ids, overlap_values = edge_ids[valid_edges], overlap_values[valid_edges]
+            assert len(edge_ids) == len(overlap_values)
+
+            edge_disaffinities[edge_ids] = (1.0 - overlap_values)
+
+    costs = compute_edge_costs(edge_disaffinities, beta=0.5)
+
+    node_labels = multicut_decomposition(rag, costs)
+    seg_stitched = project_node_labels_to_pixels(rag, node_labels)
+
+    import napari
+    v = napari.Viewer()
+    v.add_labels(seg_stitched)
+    napari.run()
+
+
 def _preprocess_data(data_dir, split):
     import h5py
 
@@ -58,6 +151,7 @@ def _preprocess_data(data_dir, split):
             labels[y1: y2, x1: x2] = tile
 
         labels = connected_components(labels).astype("uint32")
+        labels = _stitch_segmentation(labels, tile_shape=(224, 224))
 
         volume_path = os.path.join(preprocessed_dir, f"{i}.h5")
         with h5py.File(volume_path, "w") as f:
@@ -86,9 +180,6 @@ def get_consep_data(path: Union[os.PathLike, str], download: bool = False) -> st
         path, "tiled-consep-224x224px.zip"), dst=os.path.join(path, "data"), remove=False
     )
 
-    _preprocess_data(data_dir, "train")
-    _preprocess_data(data_dir, "test")
-
     return data_dir
 
 
@@ -106,6 +197,9 @@ def get_consep_paths(
         List of filepaths for the input data.
     """
     data_dir = get_consep_data(path, download)
+
+    _preprocess_data(data_dir, "train")
+    _preprocess_data(data_dir, "test")
 
     if split not in ['train', 'test']:
         raise ValueError(f"'{split}' is not a valid split.")
