@@ -62,7 +62,7 @@ def get_cryonuseg_paths(
         raise ValueError(f"'{rater_choice}' is not a valid rater choice.")
 
     # Point to the instance labels folder
-    label_dir += r"label masks"
+    label_dir += r"label masks modify"
 
     label_paths = natsorted(glob(os.path.join(path, label_dir, "*.tif")))
     raw_paths = natsorted(glob(os.path.join(path, r"tissue images", "*.tif")))
