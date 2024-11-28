@@ -1,4 +1,4 @@
-from .logger import SelfTrainingTensorboardLogger
+from .logger import SelfTrainingTensorboardLogger, ProbabilisticUNetTrainerLogger
 from .loss import DefaultSelfTrainingLoss, DefaultSelfTrainingLossAndMetric, ProbabilisticUNetLoss, \
     ProbabilisticUNetLossAndMetric
 from .mean_teacher import MeanTeacherTrainer
