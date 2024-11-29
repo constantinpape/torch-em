@@ -240,10 +240,11 @@ class ViT_ScaleMAE(VisionTransformer):
     """Vision Transformer dervied from the Scale Masked Auto Encoder codebase (TODO: paper and github link).
     """
 
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=1024, **kwargs):
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=1024, depth=12, **kwargs):
         super().__init__(img_size=img_size, embed_dim=embed_dim, **kwargs)
         self.img_size = img_size
         self.in_chans = in_chans
+        self.depth = depth
 
         self.patch_embed = PatchEmbedUnSafe(
             img_size=img_size,
@@ -302,16 +303,23 @@ class ViT_ScaleMAE(VisionTransformer):
         x = x + pos_embed
         x = self.pos_drop(x)
 
-        for blk in self.blocks:
+        # chunks obtained for getting the projections for conjuctions with upsampling blocks
+        _chunks = int(self.depth / 4)
+        chunks_for_projection = [_chunks - 1, 2*_chunks - 1, 3*_chunks - 1, 4*_chunks - 1]
+
+        list_from_encoder = []
+        for i, blk in enumerate(self.blocks):
             x = blk(x)
+            if i in chunks_for_projection:
+                list_from_encoder.append(self.convert_to_expected_dim(x))
 
         x = self.convert_to_expected_dim(x)
 
-        return x
+        return x, list_from_encoder
 
     def forward(self, x):
-        x = self.forward_features(x)
-        return x
+        x, list_from_encoder = self.forward_features(x)
+        return x, list_from_encoder
 
 
 def get_vision_transformer(backbone: str, model: str, img_size: int = 1024):
