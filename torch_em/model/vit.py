@@ -365,7 +365,8 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024):
     elif backbone == "scalemae":
         if model == "vit_b":
             encoder = ViT_ScaleMAE(
-                img_size=img_size, patch_size=8, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
+                img_size=img_size, patch_size=8, embed_dim=768, depth=12, num_heads=12,
+                mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)
             )
         elif model == "vit_l":
             encoder = ViT_ScaleMAE(
