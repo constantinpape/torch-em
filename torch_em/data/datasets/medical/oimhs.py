@@ -58,7 +58,7 @@ def get_oimhs_data(path: Union[os.PathLike, str], download: bool = False) -> str
 
 
 def _create_splits(data_dir, split_file, test_fraction=0.2):
-    eye_dirs = natsorted(glob(os.path.join(data_dir, "Images", "*")))
+    eye_dirs = [Path(edir).stem for edir in natsorted(glob(os.path.join(data_dir, "Images", "*")))]
 
     # let's split the data
     main_split, test_split = train_test_split(eye_dirs, test_size=test_fraction)
@@ -70,11 +70,13 @@ def _create_splits(data_dir, split_file, test_fraction=0.2):
         json.dump(decided_splits, f)
 
 
-def _get_per_split_dirs(split_file, split):
+def _get_per_split_dirs(data_dir, split_file, split):
     with open(split_file, "r") as f:
         data = json.load(f)
 
-    return data[split]
+    split_data = data[split]
+    split_data = [os.path.join(data_dir, "Images", sdata) for sdata in split_data]
+    return split_data
 
 
 def get_oimhs_paths(
@@ -103,7 +105,7 @@ def get_oimhs_paths(
     if not os.path.exists(split_file):
         _create_splits(data_dir, split_file)
 
-    eye_dirs = _get_per_split_dirs(split_file=split_file, split=split)
+    eye_dirs = _get_per_split_dirs(data_dir=data_dir, split_file=split_file, split=split)
 
     image_paths, gt_paths = [], []
     for eye_dir in tqdm(eye_dirs, desc="Preprocessing inputs"):
