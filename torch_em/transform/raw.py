@@ -160,18 +160,16 @@ class PoissonNoise():
 
 
 class GaussianBlur():
+    """Blur the image with a randomly drawn sigma / bandwidth value.
     """
-    Blur the image.
-    """
-    def __init__(self, kernel_size=(2, 12), sigma=(0, 2.5)):
-        self.kernel_size = kernel_size
+    def __init__(self, sigma=(0, 3.0)):
         self.sigma = sigma
 
     def __call__(self, img):
-        # sample kernel_size and make sure it is odd
-        kernel_size = 2 * (np.random.randint(self.kernel_size[0], self.kernel_size[1]) // 2) + 1
-        # switch boundaries to make sure 0 is excluded from sampling
+        # Sample the sigma value. Note that we switch the bounds to ensure zero is excluded from sampling.
         sigma = np.random.uniform(self.sigma[1], self.sigma[0])
+        # Determine the kernel size based on the sigma value.
+        kernel_size = int(2 * np.ceil(3 * sigma) + 1)
         if isinstance(img, np.ndarray):
             img = torch.from_numpy(img)
         out = transforms.GaussianBlur(kernel_size, sigma=sigma)(img)
