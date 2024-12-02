@@ -19,6 +19,8 @@ from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Tuple, Literal, List
 
+import numpy as np
+
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
@@ -77,7 +79,11 @@ def _preprocess_labels(label_paths):
         labels = sitk.ReadImage(lpath)
         larray = sitk.GetArrayFromImage(labels)
 
-        for i, lid in enumerate([100, 150, 200], start=1):
+        # NOTE: Remove other label ids not matching the specified task.
+        valid_labels = [100, 150, 200]
+        larray[~np.isin(larray, valid_labels)] = 0
+
+        for i, lid in enumerate(valid_labels, start=1):
             larray[larray == lid] = i
 
         sitk_label = sitk.GetImageFromArray(larray)
@@ -140,7 +146,7 @@ def get_leg_3d_us_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    return torch_em.default_segmentation_dataset(
+    dataset = torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
         raw_key=None,
         label_paths=label_paths,
@@ -149,6 +155,11 @@ def get_leg_3d_us_dataset(
         is_seg_dataset=True,
         **kwargs
     )
+
+    for d in dataset.datasets:
+        d.max_sampling_attempts = 10000
+
+    return dataset
 
 
 def get_leg_3d_us_loader(
