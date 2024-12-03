@@ -9,8 +9,12 @@ Please cite it if you use this dataset for your research.
 
 import os
 from glob import glob
+from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Tuple, Literal, List
+
+import numpy as np
+import imageio.v3 as imageio
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -48,6 +52,21 @@ def get_siim_acr_data(path: Union[os.PathLike, str], download: bool = False) -> 
     return data_dir
 
 
+def _clean_image_and_label_paths(image_paths, gt_paths):
+    # NOTE: Extract paths with image and corresponding label paths with valid annotations.
+    def _has_multiple_classes(gt_path):
+        gt = imageio.imread(gt_path)
+        return np.any(gt) and not np.all(gt)
+
+    paths = [
+        (ip, gp) for ip, gp in tqdm(zip(image_paths, gt_paths), total=len(image_paths)) if _has_multiple_classes(gp)
+    ]
+    image_paths = [p[0] for p in paths]
+    gt_paths = [p[1] for p in paths]
+
+    return image_paths, gt_paths
+
+
 def get_siim_acr_paths(
     path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
 ) -> Tuple[List[str], List[str]]:
@@ -67,14 +86,19 @@ def get_siim_acr_paths(
     if split == "test":
         image_paths = natsorted(glob(os.path.join(data_dir, "png_images", f"*_{split}_*.png")))
         gt_paths = natsorted(glob(os.path.join(data_dir, "png_masks", f"*_{split}_*.png")))
+
+        image_paths, gt_paths = _clean_image_and_label_paths(image_paths, gt_paths)
     else:
         image_paths = natsorted(glob(os.path.join(data_dir, "png_images", "*_train_*.png")))
         gt_paths = natsorted(glob(os.path.join(data_dir, "png_masks", "*_train_*.png")))
 
+        image_paths, gt_paths = _clean_image_and_label_paths(image_paths, gt_paths)
+
+        # Next, we create custom train-val split out of the given original 'train' split.
         if split == "train":
-            image_paths, gt_paths = image_paths[600:], gt_paths[600:]
+            image_paths, gt_paths = image_paths[400:], gt_paths[400:]
         elif split == "val":
-            image_paths, gt_paths = image_paths[:600], gt_paths[:600]
+            image_paths, gt_paths = image_paths[:400], gt_paths[:400]
         else:
             raise ValueError(f"'{split}' is not a valid split.")
 
