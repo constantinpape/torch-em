@@ -59,7 +59,8 @@ def _clean_image_and_label_paths(image_paths, gt_paths):
         return np.any(gt) and not np.all(gt)
 
     paths = [
-        (ip, gp) for ip, gp in tqdm(zip(image_paths, gt_paths), total=len(image_paths)) if _has_multiple_classes(gp)
+        (ip, gp) for ip, gp in tqdm(zip(image_paths, gt_paths), total=len(image_paths), desc="Verifying labels")
+        if _has_multiple_classes(gp)
     ]
     image_paths = [p[0] for p in paths]
     gt_paths = [p[1] for p in paths]
