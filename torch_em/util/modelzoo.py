@@ -630,7 +630,9 @@ def _load_model(model_spec, device):
     model = PytorchModelAdapter.get_network(weight_spec)
     weight_file = weight_spec.source.path
     if not os.path.exists(weight_file):
-        weight_file = os.path.join(model_spec.root, weight_file)
+        root_folder = f"{model_spec.root.filename}.unzip"
+        assert os.path.exists(root_folder), root_folder
+        weight_file = os.path.join(root_folder, weight_file)
     assert os.path.exists(weight_file), weight_file
     state = torch.load(weight_file, map_location=device)
     model.load_state_dict(state)
