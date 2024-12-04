@@ -9,6 +9,7 @@ Please cite them if you use this dataset for your research.
 
 import os
 from glob import glob
+from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Tuple, Literal, Optional
 
@@ -41,12 +42,18 @@ def get_cbis_ddsm_data(path: Union[os.PathLike, str], download: bool = False) ->
     return data_dir
 
 
+def _check_if_size_matches(image_path, gt_path):
+    from PIL import Image
+    return Image.open(image_path).size == Image.open(gt_path).size
+
+
 def get_cbis_ddsm_paths(
     path: Union[os.PathLike, str],
     split: Literal['Train', 'Val', 'Test'],
     task: Literal['Calc', 'Mass'],
     tumour_type: Optional[Literal["MALIGNANT", "BENIGN"]] = None,
-    download: bool = False
+    download: bool = False,
+    ignore_mismatching_pairs: bool = False,
 ):
     """Get paths to the CBIS DDSM data.
 
@@ -84,6 +91,14 @@ def get_cbis_ddsm_paths(
         target_dir = os.path.join(data_dir, task, "Train", tumour_type)
         image_paths = natsorted(glob(os.path.join(target_dir, "*_FULL_*.png")))
         gt_paths = natsorted(glob(os.path.join(target_dir, "*_MASK_*.png")))
+
+        if ignore_mismatching_pairs:
+            input_paths = [
+                (ip, gp) for ip, gp in tqdm(zip(image_paths, gt_paths), total=len(image_paths), desc="Validate inputs")
+                if _check_if_size_matches(ip, gp)
+            ]
+            image_paths = [p[0] for p in input_paths]
+            gt_paths = [p[1] for p in input_paths]
 
         if split == "Train":
             image_paths, gt_paths = image_paths[125:], gt_paths[125:]
