@@ -63,6 +63,7 @@ def get_cbis_ddsm_paths(
         task: The choice of labels for the specified task.
         tumour_type: The choice of tumour type.
         download: Whether to download the data if it is not present.
+        ignore_mismatching_pairs: Whether to avoid returning paths to image-label pairs of mismatching shape.
 
     Returns:
         List of filepaths for the image data.
