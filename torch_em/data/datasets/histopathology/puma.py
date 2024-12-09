@@ -80,7 +80,7 @@ def _preprocess_inputs(path, annotations):
             if "raw" not in f.keys():
                 f.create_dataset("raw", data=image, compression="gzip")
 
-            if f"{annotations}" not in f["labels"].keys():
+            if "labels" not in f.keys() or ("labels" in f.keys() and f"{annotations}" not in f["labels"].keys()):
                 f.create_dataset(f"labels/{annotations}", data=mask, compression="gzip")
 
 
