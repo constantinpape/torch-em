@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_nuclick():
-    # from util import ROOT
-    ROOT = "/home/anwai/data"
+    from util import ROOT
 
     loader = get_nuclick_loader(
         path=os.path.join(ROOT, "nuclick"),
