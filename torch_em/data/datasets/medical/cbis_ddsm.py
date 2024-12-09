@@ -84,22 +84,30 @@ def get_cbis_ddsm_paths(
     else:
         assert tumour_type in ["MALIGNANT", "BENIGN"], f"'{tumour_type}' is not a tumor type."
 
+    def _remove_mismatching_image_label_pairs(image_paths, gt_paths):
+        input_paths = [
+            (ip, gp) for ip, gp in tqdm(zip(image_paths, gt_paths), total=len(image_paths), desc="Validate inputs")
+            if _check_if_size_matches(ip, gp)
+        ]
+        image_paths = [p[0] for p in input_paths]
+        gt_paths = [p[1] for p in input_paths]
+        return image_paths, gt_paths
+
     if split == "Test":
         target_dir = os.path.join(data_dir, task, split, tumour_type)
         image_paths = natsorted(glob(os.path.join(target_dir, "*_FULL_*.png")))
         gt_paths = natsorted(glob(os.path.join(target_dir, "*_MASK_*.png")))
+
+        if ignore_mismatching_pairs:
+            image_paths, gt_paths = _remove_mismatching_image_label_pairs(image_paths, gt_paths)
+
     else:
         target_dir = os.path.join(data_dir, task, "Train", tumour_type)
         image_paths = natsorted(glob(os.path.join(target_dir, "*_FULL_*.png")))
         gt_paths = natsorted(glob(os.path.join(target_dir, "*_MASK_*.png")))
 
         if ignore_mismatching_pairs:
-            input_paths = [
-                (ip, gp) for ip, gp in tqdm(zip(image_paths, gt_paths), total=len(image_paths), desc="Validate inputs")
-                if _check_if_size_matches(ip, gp)
-            ]
-            image_paths = [p[0] for p in input_paths]
-            gt_paths = [p[1] for p in input_paths]
+            image_paths, gt_paths = _remove_mismatching_image_label_pairs(image_paths, gt_paths)
 
         if split == "Train":
             image_paths, gt_paths = image_paths[125:], gt_paths[125:]
