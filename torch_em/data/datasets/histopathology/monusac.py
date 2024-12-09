@@ -75,9 +75,9 @@ def _check_channel_consistency(path, split):
     all_image_path = glob(os.path.join(path, "images", split, "*.tif"))
     for image_path in all_image_path:
         image = imageio.imread(image_path)
-        assert image.shape[-1] == 4, f"Image has an unexpected shape: {image.shape}"
-        rgb_image = image[..., :-1]  # get rid of the alpha channel
-        imageio.imwrite(image_path, rgb_image)
+        if image.ndim == 3 and image.shape[-1] == 4:  # NOTE: There are images without an alpha channel.
+            rgb_image = image[..., :-1]  # get rid of the alpha channel
+            imageio.imwrite(image_path, rgb_image)
 
 
 def _process_monusac(path, split):
