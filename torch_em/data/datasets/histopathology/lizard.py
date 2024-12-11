@@ -23,7 +23,7 @@ from .. import util
 
 
 def create_split_list(path, split):
-    df = pd.read_csv(os.path.join(path, 'lizard_labels/Lizard_Labels/info.csv'))
+    df = pd.read_csv(os.path.join(path, 'lizard_labels', 'Lizard_Labels/info.csv'))
     split_list = []
     for i in df.index:
         image_split = df['Split'].iloc[i]
