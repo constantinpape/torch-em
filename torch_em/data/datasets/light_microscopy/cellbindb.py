@@ -11,7 +11,7 @@ import os
 import subprocess
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, List, Literal, Optional
+from typing import Union, Tuple, List, Optional
 
 import torch_em
 
@@ -22,11 +22,19 @@ from .neurips_cell_seg import to_rgb
 
 
 DOWNLOAD_SCRIPT = 'wget -c -nH -np -r -R "index.html*" --cut-dirs 4 ftp://ftp.cngb.org/pub/CNSA/data5/CNP0006370/Other/'
+
 CHOICES = ["10×Genomics_DAPI", "10×Genomics_HE", "DAPI", "HE", "mIF", "ssDNA"]
 
 
-def get_cellbindb_data(path: Union[os.PathLike, str], download: bool = False):
-    """
+def get_cellbindb_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the CellBinDB dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the data.
     """
     data_dir = os.path.join(path, "Other")
     if os.path.exists(data_dir):
@@ -46,9 +54,18 @@ def get_cellbindb_data(path: Union[os.PathLike, str], download: bool = False):
 
 
 def get_cellbindb_paths(
-    path: Union[os.PathLike, str], data_choice: Optional[Literal[""]] = None, download: bool = False
+    path: Union[os.PathLike, str], data_choice: Optional[str] = None, download: bool = False
 ) -> Tuple[List[str], List[str]]:
-    """
+    """Get paths to the CellBinDB data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded.
+        data_choice: The choice of dataset.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
     data_dir = get_cellbindb_data(path, download)
 
@@ -72,11 +89,21 @@ def get_cellbindb_paths(
 def get_cellbindb_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    data_choice: Literal[""],
+    data_choice: Optional[str] = None,
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the CellBinDB dataset for cell segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded.
+        patch_shape: The patch shape to use for training.
+        data_choice: The choice of dataset.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     raw_paths, label_paths = get_cellbindb_paths(path, data_choice, download)
 
@@ -99,11 +126,21 @@ def get_cellbindb_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    data_choice: Literal[""],
+    data_choice: Optional[str] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the CellBinDB dataloader for cell segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded.
+        patch_shape: The patch shape to use for training.
+        data_choice: The choice of dataset.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_cellbindb_dataset(path, patch_shape, data_choice, download, **ds_kwargs)
