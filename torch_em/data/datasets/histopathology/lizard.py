@@ -105,11 +105,14 @@ def get_lizard_data(path: Union[os.PathLike, str], split: Literal["train", "val"
     rmtree(os.path.join(path, "overlay"))
 
 
-def get_lizard_paths(path: Union[os.PathLike], split, download: bool = False) -> List[str]:
+def get_lizard_paths(
+    path: Union[os.PathLike], split: Literal["train", "val", "test"], download: bool = False
+) -> List[str]:
     """Get paths to the Lizard data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data splits.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -121,7 +124,11 @@ def get_lizard_paths(path: Union[os.PathLike], split, download: bool = False) ->
 
 
 def get_lizard_dataset(
-    path: Union[os.PathLike, str], patch_shape: Tuple[int, int], split: str, download: bool = False, **kwargs
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
+    download: bool = False,
+    **kwargs
 ) -> Dataset:
     """Get the Lizard dataset for nucleus segmentation.
 
@@ -155,7 +162,7 @@ def get_lizard_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    split: str,
+    split: Literal["train", "val", "test"],
     download: bool = False,
     **kwargs
 ) -> DataLoader:
