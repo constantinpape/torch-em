@@ -40,14 +40,14 @@ def get_cellbindb_data(path: Union[os.PathLike, str], download: bool = False) ->
     if os.path.exists(data_dir):
         return data_dir
 
-    os.makedirs(data_dir, exist_ok=True)
+    os.makedirs(path, exist_ok=True)
 
     if not download:
         raise AssertionError("The dataset is not found and download is set to 'False'.")
 
     print(
-        "Downloading the dataset takes several hours and is extremely slow. "
-        "Make sure you have consistent internet connection."
+        "Downloading the dataset takes several hours and is extremely (like very very) slow. "
+        "Make sure you have consistent internet connection or run it in background over a cluster."
     )
     subprocess.run(DOWNLOAD_SCRIPT.split(" "))
     return data_dir
