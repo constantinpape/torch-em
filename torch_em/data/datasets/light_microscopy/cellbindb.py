@@ -49,7 +49,8 @@ def get_cellbindb_data(path: Union[os.PathLike, str], download: bool = False) ->
         "Downloading the dataset takes several hours and is extremely (like very very) slow. "
         "Make sure you have consistent internet connection or run it in background over a cluster."
     )
-    subprocess.run(DOWNLOAD_SCRIPT.split(" "))
+    splits = DOWNLOAD_SCRIPT.split(" ")
+    subprocess.run([*splits[:-1], "-P", os.path.abspath(path), splits[-1]])
     return data_dir
 
 

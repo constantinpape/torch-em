@@ -16,7 +16,7 @@ def check_cellbindb():
         patch_shape=(512, 512),
         batch_size=2,
         data_choice=None,
-        download=False,
+        download=True,
         shuffle=True,
     )
 
