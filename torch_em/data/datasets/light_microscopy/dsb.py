@@ -232,6 +232,7 @@ def get_dsb_loader(
         source: The source of the dataset. Can either be 'full' for the complete dataset,
             or 'reduced' for the dataset excluding histopathology images.
         split: The split to use for the dataset. Either 'train' or 'test'.
+        domain: The choice of modality in dataset.
         binary: Whether to use a binary segmentation target.
         boundaries: Whether to compute boundaries as the target.
         offsets: Offset values for affinity computation used as target.
