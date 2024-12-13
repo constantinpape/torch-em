@@ -4,7 +4,7 @@ images with annotations for nucleus segmentation.
 NOTE:
 - The 'full' dataset has been taken from https://github.com/ibmua/data-science-bowl-2018-train-set,
 as recommended in BBBC website: https://bbbc.broadinstitute.org/BBBC038.
-- The 'reduced' dataset is the dapi stained image set from StarDist.
+- The 'reduced' dataset is the fluorescence image set from StarDist.
 
 The dataset is described in the publication https://doi.org/10.1038/s41592-019-0612-7.
 Please cite it if you use this dataset in your research.
@@ -42,19 +42,19 @@ def _merge_instances(path):
     for id_path in tqdm(glob(os.path.join(path, "full", "*")), desc="Preprocessing labels"):
         id = os.path.basename(id_path)
 
-        # Let's preprocess the image: remove alpha channel and make distinction of histopatho vs dapi images.
+        # Let's preprocess the image: remove alpha channel and make distinction of histopatho vs fluo images.
         image = imageio.imread(os.path.join(id_path, "images", f"{id}.png"))
         assert image.ndim == 3 and image.shape[-1] == 4, image.shape
 
         image = image[..., :-1]  # Remove alpha channel
         r, g, b = image.transpose(2, 0, 1)
         if np.array_equal(r, g) and np.array_equal(g, b):
-            dname = "dapi"
-            # Store only one channel for DAPI images.
+            dname = "fluo"
+            # Store only one channel for fluorescence images.
             imageio.imwrite(os.path.join(id_path, "images", f"{dname}_{id}.png"), image[..., -1], compression="zlib")
         else:
-            dname = "histopathology"
-            # Store all three channels for histopatho images.
+            dname = "histopatho"
+            # Store all three channels for histopathology images.
             imageio.imwrite(os.path.join(id_path, "images", f"{dname}_{id}.png"), image, compression="zlib")
 
         os.remove(os.path.join(id_path, "images", f"{id}.png"))
@@ -115,7 +115,7 @@ def get_dsb_paths(
     path: Union[os.PathLike, str],
     source: Literal["full", "reduced"],
     split: Optional[Literal["train", "test"]] = None,
-    domain: Optional[Literal["dapi", "histopathology"]] = None,
+    domain: Optional[Literal["fluo", "histopatho"]] = None,
     download: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the DSB data.
@@ -136,7 +136,7 @@ def get_dsb_paths(
 
     if source == "reduced":
         if domain is not None:
-            assert domain in "dapi", "The reduced set only has 'DAPI' images."
+            assert domain in "fluo", "The reduced set only has 'fluo' images."
 
         if split is None:
             split = "t*"  # reduced set returns all "train" and "test" sets if split is None.
@@ -163,7 +163,7 @@ def get_dsb_dataset(
     patch_shape: Tuple[int, int],
     source: Literal["full", "reduced"] = "reduced",
     split: Optional[Literal["train", "test"]] = None,
-    domain: Optional[Literal["dapi", "histopathology"]] = None,
+    domain: Optional[Literal["fluo", "histopatho"]] = None,
     binary: bool = False,
     boundaries: bool = False,
     offsets: Optional[List[List[int]]] = None,
@@ -216,7 +216,7 @@ def get_dsb_loader(
     patch_shape: Tuple[int, int],
     source: Literal["full", "reduced"] = "reduced",
     split: Optional[Literal["train", "test"]] = None,
-    domain: Optional[Literal["dapi", "histopathology"]] = None,
+    domain: Optional[Literal["fluo", "histopatho"]] = None,
     binary: bool = False,
     boundaries: bool = False,
     offsets: Optional[List[List[int]]] = None,
