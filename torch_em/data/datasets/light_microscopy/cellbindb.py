@@ -55,13 +55,13 @@ def get_cellbindb_data(path: Union[os.PathLike, str], download: bool = False) ->
 
 
 def get_cellbindb_paths(
-    path: Union[os.PathLike, str], data_choice: Optional[str] = None, download: bool = False
+    path: Union[os.PathLike, str], data_choice: Optional[Union[str, List[str]]] = None, download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the CellBinDB data.
 
     Args:
         path: Filepath to a folder where the data is downloaded.
-        data_choice: The choice of dataset.
+        data_choice: The choice of datasets.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -73,12 +73,12 @@ def get_cellbindb_paths(
     if data_choice is None:
         data_choice = CHOICES
     else:
-        assert data_choice in CHOICES
         if isinstance(data_choice, str):
             data_choice = [data_choice]
 
     raw_paths, label_paths = [], []
     for dchoice in data_choice:
+        assert dchoice in CHOICES, f"'{dchoice}' is not a valid data choice."
         raw_paths.extend(natsorted(glob(os.path.join(data_dir, dchoice, "*", "*-img.tif"))))
         label_paths.extend(natsorted(glob(os.path.join(data_dir, dchoice, "*", "*-instancemask.tif"))))
 
@@ -90,7 +90,7 @@ def get_cellbindb_paths(
 def get_cellbindb_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    data_choice: Optional[str] = None,
+    data_choice: Optional[Union[str, List[str]]] = None,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -99,7 +99,7 @@ def get_cellbindb_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded.
         patch_shape: The patch shape to use for training.
-        data_choice: The choice of dataset.
+        data_choice: The choice of datasets.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -127,7 +127,7 @@ def get_cellbindb_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    data_choice: Optional[str] = None,
+    data_choice: Optional[Union[str, List[str]]] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -136,7 +136,7 @@ def get_cellbindb_loader(
     Args:
         path: Filepath to a folder where the data is downloaded.
         patch_shape: The patch shape to use for training.
-        data_choice: The choice of dataset.
+        data_choice: The choice of datasets.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
