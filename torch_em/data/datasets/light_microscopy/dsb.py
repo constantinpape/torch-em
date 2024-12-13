@@ -1,6 +1,11 @@
 """This Dataset was used in a Kaggle Data Science Bowl. It contains light microscopy
 images with annotations for nucleus segmentation.
 
+NOTE:
+- The 'full' dataset has been taken from https://github.com/ibmua/data-science-bowl-2018-train-set,
+as recommended in BBBC website: https://bbbc.broadinstitute.org/BBBC038.
+- The 'reduced' dataset is the dapi stained image set from StarDist.
+
 The dataset is described in the publication https://doi.org/10.1038/s41592-019-0612-7.
 Please cite it if you use this dataset in your research.
 """
