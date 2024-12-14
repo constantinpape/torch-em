@@ -38,7 +38,10 @@ def _preprocess_images(path):
 
     for rpath, lpath in tqdm(zip(raw_paths, label_paths), desc="Preprocessing images", total=len(raw_paths)):
         raw = imageio.imread(rpath)
-        raw = raw[..., :-1].transpose(2, 0, 1)  # remove 4th alpha channel (seems like an empty channel).
+        if raw.ndim == 3 and raw.shape[-1] == 4:
+            raw = raw[..., :-1]  # remove 4th alpha channel (seems like an empty channel).
+
+        raw = raw.transpose(2, 0, 1)
         label = imageio.imread(lpath)
 
         vol_path = os.path.join(preprocessed_dir, f"{Path(lpath).stem}.h5")
