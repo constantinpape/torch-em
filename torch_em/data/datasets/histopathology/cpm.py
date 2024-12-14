@@ -61,7 +61,13 @@ def get_cpm_data(
         )
 
     os.makedirs(path, exist_ok=True)
-    zip_path = glob(os.path.join(path, f"{data_choice}*.zip"))[0]
+    zip_path = glob(os.path.join(path, f"{data_choice}*.zip"))
+    if len(zip_path) == 0:
+        raise AssertionError(
+            f"zip file for '{data_choice}' dataset is not found. Please download it from '{URL[data_choice]}'."
+        )
+
+    zip_path = zip_path[0]
     util.unzip(zip_path=zip_path, dst=path, remove=False)
 
     return data_dir
