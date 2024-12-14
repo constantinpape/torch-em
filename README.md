@@ -136,6 +136,7 @@ Note: this functionality was recently added and is not fully tested.
 
 ## Research Projects using `torch-em`
 
-- [Probabilistic Domain Adaptation for Biomedical Image Segmentation](https://doi.org/10.48550/arXiv.2303.11790)
-- [Segment Anything for Microscopy](https://doi.org/10.1101/2023.08.21.554208)
-- [ViM-UNet: Vision Mamba for Biomedical Segmentation](https://doi.org/10.48550/arXiv.2404.07705)
+- [Probabilistic Domain Adaptation for Biomedical Image Segmentation](https://doi.org/10.48550/arXiv.2303.11790) | [Code Repository](https://github.com/computational-cell-analytics/Probabilistic-Domain-Adaptation)
+- [Segment Anything for Microscopy](https://doi.org/10.1101/2023.08.21.554208) | [Code Repository](https://github.com/computational-cell-analytics/micro-sam)
+- [ViM-UNet: Vision Mamba for Biomedical Segmentation](https://doi.org/10.48550/arXiv.2404.07705) | [Code Repository](https://github.com/constantinpape/torch-em/blob/main/vimunet.md)
+- [SynapseNet: Deep Learning for Automatic Synapse Reconstruction](https://doi.org/10.1101/2024.12.02.626387) | [Code Repository](https://github.com/computational-cell-analytics/synapse-net)
