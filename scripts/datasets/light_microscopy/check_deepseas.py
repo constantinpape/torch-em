@@ -9,12 +9,11 @@ sys.path.append("..")
 
 
 def check_deepseas():
-    # from util import ROOT
-    ROOT = "/home/anwai/data"
+    from util import ROOT
 
     loader = get_deepseas_loader(
         path=os.path.join(ROOT, "deepseas"),
-        choice="original",
+        split="test",
         patch_shape=(512, 512),
         batch_size=2,
         download=True,
