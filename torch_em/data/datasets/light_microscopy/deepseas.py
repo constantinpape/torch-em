@@ -30,11 +30,13 @@ def get_deepseas_data(path: Union[os.PathLike, str], choice, download: bool = Fa
     if os.path.exists(data_dir):
         return data_dir
 
+    print("'DeepSeas' is a large dataset. Downloading all files might take a while.")
     util.download_source_gdrive(
-        path=os.path.join(URL, choice),
+        path=os.path.join(path, choice),
         url=URL[choice],
         download=download,
         download_type="folder",
+        quiet=False,
     )
 
     return data_dir
