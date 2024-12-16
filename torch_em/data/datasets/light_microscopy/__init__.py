@@ -1,5 +1,6 @@
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bitdepth_nucseg import get_bitdepth_nucseg_loader, get_bitdepth_nucseg_dataset
+from .brifiseg import get_brifiseg_loader, get_brifiseg_dataset
 from .blastospim import get_blastospim_loader, get_blastospim_dataset
 from .brain_organoids import get_brain_organoids_loader, get_brain_organoids_dataset
 from .cartocell import get_cartocell_loader, get_cartocell_dataset
