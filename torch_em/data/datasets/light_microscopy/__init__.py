@@ -33,3 +33,4 @@ from .toiam import get_toiam_loader, get_toiam_dataset
 from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
 from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
 from .vicar import get_vicar_loader, get_vicar_dataset
+from .yeaz import get_yeaz_loader, get_yeaz_dataset
