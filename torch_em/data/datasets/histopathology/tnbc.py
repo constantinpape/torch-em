@@ -12,7 +12,8 @@ from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
 from typing import Union, Tuple, List
-
+import random
+import pandas as pd
 import imageio.v3 as imageio
 from skimage.measure import label as connected_components
 
@@ -25,6 +26,27 @@ from .. import util
 
 URL = "https://zenodo.org/records/1175282/files/TNBC_NucleiSegmentation.zip"
 CHECKSUM = "da708c3a988f4ad4b9bbb9283b387faf703f0bc0e5e689927306bd27ea13a57f"
+
+
+def create_split_csv(path): # TNBC
+    image_names = [os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, 'preprocessed', '*.h5'))]
+    split_index = int(len(image_names)*0.8)
+    random.shuffle(image_names)
+    train_set = image_names[:split_index]
+    test_images = image_names[split_index:] 
+    val_split_index = int(len(train_set)*0.8)
+    train_images = train_set[:val_split_index]
+    val_images = train_set[val_split_index:]
+    split_data = []
+    for img in natsorted(train_images):
+        split_data.append({"image_name": img, "split": "train"})
+    for img in natsorted(test_images):
+        split_data.append({"image_name": img, "split": "test"})
+    for img in natsorted(val_images):
+        split_data.append({"image_name": img, "split": "val"})
+    output_csv = os.path.join(path, 'tnbc_split.csv')
+    df = pd.DataFrame(split_data)
+    df.to_csv(output_csv, index=False)
 
 
 def _preprocess_images(path):
