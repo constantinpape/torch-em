@@ -3,11 +3,11 @@ H&E stained histopathology images for different tissue images.
 
 NOTE: You must download the files manually.
 1. The dataset is located at https://drive.google.com/drive/folders/1l55cv3DuY-f7-JotDN7N5nbNnjbLWchK.
-2. The restructuring details are mentioned by the authors here: https://github.com/vqdang/hover_net/issues/5#issuecomment-508431862.  # noqa
+2. The restructuring details are mentioned by the authors here: https://github.com/vqdang/hover_net/issues/5#issuecomment-508431862.
 
 This dataset is from the publication https://doi.org/10.3389/fbioe.2019.00053.
 Please cite it if you use this dataset for your research.
-"""
+"""  # noqa
 
 import os
 from glob import glob
@@ -15,10 +15,12 @@ from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Literal, Optional, Tuple, List
 
+import json
+import pandas as pd
 from scipy.io import loadmat
 import imageio.v3 as imageio
-import random
-import pandas as pd
+from sklearn.model_selection import train_test_split
+
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
@@ -32,32 +34,32 @@ URL = {
 }
 
 
-def create_split_csv(path, split):
-    image_names = [os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, 'cpm15', 'Images', '*.png'))]
-    split_index = int(len(image_names)*0.8)
-    random.shuffle(image_names)
-    train_set = image_names[:split_index]
-    test_images = image_names[split_index:] 
-    val_split_index = int(len(train_set)*0.8)
-    train_images = train_set[:val_split_index]
-    val_images = train_set[val_split_index:]
-    split_data = []
-    for img in natsorted(train_images):
-        split_data.append({"image_name": img, "split": "train"})
-    for img in natsorted(test_images):
-        split_data.append({"image_name": img, "split": "test"})
-    for img in natsorted(val_images):
-        split_data.append({"image_name": img, "split": "val"})
-    output_csv = os.path.join(path, 'cpm15_split.csv')
-    df = pd.DataFrame(split_data)
-    df.to_csv(output_csv, index=False)  
-    split_list = [df['image_name'].iloc[i] for i in df.index if df['split'].iloc[i] == split]
+def _create_split_csv(path, split):
+    csv_path = os.path.join(path, 'cpm15_split.csv')
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df[split] = df[split].apply(lambda x: json.loads(x.replace("'", '"')))  # ensures all items from column in list.
+        split_list = df.iloc[0][split]
+
+    else:
+        image_names = [
+            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, 'cpm15', 'Images', '*.png'))
+        ]
+
+        train_ids, test_ids = train_test_split(image_names, test_size=0.25)  # 20% split for test.
+        train_ids, val_ids = train_test_split(train_ids, test_size=0.20)  # 15% split for val.
+        split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
+
+        print(len(train_ids), len(val_ids), len(test_ids))
+
+        df = pd.DataFrame.from_dict([split_ids])
+        df.to_csv(csv_path)
+        split_list = split_ids[split]
+
     return split_list
 
 
-def get_cpm_data(
-    path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False, split: Literal["train", "val", "test"] = None,
-) -> str:
+def get_cpm_data(path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False) -> str:
     """Obtain the CPM data.
 
     NOTE: The dataset is located at https://drive.google.com/drive/folders/1l55cv3DuY-f7-JotDN7N5nbNnjbLWchK.
@@ -98,7 +100,9 @@ def get_cpm_data(
 
 
 def get_cpm_paths(
-    path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], split: Literal["train", "val", "test"],
+    path: Union[os.PathLike, str],
+    data_choice: Literal['cpm15', 'cpm17'],
+    split: Literal["train", "val", "test"],
     download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the CPM data.
@@ -106,19 +110,22 @@ def get_cpm_paths(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         data_choice: The choice of data.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
 
     Returns:
         List of filepaths to the image data.
         List of filepaths to the label data.
     """
-    data_dir = get_cpm_data(path, data_choice, split, download)
+    data_dir = get_cpm_data(path, data_choice, download)
 
     if data_choice == "cpm15":
         raw_dir, label_dir = "Images", "Labels"
-        split_list = create_split_csv(path, split)
-        raw_paths = [p for p in natsorted(glob(os.path.join(data_dir, raw_dir, "*.png"))) if os.path.basename(p).split(".")[0] in split_list]
-        label_mat_paths = [p for p in natsorted(glob(os.path.join(data_dir, label_dir, "*.mat"))) if os.path.basename(p).split(".")[0] in split_list]
+        split_list = _create_split_csv(path, split)
+
+        raw_paths = [os.path.join(data_dir, raw_dir, f"{fname}.png") for fname in split_list]
+        label_mat_paths = [os.path.join(data_dir, label_dir, f"{fname}.mat") for fname in split_list]
+
     else:
         assert split in ['train', 'test'], 'Explicit val split does not exist for cpm17.'
         raw_dir, label_dir = f"{split}/Images", f"{split}/Labels"
@@ -135,7 +142,7 @@ def get_cpm_paths(
         label = loadmat(mpath)["inst_map"]
         imageio.imwrite(label_path, label, compression="zlib")
 
-    assert len(raw_paths) == len(label_paths)
+    assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
     return raw_paths, label_paths
 
