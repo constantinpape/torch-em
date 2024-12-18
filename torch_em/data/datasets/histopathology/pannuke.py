@@ -186,6 +186,7 @@ def get_pannuke_dataset(
     custom_label_choice: str = "instances",
     with_channels: bool = True,
     with_label_channels: bool = False,
+    resize_inputs: bool = False,
     **kwargs
 ) -> Dataset:
     """Get the PanNuke dataset for nucleus segmentation.
@@ -199,6 +200,7 @@ def get_pannuke_dataset(
         custom_label_choice: The choice of labels to be used for training.
         with_channels: Whether the inputs have channels.
         with_label_channels: Whether the labels have channels.
+        resize_inputs: Whether to resize the inputs.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
@@ -212,6 +214,12 @@ def get_pannuke_dataset(
         assert isinstance(rois, dict)
 
     data_paths = get_pannuke_paths(path, folds, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=data_paths,
@@ -234,6 +242,7 @@ def get_pannuke_loader(
     download: bool = False,
     rois: Dict = {},
     custom_label_choice: str = "instances",
+    resize_inputs: bool = False,
     **kwargs
 ) -> DataLoader:
     """Get the PanNuke dataloader for nucleus segmentation.
@@ -246,6 +255,7 @@ def get_pannuke_loader(
         download: Whether to download the data if it is not present.
         rois: The choice of rois per fold to create the dataloader for training.
         custom_label_choice: The choice of labels to be used for training.
+        resize_inputs: Whether to resize the inputs.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
@@ -259,6 +269,7 @@ def get_pannuke_loader(
         rois=rois,
         download=download,
         custom_label_choice=custom_label_choice,
+        resize_inputs=resize_inputs,
         **dataset_kwargs
     )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
