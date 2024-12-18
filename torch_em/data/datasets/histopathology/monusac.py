@@ -212,6 +212,7 @@ def get_monusac_dataset(
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     binary: bool = False,
+    resize_inputs: bool = False,
     **kwargs
 ) -> Dataset:
     """Get the MoNuSAC dataset for nucleus segmentation in H&E stained tissue images.
@@ -225,6 +226,7 @@ def get_monusac_dataset(
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
+        resize_inputs: Whether to resize the inputs.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
@@ -235,6 +237,12 @@ def get_monusac_dataset(
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
@@ -257,6 +265,7 @@ def get_monusac_loader(
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     binary: bool = False,
+    resize_inputs: bool = False,
     **kwargs
 ) -> DataLoader:
     """Get the MoNuSAC dataloader for nucleus segmentation in H&E stained tissue images.
@@ -271,6 +280,7 @@ def get_monusac_loader(
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
+        resize_inputs: Whether to resize the inputs.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
@@ -278,7 +288,6 @@ def get_monusac_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_monusac_dataset(
-        path, patch_shape, split, organ_type=organ_type, download=download,
-        offsets=offsets, boundaries=boundaries, binary=binary, **ds_kwargs
+        path, patch_shape, split, organ_type, download, offsets, boundaries, binary, resize_inputs, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -152,6 +152,7 @@ def get_cpm_dataset(
     patch_shape: Tuple[int, int],
     data_choice: Optional[Literal['cpm15', 'cpm17']] = None,
     split: Literal["train", "val", "test"] = None,
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -161,6 +162,7 @@ def get_cpm_dataset(
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
         data_choice: The choice of data.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -168,6 +170,12 @@ def get_cpm_dataset(
         The segmentation dataset.
     """
     raw_paths, label_paths = get_cpm_paths(path, data_choice, split, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -188,6 +196,7 @@ def get_cpm_loader(
     patch_shape: Tuple[int, int],
     data_choice: Optional[Literal['cpm15', 'cpm17']] = None,
     split: Literal["train", "val", "test"] = None,
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -198,6 +207,7 @@ def get_cpm_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         data_choice: The choice of data.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -205,5 +215,5 @@ def get_cpm_loader(
         The DataLoader
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cpm_dataset(path, patch_shape, data_choice, split, download, **ds_kwargs)
+    dataset = get_cpm_dataset(path, patch_shape, data_choice, split, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
