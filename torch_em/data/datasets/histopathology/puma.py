@@ -15,8 +15,11 @@ from pathlib import Path
 from natsort import natsorted
 from typing import Union, Literal, List, Tuple
 
+import json
 import numpy as np
+import pandas as pd
 import imageio.v3 as imageio
+from sklearn.model_selection import train_test_split
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -42,7 +45,42 @@ CHECKSUM = {
 }
 
 
-def _preprocess_inputs(path, annotations):
+def _create_split_csv(path, split):
+    "This creates a split saved to a .csv file in the dataset directory"
+    csv_path = os.path.join(path, "puma_split.csv")
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df[split] = df[split].apply(lambda x: json.loads(x.replace("'", '"')))  # ensures all items from column in list.
+        split_list = df.iloc[0][split]
+
+    else:
+        metastatic_ids = [
+            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*metastatic*"))
+        ]
+        primary_ids = [
+            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*primary*"))
+        ]
+
+        # Create random splits per dataset.
+        train_ids, test_ids = train_test_split(metastatic_ids, test_size=0.2)  # 20% for test.
+        train_ids, val_ids = train_test_split(train_ids, test_size=0.15)  # 15% of the train set for val.
+        ptrain_ids, ptest_ids = train_test_split(primary_ids, test_size=0.2)  # do same as above for 'primary' samples.
+        ptrain_ids, pval_ids = train_test_split(ptrain_ids, test_size=0.15)  # do same as above for 'primary' samples.
+        train_ids.extend(ptrain_ids)
+        val_ids.extend(pval_ids)
+        test_ids.extend(ptest_ids)
+
+        split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
+
+        df = pd.DataFrame.from_dict([split_ids])
+        df.to_csv(csv_path, index=False)
+
+        split_list = split_ids[split]
+
+    return split_list
+
+
+def _preprocess_inputs(path, annotations, split):
     import h5py
     import geopandas as gpd
     from rasterio.features import rasterize
@@ -50,15 +88,19 @@ def _preprocess_inputs(path, annotations):
 
     annotation_paths = glob(os.path.join(path, "annotations", annotations, "*.geojson"))
     roi_dir = os.path.join(path, "data")
-    preprocessed_dir = os.path.join(path, "preprocessed")
+    preprocessed_dir = os.path.join(path, split, "preprocessed")
     os.makedirs(preprocessed_dir, exist_ok=True)
+
+    split_list = _create_split_csv(path, split)
+    print(f"The data split '{split}' has '{len(split_list)}' samples!")
 
     for ann_path in tqdm(annotation_paths, desc=f"Preprocessing '{annotations}'"):
         fname = os.path.basename(ann_path).replace(f"_{annotations}.geojson", ".tif")
-        volume_path = os.path.join(preprocessed_dir, Path(fname).with_suffix(".h5"))
-
         image_path = os.path.join(roi_dir, fname)
+        if os.path.basename(image_path).split(".")[0] not in split_list:
+            continue
 
+        volume_path = os.path.join(preprocessed_dir, Path(fname).with_suffix(".h5"))
         gdf = gpd.read_file(ann_path)
         minx, miny, maxx, maxy = gdf.total_bounds
 
@@ -86,22 +128,27 @@ def _preprocess_inputs(path, annotations):
 
 def get_puma_data(
     path: Union[os.PathLike, str],
+    split: Literal["train", "val", "test"],
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
     download: bool = False
-):
+) -> str:
     """Download the PUMA data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data split.
         annotations: The choice of annotations.
         download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the dataset is downloaded and stored for further preprocessing.
     """
     if annotations not in ["nuclei", "tissue"]:
         raise ValueError(f"'{annotations}' is not a valid annotation for the data.")
 
-    data_dir = os.path.join(path, "annotations", annotations)
+    data_dir = os.path.join(path, split)
     if os.path.exists(data_dir):
-        return
+        return data_dir
 
     os.makedirs(path, exist_ok=True)
 
@@ -121,11 +168,14 @@ def get_puma_data(
     )
     util.unzip(zip_path=zip_path, dst=os.path.join(path, "annotations", annotations))
 
-    _preprocess_inputs(path, annotations)
+    _preprocess_inputs(path, annotations, split)
+
+    return data_dir
 
 
 def get_puma_paths(
     path: Union[os.PathLike, str],
+    split: Literal["train", "val", "test"],
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
     download: bool = False
 ) -> List[str]:
@@ -139,14 +189,15 @@ def get_puma_paths(
     Returns:
         List of filepaths for the input data.
     """
-    get_puma_data(path, annotations, download)
-    volume_paths = natsorted(glob(os.path.join(path, "preprocessed", "*.h5")))
+    data_dir = get_puma_data(path, split, annotations, download)
+    volume_paths = natsorted(glob(os.path.join(data_dir, "preprocessed", "*.h5")))
     return volume_paths
 
 
 def get_puma_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
     download: bool = False,
     **kwargs
@@ -156,6 +207,7 @@ def get_puma_dataset(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         annotations: The choice of annotations.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -163,7 +215,7 @@ def get_puma_dataset(
     Returns:
         The segmentation dataset.
     """
-    volume_paths = get_puma_paths(path, annotations, download)
+    volume_paths = get_puma_paths(path, split, annotations, download)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=volume_paths,
@@ -182,6 +234,7 @@ def get_puma_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
     download: bool = False,
     **kwargs
@@ -192,6 +245,7 @@ def get_puma_loader(
         path: Filepath to a folder where the downloaded data will be saved.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         annotations: The choice of annotations.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -200,5 +254,5 @@ def get_puma_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_puma_dataset(path, patch_shape, annotations, download, **ds_kwargs)
+    dataset = get_puma_dataset(path, patch_shape, split, annotations, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

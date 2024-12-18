@@ -11,9 +11,12 @@ from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Literal
 
+import json
+import pandas as pd
 import imageio.v3 as imageio
+from sklearn.model_selection import train_test_split
 from skimage.measure import label as connected_components
 
 from torch.utils.data import Dataset, DataLoader
@@ -25,6 +28,30 @@ from .. import util
 
 URL = "https://zenodo.org/records/1175282/files/TNBC_NucleiSegmentation.zip"
 CHECKSUM = "da708c3a988f4ad4b9bbb9283b387faf703f0bc0e5e689927306bd27ea13a57f"
+
+
+def _create_split_csv(path, data_dir, split):
+    csv_path = os.path.join(path, 'tnbc_split.csv')
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df[split] = df[split].apply(lambda x: json.loads(x.replace("'", '"')))  # ensures all items from column in list.
+        split_list = df.iloc[0][split]
+
+    else:
+        image_names = [
+            os.path.basename(image).split(".")[0] for image in glob(os.path.join(data_dir, '*.h5'))
+        ]
+
+        train_ids, test_ids = train_test_split(image_names, test_size=0.2)  # 20% for test split.
+        train_ids, val_ids = train_test_split(train_ids, test_size=0.15)  # 15% for val split.
+        split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
+
+        df = pd.DataFrame.from_dict([split_ids])
+        df.to_csv(csv_path, index=False)
+
+        split_list = split_ids[split]
+
+    return split_list
 
 
 def _preprocess_images(path):
@@ -82,29 +109,38 @@ def get_tnbc_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     return data_dir
 
 
-def get_tnbc_paths(path: Union[os.PathLike, str], download: bool = False) -> List[int]:
+def get_tnbc_paths(
+    path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
+) -> List[int]:
     """Get paths to the TNBC data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
 
     Returns:
         List of filepaths to the preprocessed image data.
     """
     data_dir = get_tnbc_data(path, download)
-    volume_paths = natsorted(glob(os.path.join(data_dir, "*.h5")))
+    split_list = _create_split_csv(path, data_dir, split)
+    volume_paths = [os.path.join(data_dir, f"{fname}.h5") for fname in split_list]
     return volume_paths
 
 
 def get_tnbc_dataset(
-    path: Union[os.PathLike, str], patch_shape: Tuple[int, int], download: bool = False, **kwargs
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
+    download: bool = False,
+    **kwargs
 ) -> Dataset:
     """Get the TNBC dataset for nucleus segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -113,7 +149,7 @@ def get_tnbc_dataset(
     """
     label_choice = "instances"  # semantic / instances
 
-    volume_paths = get_tnbc_paths(path, download)
+    volume_paths = get_tnbc_paths(path, split, download)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=volume_paths,
@@ -128,7 +164,12 @@ def get_tnbc_dataset(
 
 
 def get_tnbc_loader(
-    path: Union[os.PathLike, str], batch_size: int, patch_shape: Tuple[int, int], download: bool = False, **kwargs
+    path: Union[os.PathLike, str],
+    batch_size: int,
+    patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
+    download: bool = False,
+    **kwargs
 ) -> DataLoader:
     """Get the TNBC dataloader for nucleus segmentation.
 
@@ -136,6 +177,7 @@ def get_tnbc_loader(
         path: Filepath to a folder where the downloaded data will be saved.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -143,5 +185,5 @@ def get_tnbc_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_tnbc_dataset(path, patch_shape, download, **ds_kwargs)
+    dataset = get_tnbc_dataset(path, patch_shape, split, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
