@@ -31,7 +31,8 @@ URL = {
     "cpm17": "https://drive.google.com/drive/folders/1sJ4nmkif6j4s2FOGj8j6i_Ye7z9w0TfA?usp=drive_link",
 }
 
-def create_split_csv(path, split): 
+
+def create_split_csv(path, split):
     image_names = [os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, 'cpm15', 'Images', '*.png'))]
     split_index = int(len(image_names)*0.8)
     random.shuffle(image_names)
@@ -52,6 +53,7 @@ def create_split_csv(path, split):
     df.to_csv(output_csv, index=False)  
     split_list = [df['image_name'].iloc[i] for i in df.index if df['split'].iloc[i] == split]
     return split_list
+
 
 def get_cpm_data(
     path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False, split: Literal["train", "val", "test"] = None,
