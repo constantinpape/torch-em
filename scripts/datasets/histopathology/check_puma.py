@@ -15,11 +15,12 @@ def check_puma():
         path=os.path.join(ROOT, "puma"),
         patch_shape=(512, 512),
         batch_size=2,
+        split="test",
         annotations="nuclei",
         download=True,
     )
 
-    check_loader(loader, 8)
+    check_loader(loader, 8, instance_labels=True, rgb=True)
 
 
 if __name__ == "__main__":
