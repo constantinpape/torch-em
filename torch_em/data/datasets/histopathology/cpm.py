@@ -17,7 +17,8 @@ from typing import Union, Literal, Optional, Tuple, List
 
 from scipy.io import loadmat
 import imageio.v3 as imageio
-
+import random
+import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
@@ -30,9 +31,30 @@ URL = {
     "cpm17": "https://drive.google.com/drive/folders/1sJ4nmkif6j4s2FOGj8j6i_Ye7z9w0TfA?usp=drive_link",
 }
 
+def create_split_csv(path, split): 
+    image_names = [os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, 'cpm15', 'Images', '*.png'))]
+    split_index = int(len(image_names)*0.8)
+    random.shuffle(image_names)
+    train_set = image_names[:split_index]
+    test_images = image_names[split_index:] 
+    val_split_index = int(len(train_set)*0.8)
+    train_images = train_set[:val_split_index]
+    val_images = train_set[val_split_index:]
+    split_data = []
+    for img in natsorted(train_images):
+        split_data.append({"image_name": img, "split": "train"})
+    for img in natsorted(test_images):
+        split_data.append({"image_name": img, "split": "test"})
+    for img in natsorted(val_images):
+        split_data.append({"image_name": img, "split": "val"})
+    output_csv = os.path.join(path, 'cpm15_split.csv')
+    df = pd.DataFrame(split_data)
+    df.to_csv(output_csv, index=False)  
+    split_list = [df['image_name'].iloc[i] for i in df.index if df['split'].iloc[i] == split]
+    return split_list
 
 def get_cpm_data(
-    path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False
+    path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False, split: Literal["train", "val", "test"] = None,
 ) -> str:
     """Obtain the CPM data.
 
@@ -74,7 +96,8 @@ def get_cpm_data(
 
 
 def get_cpm_paths(
-    path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False
+    path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], split: Literal["train", "val", "test"],
+    download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the CPM data.
 
@@ -87,15 +110,18 @@ def get_cpm_paths(
         List of filepaths to the image data.
         List of filepaths to the label data.
     """
-    data_dir = get_cpm_data(path, data_choice, download)
+    data_dir = get_cpm_data(path, data_choice, split, download)
 
     if data_choice == "cpm15":
         raw_dir, label_dir = "Images", "Labels"
+        split_list = create_split_csv(path, split)
+        raw_paths = [p for p in natsorted(glob(os.path.join(data_dir, raw_dir, "*.png"))) if os.path.basename(p).split(".")[0] in split_list]
+        label_mat_paths = [p for p in natsorted(glob(os.path.join(data_dir, label_dir, "*.mat"))) if os.path.basename(p).split(".")[0] in split_list]
     else:
-        raw_dir, label_dir = "*/Images", "*/Labels"
-
-    raw_paths = [p for p in natsorted(glob(os.path.join(data_dir, raw_dir, "*.png")))]
-    label_mat_paths = [p for p in natsorted(glob(os.path.join(data_dir, label_dir, "*.mat")))]
+        assert split in ['train', 'test'], 'Explicit val split does not exist for cpm17.'
+        raw_dir, label_dir = f"{split}/Images", f"{split}/Labels"
+        raw_paths = [p for p in natsorted(glob(os.path.join(data_dir, raw_dir, "*.png")))]
+        label_mat_paths = [p for p in natsorted(glob(os.path.join(data_dir, label_dir, "*.mat")))]
 
     label_paths = []
     for mpath in tqdm(label_mat_paths, desc="Preprocessing labels"):
@@ -116,6 +142,7 @@ def get_cpm_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     data_choice: Optional[Literal['cpm15', 'cpm17']] = None,
+    split: Literal["train", "val", "test"] = None,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -131,7 +158,7 @@ def get_cpm_dataset(
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_cpm_paths(path, data_choice, download)
+    raw_paths, label_paths = get_cpm_paths(path, data_choice, split, download)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -151,6 +178,7 @@ def get_cpm_loader(
     batch_size: int,
     patch_shape: Tuple[int, int],
     data_choice: Optional[Literal['cpm15', 'cpm17']] = None,
+    split: Literal["train", "val", "test"] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -168,5 +196,5 @@ def get_cpm_loader(
         The DataLoader
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cpm_dataset(path, patch_shape, data_choice, download, **ds_kwargs)
+    dataset = get_cpm_dataset(path, patch_shape, data_choice, split, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
