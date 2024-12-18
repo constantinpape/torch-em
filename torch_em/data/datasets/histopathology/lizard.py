@@ -127,6 +127,7 @@ def get_lizard_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     split: Literal["train", "val", "test"],
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -136,6 +137,7 @@ def get_lizard_dataset(
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
+        resize_inputs: Whether to resize the input images.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -143,6 +145,12 @@ def get_lizard_dataset(
         The segmentation dataset.
     """
     data_paths = get_lizard_paths(path, split, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=data_paths,
@@ -163,6 +171,7 @@ def get_lizard_loader(
     batch_size: int,
     patch_shape: Tuple[int, int],
     split: Literal["train", "val", "test"],
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -173,6 +182,7 @@ def get_lizard_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -180,5 +190,5 @@ def get_lizard_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    ds = get_lizard_dataset(path, patch_shape, split, download, **ds_kwargs)
+    ds = get_lizard_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(ds, batch_size, **loader_kwargs)

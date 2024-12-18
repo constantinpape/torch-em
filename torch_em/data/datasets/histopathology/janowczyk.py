@@ -161,6 +161,7 @@ def get_janowczyk_dataset(
     patch_shape: Tuple[int, int],
     split: Optional[Literal["train", "val", "test"]] = None,
     annotation: Literal['nuclei', 'epithelium', 'tubule'] = "nuclei",
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -171,6 +172,7 @@ def get_janowczyk_dataset(
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
         annotation: The choice of annotated labels.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -178,6 +180,12 @@ def get_janowczyk_dataset(
         The segmentation dataset.
     """
     raw_paths, label_paths = get_janowczyk_paths(path, split, annotation, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -198,6 +206,7 @@ def get_janowczyk_loader(
     patch_shape: Tuple[int, int],
     split: Optional[Literal["train", "val", "test"]] = None,
     annotation: Literal['nuclei', 'epithelium', 'tubule'] = "nuclei",
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -209,6 +218,7 @@ def get_janowczyk_loader(
         patch_shape: The patch shape to use for training.
         split: The choice of data split/
         annotation: The choice of annotated labels.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -216,5 +226,5 @@ def get_janowczyk_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_janowczyk_dataset(path, patch_shape, split, annotation, download, **ds_kwargs)
+    dataset = get_janowczyk_dataset(path, patch_shape, split, annotation, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

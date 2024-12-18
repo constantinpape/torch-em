@@ -17,6 +17,7 @@ def check_cpm():
         batch_size=2,
         data_choice="cpm17",
         split="train",
+        resize_inputs=True,
     )
     check_loader(loader, 8, rgb=True, instance_labels=True)
 
