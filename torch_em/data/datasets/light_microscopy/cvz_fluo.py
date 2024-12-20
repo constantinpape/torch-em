@@ -1,7 +1,7 @@
 """The CVZ-Fluo dataset contains annotations for cell and nuclei segmentation in
 fluorescence microscopy images.
 
-NOTE: You need to install synapseclient`, create an account and authentication token on Synapse,
+NOTE: You need to install 'synapseclient', create an account and authentication token on Synapse,
 and follow the documentation to create your authentication config: https://python-docs.synapse.org/tutorials/authentication/
 and install using 'synapse get -r syn27624812'.
 
@@ -47,6 +47,23 @@ def get_cvz_fluo_data(path: Union[os.PathLike, str], download: bool = False):
         raise AssertionError(f"The dataset is not downloaded. Please download it manually from '{URL}'.")
 
 
+def _preprocess_labels(label_paths):
+    neu_label_paths = []
+    for lpath in tqdm(label_paths, desc="Preprocessing labels"):
+        neu_lpath = lpath.replace(".png", ".tif")
+        neu_label_paths.append(neu_lpath)
+        if os.path.exists(neu_lpath):
+            continue
+
+        if not os.path.exists(lpath):  # HACK: some paths have weird spacing nomenclature.
+            lpath = Path(lpath).parent / rf" {os.path.basename(lpath)}"
+
+        label = imageio.imread(lpath)
+        imageio.imwrite(neu_lpath, connected_components(label).astype(label.dtype), compression="zlib")
+
+    return neu_label_paths
+
+
 def get_cvz_fluo_paths(
     path: Union[os.PathLike, str],
     stain_choice: Literal["cell", "dapi"],
@@ -80,23 +97,11 @@ def get_cvz_fluo_paths(
         glob(os.path.join(path, data_choice, f"*-Crop_{stain_choice.title()}_Png.png"), recursive=True)
     )
     label_paths = [p.replace("_Png.png", "_Mask_Png.png") for p in raw_paths]
+    label_paths = _preprocess_labels(label_paths)
 
-    neu_label_paths = []
-    for lpath in tqdm(label_paths, desc="Preprocessing labels"):
-        neu_lpath = lpath.replace(".png", ".tif")
-        neu_label_paths.append(neu_lpath)
-        if os.path.exists(neu_lpath):
-            continue
+    assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
-        if not os.path.exists(lpath):  # HACK: some paths have weird spacing nomenclature.
-            lpath = Path(lpath).parent / rf" {os.path.basename(lpath)}"
-
-        label = imageio.imread(lpath)
-        imageio.imwrite(neu_lpath, connected_components(label).astype(label.dtype), compression="zlib")
-
-    assert len(raw_paths) == len(neu_label_paths) and len(raw_paths) > 0
-
-    return raw_paths, neu_label_paths
+    return raw_paths, label_paths
 
 
 def get_cvz_fluo_dataset(
