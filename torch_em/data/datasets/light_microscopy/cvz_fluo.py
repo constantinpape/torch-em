@@ -1,7 +1,7 @@
 """The CVZ-Fluo dataset contains annotations for cell and nuclei segmentation in
 fluorescence microscopy images.
 
-NOTE: You need to install 'synapseclient`, create an account and authentication token on Synapse,
+NOTE: You need to install synapseclient`, create an account and authentication token on Synapse,
 and follow the documentation to create your authentication config: https://python-docs.synapse.org/tutorials/authentication/
 and install using 'synapse get -r syn27624812'.
 
