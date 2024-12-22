@@ -348,7 +348,7 @@ def generate_labeled_array_from_xml(shape, xml_file):
         xml_file: path relative to the current working directory where the xml file is present
 
     Returns:
-        An image of given shape with region inside contour being white..
+        An image of given shape with region inside contour being white.
     """
     # DOM object created by the minidom parser
     xDoc = minidom.parse(xml_file)
