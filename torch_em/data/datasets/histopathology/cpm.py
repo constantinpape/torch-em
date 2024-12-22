@@ -50,8 +50,6 @@ def _create_split_csv(path, split):
         train_ids, val_ids = train_test_split(train_ids, test_size=0.20)  # 15% split for val.
         split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
 
-        print(len(train_ids), len(val_ids), len(test_ids))
-
         df = pd.DataFrame.from_dict([split_ids])
         df.to_csv(csv_path)
         split_list = split_ids[split]
