@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_amd_sd():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_amd_sd_loader(
         path=os.path.join(ROOT, "amd_sd"),
