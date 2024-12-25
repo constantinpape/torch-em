@@ -75,12 +75,16 @@ def get_pengwin_data(
 
 
 def get_pengwin_paths(
-    path: Union[os.PathLike, str], modality: Literal["CT", "X-Ray"], download: bool = False
+    path: Union[os.PathLike, str],
+    split: Literal['train', 'val', 'test'],
+    modality: Literal["CT", "X-Ray"],
+    download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the PENGWIN data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
         modality: The choice of modality for inputs.
         download: Whether to download the data if it is not present.
 
@@ -88,7 +92,7 @@ def get_pengwin_paths(
         List of filepaths for the image data.
         List of filepaths for the label data.
     """
-    data_dir = get_pengwin_data(path=path, modality=modality, download=download)
+    data_dir = get_pengwin_data(path, modality, download)
 
     if modality == "CT":
         image_paths = natsorted(glob(os.path.join(data_dir, modality, "images", "*.mha")))
@@ -98,12 +102,17 @@ def get_pengwin_paths(
         image_paths = natsorted(glob(os.path.join(base_dir, "input", "images", "*.tif")))
         gt_paths = natsorted(glob(os.path.join(base_dir, "output", "images", "*.tif")))
 
+    print(len(image_paths))
+
+    assert len(image_paths) == len(gt_paths) and len(image_paths) > 0
+
     return image_paths, gt_paths
 
 
 def get_pengwin_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     modality: Literal["CT", "X-Ray"],
     resize_inputs: bool = False,
     download: bool = False,
@@ -114,6 +123,7 @@ def get_pengwin_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         modality: The choice of modality for inputs.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
@@ -122,7 +132,7 @@ def get_pengwin_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = get_pengwin_paths(path=path, modality=modality, download=download)
+    image_paths, gt_paths = get_pengwin_paths(path, split, modality, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -131,14 +141,20 @@ def get_pengwin_dataset(
         )
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths, raw_key=None, label_paths=gt_paths, label_key=None, patch_shape=patch_shape, **kwargs
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
+        patch_shape=patch_shape,
+        **kwargs
     )
 
 
 def get_pengwin_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     modality: Literal["CT", "X-Ray"],
     resize_inputs: bool = False,
     download: bool = False,
@@ -148,7 +164,9 @@ def get_pengwin_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         modality: The choice of modality for inputs.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
@@ -158,5 +176,5 @@ def get_pengwin_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_pengwin_dataset(path, patch_shape, modality, resize_inputs, download, **ds_kwargs)
+    dataset = get_pengwin_dataset(path, patch_shape, split, modality, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
