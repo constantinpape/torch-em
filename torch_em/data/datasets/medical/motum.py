@@ -55,6 +55,8 @@ def get_motum_paths(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
+        modality: The choice of imaging modality.
         download: Whether to download the data if it is not present.
 
     Returns:
