@@ -10,8 +10,7 @@ sys.path.append("..")
 
 
 def check_mice_tumseg():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_mice_tumseg_loader(
         path=os.path.join(ROOT, "mice_tumseg"),
