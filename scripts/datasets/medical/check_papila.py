@@ -17,7 +17,7 @@ def check_papila():
         batch_size=2,
         split="test",
         resize_inputs=True,
-        task="cup",
+        task="disc",
         download=True,
     )
 

@@ -122,8 +122,6 @@ def get_papila_paths(
     else:
         raise ValueError(f"'{split}' is not a valid split.")
 
-    print(len(image_paths))
-
     assert len(image_paths) == len(gt_paths) and len(image_paths) > 0
 
     return image_paths, gt_paths
