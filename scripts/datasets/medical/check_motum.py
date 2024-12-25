@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_motum():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_motum_loader(
         path=os.path.join(ROOT, "motum"),
