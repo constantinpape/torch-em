@@ -14,11 +14,12 @@ def check_motum():
     loader = get_motum_loader(
         path=os.path.join(ROOT, "motum"),
         batch_size=1,
-        patch_shape=(8, 512, 512),
-        ndim=3,
+        patch_shape=(1, 512, 512),
+        ndim=2,
+        split="train",
         resize_inputs=True,
-        modality="t1ce",
-        download=False,
+        modality="flair",
+        download=True,
     )
 
     check_loader(loader, 8)

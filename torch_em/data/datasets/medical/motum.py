@@ -46,12 +46,17 @@ def get_motum_data(path: Union[os.PathLike, str], download: bool = False) -> str
 
 
 def get_motum_paths(
-    path: Union[os.PathLike, str], modality: Literal['flair', 't1ce'], download: bool = False
+    path: Union[os.PathLike, str],
+    split: Literal['train', 'val', 'test'],
+    modality: Literal['flair', 't1ce'],
+    download: bool = False
 ) -> Tuple[List[int], List[int]]:
     """Get paths to the MOTUM data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
+        modality: The choice of imaging modality.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -66,11 +71,20 @@ def get_motum_paths(
     raw_paths = natsorted(glob(os.path.join(data_dir, "sub-*", "anat", f"sub-*_{modality}.nii.gz")))
     label_paths = natsorted(glob(os.path.join(data_dir, "derivatives", "sub-*", f"{modality}_seg_*.nii.gz")))
 
-    # Remove labels which are missing preprocessed volumes
+    # NOTE: Remove labels which are missing preprocessed volumes
     missing_inputs = ["sub-0030", "sub-0031", "sub-0032"]
     label_paths = [p for p in label_paths if all([p.find(_f) == -1 for _f in missing_inputs])]
 
-    assert len(raw_paths) == len(label_paths), (len(raw_paths), len(label_paths))
+    if split == "train":
+        raw_paths, label_paths = raw_paths[:35], label_paths[:35]
+    elif split == "val":
+        raw_paths, label_paths = raw_paths[35:45], label_paths[35:45]
+    elif split == "test":
+        raw_paths, label_paths = raw_paths[45:], label_paths[45:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
+
+    assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
     return raw_paths, label_paths
 
@@ -78,6 +92,7 @@ def get_motum_paths(
 def get_motum_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     modality: Literal['flair', 't1ce'],
     resize_inputs: bool = False,
     download: bool = False,
@@ -88,6 +103,8 @@ def get_motum_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        modality: The choice of imaging modality.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -95,7 +112,7 @@ def get_motum_dataset(
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_motum_paths(path, modality, download)
+    raw_paths, label_paths = get_motum_paths(path, split, modality, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -118,6 +135,7 @@ def get_motum_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     modality: Literal['flair', 't1ce'],
     resize_inputs: bool = False,
     download: bool = False,
@@ -129,6 +147,8 @@ def get_motum_loader(
         path: Filepath to a folder where the data is downloaded for further processing.'
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        modality: The choice of imaging modality.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -137,5 +157,5 @@ def get_motum_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_motum_dataset(path, patch_shape, modality, resize_inputs, download, **ds_kwargs)
+    dataset = get_motum_dataset(path, patch_shape, split, modality, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
