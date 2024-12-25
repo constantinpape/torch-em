@@ -10,14 +10,15 @@ sys.path.append("..")
 
 
 def check_mice_tumseg():
-    from util import ROOT
+    # from util import ROOT
+    ROOT = "/media/anwai/ANWAI/data"
 
     loader = get_mice_tumseg_loader(
         path=os.path.join(ROOT, "mice_tumseg"),
         batch_size=1,
         patch_shape=(1, 512, 512),
         ndim=2,
-        split="train",
+        split="test",
         resize_inputs=True,
         download=True,
         sampler=MinInstanceSampler(),

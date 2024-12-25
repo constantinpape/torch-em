@@ -72,6 +72,15 @@ def get_mice_tumseg_paths(
     raw_paths = natsorted(glob(os.path.join(data_dir, "Dataset*", "**", "CT*.nii.gz"), recursive=True))
     label_paths = natsorted(glob(os.path.join(data_dir, "Dataset*", "**", f"{ann_choice}*.nii.gz"), recursive=True))
 
+    if split == "train":
+        raw_paths, label_paths = raw_paths[:325], label_paths[:325]
+    elif split == "val":
+        raw_paths, label_paths = raw_paths[325:360], label_paths[325:360]
+    elif split == "test":
+        raw_paths, label_paths = raw_paths[360:], label_paths[360:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
+
     assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
     return raw_paths, label_paths
