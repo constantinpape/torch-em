@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_consep():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_consep_loader(
         path=os.path.join(ROOT, "consep"),
