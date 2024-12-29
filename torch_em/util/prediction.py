@@ -20,8 +20,7 @@ def predict_with_padding(
     with_channels=False,
     prediction_function=None
 ):
-    """Run prediction with padding for a model that can only deal with
-    inputs divisible by specific factors.
+    """Run prediction with padding for a model that can only deal with inputs divisible by specific factors.
 
     Arguments:
         model [torch.nn.Module]: the model
