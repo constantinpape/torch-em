@@ -10,8 +10,7 @@ sys.path.append("..")
 
 
 def check_yeaz():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_yeaz_loader(
         path=os.path.join(ROOT, "yeaz"),

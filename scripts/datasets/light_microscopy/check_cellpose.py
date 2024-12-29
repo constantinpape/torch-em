@@ -8,8 +8,7 @@ sys.path.append("..")
 
 
 def check_cellpose():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_cellpose_loader(
         path=os.path.join(ROOT, "cellpose"),

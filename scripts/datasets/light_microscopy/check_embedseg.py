@@ -8,8 +8,7 @@ sys.path.append("..")
 
 
 def check_embedseg():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     names = [
         "Mouse-Organoid-Cells-CBG",

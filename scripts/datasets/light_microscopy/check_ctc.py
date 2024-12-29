@@ -1,9 +1,9 @@
 import os
 import sys
 
-from torch_em.data.datasets.light_microscopy.ctc import get_ctc_segmentation_loader, CTC_CHECKSUMS
 from torch_em.util.debug import check_loader
 from torch_em.data.sampler import MinInstanceSampler
+from torch_em.data.datasets.light_microscopy.ctc import get_ctc_segmentation_loader, CTC_CHECKSUMS
 
 sys.path.append("..")
 

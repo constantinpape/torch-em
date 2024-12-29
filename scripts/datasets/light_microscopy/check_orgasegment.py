@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_orgasegment():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_orgasegment_loader(
         path=os.path.join(ROOT, "orgasegment"),
