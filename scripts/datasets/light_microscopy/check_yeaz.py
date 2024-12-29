@@ -9,21 +9,16 @@ sys.path.append("..")
 
 
 def check_yeaz():
-    from util import ROOT
-
-    choice = "phc"  # choose from 'bf' / 'phc'
-    if choice == "bf":
-        patch_shape, ndim = (512, 512), 2
-    else:
-        patch_shape, ndim = (1, 512, 512), 3
+    # from util import ROOT
+    ROOT = "/media/anwai/ANWAI/data"
 
     loader = get_yeaz_loader(
         path=os.path.join(ROOT, "yeaz"),
         batch_size=2,
-        patch_shape=patch_shape,
-        choice=choice,
-        ndim=ndim,
-        download=False,
+        patch_shape=(1, 512, 512),
+        choice="phc",  # choose from 'bf' / 'phc'
+        ndim=2,
+        download=True,
     )
 
     check_loader(loader, 8, instance_labels=True)

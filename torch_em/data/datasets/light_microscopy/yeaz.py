@@ -28,9 +28,7 @@ URL = {
 }
 
 
-def get_yeaz_data(
-    path: Union[os.PathLike, str], choice: Literal['bf, phc'], download: bool = False
-) -> str:
+def get_yeaz_data(path: Union[os.PathLike, str], choice: Literal['bf, phc'], download: bool = False) -> str:
     """Obtain the YeaZ dataset.
 
     NOTE: Please download the dataset manually.
@@ -53,10 +51,9 @@ def get_yeaz_data(
         path, "gold-standard-PhC-plus-2.tar.gz" if choice == "phc" else "gold-standard-BF-V-1.tar.gz"
     )
 
-    if not os.path.exists(tar_path) and not download:
+    if not os.path.exists(tar_path) or download:
         raise NotImplementedError(
-            "Automatic download is not supported at the moment. "
-            f"Please download the data manually from '{URL[choice]}'."
+            f"Automatic download is not supported. Please download the data manually from '{URL[choice]}'."
         )
 
     util.unzip_tarfile(tar_path=tar_path, dst=path, remove=False)
@@ -115,6 +112,7 @@ def get_yeaz_dataset(
         label_paths=label_paths,
         label_key=None,
         patch_shape=patch_shape,
+        is_seg_dataset=False,
         **kwargs
     )
 
@@ -131,6 +129,7 @@ def get_yeaz_loader(
 
     Args:
         path: Filepath to a folder where the data is expected to be downloaded for further processing.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         choice: The choice of modality for dataset.
         download: Whether to download the data if it is not present. Not implemented for this data.

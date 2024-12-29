@@ -8,14 +8,17 @@ sys.path.append("..")
 
 
 def check_cellpose():
-    from util import ROOT
+    # from util import ROOT
+    ROOT = "/media/anwai/ANWAI/data"
 
     loader = get_cellpose_loader(
         path=os.path.join(ROOT, "cellpose"),
         split="train",
         patch_shape=(512, 512),
         batch_size=1,
-        choice=None,
+        choice="cyto",
+        download=True,
+        shuffle=True,
     )
     check_loader(loader, 8, instance_labels=True)
 

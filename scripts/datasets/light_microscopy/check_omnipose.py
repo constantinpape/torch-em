@@ -9,7 +9,8 @@ sys.path.append("..")
 
 
 def check_omnipose():
-    from util import ROOT
+    # from util import ROOT
+    ROOT = "/media/anwai/ANWAI/data"
 
     loader = get_omnipose_loader(
         path=os.path.join(ROOT, "omnipose"),
