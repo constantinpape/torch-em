@@ -55,6 +55,8 @@ def get_ifnuclei_paths(path: Union[os.PathLike, str], download: bool = False) ->
     raw_paths = natsorted(glob(os.path.join(path, "rawimages", "*.tif")))
     label_paths = natsorted(glob(os.path.join(path, "groundtruth", "*")))
 
+    assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
+
     return raw_paths, label_paths
 
 
