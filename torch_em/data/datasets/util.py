@@ -101,7 +101,9 @@ def download_source(path, url, download, checksum=None, verify=True):
     _check_checksum(path, checksum)
 
 
-def download_source_gdrive(path, url, download, checksum=None, download_type="zip", expected_samples=10000):
+def download_source_gdrive(
+    path, url, download, checksum=None, download_type="zip", expected_samples=10000, quiet=True,
+):
     if os.path.exists(path):
         return
 
@@ -117,12 +119,12 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
     print("Downloading the files. Might take a few minutes...")
 
     if download_type == "zip":
-        gdown.download(url, path, quiet=False)
+        gdown.download(url, path, quiet=quiet)
         _check_checksum(path, checksum)
     elif download_type == "folder":
         assert version.parse(gdown.__version__) == version.parse("4.6.3"), "Please install 'gdown==4.6.3'."
         gdown.download_folder.__globals__["MAX_NUMBER_FILES"] = expected_samples
-        gdown.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
+        gdown.download_folder(url=url, output=path, quiet=quiet, remaining_ok=True)
     else:
         raise ValueError("`download_path` argument expects either `zip`/`folder`")
     print("Download completed.")
@@ -346,7 +348,7 @@ def generate_labeled_array_from_xml(shape, xml_file):
         xml_file: path relative to the current working directory where the xml file is present
 
     Returns:
-        An image of given shape with region inside contour being white..
+        An image of given shape with region inside contour being white.
     """
     # DOM object created by the minidom parser
     xDoc = minidom.parse(xml_file)

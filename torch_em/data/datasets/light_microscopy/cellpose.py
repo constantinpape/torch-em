@@ -129,10 +129,10 @@ def get_cellpose_dataset(
         gt_paths.extend(per_gt_paths)
 
     if "raw_transform" not in kwargs:
-        raw_transform = torch_em.transform.get_raw_transform(augmentation2=to_rgb)
+        kwargs["raw_transform"] = torch_em.transform.get_raw_transform(augmentation2=to_rgb)
 
     if "transform" not in kwargs:
-        transform = torch_em.transform.get_augmentations(ndim=2)
+        kwargs["transform"] = torch_em.transform.get_augmentations(ndim=2)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
@@ -141,8 +141,7 @@ def get_cellpose_dataset(
         label_key=None,
         is_seg_dataset=False,
         patch_shape=patch_shape,
-        raw_transform=raw_transform,
-        transform=transform,
+        ndim=2,
         **kwargs
     )
 

@@ -16,9 +16,10 @@ def check_tnbc():
         batch_size=1,
         ndim=2,
         download=True,
+        split="train",
     )
 
-    check_loader(loader, 8, instance_labels=True)
+    check_loader(loader, 8, instance_labels=True, rgb=True)
 
 
 if __name__ == "__main__":

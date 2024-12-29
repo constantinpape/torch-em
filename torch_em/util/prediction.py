@@ -12,7 +12,14 @@ except ImportError:
 from ..transform.raw import standardize
 
 
-def predict_with_padding(model, input_, min_divisible, device, with_channels=False, prediction_function=None):
+def predict_with_padding(
+    model,
+    input_,
+    min_divisible,
+    device=None,
+    with_channels=False,
+    prediction_function=None
+):
     """Run prediction with padding for a model that can only deal with
     inputs divisible by specific factors.
 
@@ -47,6 +54,9 @@ def predict_with_padding(model, input_, min_divisible, device, with_channels=Fal
 
     ndim = input_.ndim
     ndim_model = 1 + ndim if with_channels else 2 + ndim
+
+    if device is None:
+        device = next(model.parameters()).device
 
     expand_dim = (None,) * (ndim_model - ndim)
     with torch.no_grad():

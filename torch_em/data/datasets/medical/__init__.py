@@ -1,7 +1,8 @@
 from .acdc import get_acdc_dataset, get_acdc_loader
 from .acouslic_ai import get_acouslic_ai_dataset, get_acouslic_ai_loader
-from .autopet import get_autopet_dataset, get_autopet_loader
+from .amd_sd import get_amd_sd_dataset, get_amd_sd_loader
 from .amos import get_amos_dataset, get_amos_loader
+from .autopet import get_autopet_dataset, get_autopet_loader
 from .btcv import get_btcv_dataset, get_btcv_loader
 from .busi import get_busi_dataset, get_busi_loader
 from .camus import get_camus_dataset, get_camus_loader
@@ -28,6 +29,7 @@ from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
 from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
+from .mice_tumseg import get_mice_tumseg_dataset, get_mice_tumseg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
 from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .motum import get_motum_dataset, get_motum_loader
