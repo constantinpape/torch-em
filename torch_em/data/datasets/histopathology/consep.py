@@ -15,69 +15,111 @@ from pathlib import Path
 from natsort import natsorted
 from typing import Union, Tuple, List, Literal
 
-import numpy as np
-from scipy.io import loadmat
+import h5py
 import imageio.v3 as imageio
-from skimage.measure import label as connected_components
-
-from torch.utils.data import Dataset, DataLoader
-
+import numpy as np
 import torch_em
 
 from elf.segmentation.stitching import stitch_tiled_segmentation
+from scipy.io import loadmat
+from skimage.measure import label as connected_components
+from torch.utils.data import Dataset, DataLoader
 
 from .. import util
 
 
-def _preprocess_data(data_dir, split):
-    import h5py
+def _preprocess_image(raw_paths, label_paths, output_path):
 
+    # Find the start and stop coordinates for all tiles by parsing their filenames.
+    tile_coordinates = []
+    for path in raw_paths:
+        tile_coords = tuple(int(coord) for coord in Path(path).stem.split("_")[2:])
+        tile_coordinates.append(tile_coords)
+
+    # Find the dimension of the image as the maximum of the tile coordinates.
+    h = max(coord[1] for coord in tile_coordinates)
+    w = max(coord[3] for coord in tile_coordinates)
+    shape = (h, w)
+
+    # Stitch together the image data.
+    raw = np.zeros(shape + (3,), dtype="uint8")
+    for path, coords in zip(raw_paths, tile_coordinates):
+        tile_data = imageio.imread(path)
+        y1, y2, x1, x2 = coords
+        raw[y1:y2, x1:x2] = tile_data
+
+    # Stitch together the label data.
+    # First, we load the labels and apply an offset so that we have unique ids.
+    # Also, some parts of the labels are over-lapping and we make sure to only write it once.
+    offset = 0
+    labels = np.zeros(shape, dtype="uint32")
+    written = np.zeros(shape, dtype=bool)
+    for path, coords in zip(label_paths, tile_coordinates):
+        y1, y2, x1, x2 = coords
+
+        tile_labels = loadmat(path)["instance_map"]
+        tile_labels = connected_components(tile_labels).astype("uint32")
+
+        # Find the mask where we have labels in this tile, and where data was already written.
+        tile_mask = tile_labels != 0
+        tile_not_written = ~written[y1:y2, x1:x2]
+
+        # And intersect them.
+        tile_mask = np.logical_and(tile_mask, tile_not_written)
+
+        # Add up the offset to this tile, unless it is empty.
+        if tile_mask.sum() > 0:
+            tile_labels[tile_mask] += offset
+            offset = int(tile_labels.max())
+
+        # Write out what has been written and the labels.
+        written[y1:y2, x1:x2][tile_mask] = 1
+        labels[y1:y2, x1:x2][tile_mask] = tile_labels[tile_mask]
+
+    # Stitch the labels together.
+    tile_shape = (224, 224)
+    stitched_labels = stitch_tiled_segmentation(labels, tile_shape=tile_shape, overlap=1, verbose=False)
+
+    # # ##### Debugging
+    # import napari
+    # import nifty.tools as nt
+
+    # blocks = np.zeros(labels.shape, dtype="uint32")
+    # blocking = nt.blocking((0, 0), blocks.shape, tile_shape)
+    # for block_id in range(blocking.numberOfBlocks):
+    #     block = blocking.getBlock(block_id)
+    #     bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
+    #     blocks[bb] = block_id
+
+    # v = napari.Viewer()
+    # v.add_image(raw, visible=False)
+    # v.add_labels(labels, visible=False)
+    # v.add_labels(stitched_labels)
+    # v.add_labels(blocks, visible=False)
+    # v.add_labels(written, visible=False)
+    # napari.run()
+    # # import sys
+    # # sys.exit(1)
+    # # ##### Debugging
+
+    with h5py.File(output_path, "w") as f:
+        f.create_dataset("raw", data=raw.transpose(2, 0, 1), compression="gzip")
+        f.create_dataset("labels", data=stitched_labels, compression="gzip")
+
+
+def _preprocess_data(data_dir, split):
     preprocessed_dir = os.path.join(data_dir, "preprocessed", split)
     os.makedirs(preprocessed_dir, exist_ok=True)
-    for i in tqdm(range(1, 28 if split == "train" else 15), desc="Preprocessing inputs"):
-        raw_paths = natsorted(glob(os.path.join(data_dir, "tiles", f"{split}_{i}_*.png")))
+
+    n_images = 28 if split == "train" else 15
+    for image_id in tqdm(range(1, n_images), desc="Preprocessing inputs"):
+        output_path = os.path.join(preprocessed_dir, f"{image_id}.h5")
+        if os.path.exists(output_path):
+            continue
+
+        raw_paths = natsorted(glob(os.path.join(data_dir, "tiles", f"{split}_{image_id}_*.png")))
         label_paths = [p.replace("tiles", "labels").replace(".png", ".mat") for p in raw_paths]
-
-        raw_tiles, label_tiles, tile_shapes = [], [], []
-        for rpath, lpath in zip(raw_paths, label_paths):
-            tile_shapes.append(tuple(int(t) for t in Path(rpath).stem.split("_")[2:]))
-            raw_tiles.append(imageio.imread(rpath))
-            label_tiles.append(loadmat(lpath)["instance_map"])
-
-        h = max(shape[1] for shape in tile_shapes)
-        w = max(shape[3] for shape in tile_shapes)
-
-        labels = np.zeros((h, w))
-
-        raw = np.zeros((h, w, 3))
-        for tile, shape in zip(raw_tiles, tile_shapes):
-            y1, y2, x1, x2 = shape
-            raw[y1: y2, x1: x2] = tile
-
-        labels = np.zeros((h, w))
-        offset = 0
-        for tile, shape in zip(label_tiles, tile_shapes):
-            # We need to make sure that each object labels are distinct across all tiles.
-            # We separate them by running connected components and setting a recurring offset to all instances per tile.
-            tile = connected_components(tile).astype("uint32")
-            tile[tile != 0] += offset
-            offset = int(tile.max())
-
-            y1, y2, x1, x2 = shape
-            labels[y1: y2, x1: x2] = tile
-
-        stitched_labels = stitch_tiled_segmentation(labels, tile_shape=(224, 224), overlap=1)
-
-        import napari
-        v = napari.Viewer()
-        v.add_labels(labels.astype("uint32"))
-        v.add_labels(stitched_labels)
-        napari.run()
-
-        volume_path = os.path.join(preprocessed_dir, f"{i}.h5")
-        with h5py.File(volume_path, "w") as f:
-            f.create_dataset("raw", data=raw.transpose(2, 0, 1), compression="gzip")
-            f.create_dataset("labels", data=labels, compression="gzip")
+        _preprocess_image(raw_paths, label_paths, output_path)
 
 
 def get_consep_data(path: Union[os.PathLike, str], download: bool = False) -> str:
@@ -105,7 +147,7 @@ def get_consep_data(path: Union[os.PathLike, str], download: bool = False) -> st
 
 
 def get_consep_paths(
-    path: Union[os.PathLike, str], split: Literal['train', 'test'], download: bool = False
+    path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False
 ) -> List[str]:
     """Get paths to the CoNSeP data.
 
@@ -122,17 +164,17 @@ def get_consep_paths(
     _preprocess_data(data_dir, "train")
     _preprocess_data(data_dir, "test")
 
-    if split not in ['train', 'test']:
+    if split not in ["train", "test"]:
         raise ValueError(f"'{split}' is not a valid split.")
 
-    volume_paths = natsorted(glob(os.path.join(data_dir, "preprocessed", split, "*.h5")))
-    return volume_paths
+    paths = natsorted(glob(os.path.join(data_dir, "preprocessed", split, "*.h5")))
+    return paths
 
 
 def get_consep_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    split: Literal['train', 'test'],
+    split: Literal["train", "test"],
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -167,7 +209,7 @@ def get_consep_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    split: Literal['train', 'test'],
+    split: Literal["train", "test"],
     download: bool = False,
     **kwargs
 ) -> DataLoader:
