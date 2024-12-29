@@ -80,28 +80,6 @@ def _preprocess_image(raw_paths, label_paths, output_path):
     tile_shape = (224, 224)
     stitched_labels = stitch_tiled_segmentation(labels, tile_shape=tile_shape, overlap=1, verbose=False)
 
-    # # ##### Debugging
-    # import napari
-    # import nifty.tools as nt
-
-    # blocks = np.zeros(labels.shape, dtype="uint32")
-    # blocking = nt.blocking((0, 0), blocks.shape, tile_shape)
-    # for block_id in range(blocking.numberOfBlocks):
-    #     block = blocking.getBlock(block_id)
-    #     bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
-    #     blocks[bb] = block_id
-
-    # v = napari.Viewer()
-    # v.add_image(raw, visible=False)
-    # v.add_labels(labels, visible=False)
-    # v.add_labels(stitched_labels)
-    # v.add_labels(blocks, visible=False)
-    # v.add_labels(written, visible=False)
-    # napari.run()
-    # # import sys
-    # # sys.exit(1)
-    # # ##### Debugging
-
     with h5py.File(output_path, "w") as f:
         f.create_dataset("raw", data=raw.transpose(2, 0, 1), compression="gzip")
         f.create_dataset("labels", data=stitched_labels, compression="gzip")
