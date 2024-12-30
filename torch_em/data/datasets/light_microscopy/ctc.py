@@ -74,8 +74,6 @@ def get_ctc_segmentation_data(
     if dataset_name not in dataset_names:
         raise ValueError(f"Invalid dataset: {dataset_name}, choose one of {dataset_names}.")
 
-    breakpoint()
-
     data_path = os.path.join(path, split, dataset_name)
 
     if os.path.exists(data_path):
