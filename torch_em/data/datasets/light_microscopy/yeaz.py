@@ -115,8 +115,6 @@ def get_yeaz_paths(
     # Get the raw and label paths.
     raw_paths, label_paths = _create_data_splits(path, data_dir, choice, split, raw_paths)
 
-    print(len(raw_paths))
-
     assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
     return raw_paths, label_paths
