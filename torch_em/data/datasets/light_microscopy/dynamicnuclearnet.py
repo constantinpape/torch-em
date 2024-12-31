@@ -11,7 +11,7 @@ and download it yourself.
 import os
 from tqdm import tqdm
 from glob import glob
-from typing import Tuple, Union, List
+from typing import Tuple, Union, Literal, List
 
 import numpy as np
 import pandas as pd
@@ -58,9 +58,7 @@ def _create_dataset(path, zip_path):
 
 
 def get_dynamicnuclearnet_data(
-    path: Union[os.PathLike, str],
-    split: str,
-    download: bool = False,
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False,
 ) -> str:
     """Download the DynamicNuclearNet dataset.
 
@@ -76,7 +74,7 @@ def get_dynamicnuclearnet_data(
         The path where inputs are stored per split.
     """
     splits = ["train", "val", "test"]
-    assert split in splits
+    assert split in splits, f"'{split}' is not a valid split."
 
     # check if the dataset exists already
     zip_path = os.path.join(path, "DynamicNuclearNet-segmentation-v1_0.zip")
@@ -115,8 +113,8 @@ def get_dynamicnuclearnet_paths(path: Union[os.PathLike, str], split: str, downl
 
 def get_dynamicnuclearnet_dataset(
     path: Union[os.PathLike, str],
-    split: str,
     patch_shape: Tuple[int, int],
+    split: Literal['train', 'val', 'test'],
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -124,8 +122,8 @@ def get_dynamicnuclearnet_dataset(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
         patch_shape: The patch shape to use for training.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -148,9 +146,9 @@ def get_dynamicnuclearnet_dataset(
 
 def get_dynamicnuclearnet_loader(
     path: Union[os.PathLike, str],
-    split: str,
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
+    split: Literal['train', 'val', 'test'],
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -158,9 +156,9 @@ def get_dynamicnuclearnet_loader(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
-        patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -168,5 +166,5 @@ def get_dynamicnuclearnet_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_dynamicnuclearnet_dataset(path, split, patch_shape, download, **ds_kwargs)
+    dataset = get_dynamicnuclearnet_dataset(path, patch_shape, split, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

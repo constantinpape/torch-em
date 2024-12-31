@@ -15,11 +15,11 @@ def check_cvz_fluo():
         path=os.path.join(ROOT, "cvz"),
         patch_shape=(512, 512),
         batch_size=2,
-        stain_choice="cell",
+        stain_choice="dapi",
         data_choice=None,
     )
 
-    check_loader(loader, 8, instance_labels=True, plt=True, save_path="./test.png", rgb=True)
+    check_loader(loader, 8, instance_labels=True, rgb=True)
 
 
 if __name__ == "__main__":
