@@ -123,7 +123,8 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
 
     assert len(image_paths) == len(seg_paths)
     assert len(image_paths) > 0, \
-        f"No matching image paths were found. Did you pass invalid cell type naems ({cell_types})?"
+        f"No matching image paths were found. Did you pass invalid cell type names ({cell_types})?"
+
     return image_paths, seg_paths
 
 
