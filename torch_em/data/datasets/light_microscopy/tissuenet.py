@@ -1,4 +1,5 @@
-"""The TissueNet dataset contains annotations for cell segmentation in microscopy images of different tissue types.
+"""The TissueNet dataset contains annotations for cell and nucleus segmentation in microscopy images
+of different tissue types.
 
 This dataset is from the publication https://doi.org/10.1038/s41587-021-01094-0.
 Please cite it if you use this dataset for your research.
@@ -10,7 +11,7 @@ and download it yourself.
 import os
 from glob import glob
 from tqdm import tqdm
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, Literal
 
 import numpy as np
 import pandas as pd
@@ -38,17 +39,18 @@ def _create_split(path, split):
         out_path = os.path.join(split_folder, f"image_{i:04}.zarr")
         nucleus_channel = im[..., 0]
         cell_channel = im[..., 1]
-        rgb = np.stack([np.zeros_like(nucleus_channel), cell_channel, nucleus_channel])
+        rgb = np.stack([cell_channel, nucleus_channel, np.zeros_like(nucleus_channel)])
         chunks = cell_channel.shape
         with z5py.File(out_path, "a") as f:
 
-            f.create_dataset("raw/nucleus", data=im[..., 0], compression="gzip", chunks=chunks)
+            f.create_dataset("raw/nucleus", data=nucleus_channel, compression="gzip", chunks=chunks)
             f.create_dataset("raw/cell", data=cell_channel, compression="gzip", chunks=chunks)
             f.create_dataset("raw/rgb", data=rgb, compression="gzip", chunks=(3,) + chunks)
 
             # the switch 0<->1 is intentional, the data format is chaotic...
             f.create_dataset("labels/nucleus", data=label[..., 1], compression="gzip", chunks=chunks)
             f.create_dataset("labels/cell", data=label[..., 0], compression="gzip", chunks=chunks)
+
     os.remove(split_file)
 
 
@@ -60,14 +62,16 @@ def _create_dataset(path, zip_path):
         _create_split(path, split)
 
 
-def get_tissuenet_data(path: Union[os.PathLike, str], split: str, download: bool = False) -> str:
-    """Download the TissueNet dataset.
+def get_tissuenet_data(
+    path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
+) -> str:
+    """Obtain the TissueNet dataset.
 
-    NOTE: Automatic download is not supported for TissueNet datset.
+    NOTE: Automatic download is not supported for TissueNet dataset.
     Please download the dataset from https://datasets.deepcell.org/data.
 
     Args:
-        path: Filepath to a folder where the downloaded data will be saved.
+        path: Filepath to a folder where the manually downloaded data will be saved.
         split: The data split to use. Either 'train', 'val' or 'test'.
         download: Whether to download the data if it is not present.
 
@@ -93,7 +97,9 @@ def get_tissuenet_data(path: Union[os.PathLike, str], split: str, download: bool
     return split_folder
 
 
-def get_tissuenet_paths(path: Union[os.PathLike, str], split: str, download: bool = False) -> List[str]:
+def get_tissuenet_paths(
+    path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
+) -> List[str]:
     """Get paths to the TissueNet data.
 
     Args:
@@ -114,14 +120,14 @@ def get_tissuenet_paths(path: Union[os.PathLike, str], split: str, download: boo
 
 def get_tissuenet_dataset(
     path: Union[os.PathLike, str],
-    split: str,
+    split: Literal["train", "val", "test"],
     patch_shape: Tuple[int, int],
-    raw_channel: str,
-    label_channel: str,
+    raw_channel: Literal["nucleus", "cell", "rgb"],
+    label_channel: Literal["nucleus", "cell"],
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the TissueNet dataset for segmenting cells in microscopy tissue images.
+    """Get the TissueNet dataset for segmenting cells and nucleus in microscopy tissue images.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -158,15 +164,15 @@ def get_tissuenet_dataset(
 # TODO enable loading specific tissue types etc. (from the 'meta' attributes)
 def get_tissuenet_loader(
     path: Union[os.PathLike, str],
-    split: str,
+    split: Literal["train", "val", "test"],
     patch_shape: Tuple[int, int],
     batch_size: int,
-    raw_channel: str,
-    label_channel: str,
+    raw_channel: Literal["nucleus", "cell", "rgb"],
+    label_channel: Literal["nucleus", "cell"],
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the TissueNet dataloader for segmenting cells in microscopy tissue images.
+    """Get the TissueNet dataloader for segmenting cells and nucleus in microscopy tissue images.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -182,7 +188,5 @@ def get_tissuenet_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_tissuenet_dataset(
-        path, split, patch_shape, raw_channel, label_channel, download, **ds_kwargs
-    )
+    dataset = get_tissuenet_dataset(path, split, patch_shape, raw_channel, label_channel, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
