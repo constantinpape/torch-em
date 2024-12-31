@@ -22,9 +22,7 @@ CHECKSUM = "d067124d734108e46e18f65daaf17c89cb0a40bdacc6f6031815a6839e472798"
 
 
 def get_orgasegment_data(
-    path: Union[os.PathLike, str],
-    split: Literal["train", "val", "eval"],
-    download: bool = False
+    path: Union[os.PathLike, str], split: Literal["train", "val", "eval"], download: bool = False
 ) -> str:
     """Download the OrgaSegment dataset for organoid segmentation.
 
@@ -55,9 +53,7 @@ def get_orgasegment_data(
 
 
 def get_orgasegment_paths(
-    path: Union[os.PathLike, str],
-    split: Literal["train", "val", "eval"],
-    download: bool = False
+    path: Union[os.PathLike, str], split: Literal["train", "val", "eval"], download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths for the OrgaSegment data.
 
@@ -80,8 +76,8 @@ def get_orgasegment_paths(
 
 def get_orgasegment_dataset(
     path: Union[os.PathLike, str],
-    split: Literal["train", "val", "eval"],
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "eval"],
     boundaries: bool = False,
     binary: bool = False,
     download: bool = False,
@@ -91,8 +87,8 @@ def get_orgasegment_dataset(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        split: The split to download. Either 'train', 'val or 'eval'.
         patch_shape: The patch shape to use for training.
+        split: The split to download. Either 'train', 'val or 'eval'.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
         download: Whether to download the data if it is not present.
@@ -103,7 +99,7 @@ def get_orgasegment_dataset(
     """
     assert split in ["train", "val", "eval"]
 
-    image_paths, label_paths = get_orgasegment_paths(path=path, split=split, download=download)
+    image_paths, label_paths = get_orgasegment_paths(path, split, download)
 
     kwargs, _ = util.add_instance_label_transform(kwargs, add_binary_target=True, binary=binary, boundaries=boundaries)
 
@@ -120,9 +116,9 @@ def get_orgasegment_dataset(
 
 def get_orgasegment_loader(
     path: Union[os.PathLike, str],
-    split: Literal["train", "val", "eval"],
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "eval"],
     boundaries: bool = False,
     binary: bool = False,
     download: bool = False,
@@ -132,8 +128,9 @@ def get_orgasegment_loader(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        split: The split to download. Either 'train', 'val or 'eval'.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The split to download. Either 'train', 'val or 'eval'.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
         download: Whether to download the data if it is not present.
@@ -143,13 +140,5 @@ def get_orgasegment_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_orgasegment_dataset(
-        path=path,
-        split=split,
-        patch_shape=patch_shape,
-        boundaries=boundaries,
-        binary=binary,
-        download=download,
-        **ds_kwargs
-    )
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_orgasegment_dataset(path, patch_shape, split, boundaries, binary, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

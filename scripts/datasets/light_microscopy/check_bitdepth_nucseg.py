@@ -13,7 +13,8 @@ def check_bitdepth_nucseg():
     loader = get_bitdepth_nucseg_loader(
         path=os.path.join(ROOT, "bitdepth_nucseg"),
         patch_shape=(512, 512),
-        batch_size=1,
+        batch_size=2,
+        magnification=None,
         download=True,
     )
 

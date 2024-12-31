@@ -152,7 +152,6 @@ def get_dsb_paths(
         raw_paths = natsorted(glob(os.path.join(path, "full", "*", "images", f"{domain}_*.png")))
         label_paths = natsorted(glob(os.path.join(path, "full", "*", "preprocessed_labels", f"{domain}_*.tif")))
 
-    print(len(raw_paths), len(label_paths))
     assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
     return raw_paths, label_paths

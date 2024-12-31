@@ -53,7 +53,7 @@ def get_omnipose_data(path: Union[os.PathLike, str], download: bool = False) -> 
 
 def get_omnipose_paths(
     path: Union[os.PathLike, str],
-    split: str,
+    split: Literal["train", "test"],
     data_choice: Optional[Union[str, List[str]]] = None,
     download: bool = False
 ) -> Tuple[List[str], List[str]]:
@@ -70,7 +70,7 @@ def get_omnipose_paths(
         List of filepaths for the image data.
         List of filepaths for the label data.
     """
-    data_dir = get_omnipose_data(path=path, download=download)
+    data_dir = get_omnipose_data(path, download)
 
     if split not in ["train", "test"]:
         raise ValueError(f"'{split}' is not a valid split.")
@@ -167,7 +167,5 @@ def get_omnipose_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_omnipose_dataset(
-        path=path, patch_shape=patch_shape, split=split, data_choice=data_choice, download=download, **ds_kwargs
-    )
+    dataset = get_omnipose_dataset(path, patch_shape, split, data_choice, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
