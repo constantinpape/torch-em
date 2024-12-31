@@ -1,7 +1,7 @@
 """The LIVECell dataset contains phase-contrast microscopy images
 and annotations for cell segmentations for 8 different cell lines.
 
-This dataset is desceibed in the publication https://doi.org/10.1038/s41592-021-01249-6.
+This dataset is described in the publication https://doi.org/10.1038/s41592-021-01249-6.
 Please cite it if you use this dataset in your research.
 """
 
@@ -38,6 +38,8 @@ URLS = {
 }
 # TODO
 CHECKSUM = None
+
+CELL_TYPES = ['A172', 'BT474', 'BV2', 'Huh7', 'MCF7', 'SHSY5Y', 'SkBr3', 'SKOV3']
 
 
 # TODO use download flag
@@ -86,7 +88,7 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
 
 
 def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types):
-    assert COCO is not None, "pycocotools is required for processing the LiveCELL ground-truth."
+    assert COCO is not None, "pycocotools is required for processing the LIVECell ground-truth."
 
     coco = COCO(annotation_file)
     category_ids = coco.getCatIds(catNms=["cell"])
