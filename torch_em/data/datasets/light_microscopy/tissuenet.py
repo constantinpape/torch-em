@@ -1,4 +1,4 @@
-"""The TissueNet dataset contains annotations for cell and nucleis segmentation in microscopy images
+"""The TissueNet dataset contains annotations for cell and nucleus segmentation in microscopy images
 of different tissue types.
 
 This dataset is from the publication https://doi.org/10.1038/s41587-021-01094-0.
@@ -67,7 +67,7 @@ def get_tissuenet_data(
 ) -> str:
     """Obtain the TissueNet dataset.
 
-    NOTE: Automatic download is not supported for TissueNet datset.
+    NOTE: Automatic download is not supported for TissueNet dataset.
     Please download the dataset from https://datasets.deepcell.org/data.
 
     Args:
