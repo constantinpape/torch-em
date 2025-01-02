@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Callable
 
 import torch
 
@@ -54,16 +54,16 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         raw_image_paths: List[Union[str, os.PathLike]],
         label_image_paths: List[Union[str, os.PathLike]],
         patch_shape: Tuple[int, ...],
-        raw_transform=None,
-        label_transform=None,
-        label_transform2=None,
-        transform=None,
+        raw_transform: Optional[Callable] = None,
+        label_transform: Optional[Callable] = None,
+        label_transform2: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
         dtype: torch.dtype = torch.float32,
         label_dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
-        sampler=None,
+        sampler: Optional[Callable] = None,
         full_check: bool = False,
-        with_padding=True,
+        with_padding: bool = True,
     ):
         self._check_inputs(raw_image_paths, label_image_paths, full_check=full_check)
         self.raw_images = raw_image_paths

@@ -1,5 +1,5 @@
 import os
-from typing import Union, Tuple, Optional, List, Any
+from typing import Union, Tuple, Optional, List, Any, Callable
 
 import torch
 
@@ -11,23 +11,24 @@ class PseudoLabelDataset(RawDataset):
     def __init__(
         self,
         raw_path: Union[List[Any], str, os.PathLike],
-        raw_key: str,
+        raw_key: Optional[str],
         patch_shape: Tuple[int, ...],
-        pseudo_labeler,
-        raw_transform=None,
-        label_transform=None,
-        transform=None,
-        roi=None,
+        pseudo_labeler: Callable,
+        raw_transform: Optional[Callable] = None,
+        label_transform: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
+        roi: Optional[dict] = None,
         dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
-        sampler=None,
+        sampler: Optional[Callable] = None,
         ndim: Optional[Union[int]] = None,
         with_channels: bool = False,
         labeler_device: Optional[Union[str, torch.device]] = None,
     ):
-        super().__init__(raw_path, raw_key, patch_shape, raw_transform=raw_transform, transform=transform,
-                         roi=roi, dtype=dtype, n_samples=n_samples, sampler=sampler,
-                         ndim=ndim, with_channels=with_channels)
+        super().__init__(
+            raw_path, raw_key, patch_shape, raw_transform=raw_transform, transform=transform, roi=roi,
+            dtype=dtype, n_samples=n_samples, sampler=sampler, ndim=ndim, with_channels=with_channels
+        )
         self.pseudo_labeler = pseudo_labeler
         self.label_transform = label_transform
         self.labeler_device = next(pseudo_labeler.parameters()).device if labeler_device is None else labeler_device

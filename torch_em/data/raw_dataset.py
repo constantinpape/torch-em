@@ -1,7 +1,7 @@
 import os
 import warnings
 import numpy as np
-from typing import List, Union, Tuple, Optional, Any
+from typing import List, Union, Tuple, Optional, Any, Callable
 
 import torch
 
@@ -23,17 +23,17 @@ class RawDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         raw_path: Union[List[Any], str, os.PathLike],
-        raw_key: str,
+        raw_key: Optional[str],
         patch_shape: Tuple[int, ...],
-        raw_transform=None,
-        transform=None,
+        raw_transform: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
         roi: Optional[dict] = None,
         dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
-        sampler=None,
+        sampler: Optional[Callable] = None,
         ndim: Optional[int] = None,
         with_channels: bool = False,
-        augmentations=None,
+        augmentations: Optional[Callable] = None,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -44,6 +44,7 @@ class RawDataset(torch.utils.data.Dataset):
         if roi is not None:
             if isinstance(roi, slice):
                 roi = (roi,)
+
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
 
         self.shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
@@ -107,13 +108,12 @@ class RawDataset(torch.utils.data.Dataset):
                 sample_id += 1
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+
         if self.patch_shape is not None:
             raw = ensure_patch_shape(
-                raw=raw,
-                labels=None,
-                patch_shape=self.patch_shape,
-                have_raw_channels=self._with_channels
+                raw=raw, labels=None, patch_shape=self.patch_shape, have_raw_channels=self._with_channels
             )
+
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
         if len(self.patch_shape) == self._ndim + 1:
             raw = raw.squeeze(1 if self._with_channels else 0)
@@ -137,6 +137,7 @@ class RawDataset(torch.utils.data.Dataset):
             if isinstance(raw, list):
                 assert len(raw) == 1
                 raw = raw[0]
+
             if self.trafo_halo is not None:
                 raw = self.crop(raw)
 
@@ -168,4 +169,5 @@ class RawDataset(torch.utils.data.Dataset):
             msg += "But it cannot be used for further training and wil throw an error."
             warnings.warn(msg)
             state["raw"] = None
+
         self.__dict__.update(state)

@@ -54,6 +54,7 @@ def auto_compile(model, compile_model, default_compile=True):
     if compile_model:
         if torch_major < 2:
             raise RuntimeError("Model compilation is only supported for pytorch 2")
+
         print("Compiling pytorch model ...")
         if isinstance(compile_model, str):
             model = torch.compile(model, mode=compile_model)
@@ -203,10 +204,14 @@ def get_constructor_arguments(obj):
 
     # we don't need to find the constructor arguments for optimizers or schedulers
     # because we deserialize the state later
-    if isinstance(obj, (torch.optim.Optimizer,
-                        torch.optim.lr_scheduler._LRScheduler,
-                        # ReduceLROnPlateau does not inherit from _LRScheduler
-                        torch.optim.lr_scheduler.ReduceLROnPlateau)):
+    if isinstance(
+        obj, (
+            torch.optim.Optimizer,
+            torch.optim.lr_scheduler._LRScheduler,
+            # ReduceLROnPlateau does not inherit from _LRScheduler
+            torch.optim.lr_scheduler.ReduceLROnPlateau
+        )
+    ):
         return {}
 
     # recover the arguments for torch dataloader
@@ -214,9 +219,12 @@ def get_constructor_arguments(obj):
         # These are all the "simple" arguements.
         # "sampler", "batch_sampler" and "worker_init_fn" are more complicated
         # and generally not used in torch_em
-        return _get_args(obj, ["batch_size", "shuffle", "num_workers",
-                               "pin_memory", "drop_last", "persistent_workers",
-                               "prefetch_factor", "timeout"])
+        return _get_args(
+            obj, [
+                "batch_size", "shuffle", "num_workers", "pin_memory", "drop_last",
+                "persistent_workers", "prefetch_factor", "timeout"
+            ]
+        )
 
     # TODO support common torch losses (e.g. CrossEntropy, BCE)
 
@@ -234,9 +242,7 @@ def get_trainer(checkpoint, name="best", device=None):
     # try to load from file
     if isinstance(checkpoint, str):
         assert os.path.exists(checkpoint), checkpoint
-        trainer = torch_em.trainer.DefaultTrainer.from_checkpoint(checkpoint,
-                                                                  name=name,
-                                                                  device=device)
+        trainer = torch_em.trainer.DefaultTrainer.from_checkpoint(checkpoint, name=name, device=device)
     else:
         trainer = checkpoint
     assert isinstance(trainer, torch_em.trainer.DefaultTrainer)

@@ -1,4 +1,7 @@
+from typing import Union, Optional, Tuple, Dict, Callable
+
 import numpy as np
+
 import torch
 from torchvision import transforms
 
@@ -23,14 +26,21 @@ TORCH_DTYPES = {
 }
 
 
-def cast(inpt, typestring):
+def cast(inpt: Union[np.ndarray, torch.tensor], typestring: torch.dtype):
     if torch.is_tensor(inpt):
         assert typestring in TORCH_DTYPES, f"{typestring} not in TORCH_DTYPES"
         return inpt.to(TORCH_DTYPES[typestring])
+
     return inpt.astype(typestring)
 
 
-def standardize(raw, mean=None, std=None, axis=None, eps=1e-7):
+def standardize(
+    raw: np.ndarray,
+    mean: Optional[float] = None,
+    std: Optional[float] = None,
+    axis: Optional[int] = None,
+    eps: float = 1e-7,
+):
     raw = cast(raw, "float32")
 
     mean = raw.mean(axis=axis, keepdims=True) if mean is None else mean
@@ -62,7 +72,13 @@ def _normalize_torch(tensor, minval, maxval, axis, eps):
     return tensor
 
 
-def normalize(raw, minval=None, maxval=None, axis=None, eps=1e-7):
+def normalize(
+    raw: Union[torch.tensor, np.ndarray],
+    minval: Optional[float] = None,
+    maxval: Optional[float] = None,
+    axis: Optional[int] = None,
+    eps: float = 1e-7,
+):
     raw = cast(raw, "float32")
 
     if torch.is_tensor(raw):
@@ -77,7 +93,13 @@ def normalize(raw, minval=None, maxval=None, axis=None, eps=1e-7):
     return raw
 
 
-def normalize_percentile(raw, lower=1.0, upper=99.0, axis=None, eps=1e-7):
+def normalize_percentile(
+    raw: np.ndarray,
+    lower: float = 1.0,
+    upper: float = 99.0,
+    axis: Optional[int] = None,
+    eps: float = 1e-7,
+):
     v_lower = np.percentile(raw, lower, axis=axis, keepdims=True)
     v_upper = np.percentile(raw, upper, axis=axis, keepdims=True) - v_lower
     return normalize(raw, v_lower, v_upper, eps=eps)
@@ -89,10 +111,11 @@ def normalize_percentile(raw, lower=1.0, upper=99.0, axis=None, eps=1e-7):
 
 # modified from https://github.com/kreshuklab/spoco/blob/main/spoco/transforms.py
 class RandomContrast():
+    """Adjust contrast by scaling image to `mean + alpha * (image - mean)`.
     """
-    Adjust contrast by scaling image to `mean + alpha * (image - mean)`.
-    """
-    def __init__(self, alpha=(0.5, 2), mean=0.5, clip_kwargs={'a_min': 0, 'a_max': 1}):
+    def __init__(
+        self, alpha: Tuple[float, float] = (0.5, 2), mean: float = 0.5, clip_kwargs: Dict = {'a_min': 0, 'a_max': 1}
+    ):
         self.alpha = alpha
         self.mean = mean
         self.clip_kwargs = clip_kwargs
@@ -100,50 +123,52 @@ class RandomContrast():
     def __call__(self, img):
         alpha = np.random.uniform(self.alpha[0], self.alpha[1])
         result = self.mean + alpha * (img - self.mean)
+
         if self.clip_kwargs:
             return np.clip(result, **self.clip_kwargs)
+
         return result
 
 
 class AdditiveGaussianNoise():
+    """Add random Gaussian noise to image.
     """
-    Add random Gaussian noise to image.
-    """
-    def __init__(self, scale=(0.0, 0.3), clip_kwargs={'a_min': 0, 'a_max': 1}):
+    def __init__(self, scale: Tuple[float, float] = (0.0, 0.3), clip_kwargs: Dict = {'a_min': 0, 'a_max': 1}):
         self.scale = scale
         self.clip_kwargs = clip_kwargs
 
     def __call__(self, img):
         std = np.random.uniform(self.scale[0], self.scale[1])
         gaussian_noise = np.random.normal(0, std, size=img.shape)
+
         if self.clip_kwargs:
             return np.clip(img + gaussian_noise, 0, 1)
+
         return img + gaussian_noise
 
 
 class AdditivePoissonNoise():
+    """Add random Poisson noise to image.
     """
-    Add random Poisson noise to image.
-    """
-    # TODO: not sure if Poisson noise like this does make sense
-    # for data that is already normalized
-    def __init__(self, lam=(0.0, 0.1), clip_kwargs={'a_min': 0, 'a_max': 1}):
+    # TODO: not sure if Poisson noise like this does make sense for data that is already normalized
+    def __init__(self, lam: Tuple[float, float] = (0.0, 0.1), clip_kwargs: Dict = {'a_min': 0, 'a_max': 1}):
         self.lam = lam
         self.clip_kwargs = clip_kwargs
 
     def __call__(self, img):
         lam = np.random.uniform(self.lam[0], self.lam[1])
         poisson_noise = np.random.poisson(lam, size=img.shape) / lam
+
         if self.clip_kwargs:
             return np.clip(img + poisson_noise, 0, 1)
+
         return img + poisson_noise
 
 
 class PoissonNoise():
+    """Add random data-dependent Poisson noise to image.
     """
-    Add random data-dependent Poisson noise to image.
-    """
-    def __init__(self, multiplier=(5.0, 10.0), clip_kwargs={'a_min': 0, 'a_max': 1}):
+    def __init__(self, multiplier: Tuple[float, float] = (5.0, 10.0), clip_kwargs: Dict = {'a_min': 0, 'a_max': 1}):
         self.multiplier = multiplier
         self.clip_kwargs = clip_kwargs
 
@@ -151,18 +176,21 @@ class PoissonNoise():
         multiplier = np.random.uniform(self.multiplier[0], self.multiplier[1])
         offset = img.min()
         poisson_noise = np.random.poisson((img - offset) * multiplier)
+
         if isinstance(img, torch.Tensor):
             poisson_noise = torch.Tensor(poisson_noise)
         poisson_noise = poisson_noise / multiplier + offset
+
         if self.clip_kwargs:
             return np.clip(poisson_noise, **self.clip_kwargs)
+
         return poisson_noise
 
 
 class GaussianBlur():
     """Blur the image with a randomly drawn sigma / bandwidth value.
     """
-    def __init__(self, sigma=(0, 3.0)):
+    def __init__(self, sigma: Tuple[float, float] = (0, 3.0)):
         self.sigma = sigma
 
     def __call__(self, img):
@@ -172,7 +200,9 @@ class GaussianBlur():
         kernel_size = int(2 * np.ceil(3 * sigma) + 1)
         if isinstance(img, np.ndarray):
             img = torch.from_numpy(img)
+
         out = transforms.GaussianBlur(kernel_size, sigma=sigma)(img)
+
         return out
 
 
@@ -182,7 +212,9 @@ class GaussianBlur():
 #
 
 class RawTransform:
-    def __init__(self, normalizer, augmentation1=None, augmentation2=None):
+    def __init__(
+        self, normalizer: Callable, augmentation1: Optional[Callable] = None, augmentation2: Optional[Callable] = None
+    ):
         self.normalizer = normalizer
         self.augmentation1 = augmentation1
         self.augmentation2 = augmentation2
@@ -190,38 +222,41 @@ class RawTransform:
     def __call__(self, raw):
         if self.augmentation1 is not None:
             raw = self.augmentation1(raw)
+
         raw = self.normalizer(raw)
+
         if self.augmentation2 is not None:
             raw = self.augmentation2(raw)
+
         return raw
 
 
 def get_raw_transform(normalizer=standardize, augmentation1=None, augmentation2=None):
-    return RawTransform(normalizer,
-                        augmentation1=augmentation1,
-                        augmentation2=augmentation2)
+    return RawTransform(normalizer, augmentation1=augmentation1, augmentation2=augmentation2)
 
 
 # The default values are made for an image with pixel values in
 # range [0, 1]. That the image is in this range is ensured by an
 # initial normalizations step.
 def get_default_mean_teacher_augmentations(
-    p=0.3, norm=None,
-    blur_kwargs=None, poisson_kwargs=None, gaussian_kwargs=None
+    p: float = 0.3,
+    norm: Optional[Callable] = None,
+    blur_kwargs: Dict = None,
+    poisson_kwargs: Dict = None,
+    gaussian_kwargs: Dict = None,
 ):
     if norm is None:
         norm = normalize
+
     aug1 = transforms.Compose([
         norm,
         transforms.RandomApply([GaussianBlur(**({} if blur_kwargs is None else blur_kwargs))], p=p),
         transforms.RandomApply([PoissonNoise(**({} if poisson_kwargs is None else poisson_kwargs))], p=p/2),
         transforms.RandomApply([AdditiveGaussianNoise(**({} if gaussian_kwargs is None else gaussian_kwargs))], p=p/2),
     ])
+
     aug2 = transforms.RandomApply(
         [RandomContrast(clip_kwargs={"a_min": 0, "a_max": 1})], p=p
     )
-    return get_raw_transform(
-        normalizer=norm,
-        augmentation1=aug1,
-        augmentation2=aug2
-    )
+
+    return get_raw_transform(normalizer=norm, augmentation1=aug1, augmentation2=aug2)

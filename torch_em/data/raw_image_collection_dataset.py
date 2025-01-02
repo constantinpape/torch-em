@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from typing import List, Union, Tuple, Optional, Any
+from typing import List, Union, Tuple, Optional, Any, Callable
 
 import torch
 
@@ -37,12 +37,12 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         self,
         raw_image_paths: Union[List[Any], str, os.PathLike],
         patch_shape: Tuple[int, ...],
-        raw_transform=None,
-        transform=None,
+        raw_transform: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
         dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
-        sampler=None,
-        augmentations=None,
+        sampler: Optional[Callable] = None,
+        augmentations: Optional[Callable] = None,
         full_check: bool = False,
     ):
         self._check_inputs(raw_image_paths, full_check)
@@ -77,8 +77,7 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
 
     def _sample_bounding_box(self, shape):
         bb_start = [
-            np.random.randint(0, sh - psh) if sh - psh > 0 else 0
-            for sh, psh in zip(shape, self.patch_shape)
+            np.random.randint(0, sh - psh) if sh - psh > 0 else 0 for sh, psh in zip(shape, self.patch_shape)
         ]
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, self.patch_shape))
 
@@ -86,6 +85,7 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
         shape = raw.shape
         if have_raw_channels and channel_first:
             shape = shape[1:]
+
         if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
             pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
 
@@ -102,6 +102,7 @@ class RawImageCollectionDataset(torch.utils.data.Dataset):
     def _get_sample(self, index):
         if self.sample_random_index:
             index = np.random.randint(0, len(self.raw_images))
+
         raw = load_image(self.raw_images[index])
         have_raw_channels = raw.ndim == 3
 

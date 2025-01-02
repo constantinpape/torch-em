@@ -1,6 +1,6 @@
 import os
 from glob import glob
-from typing import Any, Dict, Optional, Union, Tuple, List
+from typing import Any, Dict, Optional, Union, Tuple, List, Callable
 
 import torch
 import torch.utils.data
@@ -128,6 +128,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
         rpath.sort()
         if len(rpath) == 0:
             raise ValueError(f"Could not find any images for pattern {os.path.join(rpath, rkey)}")
+
         lpath = glob(os.path.join(lpath, lkey))
         lpath.sort()
         if len(rpath) != len(lpath):
@@ -149,11 +150,13 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
     if isinstance(raw_paths, str):
         raw_paths, label_paths = _get_paths(raw_paths, raw_key, label_paths, label_key, roi)
         ds = ImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape, **kwargs)
+
     elif raw_key is None:
         assert label_key is None
         assert isinstance(raw_paths, (list, tuple)) and isinstance(label_paths, (list, tuple))
         assert len(raw_paths) == len(label_paths)
         ds = ImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape, **kwargs)
+
     else:
         ds = []
         n_samples = kwargs.pop("n_samples", None)
@@ -169,6 +172,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
             dset = ImageCollectionDataset(rpath, lpath, patch_shape=patch_shape, n_samples=samples_per_ds[i], **kwargs)
             ds.append(dset)
         ds = ConcatDataset(*ds)
+
     return ds
 
 
@@ -181,10 +185,13 @@ def _get_default_transform(path, key, is_seg_dataset, ndim):
             # heuristics to figure out whether to use default 3d
             # or default anisotropic augmentations
             ndim = "anisotropic" if shape[0] < shape[1] // 2 else 3
+
     elif is_seg_dataset and ndim is not None:
         pass
+
     else:
         ndim = 2
+
     return get_augmentations(ndim)
 
 
@@ -195,15 +202,15 @@ def default_segmentation_loader(
     label_key: Optional[str],
     batch_size: int,
     patch_shape: Tuple[int, ...],
-    label_transform=None,
-    label_transform2=None,
-    raw_transform=None,
-    transform=None,
+    label_transform: Optional[Callable] = None,
+    label_transform2: Optional[Callable] = None,
+    raw_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
     dtype: torch.device = torch.float32,
     label_dtype: torch.device = torch.float32,
-    rois: Optional[Union[Dict[str, Any], List[Any]]] = None,
+    rois: Optional[Union[slice, Tuple[slice, ...]]] = None,
     n_samples: Optional[int] = None,
-    sampler=None,
+    sampler: Optional[Callable] = None,
     ndim: Optional[int] = None,
     is_seg_dataset: Optional[bool] = None,
     with_channels: bool = False,
@@ -211,6 +218,7 @@ def default_segmentation_loader(
     verify_paths: bool = True,
     **loader_kwargs,
 ) -> torch.utils.data.DataLoader:
+
     ds = default_segmentation_dataset(
         raw_paths=raw_paths,
         raw_key=raw_key,
@@ -232,6 +240,7 @@ def default_segmentation_loader(
         with_label_channels=with_label_channels,
         verify_paths=verify_paths,
     )
+
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
 
@@ -241,24 +250,24 @@ def default_segmentation_dataset(
     label_paths: Union[List[Any], str, os.PathLike],
     label_key: Optional[str],
     patch_shape: Tuple[int, ...],
-    label_transform=None,
-    label_transform2=None,
-    raw_transform=None,
-    transform=None,
+    label_transform: Optional[Callable] = None,
+    label_transform2: Optional[Callable] = None,
+    raw_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
     dtype: torch.dtype = torch.float32,
     label_dtype: torch.dtype = torch.float32,
-    rois: Optional[Union[Dict[str, Any], List[Any]]] = None,
+    rois: Optional[Union[slice, Tuple[slice, ...]]] = None,
     n_samples: Optional[int] = None,
-    sampler=None,
-
+    sampler: Optional[Callable] = None,
     ndim: Optional[int] = None,
     is_seg_dataset: Optional[bool] = None,
     with_channels: bool = False,
     with_label_channels: bool = False,
     verify_paths: bool = True,
     with_padding: bool = True,
-    z_ext = None,
+    z_ext: Optional[int] = None,
 ) -> torch.utils.data.Dataset:
+
     if verify_paths:
         check_paths(raw_paths, label_paths)
 
@@ -297,6 +306,7 @@ def default_segmentation_dataset(
             with_padding=with_padding,
             z_ext=z_ext,
         )
+
     else:
         ds = _load_image_collection_dataset(
             raw_paths,
@@ -338,7 +348,7 @@ def default_segmentation_trainer(
     train_loader: DataLoader,
     val_loader: DataLoader,
     loss: Optional[torch.nn.Module] = None,
-    metric=None,
+    metric: Optional[Callable] = None,
     learning_rate: float = 1e-3,
     device: Optional[Union[str, torch.device]] = None,
     log_image_interval: int = 100,
@@ -354,6 +364,7 @@ def default_segmentation_trainer(
     compile_model: Optional[Union[bool, str]] = None,
     rank:  Optional[int] = None,
 ):
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, **optimizer_kwargs)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)
 
@@ -389,4 +400,5 @@ def default_segmentation_trainer(
         compile_model=compile_model,
         rank=rank,
     )
+
     return trainer

@@ -1,13 +1,14 @@
 import os
-import imageio
 import numpy as np
+
+import imageio.v3 as imageio
 
 from elf.io import open_file
 from elf.util import normalize_index
 
-from ..data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
-from .util import get_trainer, get_normalizer
 from .prediction import predict_with_halo
+from .util import get_trainer, get_normalizer
+from ..data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
 
 try:
     import napari
@@ -49,9 +50,10 @@ class SampleGenerator:
     def paths_from_ds(self, dataset):
         if isinstance(dataset, ConcatDataset):
             datasets = dataset.datasets
-            (n_samples, load_2d_from_3d, rois,
-             raw_paths, raw_key,
-             label_paths, label_key) = self.paths_from_ds(datasets[0])
+            (
+                n_samples, load_2d_from_3d, rois, raw_paths,
+                raw_key, label_paths, label_key
+            ) = self.paths_from_ds(datasets[0])
 
             for ds in datasets[1:]:
                 ns, l2d3d, bb, rp, rk, lp, lk = self.paths_from_ds(ds)
@@ -170,8 +172,9 @@ def _predict(model, raw, trainer, gpu_ids, save_path, sample_id):
         f = open_file(save_path, 'a')
         out_shape = (trainer.model.out_channels,) + raw.shape
         chunks = (1,) + block_shape
-        output = f.create_dataset(save_key, shape=out_shape, chunks=chunks,
-                                  compression='gzip', dtype='float32')
+        output = f.create_dataset(
+            save_key, shape=out_shape, chunks=chunks, compression='gzip', dtype='float32'
+        )
 
     gpu_ids = [int(gpu) if gpu != 'cpu' else gpu for gpu in gpu_ids]
     pred = predict_with_halo(
@@ -251,6 +254,6 @@ def main():
     args = parser.parse_args()
     # TODO implement loading data
     assert args.data is None
-    validate_checkpoint(args.path, args.gpus, args.save_path,
-                        max_samples=args.max_samples,
-                        n_threads=args.n_threads)
+    validate_checkpoint(
+        args.path, args.gpus, args.save_path, max_samples=args.max_samples, n_threads=args.n_threads
+    )

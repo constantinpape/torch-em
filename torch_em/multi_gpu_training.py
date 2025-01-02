@@ -63,7 +63,7 @@ def _train_impl(
     optimizer_kwargs: Optional[Dict[str, Any]] = None,
     lr_scheduler_callable: Optional[Callable[[Any], torch.optim.lr_scheduler._LRScheduler]] = None,
     lr_scheduler_kwargs: Optional[Dict[str, Any]] = None,
-    trainer_callable=None,
+    trainer_callable: Optional[Callable] = None,
     **kwargs
 ):
     assert "device" not in kwargs
@@ -113,7 +113,7 @@ def train_multi_gpu(
     optimizer_kwargs: Optional[Dict[str, Any]] = None,
     lr_scheduler_callable: Optional[Callable[[Any], torch.optim.lr_scheduler._LRScheduler]] = None,
     lr_scheduler_kwargs: Optional[Dict[str, Any]] = None,
-    trainer_callable=None,
+    trainer_callable: Optional[Callable] = None,
     **kwargs
 ) -> None:
     """
