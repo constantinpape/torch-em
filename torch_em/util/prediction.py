@@ -1,9 +1,13 @@
-from concurrent import futures
+from tqdm import tqdm
 from copy import deepcopy
+from concurrent import futures
+from typing import Tuple, Union, Callable, Any, List, Optional
 
-import nifty.tools as nt
 import numpy as np
+import nifty.tools as nt
+
 import torch
+
 try:
     from napari.utils import progress as tqdm
 except ImportError:
@@ -13,12 +17,12 @@ from ..transform.raw import standardize
 
 
 def predict_with_padding(
-    model,
-    input_,
-    min_divisible,
-    device=None,
-    with_channels=False,
-    prediction_function=None
+    model: torch.nn.Module,
+    input_: np.ndarray,
+    min_divisible: Tuple[int, int],
+    device: Optional[Union[torch.device, str]] = None,
+    with_channels: bool = False,
+    prediction_function: Callable[[Any], Any] = None
 ):
     """Run prediction with padding for a model that can only deal with inputs divisible by specific factors.
 
@@ -119,19 +123,19 @@ def _load_block(input_, offset, block_shape, halo, padding_mode="reflect", with_
 
 # TODO half precision prediction
 def predict_with_halo(
-    input_,
-    model,
-    gpu_ids,
-    block_shape,
-    halo,
-    output=None,
-    preprocess=standardize,
-    postprocess=None,
-    with_channels=False,
-    skip_block=None,
-    mask=None,
-    disable_tqdm=False,
-    tqdm_desc="predict with halo",
+    input_: np.ndarray,
+    model: torch.nn.Module,
+    gpu_ids: List[Union[str, int]],
+    block_shape: Tuple[int, ...],
+    halo: Tuple[int, ...],
+    output: Optional[Union[np.ndarray, ]] = None,
+    preprocess: Callable[[Union[torch.Tensor, np.ndarray]], Union[torch.Tensor, np.ndarray]] = standardize,
+    postprocess: Callable[[np.ndarray], np.ndarray] = None,
+    with_channels: bool = False,
+    skip_block: Callable[[Any], bool] = None,
+    mask: np.ndarray = None,
+    disable_tqdm: bool = False,
+    tqdm_desc: str = "predict with halo",
     prediction_function=None,
     roi=None,
 ):

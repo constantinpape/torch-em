@@ -1,7 +1,7 @@
 import os
 import warnings
 import numpy as np
-from typing import List, Union, Tuple, Optional, Any
+from typing import List, Union, Tuple, Optional, Any, Dict
 
 import torch
 
@@ -26,15 +26,15 @@ class SegmentationDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         raw_path: Union[List[Any], str, os.PathLike],
-        raw_key: str,
+        raw_key: Optional[str],
         label_path: Union[List[Any], str, os.PathLike],
-        label_key: str,
+        label_key: Optional[str],
         patch_shape: Tuple[int, ...],
         raw_transform=None,
         label_transform=None,
         label_transform2=None,
         transform=None,
-        roi: Optional[dict] = None,
+        roi: Optional[Union[Dict[str, Any], List[Any]]] = None,
         dtype: torch.dtype = torch.float32,
         label_dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
