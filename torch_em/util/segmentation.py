@@ -1,15 +1,18 @@
-import numpy as np
+from typing import Optional, List
 
-import vigra
-import elf.segmentation as elseg
-from elf.segmentation.utils import normalize_input
-from elf.segmentation.mutex_watershed import mutex_watershed
+import numpy as np
 
 from skimage.measure import label
 from skimage.filters import gaussian
 from skimage.segmentation import watershed
 from skimage.feature import peak_local_max
 from scipy.ndimage import distance_transform_edt
+
+import vigra
+
+import elf.segmentation as elseg
+from elf.segmentation.utils import normalize_input
+from elf.segmentation.mutex_watershed import mutex_watershed
 
 
 #
@@ -18,7 +21,9 @@ from scipy.ndimage import distance_transform_edt
 
 
 # could also refactor this into elf
-def size_filter(seg, min_size, hmap=None, with_background=False):
+def size_filter(
+    seg: np.ndarray, min_size: int, hmap: Optional[np.ndarray] = None, with_background: bool = False
+) -> np.ndarray:
     if min_size == 0:
         return seg
 
@@ -38,7 +43,14 @@ def size_filter(seg, min_size, hmap=None, with_background=False):
     return seg
 
 
-def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=50, threshold=0.5, strides=None):
+def mutex_watershed_segmentation(
+    foreground: np.ndarray,
+    affinities: np.ndarray,
+    offsets: List[List[int]],
+    min_size: int = 50,
+    threshold: float = 0.5,
+    strides: Optional[List[int]] = None
+) -> np.ndarray:
     """Computes the mutex watershed segmentation using the affinity maps for respective pixel offsets
 
     Arguments:
@@ -47,16 +59,21 @@ def mutex_watershed_segmentation(foreground, affinities, offsets, min_size=50, t
         - offsets: [list[list[int]]] - The pixel offsets corresponding to the affinity channels
         - min_size: [int] - The minimum pixels (below which) to filter objects
         - threshold: [float] - To threshold foreground predictions
+        - strides: [list[int]] - The strides used to sub-sample long range edges.
     """
     mask = (foreground >= threshold)
     if strides is None:
         strides = [2] * foreground.ndim
+
     seg = mutex_watershed(affinities, offsets=offsets, mask=mask, strides=strides, randomize_strides=True)
     seg = size_filter(seg.astype("uint32"), min_size=min_size, hmap=affinities, with_background=True)
+
     return seg
 
 
-def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
+def connected_components_with_boundaries(
+    foreground: np.ndarray, boundaries: np.ndarray, threshold: float = 0.5
+) -> np.ndarray:
     input_ = np.clip(foreground - boundaries, 0, 1)
     seeds = label(input_ > threshold)
     mask = normalize_input(foreground > threshold)
@@ -64,7 +81,13 @@ def connected_components_with_boundaries(foreground, boundaries, threshold=0.5):
     return seg.astype("uint64")
 
 
-def watershed_from_components(boundaries, foreground, min_size=50, threshold1=0.5, threshold2=0.5):
+def watershed_from_components(
+    boundaries: np.ndarray,
+    foreground: np.ndarray,
+    min_size: int = 50,
+    threshold1: float = 0.5,
+    threshold2: float = 0.5,
+) -> np.ndarray:
     """The default approach:
     - Subtract the boundaries from the foreground to separate touching objects.
     - Use the connected components of this as seeds.
@@ -88,7 +111,14 @@ def watershed_from_components(boundaries, foreground, min_size=50, threshold1=0.
     return seg
 
 
-def watershed_from_maxima(boundaries, foreground, min_distance, min_size=50, sigma=1.0, threshold1=0.5):
+def watershed_from_maxima(
+    boundaries: np.ndarray,
+    foreground: np.ndarray,
+    min_distance: int,
+    min_size: int = 50,
+    sigma: float = 1.0,
+    threshold1: float = 0.5,
+) -> np.ndarray:
     """Find objects via seeded watershed starting from the maxima of the distance transform instead.
     This has the advantage that objects can be better separated, but it may over-segment
     if the objects have complex shapes.
@@ -109,8 +139,8 @@ def watershed_from_maxima(boundaries, foreground, min_distance, min_size=50, sig
     """
     mask = foreground > threshold1
     boundary_distances = distance_transform_edt(boundaries < 0.1)
-    boundary_distances[~mask] = 0  # type: ignore
-    boundary_distances = gaussian(boundary_distances, sigma)  # type: ignore
+    boundary_distances[~mask] = 0
+    boundary_distances = gaussian(boundary_distances, sigma)
     seed_points = peak_local_max(boundary_distances, min_distance=min_distance, exclude_border=False)
     seeds = np.zeros(mask.shape, dtype="uint32")
     seeds[seed_points[:, 0], seed_points[:, 1]] = np.arange(1, len(seed_points) + 1)
@@ -120,16 +150,16 @@ def watershed_from_maxima(boundaries, foreground, min_distance, min_size=50, sig
 
 
 def watershed_from_center_and_boundary_distances(
-    center_distances,
-    boundary_distances,
-    foreground_map,
-    center_distance_threshold=0.5,
-    boundary_distance_threshold=0.5,
-    foreground_threshold=0.5,
-    distance_smoothing=1.6,
-    min_size=0,
-    debug=False,
-):
+    center_distances: np.ndarray,
+    boundary_distances: np.ndarray,
+    foreground_map: np.ndarray,
+    center_distance_threshold: float = 0.5,
+    boundary_distance_threshold: float = 0.5,
+    foreground_threshold: float = 0.5,
+    distance_smoothing: float = 1.6,
+    min_size: int = 0,
+    debug: bool = False,
+) -> np.ndarray:
     """Seeded watershed based on distance predictions to object center and boundaries.
 
     The seeds are computed by finding connected components where both distance predictions
@@ -159,8 +189,7 @@ def watershed_from_center_and_boundary_distances(
     fg_mask = foreground_map > foreground_threshold
 
     marker_map = np.logical_and(
-        center_distances < center_distance_threshold,
-        boundary_distances < boundary_distance_threshold
+        center_distances < center_distance_threshold, boundary_distances < boundary_distance_threshold
     )
     marker_map[~fg_mask] = 0
     markers = label(marker_map)

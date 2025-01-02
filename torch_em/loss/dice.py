@@ -1,4 +1,5 @@
-import torch
+from typing import Optional
+
 import torch.nn as nn
 
 
@@ -67,25 +68,10 @@ def dice_score(input_, target, invert=False, channelwise=True, reduce_channel="s
 
 
 class DiceLoss(nn.Module):
-    def __init__(self, channelwise=True, eps=1e-7, reduce_channel="sum"):
+    def __init__(self, channelwise: bool = True, eps: float = 1e-7, reduce_channel: Optional[str] = "sum"):
         if reduce_channel not in ("sum", "mean", "max", "min", None):
             raise ValueError(f"Unsupported channel reduction {reduce_channel}")
-        super().__init__()
-        self.channelwise = channelwise
-        self.eps = eps
-        self.reduce_channel = reduce_channel
 
-        # all torch_em classes should store init kwargs to easily recreate the init call
-        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps, "reduce_channel": self.reduce_channel}
-
-    def forward(self, input_, target):
-        return dice_score(input_, target,
-                          invert=True, channelwise=self.channelwise,
-                          eps=self.eps, reduce_channel=self.reduce_channel)
-
-
-class DiceLossWithLogits(nn.Module):
-    def __init__(self, channelwise=True, eps=1e-7, reduce_channel="sum"):
         super().__init__()
         self.channelwise = channelwise
         self.eps = eps
@@ -96,8 +82,32 @@ class DiceLossWithLogits(nn.Module):
 
     def forward(self, input_, target):
         return dice_score(
-            nn.functional.sigmoid(input_),
-            target,
+            input_=input_,
+            target=target,
+            invert=True,
+            channelwise=self.channelwise,
+            eps=self.eps,
+            reduce_channel=self.reduce_channel
+        )
+
+
+class DiceLossWithLogits(nn.Module):
+    def __init__(self, channelwise: bool = True, eps: float = 1e-7, reduce_channel: Optional[str] = "sum"):
+        if reduce_channel not in ("sum", "mean", "max", "min", None):
+            raise ValueError(f"Unsupported channel reduction {reduce_channel}")
+
+        super().__init__()
+        self.channelwise = channelwise
+        self.eps = eps
+        self.reduce_channel = reduce_channel
+
+        # all torch_em classes should store init kwargs to easily recreate the init call
+        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps, "reduce_channel": self.reduce_channel}
+
+    def forward(self, input_, target):
+        return dice_score(
+            input_=nn.functional.sigmoid(input_),
+            target=target,
             invert=True,
             channelwise=self.channelwise,
             eps=self.eps,
@@ -106,8 +116,7 @@ class DiceLossWithLogits(nn.Module):
 
 
 class BCEDiceLoss(nn.Module):
-
-    def __init__(self, alpha=1., beta=1., channelwise=True, eps=1e-7):
+    def __init__(self, alpha: float = 1., beta: float = 1., channelwise: bool = True, eps: float = 1e-7):
         super().__init__()
         self.alpha = alpha
         self.beta = beta
@@ -119,22 +128,21 @@ class BCEDiceLoss(nn.Module):
 
     def forward(self, input_, target):
         loss_dice = dice_score(
-            input_,
-            target,
+            input_=input_,
+            target=target,
             invert=True,
             channelwise=self.channelwise,
             eps=self.eps
         )
-        loss_bce = nn.functional.binary_cross_entropy(
-            input_, target
-        )
+
+        loss_bce = nn.functional.binary_cross_entropy(input_, target)
+
         return self.alpha * loss_dice + self.beta * loss_bce
 
 
 # TODO think about how to handle combined losses like this for mixed precision training
 class BCEDiceLossWithLogits(nn.Module):
-
-    def __init__(self, alpha=1., beta=1., channelwise=True, eps=1e-7):
+    def __init__(self, alpha: float = 1., beta: float = 1., channelwise: bool = True, eps: float = 1e-7):
         super().__init__()
         self.alpha = alpha
         self.beta = beta
@@ -146,13 +154,13 @@ class BCEDiceLossWithLogits(nn.Module):
 
     def forward(self, input_, target):
         loss_dice = dice_score(
-            torch.sigmoid(input_),
-            target,
+            input_=nn.functional.sigmoid(input_),
+            target=target,
             invert=True,
             channelwise=self.channelwise,
             eps=self.eps
         )
-        loss_bce = nn.functional.binary_cross_entropy_with_logits(
-            input_, target
-        )
+
+        loss_bce = nn.functional.binary_cross_entropy_with_logits(input_, target)
+
         return self.alpha * loss_dice + self.beta * loss_bce
