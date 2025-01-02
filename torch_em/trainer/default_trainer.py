@@ -1,21 +1,22 @@
 from __future__ import annotations
 
-import contextlib
-import inspect
 import os
 import time
+import inspect
 import warnings
+import contextlib
+from tqdm import tqdm
 from collections import OrderedDict
 from functools import partial
 from importlib import import_module
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union, Literal
 
 import numpy as np
-import torch
-from tqdm import tqdm
 
-from .tensorboard_logger import TensorboardLogger
+import torch
+
 from .wandb_logger import WandbLogger
+from .tensorboard_logger import TensorboardLogger
 from ..util import auto_compile, get_constructor_arguments, is_compiled
 
 
@@ -30,7 +31,7 @@ class DefaultTrainer:
         model: torch.nn.Module,
         loss: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        metric,
+        metric: Callable,
         device: Union[str, torch.device],
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler = None,
         log_image_interval: int = 100,
@@ -157,7 +158,7 @@ class DefaultTrainer:
         def load_generic(
             self,
             kwarg_name: str,
-            *dynamic_args,
+            *dynamic_args: Dict,
             optional: bool,
             only_class: bool = False,
             dynamic_kwargs: Optional[Dict[str, Any]] = None,
@@ -205,7 +206,12 @@ class DefaultTrainer:
         return torch.load(save_path, map_location=device)
 
     @classmethod
-    def from_checkpoint(cls, checkpoint_folder, name="best", device=None):
+    def from_checkpoint(
+        cls,
+        checkpoint_folder: Union[os.PathLike, str],
+        name: Literal["best", "latest"] = "best",
+        device: Optional[Union[str, torch.device]] = None,
+    ):
         save_path = os.path.join(checkpoint_folder, f"{name}.pt")
         # make sure the correct device is set if we don't have access to CUDA
         if not torch.cuda.is_available():
@@ -369,10 +375,7 @@ class DefaultTrainer:
         def dump_model(self, kwarg_name: str):
             if is_compiled(self.trainer.model):
                 self.init_data.update(
-                    {
-                        "model_class": self.trainer._model_class,
-                        "model_kwargs": self.trainer._model_kwargs,
-                    }
+                    {"model_class": self.trainer._model_class, "model_kwargs": self.trainer._model_kwargs}
                 )
             else:
                 self.dump_generic_instance("model")
@@ -540,12 +543,12 @@ class DefaultTrainer:
 
     def fit(
         self,
-        iterations=None,
-        load_from_checkpoint=None,
-        epochs=None,
-        save_every_kth_epoch=None,
+        iterations: Optional[int] = None,
+        load_from_checkpoint: Optional[Union[os.PathLike, str]] = None,
+        epochs: Optional[int] = None,
+        save_every_kth_epoch: Optional[int] = None,
         progress=None,
-        overwrite_training=True,
+        overwrite_training: bool = True,
     ):
         """Run neural network training.
 

@@ -1,7 +1,7 @@
 import os
 import warnings
 import numpy as np
-from typing import List, Union, Tuple, Optional, Any, Dict
+from typing import List, Union, Tuple, Optional, Any, Callable
 
 import torch
 
@@ -30,15 +30,15 @@ class SegmentationDataset(torch.utils.data.Dataset):
         label_path: Union[List[Any], str, os.PathLike],
         label_key: Optional[str],
         patch_shape: Tuple[int, ...],
-        raw_transform=None,
-        label_transform=None,
-        label_transform2=None,
-        transform=None,
-        roi: Optional[Union[Dict[str, Any], List[Any]]] = None,
+        raw_transform: Optional[Callable] = None,
+        label_transform: Optional[Callable] = None,
+        label_transform2: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
+        roi: Optional[Union[slice, Tuple[slice, ...]]] = None,
         dtype: torch.dtype = torch.float32,
         label_dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
-        sampler=None,
+        sampler: Optional[Callable] = None,
         ndim: Optional[int] = None,
         with_channels: bool = False,
         with_label_channels: bool = False,
@@ -59,6 +59,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         if roi is not None:
             if isinstance(roi, slice):
                 roi = (roi,)
+
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
             self.labels = RoiWrapper(self.labels, (slice(None),) + roi) if self._with_label_channels else\
                 RoiWrapper(self.labels, roi)
@@ -124,8 +125,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         else:
             bb_start = [
-                np.random.randint(0, sh - psh) if sh - psh > 0 else 0
-                for sh, psh in zip(self.shape, self.sample_shape)
+                np.random.randint(0, sh - psh) if sh - psh > 0 else 0 for sh, psh in zip(self.shape, self.sample_shape)
             ]
             patch_shape_for_bb = self.sample_shape
 
@@ -151,6 +151,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
                 sample_id += 1
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+
         # Padding the patch to match the expected input shape.
         if self.patch_shape is not None and self.with_padding:
             raw, labels = ensure_patch_shape(

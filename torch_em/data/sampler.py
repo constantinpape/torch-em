@@ -1,20 +1,14 @@
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Callable, Union
 
 
 class MinForegroundSampler:
-    def __init__(
-        self,
-        min_fraction: float,
-        background_id: int = 0,
-        p_reject: float = 1.0
-    ):
+    def __init__(self, min_fraction: float, background_id: int = 0, p_reject: float = 1.0):
         self.min_fraction = min_fraction
         self.background_id = background_id
         self.p_reject = p_reject
 
     def __call__(self, x, y=None):
-
         # we do this so it's also possible to use the MinForegroundSampler
         # for raw data, in order to filter out not imaged areas, for example in
         # large EM volumes.
@@ -25,9 +19,8 @@ class MinForegroundSampler:
         if isinstance(self.background_id, int):
             foreground_fraction = np.sum(y != self.background_id) / size
         else:
-            foreground_fraction = np.sum(
-                np.logical_not(np.isin(y, self.background_id))
-            ) / size
+            foreground_fraction = np.sum(np.logical_not(np.isin(y, self.background_id))) / size
+
         if foreground_fraction > self.min_fraction:
             return True
         else:
@@ -36,11 +29,7 @@ class MinForegroundSampler:
 
 class MinSemanticLabelForegroundSampler:
     def __init__(
-        self,
-        semantic_ids: List[int],
-        min_fraction: float,
-        min_fraction_per_id: bool = False,
-        p_reject: float = 1.0
+        self, semantic_ids: List[int], min_fraction: float, min_fraction_per_id: bool = False, p_reject: float = 1.0
     ):
         self.semantic_ids = semantic_ids
         self.min_fraction = min_fraction
@@ -62,12 +51,7 @@ class MinSemanticLabelForegroundSampler:
 
 
 class MinIntensitySampler:
-    def __init__(
-        self,
-        min_intensity: int,
-        function="median",
-        p_reject: float = 1.0
-    ):
+    def __init__(self, min_intensity: int, function: Union[str, Callable] = "median", p_reject: float = 1.0):
         self.min_intensity = min_intensity
         self.function = getattr(np, function) if isinstance(function, str) else function
         assert callable(self.function)
@@ -82,12 +66,7 @@ class MinIntensitySampler:
 
 
 class MinInstanceSampler:
-    def __init__(
-        self,
-        min_num_instances: int = 2,
-        p_reject: float = 1.0,
-        min_size: Optional[int] = None
-    ):
+    def __init__(self, min_num_instances: int = 2, p_reject: float = 1.0, min_size: Optional[int] = None):
         self.min_num_instances = min_num_instances
         self.p_reject = p_reject
         self.min_size = min_size
@@ -97,6 +76,7 @@ class MinInstanceSampler:
         if self.min_size is not None:
             filter_ids = uniques[sizes >= self.min_size]
             uniques = filter_ids
+
         if len(uniques) >= self.min_num_instances:
             return True
         else:
@@ -106,10 +86,7 @@ class MinInstanceSampler:
 class MinTwoInstanceSampler:
     # for the case of min_num_instances=2 this is roughly 10x faster
     # than using MinInstanceSampler since np.unique is slow
-    def __init__(
-        self,
-        p_reject: float = 1.0
-    ):
+    def __init__(self, p_reject: float = 1.0):
         self.p_reject = p_reject
 
     def __call__(self, x, y):
@@ -127,12 +104,7 @@ class MinNoToBackgroundBoundarySampler:
     # label_transform and the RF only learns one class (Error further downstream).
     # Therefore, this sampler is needed. Unfortunatley, the NoToBackgroundBoundaryTransform
     # is then calculated multiple times.
-    def __init__(
-        self,
-        trafo,
-        min_fraction: float = 0.01,
-        p_reject: float = 1.0
-    ):
+    def __init__(self, trafo: Callable, min_fraction: float = 0.01, p_reject: float = 1.0):
         self.trafo = trafo
         self.bg_label = trafo.bg_label
         self.mask_label = trafo.mask_label

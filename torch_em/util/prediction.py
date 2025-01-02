@@ -1,9 +1,9 @@
-from tqdm import tqdm
 from copy import deepcopy
 from concurrent import futures
 from typing import Tuple, Union, Callable, Any, List, Optional
 
 import numpy as np
+
 import nifty.tools as nt
 
 import torch
@@ -136,8 +136,8 @@ def predict_with_halo(
     mask: np.ndarray = None,
     disable_tqdm: bool = False,
     tqdm_desc: str = "predict with halo",
-    prediction_function=None,
-    roi=None,
+    prediction_function: Optional[Callable] = None,
+    roi: Optional[Tuple[slice]] = None,
 ):
     """ Run block-wise network prediction with halo.
 
@@ -172,6 +172,7 @@ def predict_with_halo(
     shape = input_.shape
     if with_channels:
         shape = shape[1:]
+
     ndim = len(shape)
     assert len(block_shape) == len(halo) == ndim
 
@@ -240,6 +241,7 @@ def predict_with_halo(
                 for out, channel_slice in output:
                     this_bb = bb if out.ndim == ndim else (slice(None),) + bb
                     out[this_bb] = prediction[channel_slice]
+
             else:  # we only have a single output array
                 if output.ndim == ndim + 1:
                     bb = (slice(None),) + bb
