@@ -1,16 +1,17 @@
 import os
 from glob import glob
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union, Tuple, List
 
 import torch
 import torch.utils.data
+from torch.utils.data import DataLoader
 
-from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
 from .loss import DiceLoss
+from .util import load_data
 from .trainer import DefaultTrainer
 from .trainer.tensorboard_logger import TensorboardLogger
 from .transform import get_augmentations, get_raw_transform
-from .util import load_data
+from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
 
 
 # TODO add a heuristic to estimate this from the number of epochs
@@ -188,28 +189,28 @@ def _get_default_transform(path, key, is_seg_dataset, ndim):
 
 
 def default_segmentation_loader(
-    raw_paths,
-    raw_key,
-    label_paths,
-    label_key,
-    batch_size,
-    patch_shape,
+    raw_paths: Union[List[Any], str, os.PathLike],
+    raw_key: Optional[str],
+    label_paths: Union[List[Any], str, os.PathLike],
+    label_key: Optional[str],
+    batch_size: int,
+    patch_shape: Tuple[int, ...],
     label_transform=None,
     label_transform2=None,
     raw_transform=None,
     transform=None,
-    dtype=torch.float32,
-    label_dtype=torch.float32,
-    rois=None,
-    n_samples=None,
+    dtype: torch.device = torch.float32,
+    label_dtype: torch.device = torch.float32,
+    rois: Optional[Union[Dict[str, Any], List[Any]]] = None,
+    n_samples: Optional[int] = None,
     sampler=None,
-    ndim=None,
-    is_seg_dataset=None,
-    with_channels=False,
-    with_label_channels=False,
-    verify_paths=True,
+    ndim: Optional[int] = None,
+    is_seg_dataset: Optional[bool] = None,
+    with_channels: bool = False,
+    with_label_channels: bool = False,
+    verify_paths: bool = True,
     **loader_kwargs,
-):
+) -> torch.utils.data.DataLoader:
     ds = default_segmentation_dataset(
         raw_paths=raw_paths,
         raw_key=raw_key,
@@ -235,28 +236,29 @@ def default_segmentation_loader(
 
 
 def default_segmentation_dataset(
-    raw_paths,
-    raw_key,
-    label_paths,
-    label_key,
-    patch_shape,
+    raw_paths: Union[List[Any], str, os.PathLike],
+    raw_key: Optional[str],
+    label_paths: Union[List[Any], str, os.PathLike],
+    label_key: Optional[str],
+    patch_shape: Tuple[int, ...],
     label_transform=None,
     label_transform2=None,
     raw_transform=None,
     transform=None,
-    dtype=torch.float32,
-    label_dtype=torch.float32,
-    rois=None,
-    n_samples=None,
+    dtype: torch.dtype = torch.float32,
+    label_dtype: torch.dtype = torch.float32,
+    rois: Optional[Union[Dict[str, Any], List[Any]]] = None,
+    n_samples: Optional[int] = None,
     sampler=None,
-    ndim=None,
-    is_seg_dataset=None,
-    with_channels=False,
-    with_label_channels=False,
-    verify_paths=True,
-    with_padding=True,
-    z_ext=None,
-):
+
+    ndim: Optional[int] = None,
+    is_seg_dataset: Optional[bool] = None,
+    with_channels: bool = False,
+    with_label_channels: bool = False,
+    verify_paths: bool = True,
+    with_padding: bool = True,
+    z_ext = None,
+) -> torch.utils.data.Dataset:
     if verify_paths:
         check_paths(raw_paths, label_paths)
 
@@ -331,26 +333,26 @@ def get_data_loader(dataset: torch.utils.data.Dataset, batch_size: int, **loader
 
 
 def default_segmentation_trainer(
-    name,
-    model,
-    train_loader,
-    val_loader,
-    loss=None,
+    name: str,
+    model: torch.nn.Module,
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    loss: Optional[torch.nn.Module] = None,
     metric=None,
-    learning_rate=1e-3,
-    device=None,
-    log_image_interval=100,
-    mixed_precision=True,
-    early_stopping=None,
+    learning_rate: float = 1e-3,
+    device: Optional[Union[str, torch.device]] = None,
+    log_image_interval: int = 100,
+    mixed_precision: bool = True,
+    early_stopping: Optional[int] = None,
     logger=TensorboardLogger,
     logger_kwargs: Optional[Dict[str, Any]] = None,
-    scheduler_kwargs=DEFAULT_SCHEDULER_KWARGS,
-    optimizer_kwargs={},
+    scheduler_kwargs: Dict[str, Any] = DEFAULT_SCHEDULER_KWARGS,
+    optimizer_kwargs: Dict[str, Any] = {},
     trainer_class=DefaultTrainer,
-    id_=None,
-    save_root=None,
-    compile_model=None,
-    rank=None,
+    id_: Optional[str] = None,
+    save_root: Optional[str] = None,
+    compile_model: Optional[Union[bool, str]] = None,
+    rank:  Optional[int] = None,
 ):
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, **optimizer_kwargs)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)

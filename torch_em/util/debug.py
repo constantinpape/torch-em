@@ -1,5 +1,10 @@
+import os
 import warnings
+from typing import Union, Optional
+
 import torch
+import torch.utils.data
+
 from .util import ensure_array
 
 
@@ -110,7 +115,14 @@ def _check_napari(loader, n_samples, instance_labels, model=None, device=None, r
         napari.run()
 
 
-def check_trainer(trainer, n_samples, instance_labels=False, split="val", loader=None, plt=False):
+def check_trainer(
+    trainer,
+    n_samples: int,
+    instance_labels: bool = False,
+    split: str = "val",
+    loader: Optional[torch.utils.data.DataLoader] = None,
+    plt: bool = False
+):
     if loader is None:
         assert split in ("val", "train")
         loader = trainer.val_loader
@@ -123,7 +135,14 @@ def check_trainer(trainer, n_samples, instance_labels=False, split="val", loader
             _check_napari(loader, n_samples, instance_labels, model=model, device=trainer.device)
 
 
-def check_loader(loader, n_samples, instance_labels=False, plt=False, rgb=False, save_path=None):
+def check_loader(
+    loader: torch.utils.data.Dataloader,
+    n_samples: int,
+    instance_labels: bool = False,
+    plt: bool = False,
+    rgb: bool = False,
+    save_path: Optional[Union[str, os.PathLike]] = None
+):
     if plt:
         _check_plt(loader, n_samples, instance_labels, save_path=save_path)
     else:
