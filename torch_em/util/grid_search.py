@@ -18,9 +18,7 @@ from .segmentation import watershed_from_components
 
 
 def default_grid_search_values_boundary_based_instance_segmentation(
-    threshold1_values=None,
-    threshold2_values=None,
-    min_size_values=None,
+    threshold1_values=None, threshold2_values=None, min_size_values=None,
 ):
     if threshold1_values is None:
         threshold1_values = [0.5, 0.55, 0.6]
