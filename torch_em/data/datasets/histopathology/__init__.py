@@ -1,5 +1,15 @@
 from .bcss import get_bcss_loader, get_bcss_dataset
+from .consep import get_consep_loader, get_consep_dataset
+from .cpm import get_cpm_loader, get_cpm_dataset
+from .cryonuseg import get_cryonuseg_loader, get_cryonuseg_dataset
+from .janowczyk import get_janowczyk_loader, get_janowczyk_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset
+from .lynsec import get_lynsec_loader, get_lynsec_dataset
 from .monuseg import get_monuseg_loader, get_monuseg_dataset
 from .monusac import get_monusac_loader, get_monusac_dataset
+from .nuclick import get_nuclick_loader, get_nuclick_dataset
+from .nuinsseg import get_nuinsseg_loader, get_nuinsseg_dataset
 from .pannuke import get_pannuke_loader, get_pannuke_dataset
+from .puma import get_puma_loader, get_puma_dataset
+from .srsanet import get_srsanet_loader, get_srsanet_dataset
+from .tnbc import get_tnbc_loader, get_tnbc_dataset

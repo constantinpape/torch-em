@@ -1,9 +1,9 @@
 import os
 
-import torch
 import torch_em
 
 from torchvision.utils import make_grid
+from torch.utils.tensorboard import SummaryWriter
 
 
 class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
@@ -14,7 +14,7 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
             os.path.join(self.my_root, "logs", trainer.name)
         os.makedirs(self.log_dir, exist_ok=True)
 
-        self.tb = torch.utils.tensorboard.SummaryWriter(self.log_dir)
+        self.tb = SummaryWriter(self.log_dir)
         self.log_image_interval = trainer.log_image_interval
 
     def _add_supervised_images(self, step, name, x, y, pred):

@@ -26,6 +26,7 @@ class ExpandChannels:
         return labels
 
 
+@unittest.skip("BioImage.IO libraries are broken.")
 class TestModelzoo(unittest.TestCase):
     checkpoint_folder = "./checkpoints"
     log_folder = "./logs"

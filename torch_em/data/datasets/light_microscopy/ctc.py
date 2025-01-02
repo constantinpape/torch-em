@@ -1,6 +1,6 @@
 """The Cell Tracking Challenge contains annotated data for cell segmentation and tracking.
+We currently provide the 2d datasets with segmentation annotations.
 
-We currently cprovide the 2d datasets with segmentation annotations.
 If you use this data in your research please cite https://doi.org/10.1038/nmeth.4473.
 """
 
@@ -9,8 +9,10 @@ from glob import glob
 from shutil import copyfile
 from typing import Optional, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
 
 
@@ -53,20 +55,17 @@ def _get_ctc_url_and_checksum(dataset_name, split):
     return url, checksum
 
 
-def get_ctc_data(
-    path: Union[os.PathLike, str],
-    dataset_name: str,
-    download: bool,
-    split: str
+def get_ctc_segmentation_data(
+    path: Union[os.PathLike, str], dataset_name: str, split: str, download: bool = False,
 ) -> str:
-    f"""Download training data from the cell tracking challenge.
+    f"""Download training data from the Cell Tracking Challenge.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         dataset_name: Name of the dataset to be downloaded. The available datasets are:
             {', '.join(CTC_CHECKSUMS['train'].keys())}
-        download: Whether to download the data if it is not present.
         split: The split to download. Either 'train' or 'test'.
+        download: Whether to download the data if it is not present.
 
     Returns:
         The filepath to the training data.
@@ -121,6 +120,40 @@ def _require_gt_images(data_path, vol_ids):
     return image_paths, label_paths
 
 
+def get_ctc_segmentation_paths(
+    path: Union[os.PathLike, str],
+    dataset_name: str,
+    split: str = "train",
+    vol_id: Optional[int] = None,
+    download: bool = False,
+) -> Tuple[str, str]:
+    f"""Get paths to the Cell Tracking Challenge data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        dataset_name: Name of the dataset to be downloaded. The available datasets are:
+            {', '.join(CTC_CHECKSUMS['train'].keys())}
+        split: The split to download. Currently only supports 'train'.
+        vol_id: The train id to load.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath to the folder where image data is stored.
+        Filepath to the folder where label data is stored.
+    """
+    data_path = get_ctc_segmentation_data(path, dataset_name, split, download)
+
+    if vol_id is None:
+        vol_ids = glob(os.path.join(data_path, "*_GT"))
+        vol_ids = [os.path.basename(vol_id) for vol_id in vol_ids]
+        vol_ids = [vol_id.rstrip("_GT") for vol_id in vol_ids]
+    else:
+        vol_ids = vol_id
+
+    image_path, label_path = _require_gt_images(data_path, vol_ids)
+    return image_path, label_path
+
+
 def get_ctc_segmentation_dataset(
     path: Union[os.PathLike, str],
     dataset_name: str,
@@ -130,7 +163,7 @@ def get_ctc_segmentation_dataset(
     download: bool = False,
     **kwargs,
 ) -> Dataset:
-    """Get the CTC dataset for cell segmentation.
+    f"""Get the CTC dataset for cell segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -147,20 +180,18 @@ def get_ctc_segmentation_dataset(
     """
     assert split in ["train"]
 
-    data_path = get_ctc_data(path, dataset_name, download, split)
-
-    if vol_id is None:
-        vol_ids = glob(os.path.join(data_path, "*_GT"))
-        vol_ids = [os.path.basename(vol_id) for vol_id in vol_ids]
-        vol_ids = [vol_id.rstrip("_GT") for vol_id in vol_ids]
-    else:
-        vol_ids = vol_id
-
-    image_path, label_path = _require_gt_images(data_path, vol_ids)
+    image_path, label_path = get_ctc_segmentation_paths(path, dataset_name, split, vol_id, download)
 
     kwargs = util.update_kwargs(kwargs, "ndim", 2)
+
     return torch_em.default_segmentation_dataset(
-        image_path, "*.tif", label_path, "*.tif", patch_shape, is_seg_dataset=True, **kwargs
+        raw_paths=image_path,
+        raw_key="*.tif",
+        label_paths=label_path,
+        label_key="*.tif",
+        patch_shape=patch_shape,
+        is_seg_dataset=True,
+        **kwargs
     )
 
 
@@ -174,7 +205,7 @@ def get_ctc_segmentation_loader(
     download: bool = False,
     **kwargs,
 ) -> DataLoader:
-    """Get the CTC dataloader for cell segmentation.
+    f"""Get the CTC dataloader for cell segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -190,12 +221,6 @@ def get_ctc_segmentation_loader(
     Returns:
        The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
-    dataset = get_ctc_segmentation_dataset(
-        path, dataset_name, patch_shape, split=split, vol_id=vol_id, download=download, **ds_kwargs,
-    )
-
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_ctc_segmentation_dataset(path, dataset_name, patch_shape, split, vol_id, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

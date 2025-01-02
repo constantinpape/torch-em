@@ -1,24 +1,27 @@
+import os
+import sys
+
 from torch_em.data import MinInstanceSampler
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_sega_loader
 
 
-ROOT = "/media/anwai/ANWAI/data/sega"
+sys.path.append("..")
 
 
 def check_sega():
+    from util import ROOT
+
     loader = get_sega_loader(
-        path=ROOT,
-        patch_shape=(1, 512, 512),
+        path=os.path.join(ROOT, "sega"),
+        patch_shape=(32, 512, 512),
         batch_size=2,
-        ndim=2,
         data_choice="KiTS",
-        resize_inputs=True,
         download=True,
         sampler=MinInstanceSampler(),
     )
 
-    check_loader(loader, 8)
+    check_loader(loader, 8, plt=True, save_path="./sega.png")
 
 
 if __name__ == "__main__":

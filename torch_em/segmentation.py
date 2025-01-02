@@ -164,6 +164,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
             roi = len(raw_paths) * [None]
         assert len(roi) == len(raw_paths)
         for i, (raw_path, label_path, this_roi) in enumerate(zip(raw_paths, label_paths, roi)):
+            print(raw_path, label_path, this_roi)
             rpath, lpath = _get_paths(raw_path, raw_key, label_path, label_key, this_roi)
             dset = ImageCollectionDataset(rpath, lpath, patch_shape=patch_shape, n_samples=samples_per_ds[i], **kwargs)
             ds.append(dset)
@@ -249,11 +250,14 @@ def default_segmentation_dataset(
     rois: Optional[Union[Dict[str, Any], List[Any]]] = None,
     n_samples: Optional[int] = None,
     sampler=None,
+
     ndim: Optional[int] = None,
     is_seg_dataset: Optional[bool] = None,
     with_channels: bool = False,
     with_label_channels: bool = False,
     verify_paths: bool = True,
+    with_padding: bool = True,
+    z_ext = None,
 ) -> torch.utils.data.Dataset:
     if verify_paths:
         check_paths(raw_paths, label_paths)
@@ -290,6 +294,8 @@ def default_segmentation_dataset(
             label_dtype=label_dtype,
             with_channels=with_channels,
             with_label_channels=with_label_channels,
+            with_padding=with_padding,
+            z_ext=z_ext,
         )
     else:
         ds = _load_image_collection_dataset(
@@ -307,13 +313,15 @@ def default_segmentation_dataset(
             sampler=sampler,
             dtype=dtype,
             label_dtype=label_dtype,
+            with_padding=with_padding,
         )
 
     return ds
 
 
 def get_data_loader(dataset: torch.utils.data.Dataset, batch_size: int, **loader_kwargs) -> torch.utils.data.DataLoader:
-    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, **loader_kwargs)
+    pin_memory = loader_kwargs.pop("pin_memory", True)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, pin_memory=pin_memory, **loader_kwargs)
     # monkey patch shuffle attribute to the loader
     loader.shuffle = loader_kwargs.get("shuffle", False)
     return loader

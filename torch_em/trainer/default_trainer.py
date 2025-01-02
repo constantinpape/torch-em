@@ -6,12 +6,12 @@ import os
 import time
 import warnings
 from collections import OrderedDict
+from functools import partial
 from importlib import import_module
 from typing import Any, Callable, Dict, Optional, Union
 
 import numpy as np
 import torch
-import torch.cuda.amp as amp
 from tqdm import tqdm
 
 from .tensorboard_logger import TensorboardLogger
@@ -58,7 +58,7 @@ class DefaultTrainer:
         self.loss = loss
         self.optimizer = optimizer
         self.metric = metric
-        self.device = device
+        self.device = torch.device(device)
         self.lr_scheduler = lr_scheduler
         self.log_image_interval = log_image_interval
         self.save_root = save_root
@@ -73,7 +73,10 @@ class DefaultTrainer:
         self.early_stopping = early_stopping
         self.train_time = 0.0
 
-        self.scaler = amp.GradScaler() if mixed_precision else None
+        if mixed_precision:
+            self.scaler = torch.GradScaler("cpu" if self.device.type == "cpu" else "cuda")
+        else:
+            self.scaler = None
 
         self.logger_class = logger
         self.logger_kwargs = logger_kwargs
@@ -445,7 +448,14 @@ class DefaultTrainer:
             else:
                 # may set self.name if self.name is None
                 save_root = getattr(self, "save_root", None)
-                self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
+                try:
+                    self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
+                except PermissionError:
+                    warnings.warn(
+                        f"The checkpoint folder at {self.checkpoint_folder} could not be created."
+                        "The most likely reason for this is that you copied the checkpoint somewhere else,"
+                        "so we skip this error to enable loading the model from this checkpoint."
+                    )
 
             try:
                 os.makedirs(self.checkpoint_folder, exist_ok=True)
@@ -521,6 +531,13 @@ class DefaultTrainer:
 
         return save_dict
 
+    def _verify_if_training_completed(self, checkpoint="latest"):
+        save_path = os.path.join(self.checkpoint_folder, f"{checkpoint}.pt")
+        save_dict = torch.load(save_path) if os.path.exists(save_path) else None
+        if save_dict and self.max_iteration == save_dict.get("iteration"):
+            return True
+        return False
+
     def fit(
         self,
         iterations=None,
@@ -528,6 +545,7 @@ class DefaultTrainer:
         epochs=None,
         save_every_kth_epoch=None,
         progress=None,
+        overwrite_training=True,
     ):
         """Run neural network training.
 
@@ -541,8 +559,24 @@ class DefaultTrainer:
                 The corresponding checkpoints will be saved with the naming scheme 'epoch-{epoch}.pt'. (default: None)
             progress [progress_bar] - optional progress bar for integration with external tools.
                 Expected to follow the tqdm interface.
+            overwrite_training [bool] - Whether to overwrite the trained model.
         """
         best_metric = self._initialize(iterations, load_from_checkpoint, epochs)
+
+        if not overwrite_training:
+            if load_from_checkpoint is not None:
+                raise ValueError(
+                    "We do not support 'overwrite_training=False' and 'load_from_checkpoint' at the same time."
+                )
+
+            if self._verify_if_training_completed():
+                print(
+                    f"The model is trained for {self.max_iteration} iterations / {self.max_epoch} epochs "
+                    "and 'overwrite_training' is set to 'False'."
+                )
+                print(f"The checkpoints are located at '{os.path.abspath(self.checkpoint_folder)}'.")
+                return
+
         print(
             "Start fitting for",
             self.max_iteration - self._iteration,
@@ -644,7 +678,10 @@ class DefaultTrainer:
         return self._train_epoch_impl(progress, contextlib.nullcontext, self._backprop)
 
     def _train_epoch_mixed(self, progress):
-        return self._train_epoch_impl(progress, amp.autocast, self._backprop_mixed)
+        return self._train_epoch_impl(
+            progress, partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda"),
+            self._backprop_mixed
+        )
 
     def _forward_and_loss(self, x, y):
         pred = self.model(x)
@@ -661,7 +698,7 @@ class DefaultTrainer:
         n_iter = 0
         t_per_iter = time.time()
         for x, y in self.train_loader:
-            x, y = x.to(self.device), y.to(self.device)
+            x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
 
             self.optimizer.zero_grad()
 
@@ -687,7 +724,9 @@ class DefaultTrainer:
         return self._validate_impl(contextlib.nullcontext)
 
     def _validate_mixed(self):
-        return self._validate_impl(amp.autocast)
+        return self._validate_impl(
+            partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda")
+        )
 
     def _validate_impl(self, forward_context):
         self.model.eval()
@@ -697,7 +736,7 @@ class DefaultTrainer:
 
         with torch.no_grad():
             for x, y in self.val_loader:
-                x, y = x.to(self.device), y.to(self.device)
+                x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
                 with forward_context():
                     pred, loss = self._forward_and_loss(x, y)
                     metric = self.metric(pred, y)

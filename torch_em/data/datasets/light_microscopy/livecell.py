@@ -1,24 +1,26 @@
 """The LIVECell dataset contains phase-contrast microscopy images
 and annotations for cell segmentations for 8 different cell lines.
 
-This dataset is desceibed in the publication https://doi.org/10.1038/s41592-021-01249-6.
+This dataset is described in the publication https://doi.org/10.1038/s41592-021-01249-6.
 Please cite it if you use this dataset in your research.
 """
 
 import os
+import requests
+from tqdm import tqdm
 from shutil import copyfileobj
 from typing import List, Optional, Sequence, Tuple, Union
 
-import imageio
 import numpy as np
-import requests
-import vigra
-from tqdm import tqdm
+import imageio.v3 as imageio
+
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
-import torch.utils.data
-from torch.utils.data import Dataset, DataLoader
+
 from .. import util
+from ... import ImageCollectionDataset
 
 try:
     from pycocotools.coco import COCO
@@ -37,19 +39,7 @@ URLS = {
 # TODO
 CHECKSUM = None
 
-
-def _download_livecell_images(path, download):
-    os.makedirs(path, exist_ok=True)
-    image_path = os.path.join(path, "images")
-
-    if os.path.exists(image_path):
-        return
-
-    url = URLS["images"]
-    checksum = CHECKSUM
-    zip_path = os.path.join(path, "livecell.zip")
-    util.download_source(zip_path, url, download, checksum)
-    util.unzip(zip_path, path, True)
+CELL_TYPES = ['A172', 'BT474', 'BV2', 'Huh7', 'MCF7', 'SHSY5Y', 'SkBr3', 'SKOV3']
 
 
 # TODO use download flag
@@ -65,6 +55,8 @@ def _download_annotation_file(path, split, download):
 
 
 def _annotations_to_instances(coco, image_metadata, category_ids):
+    import vigra
+
     # create and save the segmentation
     annotation_ids = coco.getAnnIds(imgIds=image_metadata["id"], catIds=category_ids)
     annotations = coco.loadAnns(annotation_ids)
@@ -96,7 +88,7 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
 
 
 def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types):
-    assert COCO is not None, "pycocotools is required for processing the LiveCELL ground-truth."
+    assert COCO is not None, "pycocotools is required for processing the LIVECell ground-truth."
 
     coco = COCO(annotation_file)
     category_ids = coco.getCatIds(catNms=["cell"])
@@ -133,7 +125,8 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
 
     assert len(image_paths) == len(seg_paths)
     assert len(image_paths) > 0, \
-        f"No matching image paths were found. Did you pass invalid cell type naems ({cell_types})?"
+        f"No matching image paths were found. Did you pass invalid cell type names ({cell_types})?"
+
     return image_paths, seg_paths
 
 
@@ -153,14 +146,34 @@ def _download_livecell_annotations(path, split, download, cell_types, label_path
     return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types)
 
 
-def get_livecell_data(
+def get_livecell_data(path: Union[os.PathLike], download: bool = False):
+    """Download the LIVECell dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+    """
+    os.makedirs(path, exist_ok=True)
+    image_path = os.path.join(path, "images")
+
+    if os.path.exists(image_path):
+        return
+
+    url = URLS["images"]
+    checksum = CHECKSUM
+    zip_path = os.path.join(path, "livecell.zip")
+    util.download_source(zip_path, url, download, checksum)
+    util.unzip(zip_path, path, True)
+
+
+def get_livecell_paths(
     path: Union[os.PathLike, str],
     split: str,
-    download: bool,
+    download: bool = False,
     cell_types: Optional[Sequence[str]] = None,
     label_path: Optional[Union[os.PathLike, str]] = None
 ) -> Tuple[List[str], List[str]]:
-    """Download the LIVECell dataset.
+    """Get paths to the LIVECell data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -170,10 +183,10 @@ def get_livecell_data(
         label_path: Optional path for loading the label data.
 
     Returns:
-        The paths to the image data.
-        The paths to the label data.
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
-    _download_livecell_images(path, download)
+    get_livecell_data(path, download)
     image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
     return image_paths, seg_paths
 
@@ -214,18 +227,20 @@ def get_livecell_dataset(
         assert isinstance(cell_types, (list, tuple)), \
             f"cell_types must be passed as a list or tuple instead of {cell_types}"
 
-    image_paths, seg_paths = get_livecell_data(path, split, download, cell_types, label_path)
+    image_paths, seg_paths = get_livecell_paths(path, split, download, cell_types, label_path)
 
     kwargs = util.ensure_transforms(ndim=2, **kwargs)
     kwargs, label_dtype = util.add_instance_label_transform(
-        kwargs, add_binary_target=True, label_dtype=label_dtype,
-        offsets=offsets, boundaries=boundaries, binary=binary
+        kwargs, add_binary_target=True, label_dtype=label_dtype, offsets=offsets, boundaries=boundaries, binary=binary
     )
 
-    dataset = torch_em.data.ImageCollectionDataset(
-        image_paths, seg_paths, patch_shape=patch_shape, label_dtype=label_dtype, **kwargs
+    return ImageCollectionDataset(
+        raw_image_paths=image_paths,
+        label_image_paths=seg_paths,
+        patch_shape=patch_shape,
+        label_dtype=label_dtype,
+        **kwargs
     )
-    return dataset
 
 
 def get_livecell_loader(
@@ -266,5 +281,4 @@ def get_livecell_loader(
         path, split, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary,
         cell_types=cell_types, label_path=label_path, label_dtype=label_dtype, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

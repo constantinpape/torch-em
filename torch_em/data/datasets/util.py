@@ -17,7 +17,7 @@ import torch
 
 import torch_em
 from torch_em.transform import get_raw_transform
-from torch_em.transform.generic import ResizeInputs, Compose
+from torch_em.transform.generic import ResizeLongestSideInputs, Compose
 
 try:
     import gdown
@@ -28,6 +28,11 @@ try:
     from tcia_utils import nbia
 except ModuleNotFoundError:
     nbia = None
+
+try:
+    from cryoet_data_portal import Client, Dataset
+except ImportError:
+    Client, Dataset = None, None
 
 
 BIOIMAGEIO_IDS = {
@@ -96,7 +101,9 @@ def download_source(path, url, download, checksum=None, verify=True):
     _check_checksum(path, checksum)
 
 
-def download_source_gdrive(path, url, download, checksum=None, download_type="zip", expected_samples=10000):
+def download_source_gdrive(
+    path, url, download, checksum=None, download_type="zip", expected_samples=10000, quiet=True,
+):
     if os.path.exists(path):
         return
 
@@ -105,19 +112,19 @@ def download_source_gdrive(path, url, download, checksum=None, download_type="zi
 
     if gdown is None:
         raise RuntimeError(
-            "Need gdown library to download data from google drive."
-            "Please install gdown and then rerun."
+            "Need gdown library to download data from google drive. "
+            "Please install gdown: 'mamba install gdown==4.6.3'."
         )
 
-    print("Downloading the dataset. Might take a few minutes...")
+    print("Downloading the files. Might take a few minutes...")
 
     if download_type == "zip":
-        gdown.download(url, path, quiet=False)
+        gdown.download(url, path, quiet=quiet)
         _check_checksum(path, checksum)
     elif download_type == "folder":
-        assert version.parse(gdown.__version__) == version.parse("4.6.3"), "Please install `gdown==4.6.3`."
+        assert version.parse(gdown.__version__) == version.parse("4.6.3"), "Please install 'gdown==4.6.3'."
         gdown.download_folder.__globals__["MAX_NUMBER_FILES"] = expected_samples
-        gdown.download_folder(url=url, output=path, quiet=True, remaining_ok=True)
+        gdown.download_folder(url=url, output=path, quiet=quiet, remaining_ok=True)
     else:
         raise ValueError("`download_path` argument expects either `zip`/`folder`")
     print("Download completed.")
@@ -203,14 +210,14 @@ def update_kwargs(kwargs, key, value, msg=None):
 def unzip_tarfile(tar_path, dst, remove=True):
     import tarfile
 
-    if tar_path.endswith(".tar.gz"):
+    if tar_path.endswith(".tar.gz") or tar_path.endswith(".tgz"):
         access_mode = "r:gz"
     elif tar_path.endswith(".tar"):
         access_mode = "r:"
     else:
         raise ValueError(
-            "The provided file isn't a supported archive to unpack. ",
-            f"Please check the file: {tar_path}"
+            "The provided file isn't a supported archive to unpack. "
+            f"Please check the file: {tar_path}."
         )
 
     tar = tarfile.open(tar_path, access_mode)
@@ -219,6 +226,21 @@ def unzip_tarfile(tar_path, dst, remove=True):
 
     if remove:
         os.remove(tar_path)
+
+
+def unzip_rarfile(rar_path, dst, remove=True, use_rarfile=True):
+    import rarfile
+    import aspose.zip as az
+
+    if use_rarfile:
+        with rarfile.RarFile(rar_path) as f:
+            f.extractall(path=dst)
+    else:
+        with az.rar.RarArchive(rar_path) as archive:
+            archive.extract_to_directory(dst)
+
+    if remove:
+        os.remove(rar_path)
 
 
 def unzip(zip_path, dst, remove=True):
@@ -282,9 +304,19 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
     """
     if resize_inputs:
         assert isinstance(resize_kwargs, dict)
+
+        target_shape = resize_kwargs.get("patch_shape")
+        if len(resize_kwargs["patch_shape"]) == 3:
+            # we only need the XY dimensions to reshape the inputs along them.
+            target_shape = target_shape[1:]
+            # we provide the Z dimension value to return the desired number of slices and not the whole volume
+            kwargs["z_ext"] = resize_kwargs["patch_shape"][0]
+
+        raw_trafo = ResizeLongestSideInputs(target_shape=target_shape, is_rgb=resize_kwargs["is_rgb"])
+        label_trafo = ResizeLongestSideInputs(target_shape=target_shape, is_label=True)
+
+        # The patch shape provided to the dataset. Here, "None" means that the entire volume will be loaded.
         patch_shape = None
-        raw_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_rgb=resize_kwargs["is_rgb"])
-        label_trafo = ResizeInputs(target_shape=resize_kwargs["patch_shape"], is_label=True)
 
     if ensure_rgb is None:
         raw_trafos = []
@@ -316,7 +348,7 @@ def generate_labeled_array_from_xml(shape, xml_file):
         xml_file: path relative to the current working directory where the xml file is present
 
     Returns:
-        An image of given shape with region inside contour being white..
+        An image of given shape with region inside contour being white.
     """
     # DOM object created by the minidom parser
     xDoc = minidom.parse(xml_file)
@@ -378,3 +410,21 @@ def convert_svs_to_array(path, location=(0, 0), level=0, img_size=None):
     img_arr = _slide.read_region(location=location, level=level, size=img_size, as_array=True)
 
     return img_arr
+
+
+def download_from_cryo_et_portal(path, dataset_id, download):
+    if Client is None or Dataset is None:
+        raise RuntimeError("Please install CryoETDataPortal via 'pip install cryoet-data-portal'")
+
+    output_path = os.path.join(path, str(dataset_id))
+    if os.path.exists(output_path):
+        return output_path
+
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+
+    client = Client()
+    dataset = Dataset.get_by_id(client, dataset_id)
+    dataset.download_everything(dest_path=path)
+
+    return output_path

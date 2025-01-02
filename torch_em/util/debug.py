@@ -111,6 +111,7 @@ def _check_napari(loader, n_samples, instance_labels, model=None, device=None, r
                 v.add_image(y)
         if pred is not None:
             v.add_image(pred)
+
         napari.run()
 
 

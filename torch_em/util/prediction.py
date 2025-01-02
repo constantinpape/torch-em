@@ -8,6 +8,11 @@ import nifty.tools as nt
 
 import torch
 
+try:
+    from napari.utils import progress as tqdm
+except ImportError:
+    from tqdm import tqdm
+
 from ..transform.raw import standardize
 
 
@@ -15,12 +20,11 @@ def predict_with_padding(
     model: torch.nn.Module,
     input_: np.ndarray,
     min_divisible: Tuple[int, int],
-    device: Union[torch.device, str],
+    device: Optional[Union[torch.device, str]] = None,
     with_channels: bool = False,
     prediction_function: Callable[[Any], Any] = None
 ):
-    """Run prediction with padding for a model that can only deal with
-    inputs divisible by specific factors.
+    """Run prediction with padding for a model that can only deal with inputs divisible by specific factors.
 
     Arguments:
         model [torch.nn.Module]: the model
@@ -53,6 +57,9 @@ def predict_with_padding(
 
     ndim = input_.ndim
     ndim_model = 1 + ndim if with_channels else 2 + ndim
+
+    if device is None:
+        device = next(model.parameters()).device
 
     expand_dim = (None,) * (ndim_model - ndim)
     with torch.no_grad():
@@ -191,7 +198,7 @@ def predict_with_halo(
 
             if mask is not None:
                 mask_block, _ = _load_block(mask, offset, block_shape, halo, with_channels=False)
-                mask_block = mask_block[inner_bb]
+                mask_block = mask_block[inner_bb].astype("bool")
                 if mask_block.sum() == 0:
                     return
 
