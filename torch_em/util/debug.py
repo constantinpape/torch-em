@@ -136,7 +136,7 @@ def check_trainer(
 
 
 def check_loader(
-    loader: torch.utils.data.Dataloader,
+    loader: torch.utils.data.DataLoader,
     n_samples: int,
     instance_labels: bool = False,
     plt: bool = False,
