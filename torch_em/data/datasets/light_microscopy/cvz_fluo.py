@@ -1,13 +1,9 @@
 """The CVZ-Fluo dataset contains annotations for cell and nuclei segmentation in
 fluorescence microscopy images.
 
-NOTE: You need to install 'synapseclient', create an account and authentication token on Synapse,
-and follow the documentation to create your authentication config: https://python-docs.synapse.org/tutorials/authentication/
-and install using 'synapse get -r syn27624812'.
-
 The dataset is from the publication https://doi.org/10.1038/s41597-023-02108-z.
 Please cite it if you use this dataset for your research.
-"""  # noqa
+"""
 
 import os
 from glob import glob
@@ -31,20 +27,18 @@ URL = "https://www.synapse.org/Synapse:syn27624812/"
 
 
 def get_cvz_fluo_data(path: Union[os.PathLike, str], download: bool = False):
-    """Obtain the CVZ-Fluo dataset.
+    """DOwnload the CVZ-Fluo dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data is saved.
         download: Whether to download the data if it is not present.
     """
-    if download:
-        raise NotImplementedError("Automatic download is not implemented for this dataset.")
-
     data_dir = os.path.join(path, r"Annotation Panel Table.xlsx")
-    if os.path.exists(data_dir):
-        return
-    else:
-        raise AssertionError(f"The dataset is not downloaded. Please download it manually from '{URL}'.")
+    if not os.path.exists(data_dir):
+        # Download the dataset from 'synapse'.
+        util.download_source_synapse(path=path, entity="syn27624812", download=download)
+
+    return
 
 
 def _preprocess_labels(label_paths):
