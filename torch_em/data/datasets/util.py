@@ -35,6 +35,12 @@ try:
 except ImportError:
     Client, Dataset = None, None
 
+try:
+    import synapseclient
+    import synapseutils
+except ImportError:
+    synapseclient, synapseutils = None, None
+
 
 BIOIMAGEIO_IDS = {
     "covid_if": "ilastik/covid_if_training_data",
@@ -152,7 +158,7 @@ def download_source_gdrive(
     if gdown is None:
         raise RuntimeError(
             "Need gdown library to download data from google drive. "
-            "Please install gdown: 'mamba install gdown==4.6.3'."
+            "Please install gdown: 'conda install -c conda-forge gdown==4.6.3'."
         )
     print("Downloading the files. Might take a few minutes...")
 
@@ -190,7 +196,7 @@ def download_source_empiar(path: str, access_id: str, download: bool) -> str:
 
     if which("ascp") is None:
         raise RuntimeError(
-            "Need aspera-cli to download data from empiar. You can install it via 'mamba install -c hcc aspera-cli'."
+            "Need aspera-cli to download data from empiar. You can install it via 'conda install -c hcc aspera-cli'."
         )
 
     key_file = os.path.expanduser("~/.aspera/cli/etc/asperaweb_id_dsa.openssh")
@@ -219,7 +225,7 @@ def download_source_kaggle(path: str, dataset_name: str, download: bool, competi
         competition: Whether this data is from a competition and requires the kaggle.competition API.
     """
     if not download:
-        raise RuntimeError(f"Cannot fine the data at {path}, but download was set to False.")
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
 
     try:
         from kaggle.api.kaggle_api_extended import KaggleApi
@@ -252,7 +258,6 @@ def download_source_tcia(path, url, dst, csv_filename, download):
     """
     if nbia is None:
         raise RuntimeError("Requires the tcia_utils python package.")
-
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
     assert url.endswith(".tcia"), f"{url} is not a TCIA Manifest."
@@ -264,6 +269,35 @@ def download_source_tcia(path, url, dst, csv_filename, download):
 
     # This part extracts the UIDs from the manifests and downloads them.
     nbia.downloadSeries(series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename)
+
+
+def download_source_synapse(path: str, entity: str, download: bool) -> None:
+    """Download data from synapse.
+
+    Requires the synapseclient python library.
+
+    Args:
+        path: The path for saving the data.
+        entity: The name of the data to download from synapse.
+        download: Whether to download the data if it is not saved at `path` yet.
+    """
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
+
+    if synapseclient is None:
+        raise RuntimeError(
+            "You must install 'synapseclient' to download files from 'synapse'. "
+            "Remember to create an account and generate an authentication code for your account. "
+            "Please follow the documentation for details on creating the '~/.synapseConfig' file here: "
+            "https://python-docs.synapse.org/tutorials/authentication/."
+        )
+
+    assert entity.startswith("syn"), "The entity name does not look as expected. It should be something like 'syn123'."
+
+    # Download all files in the folder.
+    syn = synapseclient.Synapse()
+    syn.login()  # Since we do not pass any credentials here, it fetches all details from '~/.synapseConfig'.
+    synapseutils.syncFromSynapse(syn=syn, entity=entity, path=path)
 
 
 def update_kwargs(kwargs, key, value, msg=None):
