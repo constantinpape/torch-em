@@ -35,6 +35,7 @@ def get_cvz_fluo_data(path: Union[os.PathLike, str], download: bool = False):
     """
     data_dir = os.path.join(path, r"Annotation Panel Table.xlsx")
     if not os.path.exists(data_dir):
+        os.makedirs(path, exist_ok=True)
         # Download the dataset from 'synapse'.
         util.download_source_synapse(path=path, entity="syn27624812", download=download)
 
