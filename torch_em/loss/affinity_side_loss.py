@@ -6,10 +6,13 @@ from .dice import dice_score
 
 def shift_tensor(tensor, offset):
     """ Shift a tensor by the given (spatial) offset.
-    Arguments:
+
+    Args:
         tensor [torch.Tensor] - 4D (=2 spatial dims) or 5D (=3 spatial dims) tensor.
             Needs to be of float type.
         offset (tuple) - 2d or 3d spatial offset used for shifting the tensor
+
+    Returns:
     """
 
     ndim = len(offset)
