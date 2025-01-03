@@ -32,8 +32,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
             after applying augmentations via `transform`.
         transform: Transformation applied to both the raw data and label data of a sample.
             This can be used to implement data augmentations.
-        roi: Region of interest in the raw data.
-            If given, the raw data will only be loaded from the corresponding area.
+        roi: Region of interest in the data. If given, the data will only be loaded from the corresponding area.
         dtype: The return data type of the raw data.
         label_dtype: The return data type of the label data.
         n_samples: The length of this dataset. If None, the length will be set to `len(raw_image_paths)`.

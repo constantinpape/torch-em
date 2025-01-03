@@ -21,8 +21,31 @@ from ..util import auto_compile, get_constructor_arguments, is_compiled
 
 
 class DefaultTrainer:
-    """Trainer class for 2d/3d training on a single GPU."""
+    """Trainer class for training a segmentation network.
 
+    TODO
+
+    Args:
+        name: The name of the checkpoint that will be created by the trainer.
+        train_loader: The data loader containing the training data.
+        val_loader: The data loader containing the validation data.
+        model: The model to train.
+        loss: The loss function for training.
+        optimizer: TODO
+        metric: The metric for validation.
+        device: The torch device to use for training. If None, will use a GPU if available.
+        lr_scheduler: TODO
+        log_image_interval: The interval for saving images during logging, in training iterations.
+        mixed_precision: Whether to train with mixed precision.
+        early_stopping: The patience for early stopping in epochs. If None, early stopping will not be used.
+        logger: The logger class. Will be instantiated for logging.
+            By default uses `torch_em.training.tensorboard_logger.TensorboardLogger`.
+        logger_kwargs: The keyword arguments for the logger class.
+        id_: Unique identifier for the trainer. If None then `name` will be used.
+        save_root: The root folder for saving the checkpoint and logs.
+        compile_model: Whether to compile the model before training.
+        rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+    """
     def __init__(
         self,
         name: Optional[str],
