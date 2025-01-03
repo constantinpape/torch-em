@@ -1,21 +1,22 @@
-import os
 import hashlib
 import inspect
-import requests
-from tqdm import tqdm
-from warnings import warn
-from subprocess import run
+import os
+import zipfile
+
 from packaging import version
 from shutil import copyfileobj, which
-
-import zipfile
-import numpy as np
+from subprocess import run
+from typing import Optional, Tuple
+from warnings import warn
 from xml.dom import minidom
-from skimage.draw import polygon
 
+import numpy as np
+import requests
 import torch
-
 import torch_em
+
+from skimage.draw import polygon
+from tqdm import tqdm
 from torch_em.transform import get_raw_transform
 from torch_em.transform.generic import ResizeLongestSideInputs, Compose
 
@@ -60,14 +61,26 @@ BIOIMAGEIO_IDS = {
     "uro_cell": "",  # not on bioimageio yet: https://doi.org/10.1016/j.compbiomed.2020.103693
     "vnc": "ilastik/vnc",
 }
+"""@private
+"""
 
 
 def get_bioimageio_dataset_id(dataset_name):
+    """@private
+    """
     assert dataset_name in BIOIMAGEIO_IDS
     return BIOIMAGEIO_IDS[dataset_name]
 
 
-def get_checksum(filename):
+def get_checksum(filename: str) -> str:
+    """Get the SHA256 checksum of a file.
+
+    Args:
+        filename: The filepath.
+
+    Returns:
+        The checksum.
+    """
     with open(filename, "rb") as f:
         file_ = f.read()
         checksum = hashlib.sha256(file_).hexdigest()
@@ -89,7 +102,16 @@ def _check_checksum(path, checksum):
 
 # this needs to be extended to support download from s3 via boto,
 # if we get a resource that is available via s3 without support for http
-def download_source(path, url, download, checksum=None, verify=True):
+def download_source(path: str, url: str, download: bool, checksum: Optional[str] = None, verify: bool = True) -> None:
+    """Download data via https.
+
+    Args:
+        path: The path for saving the data.
+        url: The url of the data.
+        download: Whether to download the data if it is not saved at `path` yet.
+        checksum: The expected checksum of the data.
+        verify: Whether to verify the https address.
+    """
     if os.path.exists(path):
         return
     if not download:
@@ -108,8 +130,25 @@ def download_source(path, url, download, checksum=None, verify=True):
 
 
 def download_source_gdrive(
-    path, url, download, checksum=None, download_type="zip", expected_samples=10000, quiet=True,
-):
+    path: str,
+    url: str,
+    download: bool,
+    checksum: Optional[str] = None,
+    download_type: str = "zip",
+    expected_samples: int = 10000,
+    quiet: bool = True,
+) -> None:
+    """Download data from google drive.
+
+    Args:
+        path: The path for saving the data.
+        url: The url of the data.
+        download: Whether to download the data if it is not saved at `path` yet.
+        checksum: The expected checksum of the data.
+        download_type: The download type, either 'zip' or 'folder'.
+        expected_samples: The maximal number of samples in the folder.
+        quiet: Whether to download quietly.
+    """
     if os.path.exists(path):
         return
 
@@ -121,7 +160,6 @@ def download_source_gdrive(
             "Need gdown library to download data from google drive. "
             "Please install gdown: 'conda install -c conda-forge gdown==4.6.3'."
         )
-
     print("Downloading the files. Might take a few minutes...")
 
     if download_type == "zip":
@@ -136,7 +174,19 @@ def download_source_gdrive(
     print("Download completed.")
 
 
-def download_source_empiar(path, access_id, download):
+def download_source_empiar(path: str, access_id: str, download: bool) -> str:
+    """Download data from EMPIAR.
+
+    Requires the ascp command from the aspera CLI.
+
+    Args:
+        path: The path for saving the data.
+        access_id: The EMPIAR accession id of the data to download.
+        download: Whether to download the data if it is not saved at `path` yet.
+
+    Returns:
+        The path to the downloaded data.
+    """
     download_path = os.path.join(path, access_id)
 
     if os.path.exists(download_path):
@@ -146,8 +196,7 @@ def download_source_empiar(path, access_id, download):
 
     if which("ascp") is None:
         raise RuntimeError(
-            "Need aspera-cli to download data from empiar."
-            "You can install it via 'conda install -c hcc aspera-cli'."
+            "Need aspera-cli to download data from empiar. You can install it via 'conda install -c hcc aspera-cli'."
         )
 
     key_file = os.path.expanduser("~/.aspera/cli/etc/asperaweb_id_dsa.openssh")
@@ -158,16 +207,23 @@ def download_source_empiar(path, access_id, download):
     if not os.path.exists(key_file):
         raise RuntimeError("Could not find the aspera ssh keyfile")
 
-    cmd = [
-        "ascp", "-QT", "-l", "200M", "-P33001",
-        "-i", key_file, f"emp_ext2@fasp.ebi.ac.uk:/{access_id}", path
-    ]
+    cmd = ["ascp", "-QT", "-l", "200M", "-P33001", "-i", key_file, f"emp_ext2@fasp.ebi.ac.uk:/{access_id}", path]
     run(cmd)
 
     return download_path
 
 
-def download_source_kaggle(path, dataset_name, download, competition=False):
+def download_source_kaggle(path: str, dataset_name: str, download: bool, competition: bool = False):
+    """Download data from Kaggle.
+
+    Requires the Kaggle API.
+
+    Args:
+        path: The path for saving the data.
+        dataset_name: The name of the dataset to download.
+        download: Whether to download the data if it is not saved at `path` yet.
+        competition: Whether this data is from a competition and requires the kaggle.competition API.
+    """
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
 
@@ -189,23 +245,42 @@ def download_source_kaggle(path, dataset_name, download, competition=False):
 
 
 def download_source_tcia(path, url, dst, csv_filename, download):
+    """Download data from TCIA.
+
+    Requires the tcia_utils python package.
+
+    Args:
+        path: The path for saving the data.
+        url: The URL to the TCIA dataset.
+        dst:
+        csv_filename:
+        download: Whether to download the data if it is not saved at `path` yet.
+    """
+    if nbia is None:
+        raise RuntimeError("Requires the tcia_utils python package.")
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
+    assert url.endswith(".tcia"), f"{url} is not a TCIA Manifest."
 
-    assert url.endswith(".tcia"), f"{path} is not a TCIA Manifest."
-
-    # downloads the manifest file from the collection page
+    # Downloads the manifest file from the collection page.
     manifest = requests.get(url=url)
     with open(path, "wb") as f:
         f.write(manifest.content)
 
-    # this part extracts the UIDs from the manigests and downloads them.
-    nbia.downloadSeries(
-        series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename,
-    )
+    # This part extracts the UIDs from the manifests and downloads them.
+    nbia.downloadSeries(series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename)
 
 
-def download_source_synapse(path, entity, download):
+def download_source_synapse(path: str, entity: str, download: bool) -> None:
+    """Download data from synapse.
+
+    Requires the synapseclient python library.
+
+    Args:
+        path: The path for saving the data.
+        entity: The name of the data to download from synapse.
+        download: Whether to download the data if it is not saved at `path` yet.
+    """
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
 
@@ -226,6 +301,8 @@ def download_source_synapse(path, entity, download):
 
 
 def update_kwargs(kwargs, key, value, msg=None):
+    """@private
+    """
     if key in kwargs:
         msg = f"{key} will be over-ridden in loader kwargs." if msg is None else msg
         warn(msg)
@@ -233,7 +310,14 @@ def update_kwargs(kwargs, key, value, msg=None):
     return kwargs
 
 
-def unzip_tarfile(tar_path, dst, remove=True):
+def unzip_tarfile(tar_path: str, dst: str, remove: bool = True) -> None:
+    """Unpack a tar archive.
+
+    Args:
+        tar_path: Path to the tar file.
+        dst: Where to unpack the archive.
+        remove: Whether to remove the tar file after unpacking.
+    """
     import tarfile
 
     if tar_path.endswith(".tar.gz") or tar_path.endswith(".tgz"):
@@ -241,10 +325,7 @@ def unzip_tarfile(tar_path, dst, remove=True):
     elif tar_path.endswith(".tar"):
         access_mode = "r:"
     else:
-        raise ValueError(
-            "The provided file isn't a supported archive to unpack. "
-            f"Please check the file: {tar_path}."
-        )
+        raise ValueError(f"The provided file isn't a supported archive to unpack. Please check the file: {tar_path}.")
 
     tar = tarfile.open(tar_path, access_mode)
     tar.extractall(dst)
@@ -254,14 +335,21 @@ def unzip_tarfile(tar_path, dst, remove=True):
         os.remove(tar_path)
 
 
-def unzip_rarfile(rar_path, dst, remove=True, use_rarfile=True):
-    import rarfile
-    import aspose.zip as az
+def unzip_rarfile(rar_path: str, dst: str, remove: bool = True, use_rarfile: bool = True) -> None:
+    """Unpack a rar archive.
 
+    Args:
+        rar_path: Path to the rar file.
+        dst: Where to unpack the archive.
+        remove: Whether to remove the tar file after unpacking.
+        use_rarfile: Whether to use the rarfile library or aspose.zip.
+    """
     if use_rarfile:
+        import rarfile
         with rarfile.RarFile(rar_path) as f:
             f.extractall(path=dst)
     else:
+        import aspose.zip as az
         with az.rar.RarArchive(rar_path) as archive:
             archive.extract_to_directory(dst)
 
@@ -269,7 +357,14 @@ def unzip_rarfile(rar_path, dst, remove=True, use_rarfile=True):
         os.remove(rar_path)
 
 
-def unzip(zip_path, dst, remove=True):
+def unzip(zip_path: str, dst: str, remove: bool = True) -> None:
+    """Unpack a zip archive.
+
+    Args:
+        zip_path: Path to the zip file.
+        dst: Where to unpack the archive.
+        remove: Whether to remove the tar file after unpacking.
+    """
     with zipfile.ZipFile(zip_path, "r") as f:
         f.extractall(dst)
     if remove:
@@ -277,6 +372,8 @@ def unzip(zip_path, dst, remove=True):
 
 
 def split_kwargs(function, **kwargs):
+    """@private
+    """
     function_parameters = inspect.signature(function).parameters
     parameter_names = list(function_parameters.keys())
     other_kwargs = {k: v for k, v in kwargs.items() if k not in parameter_names}
@@ -289,6 +386,8 @@ def split_kwargs(function, **kwargs):
 # this is NOT necessary if 'default_segmentation_dataset' is used, only if a dataset class
 # is used directly, e.g. in the LiveCell Loader
 def ensure_transforms(ndim, **kwargs):
+    """@private
+    """
     if "raw_transform" not in kwargs:
         kwargs = update_kwargs(kwargs, "raw_transform", torch_em.transform.get_raw_transform())
     if "transform" not in kwargs:
@@ -299,6 +398,8 @@ def ensure_transforms(ndim, **kwargs):
 def add_instance_label_transform(
     kwargs, add_binary_target, label_dtype=None, binary=False, boundaries=False, offsets=None, binary_is_exclusive=True,
 ):
+    """@private
+    """
     if binary_is_exclusive:
         assert sum((offsets is not None, boundaries, binary)) <= 1
     else:
@@ -324,10 +425,10 @@ def add_instance_label_transform(
 
 
 def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kwargs=None, ensure_rgb=None):
+    """@private
     """
-    Checks for raw_transform and label_transform incoming values.
-    If yes, it will automatically merge these two transforms to apply them together.
-    """
+    # Checks for raw_transform and label_transform incoming values.
+    # If yes, it will automatically merge these two transforms to apply them together.
     if resize_inputs:
         assert isinstance(resize_kwargs, dict)
 
@@ -366,15 +467,17 @@ def update_kwargs_for_resize_trafo(kwargs, patch_shape, resize_inputs, resize_kw
     return kwargs, patch_shape
 
 
-def generate_labeled_array_from_xml(shape, xml_file):
-    """Function taken from: https://github.com/rshwndsz/hover-net/blob/master/lightning_hovernet.ipynb
+def generate_labeled_array_from_xml(shape: Tuple[int, ...], xml_file: str) -> np.ndarray:
+    """Generate a label mask from a contour defined in a xml annotation file.
 
-    Given image shape and path to annotations (xml file), generatebit mask with the region inside a contour being white
-        shape: The image shape on which bit mask will be made
-        xml_file: path relative to the current working directory where the xml file is present
+    Function taken from: https://github.com/rshwndsz/hover-net/blob/master/lightning_hovernet.ipynb
+
+    Args:
+        shape: The image shape.
+        xml_file: The path to the xml file with contour annotations.
 
     Returns:
-        An image of given shape with region inside contour being white.
+        The label mask.
     """
     # DOM object created by the minidom parser
     xDoc = minidom.parse(xml_file)
@@ -408,37 +511,46 @@ def generate_labeled_array_from_xml(shape, xml_file):
     return mask
 
 
-def convert_svs_to_array(path, location=(0, 0), level=0, img_size=None):
-    """Converts .svs files to numpy array format
+# This function could be extended to convert WSIs (or modalities with multiple resolutions).
+def convert_svs_to_array(
+    path: str, location: Tuple[int, int] = (0, 0), level: int = 0, img_size: Tuple[int, int] = None,
+) -> np.ndarray:
+    """Convert a .svs file for WSI imagging to a numpy array.
 
-    Argument:
-        - path: [str] - Path to the svs file
-        (below mentioned arguments are used for multi-resolution images)
-        - location: tuple[int, int] - pixel location (x, y) in level 0 of the image (default: (0, 0))
-        - level: [int] -  target level used to read the image (default: 0)
-        - img_size: tuple[int, int] - expected size of the image
-                                      (default: None -> obtains the original shape at the expected level)
+    Requires the tiffslide python library.
+    The function can load multi-resolution images. You can specify the resolution level via `level`.
+
+    Args:
+        path: File path ath to the svs file.
+        location: Pixel location (x, y) in level 0 of the image.
+        level: Target level used to read the image.
+        img_size: Size of the image. If None, the shape of the image at `level` is used.
 
     Returns:
-        the image as numpy array
-
-    TODO: it can be extended to convert WSIs (or modalities with multiple resolutions)
+        The image as numpy array.
     """
-    assert path.endswith(".svs"), f"The provided file ({path}) isn't in svs format"
-
     from tiffslide import TiffSlide
 
+    assert path.endswith(".svs"), f"The provided file ({path}) isn't in svs format"
     _slide = TiffSlide(path)
-
     if img_size is None:
         img_size = _slide.level_dimensions[0]
-
-    img_arr = _slide.read_region(location=location, level=level, size=img_size, as_array=True)
-
-    return img_arr
+    return _slide.read_region(location=location, level=level, size=img_size, as_array=True)
 
 
-def download_from_cryo_et_portal(path, dataset_id, download):
+def download_from_cryo_et_portal(path: str, dataset_id: int, download: bool) -> str:
+    """Download data from the CryoET Data Portal.
+
+    Requires the cryoet-data-portal python library.
+
+    Args:
+        path: The path for saving the data.
+        dataset_id: The id of the data to download from the portal.
+        download: Whether to download the data if it is not saved at `path` yet.
+
+    Returns:
+        The file path to the downloaded data.
+    """
     if Client is None or Dataset is None:
         raise RuntimeError("Please install CryoETDataPortal via 'pip install cryoet-data-portal'")
 
@@ -447,7 +559,7 @@ def download_from_cryo_et_portal(path, dataset_id, download):
         return output_path
 
     if not download:
-        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
+        raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
 
     client = Client()
     dataset = Dataset.get_by_id(client, dataset_id)

@@ -8,7 +8,32 @@ from ..util import ensure_tensor_with_channels, load_image, supports_memmap
 
 
 class RawImageCollectionDataset(torch.utils.data.Dataset):
+    """Dataset that provides raw data stored in a regular image data format for unsupervised training.
+
+    The dataset loads a patch the raw data and returns a sample for a batch.
+    It supports all file formats that can be loaded with the imageio or tiffile library, such as tif, png or jpeg files.
+
+    The dataset can also be used for contrastive learning that relies on two different views of the same data.
+    You can use the `augmentations` argument for this.
+
+    Args:
+        raw_image_paths: The file paths to the raw data.
+        patch_shape: The patch shape for a training sample.
+        raw_transform: Transformation applied to the raw data of a sample.
+        transform: Transformation to the raw data. This can be used to implement data augmentations.
+        dtype: The return data type of the raw data.
+        n_samples: The length of this dataset. If None, the length will be set to `len(raw_image_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data (as numpy arrays) as input.
+        augmentations: Augmentations for contrastive learning. If given, these need to be two different callables.
+            They will be applied to the sampled raw data to return two independent views of the raw data.
+        full_check: Whether to check that the input data is valid for all image paths.
+            This will ensure that the data is valid, but will take longer for creating the dataset.
+    """
     max_sampling_attempts = 500
+    """The maximal number of sampling attempts, for loading a sample via `__getitem__`.
+    This is used when `sampler` rejects a sample, to avoid an infinite loop if no valid sample can be found.
+    """
 
     def _check_inputs(self, raw_images, full_check):
         if not full_check:

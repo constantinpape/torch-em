@@ -1,17 +1,21 @@
+from typing import List, Optional, Tuple
+
 import numpy as np
 import torch
 import torch.nn as nn
 from .dice import dice_score
 
 
-def shift_tensor(tensor, offset):
-    """ Shift a tensor by the given (spatial) offset.
-    Arguments:
-        tensor [torch.Tensor] - 4D (=2 spatial dims) or 5D (=3 spatial dims) tensor.
-            Needs to be of float type.
-        offset (tuple) - 2d or 3d spatial offset used for shifting the tensor
-    """
+def shift_tensor(tensor: torch.Tensor, offset: List[int]) -> torch.Tensor:
+    """Shift a tensor by the given spatial offset.
 
+    Args:
+        tensor: A 4D (2 spatial dims) or 5D (3 spatial dims) tensor. Needs to be of float type.
+        offset: A 2d or 3d spatial offset used for shifting the tensor
+
+    Returns:
+        The shifted tensor.
+    """
     ndim = len(offset)
     assert ndim in (2, 3)
     diff = tensor.dim() - ndim
@@ -58,46 +62,66 @@ def shift_tensor(tensor, offset):
 
 
 def invert_offsets(offsets):
+    """@private
+    """
     return [[-off for off in offset] for offset in offsets]
 
 
-def segmentation_to_affinities(segmentation, offsets):
-    """ Transform segmentation to affinities.
-    Arguments:
-        segmentation [torch.tensor] - 4D (2 spatial dims) or 5D (3 spatial dims) segmentation tensor.
+def segmentation_to_affinities(segmentation: torch.Tensor, offsets: List[List[int]]) -> torch.Tensor:
+    """Transform segmentation to affinities.
+
+    Args:
+        segmentation: A 4D (2 spatial dims) or 5D (3 spatial dims) segmentation tensor.
             The channel axis (= dimension 1) needs to be a singleton.
-        offsets [list[tuple]] - list of offsets for which to compute the affinities.
+        offsets: List of offsets for which to compute the affinities.
+
+    Returns:
+        The affinities.
     """
     assert segmentation.shape[1] == 1, f"{segmentation.shape}"
-    # shift the segmentation and substract the shifted tensor from the segmentation
-    # we need to shift in the opposite direction of the offsets, so we invert them
-    # before applying the shift
+    # Shift the segmentation and substract the shifted tensor from the segmentation.
+    # We need to shift in the opposite direction of the offsets, so we invert them before applying the shift.
     offsets_ = invert_offsets(offsets)
     shifted = torch.cat([shift_tensor(segmentation.float(), off) for off in offsets_], dim=1)
     affs = (segmentation - shifted)
-    # the affinities are 1, where we had the same segment id (the difference is 0)
-    # and 0 otherwise
+    # The affinities are 1, where we had the same segment id (the difference is 0) and 0 otherwise.
     affs.eq_(0.)
     return affs
 
 
-def embeddings_to_affinities(embeddings, offsets, delta):
-    """ Transform embeddings to affinities.
+def embeddings_to_affinities(embeddings: torch.Tensor, offsets: List[List[int]], delta: float) -> torch.Tensor:
+    """Transform embeddings to affinities.
+
+    Args:
+        embeddings: The pixel-wise embeddings.
+        offsets: The offsets for computing affinities.
+        delta: The push force hinge used for training the embedding prediction network.
+
+    Returns:
+        The affinities.
     """
-    # shift the embeddings by the offsets and stack them along a new axis
-    # we need to shift in the opposite direction of the offsets, so we invert them
-    # before applying the shift
+    # Shift the embeddings by the offsets and stack them along a new axis.
+    # We need to shift in the opposite direction of the offsets, so we invert them before applying the shift.
     offsets_ = invert_offsets(offsets)
     shifted = torch.cat([shift_tensor(embeddings, off).unsqueeze(1) for off in offsets_], dim=1)
-    # substract the embeddings from the shifted embeddings, take the norm and
-    # transform to affinities based on the delta distance
+    # Substract the embeddings from the shifted embeddings, take the norm and
+    # transform to affinities based on the delta distance.
     affs = (2 * delta - torch.norm(embeddings.unsqueeze(1) - shifted, dim=2)) / (2 * delta)
     affs = torch.clamp(affs, min=0) ** 2
     return affs
 
 
 class AffinitySideLoss(nn.Module):
-    def __init__(self, offset_ranges, n_samples, delta):
+    """Loss computed between affinities derived from predicted embeddings and a target segmentation.
+
+    The offsets for the affinities will be derived randomly from the given `offset_ranges`.
+
+    Args:
+        offset_ranges: Ranges for the offsets to sampled.
+        n_samples: Number of offsets to sample per loss computation.
+        delta: The push force hinge used for training the embedding prediction network.
+    """
+    def __init__(self, offset_ranges: List[Tuple[int, int]], n_samples: int, delta: float):
         assert all(len(orange) == 2 for orange in offset_ranges)
         super().__init__()
         self.ndim = len(offset_ranges)
@@ -107,29 +131,42 @@ class AffinitySideLoss(nn.Module):
 
     def __call__(
         self,
-        input_,
-        target,
-        ignore_labels=None,
-        ignore_in_variance_term=None,
-        ignore_in_distance_term=None,
-    ):
+        input_: torch.Tensor,
+        target: torch.Tensor,
+        ignore_labels: Optional[List[int]] = None,
+        ignore_in_variance_term: Optional[List[int]] = None,
+        ignore_in_distance_term: Optional[List[int]] = None,
+    ) -> torch.Tensor:
+        """Compute loss between affinities derived from predicted embeddings and a target segmentation.
+
+        Note: Support for the ignore labels is currently not implemented.
+
+        Args:
+            input_: The predicted embeddings.
+            target: The target segmentation.
+            ignore_labels: Ignore labels for the loss computation.
+            ignore_in_variance_term: Ignore labels for the variance term.
+            ignore_in_distance_term: Ignore labels for the distance term.
+
+        Returns:
+            The affinity loss value.
+        """
         assert input_.dim() == target.dim(), f"{input_.dim()}, {target.dim()}"
         assert input_.shape[2:] == target.shape[2:]
 
-        # sample offsets
+        # Sample the offsets.
         offsets = [[np.random.randint(orange[0], orange[1]) for orange in self.offset_ranges]
                    for _ in range(self.n_samples)]
 
-        # we invert the affinities and the target affinities
+        # We invert the affinities and the target affinities,
         # so that we get boundaries as foreground, which is benefitial for the dice loss.
-        # compute affinities from emebeddings
+        # Compute affinities from emebeddings.
         affs = 1. - embeddings_to_affinities(input_, offsets, self.delta)
 
-        # compute groundtruth affinities from target
+        # Compute groundtruth affinities from the target segmentation.
         target_affs = 1. - segmentation_to_affinities(target, offsets)
         assert affs.shape == target_affs.shape, f"{affs.shape}, {target_affs.shape}"
 
         # TODO implement masking the ignore labels
-        # compute the dice score between affinities and target affinities
-        loss = dice_score(affs, target_affs, invert=True)
-        return loss
+        # Compute the dice score between affinities and target affinities.
+        return dice_score(affs, target_affs, invert=True)

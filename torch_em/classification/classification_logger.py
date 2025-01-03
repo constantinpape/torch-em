@@ -11,6 +11,8 @@ from torch_em.transform.raw import normalize
 
 
 def confusion_matrix(y_true, y_pred, class_labels=None, title=None, save_path=None, **plot_kwargs):
+    """@private
+    """
     fig, ax = plt.subplots(1)
 
     if save_path is None:
@@ -34,8 +36,9 @@ def confusion_matrix(y_true, y_pred, class_labels=None, title=None, save_path=No
     return image
 
 
-# TODO get the class names
 def make_grid(images, target=None, prediction=None, images_per_row=8, **kwargs):
+    """@private
+    """
     assert images.ndim in (4, 5)
     assert images.shape[1] in (1, 3), f"{images.shape}"
 
@@ -93,7 +96,13 @@ def make_grid(images, target=None, prediction=None, images_per_row=8, **kwargs):
 
 
 class ClassificationLogger(TorchEmLogger):
-    def __init__(self, trainer, save_root, **unused_kwargs):
+    """Logger for classification trainer.
+
+    Args:
+        trainer: The trainer instance.
+        save_root: Root folder for saving the checkpoints and logs.
+    """
+    def __init__(self, trainer, save_root: str, **unused_kwargs):
         super().__init__(trainer, save_root)
         self.log_dir = f"./logs/{trainer.name}" if save_root is None else\
             os.path.join(save_root, "logs", trainer.name)
@@ -103,17 +112,23 @@ class ClassificationLogger(TorchEmLogger):
         self.log_image_interval = trainer.log_image_interval
 
     def add_image(self, x, y, pred, name, step):
+        """@private
+        """
         scale_each = False
         grid = make_grid(x, y, pred, padding=4, normalize=True, scale_each=scale_each)
         self.tb.add_image(tag=f"{name}/images_and_predictions", img_tensor=grid, global_step=step)
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
+        """@private
+        """
         self.tb.add_scalar(tag="train/loss", scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag="train/learning_rate", scalar_value=lr, global_step=step)
         if step % self.log_image_interval == 0:
             self.add_image(x, y, prediction, "train", step)
 
     def log_validation(self, step, metric, loss, x, y, prediction, y_true=None, y_pred=None):
+        """@private
+        """
         self.tb.add_scalar(tag="validation/loss", scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag="validation/metric", scalar_value=metric, global_step=step)
         self.add_image(x, y, prediction, "validation", step)

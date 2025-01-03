@@ -11,6 +11,8 @@ from elf.segmentation.watershed import apply_size_filter
 
 
 class BaseInstanceSegmentationMetric(nn.Module):
+    """@private
+    """
     def __init__(self, segmenter, metric, to_numpy=True):
         super().__init__()
         self.segmenter = segmenter
@@ -37,6 +39,8 @@ class BaseInstanceSegmentationMetric(nn.Module):
 #
 
 def filter_sizes(seg, min_seg_size, hmap=None):
+    """@private
+    """
     seg_ids, counts = np.unique(seg, return_counts=True)
     if hmap is None:
         bg_ids = seg_ids[counts < min_seg_size]
@@ -49,6 +53,8 @@ def filter_sizes(seg, min_seg_size, hmap=None):
 
 
 class MWS:
+    """@private
+    """
     def __init__(self, offsets, with_background, min_seg_size, strides=None):
         self.offsets = offsets
         self.with_background = with_background
@@ -74,6 +80,8 @@ class MWS:
 
 
 class EmbeddingMWS:
+    """@private
+    """
     def __init__(self, delta, offsets, with_background, min_seg_size, strides=None):
         self.delta = delta
         self.offsets = offsets
@@ -112,6 +120,8 @@ class EmbeddingMWS:
 
 
 class Multicut:
+    """@private
+    """
     def __init__(self, min_seg_size, anisotropic=False, dt_threshold=0.25, sigma_seeds=2.0, solver="decomposition"):
         self.min_seg_size = min_seg_size
         self.anisotropic = anisotropic
@@ -144,6 +154,8 @@ class Multicut:
 
 
 class HDBScan:
+    """@private
+    """
     def __init__(self, min_size, eps, remove_largest):
         self.min_size = min_size
         self.eps = eps
@@ -158,6 +170,8 @@ class HDBScan:
 #
 
 class IOUError:
+    """@private
+    """
     def __init__(self, threshold=0.5, metric="precision"):
         self.threshold = threshold
         self.metric = metric
@@ -168,18 +182,24 @@ class IOUError:
 
 
 class VariationOfInformation:
+    """@private
+    """
     def __call__(self, seg, target):
         vis, vim = elfval.variation_of_information(seg, target)
         return vis + vim
 
 
 class AdaptedRandError:
+    """@private
+    """
     def __call__(self, seg, target):
         are, _ = elfval.rand_index(seg, target)
         return are
 
 
 class SymmetricBestDice:
+    """@private
+    """
     def __call__(self, seg, target):
         score = 1.0 - elfval.symmetric_best_dice_score(seg, target)
         return score
@@ -191,6 +211,15 @@ class SymmetricBestDice:
 
 
 class EmbeddingMWSIOUMetric(BaseInstanceSegmentationMetric):
+    """
+
+    Args:
+        delta:
+        offsets:
+        min_seg_size:
+        iou_threshold:
+        strides:
+    """
     def __init__(self, delta, offsets, min_seg_size, iou_threshold=0.5, strides=None):
         segmenter = EmbeddingMWS(delta, offsets, with_background=True, min_seg_size=min_seg_size)
         metric = IOUError(iou_threshold)
