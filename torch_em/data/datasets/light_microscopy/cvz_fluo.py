@@ -27,7 +27,7 @@ URL = "https://www.synapse.org/Synapse:syn27624812/"
 
 
 def get_cvz_fluo_data(path: Union[os.PathLike, str], download: bool = False):
-    """DOwnload the CVZ-Fluo dataset.
+    """Download the CVZ-Fluo dataset.
 
     Args:
         path: Filepath to a folder where the downloaded data is saved.
