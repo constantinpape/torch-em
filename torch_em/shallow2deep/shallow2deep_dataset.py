@@ -2,6 +2,7 @@ import os
 import pickle
 import warnings
 from glob import glob
+from typing import Callable, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -91,6 +92,8 @@ class _Shallow2DeepBase:
 
 
 class Shallow2DeepDataset(SegmentationDataset, _Shallow2DeepBase):
+    """@private
+    """
     def __getitem__(self, index):
         assert self._rf_paths is not None
         raw, labels = self._get_sample(index)
@@ -130,6 +133,8 @@ class Shallow2DeepDataset(SegmentationDataset, _Shallow2DeepBase):
 
 
 class Shallow2DeepImageCollectionDataset(ImageCollectionDataset, _Shallow2DeepBase):
+    """@private
+    """
     def __getitem__(self, index):
         raw, labels = self._get_sample(index)
         initial_label_dtype = labels.dtype
@@ -235,29 +240,54 @@ def _load_shallow2deep_image_collection_dataset(
 
 
 def get_shallow2deep_dataset(
-    raw_paths,
-    raw_key,
-    label_paths,
-    label_key,
-    rf_paths,
-    patch_shape,
-    raw_transform=None,
-    label_transform=None,
-    transform=None,
-    dtype=torch.float32,
-    rois=None,
-    n_samples=None,
-    sampler=None,
-    ndim=None,
-    is_seg_dataset=None,
-    with_channels=False,
-    filter_config=None,
-    rf_channels=(1,),
-):
+    raw_paths: Union[str, Sequence[str]],
+    raw_key: Optional[str],
+    label_paths: Union[str, Sequence[str]],
+    label_key: Optional[str],
+    rf_paths: Sequence[str],
+    patch_shape: Tuple[int, ...],
+    raw_transform: Optional[Callable] = None,
+    label_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
+    dtype: Union[str, torch.dtype] = torch.float32,
+    rois: Optional[Sequence[Tuple[slice, ...]], Tuple[slice, ...]] = None,
+    n_samples: Optional[int] = None,
+    sampler: Optional[Callable] = None,
+    ndim: Optional[int] = None,
+    is_seg_dataset: Optional[bool] = None,
+    with_channels: bool = False,
+    filter_config: Optional[Dict] = None,
+    rf_channels: Tuple[int, ...] = (1,),
+) -> torch.utils.data.Dataset:
+    """Get a dataset for shallow2deep enhancer training.
+
+    Args:
+        raw_paths: The file paths to the image data. May also be a single file.
+        raw_key: The name of the internal dataset for the raw data. Set to None for a regular image file, like tif.
+        label_paths: The file paths to the label data. May also be a single file.
+        label_key: The name of the internal dataset for the label data. Set to None for a regular image file, like tif.
+        rf_paths: The file paths to the pretrained random forests.
+        patch_shape: The patch shape to load for a sample.
+        raw_transform: The transform to apply to the raw data.
+        label_transform: The transform to apply to the label data.
+        transform: The transform to apply to raw and label data, e.g. to implement augmentations.
+        dtype: The data type for the raw data.
+        rois: The regions of interest for the data.
+        n_samples: The length of this dataset.
+        sampler: A sampler to reject samples based on a pre-defined criterion.
+        ndim: The dimensionality of the data.
+        is_seg_dataset: Whether this is a segmentation or an image collection dataset.
+            If set to None, this will be determined from the data.
+        with_channels: Whether the raw data has channels.
+        filter_config: The filter configuration for the random forest.
+        rf_channels: The random forest channel to use as input for the enhancer model.
+
+    Returns:
+        The dataset.
+    """
     check_paths(raw_paths, label_paths)
     if is_seg_dataset is None:
-        is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key,
-                                                 label_paths, label_key)
+        is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
 
     # we always use a raw transform in the convenience function
     if raw_transform is None:
@@ -302,26 +332,55 @@ def get_shallow2deep_dataset(
 
 
 def get_shallow2deep_loader(
-    raw_paths,
-    raw_key,
-    label_paths,
-    label_key,
-    rf_paths,
-    batch_size,
-    patch_shape,
-    filter_config=None,
-    raw_transform=None,
-    label_transform=None,
-    transform=None,
-    rois=None,
-    n_samples=None,
-    sampler=None,
-    ndim=None,
-    is_seg_dataset=None,
-    with_channels=False,
-    rf_channels=(1,),
+    raw_paths: Union[str, Sequence[str]],
+    raw_key: Optional[str],
+    label_paths: Union[str, Sequence[str]],
+    label_key: Optional[str],
+    rf_paths: Sequence[str],
+    batch_size: int,
+    patch_shape: Tuple[int, ...],
+    raw_transform: Optional[Callable] = None,
+    label_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
+    dtype: Union[str, torch.dtype] = torch.float32,
+    rois: Optional[Sequence[Tuple[slice, ...]], Tuple[slice, ...]] = None,
+    n_samples: Optional[int] = None,
+    sampler: Optional[Callable] = None,
+    ndim: Optional[int] = None,
+    is_seg_dataset: Optional[bool] = None,
+    with_channels: bool = False,
+    filter_config: Optional[Dict] = None,
+    rf_channels: Tuple[int, ...] = (1,),
     **loader_kwargs,
-):
+) -> torch.utils.data.DataLoader:
+    """Get a dataloader for shallow2deep enhancer training.
+
+    Args:
+        raw_paths: The file paths to the image data. May also be a single file.
+        raw_key: The name of the internal dataset for the raw data. Set to None for a regular image file, like tif.
+        label_paths: The file paths to the label data. May also be a single file.
+        label_key: The name of the internal dataset for the label data. Set to None for a regular image file, like tif.
+        rf_paths: The file paths to the pretrained random forests.
+        batch_size: The batch size for the data loader.
+        patch_shape: The patch shape to load for a sample.
+        raw_transform: The transform to apply to the raw data.
+        label_transform: The transform to apply to the label data.
+        transform: The transform to apply to raw and label data, e.g. to implement augmentations.
+        dtype: The data type for the raw data.
+        rois: The regions of interest for the data.
+        n_samples: The length of this dataset.
+        sampler: A sampler to reject samples based on a pre-defined criterion.
+        ndim: The dimensionality of the data.
+        is_seg_dataset: Whether this is a segmentation or an image collection dataset.
+            If set to None, this will be determined from the data.
+        with_channels: Whether the raw data has channels.
+        filter_config: The filter configuration for the random forest.
+        rf_channels: The random forest channel to use as input for the enhancer model.
+        loader_kwargs: The keyword arguments for the data loader.
+
+    Returns:
+        The dataloader
+    """
     ds = get_shallow2deep_dataset(
         raw_paths=raw_paths,
         raw_key=raw_key,

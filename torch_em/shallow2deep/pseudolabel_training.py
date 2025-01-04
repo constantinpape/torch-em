@@ -1,12 +1,17 @@
 import os
+from typing import Callable, Dict, Optional, Sequence, Tuple, Union
+
+import torch
 from torch_em.data import ConcatDataset, PseudoLabelDataset
-from torch_em.segmentation import (get_data_loader, get_raw_transform,
-                                   is_segmentation_dataset,
-                                   samples_to_datasets, _get_default_transform)
+from torch_em.segmentation import (
+    get_data_loader, get_raw_transform, is_segmentation_dataset, samples_to_datasets, _get_default_transform
+)
 from .shallow2deep_model import Shallow2DeepModel
 
 
 def check_paths(raw_paths):
+    """@private
+    """
     def _check_path(path):
         if not os.path.exists(path):
             raise ValueError(f"Could not find path {path}")
@@ -46,19 +51,39 @@ def _load_pseudolabel_dataset(raw_paths, raw_key, **kwargs):
 
 
 def get_pseudolabel_dataset(
-    raw_paths,
-    raw_key,
-    checkpoint,
-    rf_config,
-    patch_shape,
-    raw_transform=None,
-    transform=None,
-    rois=None,
-    n_samples=None,
-    ndim=None,
-    is_raw_dataset=None,
-    pseudo_labeler_device="cpu",
-):
+    raw_paths: Union[str, Sequence[str]],
+    raw_key: Optional[str],
+    checkpoint: str,
+    rf_config: Dict,
+    patch_shape: Tuple[int, ...],
+    raw_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
+    rois: Optional[Tuple[slice, ...], Sequence[Tuple[slice, ...]]] = None,
+    n_samples: Optional[int] = None,
+    ndim: Optional[int] = None,
+    is_raw_dataset: Optional[bool] = None,
+    pseudo_labeler_device: str = "cpu",
+) -> torch.utils.Dataset:
+    """Get a pseudo-label dataset for training from a Shallow2Deep model.
+
+    Args:
+        raw_paths: The raw paths for training the model. May also be a single file.
+        raw_key: The internal dataset name for the raw data. Set to None for a regular image file like tif.
+        checkpoint: The checkpoint for the trained Shallow2Deep model.
+        rf_config: The configuration for the random forest used for the Shallow2Deep model.
+        patch_shape: The patch shape for training.
+        raw_transform: The transformation to apply to the raw data.
+        transform: The transformation to implement augmentations.
+        rois: The region of interest for the training data.
+        n_samples: The length of this dataset.
+        ndim: The dimensionality of the dataset.
+        is_raw_dataset: Whether this is a segmentation or image collection dataset.
+            If None, will be derived from the data.
+        pseudo_labeler_device: The device for the pseudo labeling model.
+
+    Returns:
+        The dataset with pseudo-labeler.
+    """
     check_paths(raw_paths)
     if is_raw_dataset is None:
         is_raw_dataset = is_segmentation_dataset(raw_paths, raw_key, raw_paths, raw_key)
@@ -90,21 +115,43 @@ def get_pseudolabel_dataset(
 
 # TODO add options for confidence module and consistency
 def get_pseudolabel_loader(
-    raw_paths,
-    raw_key,
-    checkpoint,
-    rf_config,
-    batch_size,
-    patch_shape,
-    raw_transform=None,
-    transform=None,
-    rois=None,
-    n_samples=None,
-    ndim=None,
-    is_raw_dataset=None,
-    pseudo_labeler_device="cpu",
+    raw_paths: Union[str, Sequence[str]],
+    raw_key: Optional[str],
+    checkpoint: str,
+    rf_config: Dict,
+    batch_size: int,
+    patch_shape: Tuple[int, ...],
+    raw_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
+    rois: Optional[Tuple[slice, ...], Sequence[Tuple[slice, ...]]] = None,
+    n_samples: Optional[int] = None,
+    ndim: Optional[int] = None,
+    is_raw_dataset: Optional[bool] = None,
+    pseudo_labeler_device: str = "cpu",
     **loader_kwargs,
 ):
+    """Get a pseudo-label dataloader for training from a Shallow2Deep model.
+
+    Args:
+        raw_paths: The raw paths for training the model. May also be a single file.
+        raw_key: The internal dataset name for the raw data. Set to None for a regular image file like tif.
+        checkpoint: The checkpoint for the trained Shallow2Deep model.
+        rf_config: The configuration for the random forest used for the Shallow2Deep model.
+        batch_size: The batch size for the data loader.
+        patch_shape: The patch shape for training.
+        raw_transform: The transformation to apply to the raw data.
+        transform: The transformation to implement augmentations.
+        rois: The region of interest for the training data.
+        n_samples: The length of this dataset.
+        ndim: The dimensionality of the dataset.
+        is_raw_dataset: Whether this is a segmentation or image collection dataset.
+            If None, will be derived from the data.
+        pseudo_labeler_device: The device for the pseudo labeling model.
+        loader_kwargs: Keyword arguments for the data loader.
+
+    Returns:
+        The dataloader with pseudo-labeler.
+    """
     ds = get_pseudolabel_dataset(
         raw_paths=raw_paths, raw_key=raw_key,
         checkpoint=checkpoint, rf_config=rf_config, patch_shape=patch_shape,
