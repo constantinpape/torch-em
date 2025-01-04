@@ -139,7 +139,7 @@ def predict_with_halo(
 ) -> ArrayLike:
     """Run block-wise network prediction with a halo.
 
-    Arguments:
+    Args:
         input_: The input data, can be a numpy array, a hdf5/zarr/z5py dataset or similar
         model: The network.
         gpu_ids: List of device ids to use for prediction. To run prediction on the CPU, pass `["cpu"]`.

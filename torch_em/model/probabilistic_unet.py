@@ -298,7 +298,7 @@ class ProbabilisticUNet(nn.Module):
     consensus_masking: activates consensus masking in the reconstruction loss
     rl_swap: switches the reconstruction loss to dice loss from the default (binary cross-entroy loss)
 
-    Parameters:
+    Args:
         input_channels [int] - (default: 1)
         num_classes [int] - (default: 1)
         num_filters [list] - (default: [32, 64, 128, 192])
