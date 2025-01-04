@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 from .dice import DiceLoss
@@ -28,7 +29,7 @@ class DistanceLoss(nn.Module):
 
         self.init_kwargs = {"mask_distances_in_bg": mask_distances_in_bg}
 
-    def forward(self, input_, target):
+    def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         assert input_.shape == target.shape, input_.shape
         assert input_.shape[1] == 3, input_.shape
 
@@ -59,7 +60,10 @@ class DistanceLoss(nn.Module):
 
 
 class DiceBasedDistanceLoss(DistanceLoss):
-    """Similar to DistanceLoss and uses dice for all losses.
+    """Similar to `DistanceLoss`, using the dice score for all losses.
+
+    Args:
+        mask_distances_in_bg: whether to mask the loss for distance predictions in the background.
     """
     def __init__(self, mask_distances_in_bg: bool) -> None:
         super().__init__(mask_distances_in_bg, foreground_loss=DiceLoss(), distance_loss=DiceLoss())

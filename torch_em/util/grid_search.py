@@ -1,8 +1,9 @@
+from typing import Callable, Dict, List, Optional, Tuple
+
+import bioimageio.core
 import numpy as np
 import torch.nn as nn
 import xarray
-
-import bioimageio.core
 
 from micro_sam.instance_segmentation import InstanceSegmentationWithDecoder
 from micro_sam.evaluation.instance_segmentation import (
@@ -20,6 +21,8 @@ from .segmentation import watershed_from_components
 def default_grid_search_values_boundary_based_instance_segmentation(
     threshold1_values=None, threshold2_values=None, min_size_values=None,
 ):
+    """@private
+    """
     if threshold1_values is None:
         threshold1_values = [0.5, 0.55, 0.6]
     if threshold2_values is None:
@@ -29,14 +32,12 @@ def default_grid_search_values_boundary_based_instance_segmentation(
     if min_size_values is None:
         min_size_values = [25, 50, 75, 100, 200]
 
-    return {
-        "min_size": min_size_values,
-        "threshold1": threshold1_values,
-        "threshold2": threshold2_values,
-    }
+    return {"min_size": min_size_values, "threshold1": threshold1_values, "threshold2": threshold2_values}
 
 
 class _InstanceSegmentationBase(InstanceSegmentationWithDecoder):
+    """Over-write micro_sam functionality so that it works for distance based segmentation with a U-net.
+    """
     def __init__(self, model, preprocess=None, block_shape=None, halo=None):
         self._model = model
         self._preprocess = standardize if preprocess is None else preprocess
@@ -44,7 +45,6 @@ class _InstanceSegmentationBase(InstanceSegmentationWithDecoder):
         assert (block_shape is None) == (halo is None)
         self._block_shape = block_shape
         self._halo = halo
-
         self._is_initialized = False
 
     def _initialize_torch(self, data):
@@ -81,28 +81,44 @@ class _InstanceSegmentationBase(InstanceSegmentationWithDecoder):
 
 
 class BoundaryBasedInstanceSegmentation(_InstanceSegmentationBase):
-    def __init__(self, model, preprocess=None, block_shape=None, halo=None):
-        super().__init__(
-            model=model, preprocess=preprocess, block_shape=block_shape, halo=halo
-        )
+    """Wrapper for boundary based instance segmentation.
 
+    Instances of this class can be passed to `instance_segmentation_grid_search`.
+
+    Args:
+        model: The model to evaluate. It must predict two channels:
+            The first channel fpr foreground probabilities and the second for boundary probabilities.
+        preprocess: Optional preprocessing function to apply to the model inputs.
+        block_shape: Optional block shape for tiled prediction. If None, the inputs will be predicted en bloc.
+        halo: Halo for tiled prediction.
+    """
+    def __init__(
+        self,
+        model: nn.Module,
+        preprocess: Optional[Callable] = None,
+        block_shape: Tuple[int, ...] = None,
+        halo: Tuple[int, ...] = None,
+    ):
+        super().__init__(model=model, preprocess=preprocess, block_shape=block_shape, halo=halo)
         self._foreground = None
         self._boundaries = None
 
     def initialize(self, data):
+        """@private
+        """
         if isinstance(self._model, nn.Module):
             output = self._initialize_torch(data)
         else:
             output = self._initialize_modelzoo(data)
-
         assert output.shape[0] == 2
 
         self._foreground = output[0]
         self._boundaries = output[1]
-
         self._is_initialized = True
 
     def generate(self, min_size=50, threshold1=0.5, threshold2=0.5, output_mode="binary_mask"):
+        """@private
+        """
         segmentation = watershed_from_components(
             self._boundaries, self._foreground,
             min_size=min_size, threshold1=threshold1, threshold2=threshold2,
@@ -113,19 +129,34 @@ class BoundaryBasedInstanceSegmentation(_InstanceSegmentationBase):
 
 
 class DistanceBasedInstanceSegmentation(_InstanceSegmentationBase):
-    """Over-write micro_sam functionality so that it works for distance based
-    segmentation with a U-net.
+    """Wrapper for distance based instance segmentation.
+
+    Instances of this class can be passed to `instance_segmentation_grid_search`.
+
+    Args:
+        model: The model to evaluate. It must predict three channels:
+            The first channel fpr foreground probabilities, the second for center distances
+            and the third for boundary distances.
+        preprocess: Optional preprocessing function to apply to the model inputs.
+        block_shape: Optional block shape for tiled prediction. If None, the inputs will be predicted en bloc.
+        halo: Halo for tiled prediction.
     """
-    def __init__(self, model, preprocess=None, block_shape=None, halo=None):
-        super().__init__(
-            model=model, preprocess=preprocess, block_shape=block_shape, halo=halo
-        )
+    def __init__(
+        self,
+        model: nn.Module,
+        preprocess: Optional[Callable] = None,
+        block_shape: Tuple[int, ...] = None,
+        halo: Tuple[int, ...] = None,
+    ):
+        super().__init__(model=model, preprocess=preprocess, block_shape=block_shape, halo=halo)
 
         self._foreground = None
         self._center_distances = None
         self._boundary_distances = None
 
     def initialize(self, data):
+        """@private
+        """
         if isinstance(self._model, nn.Module):
             output = self._initialize_torch(data)
         else:
@@ -135,15 +166,39 @@ class DistanceBasedInstanceSegmentation(_InstanceSegmentationBase):
         self._foreground = output[0]
         self._center_distances = output[1]
         self._boundary_distances = output[2]
-
         self._is_initialized = True
 
 
 def instance_segmentation_grid_search(
-    segmenter, image_paths, gt_paths, result_dir,
-    grid_search_values=None, rois=None,
-    image_key=None, gt_key=None,
-):
+    segmenter,
+    image_paths: List[str],
+    gt_paths: List[str],
+    result_dir: str,
+    grid_search_values: Optional[Dict] = None,
+    rois: Optional[List[Tuple[slice, ...]]] = None,
+    image_key: Optional[str] = None,
+    gt_key: Optional[str] = None,
+) -> Tuple[Dict, float]:
+    """Run grid search for instance segmentation.
+
+    Args:
+        segmenter: The segmentation wrapper. Needs to provide a 'initialize' and 'generate' function.
+            The class `DistanceBasedInstanceSegmentation` can be used for models predicting distances
+            for instance segmentation, `BoundaryBasedInstanceSegmentation` for models predicting boundaries.
+        image_paths: The paths to the images to use for the grid search.
+        gt_paths: The paths to the labels to use for the grid search.
+        result_dir: The directory for caching the grid search results.
+        grid_search_values: The values to test in the grid search.
+        rois: Region of interests to use for the evaluation. If given, must have the same length as `image_paths`.
+        image_key: The key to the internal dataset with the image data.
+            Leave None if the images are in a regular image format such as tif.
+        gt_key: The key to the internal dataset with the label data.
+            Leave None if the images are in a regular image format such as tif.
+
+    Returns:
+        The best parameters found by the grid search.
+        The best score of the grid search.
+    """
     if grid_search_values is None:
         if isinstance(segmenter, DistanceBasedInstanceSegmentation):
             grid_search_values = default_grid_search_values_instance_segmentation_with_decoder()

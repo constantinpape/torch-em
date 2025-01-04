@@ -3,10 +3,9 @@ from concurrent import futures
 from typing import Tuple, Union, Callable, Any, List, Optional
 
 import numpy as np
-
 import nifty.tools as nt
-
 import torch
+from numpy.typing import ArrayLike
 
 try:
     from napari.utils import progress as tqdm
@@ -19,24 +18,24 @@ from ..transform.raw import standardize
 def predict_with_padding(
     model: torch.nn.Module,
     input_: np.ndarray,
-    min_divisible: Tuple[int, int],
+    min_divisible: Tuple[int, ...],
     device: Optional[Union[torch.device, str]] = None,
     with_channels: bool = False,
     prediction_function: Callable[[Any], Any] = None
-):
+) -> np.ndarray:
     """Run prediction with padding for a model that can only deal with inputs divisible by specific factors.
 
-    Arguments:
-        model [torch.nn.Module]: the model
-        input_ [np.ndarray]: the input ()
-        min_divisible [tuple]: the divisibe shape factors
-            (e.g. (16, 16) for a model that needs inputs divisible by at least 16 pixels)
-        device [str, torch.device]: the device of the model
-        with_channels [bool]: Whether the input data contains channels (default: False)
-        prediction_function [callable] - A wrapper function for prediction to enable custom prediction procedures
-            (default: None)
+    Args:
+        model: The model.
+        input_: The input for prediction.
+        min_divisible: The minimal factors the input shape must be divisible by.
+            For example, (16, 16) for a model that needs 2D inputs divisible by at least 16 pixels.
+        device: The device of the model. If not given, will be derived from the model parameters.
+        with_channels: Whether the input data contains channels.
+        prediction_function: A wrapper function for prediction to enable custom prediction procedures.
+
     Returns:
-        np.ndarray: the ouptut of the model
+        np.ndarray: The ouptut of the model.
     """
     if with_channels:
         assert len(min_divisible) + 1 == input_.ndim, f"{min_divisible}, {input_.ndim}"
@@ -121,46 +120,45 @@ def _load_block(input_, offset, block_shape, halo, padding_mode="reflect", with_
     return data, bb
 
 
-# TODO half precision prediction
 def predict_with_halo(
-    input_: np.ndarray,
+    input_: ArrayLike,
     model: torch.nn.Module,
     gpu_ids: List[Union[str, int]],
     block_shape: Tuple[int, ...],
     halo: Tuple[int, ...],
-    output: Optional[Union[np.ndarray, ]] = None,
+    output: Optional[Union[ArrayLike, List[Tuple[ArrayLike, slice]]]] = None,
     preprocess: Callable[[Union[torch.Tensor, np.ndarray]], Union[torch.Tensor, np.ndarray]] = standardize,
     postprocess: Callable[[np.ndarray], np.ndarray] = None,
     with_channels: bool = False,
     skip_block: Callable[[Any], bool] = None,
-    mask: np.ndarray = None,
+    mask: Optional[ArrayLike] = None,
     disable_tqdm: bool = False,
     tqdm_desc: str = "predict with halo",
     prediction_function: Optional[Callable] = None,
     roi: Optional[Tuple[slice]] = None,
-):
-    """ Run block-wise network prediction with halo.
+) -> ArrayLike:
+    """Run block-wise network prediction with a halo.
 
-    Arguments:
-        input_ [arraylike] - the input data, can be a numpy array, a hdf5/zarr/z5py dataset or similar
-        model [nn.Module] - the network
-        gpu_ids [list[int or string]] - list of gpus id used for prediction
-        block_shape [tuple] - shape of inner block used for prediction
-        halo [tuple] - shape of halo used for prediction
-        output [arraylike or list[tuple[arraylike, slice]]] - output data, will be allocated if None is passed.
-            Instead of a single output, this can also be a list of outputs and the corresponding channels.
-            (default: None)
-        preprocess [callable] - function to preprocess input data before passing it to the network.
-            (default: standardize)
-        postprocess [callable] - function to postprocess the network predictions (default: None)
-        with_channels [bool] - whether the input has a channel axis (default: False)
-        skip_block [callable] - function to evaluate wheter a given input block should be skipped (default: None)
-        mask [arraylike] - elements outside the mask will be ignored in the prediction (default: None)
-        disable_tqdm [bool] - flag that allows to disable tqdm output (e.g. if function is called multiple times)
-        tqdm_desc [str] - description shown by the tqdm output
-        prediction_function [callable] - a wrapper function for prediction to enable custom prediction procedures.
-            (default: None)
-        roi [tuple[slice]] - a region of interest for which to run prediction. (default: None)
+    Args:
+        input_: The input data, can be a numpy array, a hdf5/zarr/z5py dataset or similar
+        model: The network.
+        gpu_ids: List of device ids to use for prediction. To run prediction on the CPU, pass `["cpu"]`.
+        block_shape: The shape of the inner block to use for prediction.
+        halo: The shape of the halo to use for prediction
+        output: The output data, will be allocated if None is passed.
+            Instead of a single output, this can also be a list of outputs and a slice for the corresponding channel.
+        preprocess: Function to preprocess input data before passing it to the network.
+        postprocess: Function to postprocess the network predictions.
+        with_channels: Whether the input has a channel axis.
+        skip_block: Function to evaluate whether a given input block will be skipped.
+        mask: Elements outside the mask will be ignored in the prediction.
+        disable_tqdm: Flag that allows to disable tqdm output (e.g. if function is called multiple times).
+        tqdm_desc: Fescription shown by the tqdm output.
+        prediction_function: A wrapper function for prediction to enable custom prediction procedures.
+        roi: A region of interest of the input for which to run prediction.
+
+    Returns:
+        The model output.
     """
     devices = [torch.device(gpu) for gpu in gpu_ids]
     models = [

@@ -11,9 +11,43 @@ from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data,
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
-    """
+    """Dataset that provides raw data and labels stored in a container data format for segmentation training.
+
+    The dataset loads a patch from the raw and label data and returns a sample for a batch.
+    Image data and label data must have the same shape, except for potential channels.
+    The dataset supports all file formats that can be opened with `elf.io.open_file`, such as hdf5, zarr or n5.
+    Use `raw_path` / `label_path` to specify the file path and `raw_key` / `label_key` to specify the internal dataset.
+    It also supports regular image formats, such as .tif. For these cases set `raw_key=None` / `label_key=None`.
+
+    Args:
+        raw_path: The file path to the raw image data. May also be a list of file paths.
+        raw_key: The key to the internal dataset containing the raw data.
+        label_path: The file path to the label data. May also be a list of file paths.
+        label_key: The key to the internal dataset containing the label data
+        patch_shape: The patch shape for a training sample.
+        raw_transform: Transformation applied to the raw data of a sample.
+        label_transform: Transformation applied to the label data of a sample,
+            before applying augmentations via `transform`.
+        label_transform2: Transformation applied to the label data of a sample,
+            after applying augmentations via `transform`.
+        transform: Transformation applied to both the raw data and label data of a sample.
+            This can be used to implement data augmentations.
+        roi: Region of interest in the data. If given, the data will only be loaded from the corresponding area.
+        dtype: The return data type of the raw data.
+        label_dtype: The return data type of the label data.
+        n_samples: The length of this dataset. If None, the length will be set to `len(raw_image_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data (as numpy arrays) as input.
+        ndim: The spatial dimensionality of the data. If None, will be derived from the raw data.
+        with_channels: Whether the raw data has channels.
+        with_label_channels: Whether the label data has channels.
+        with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
+        z_ext: Extra bounding box for loading the data across z.
     """
     max_sampling_attempts = 500
+    """The maximal number of sampling attempts, for loading a sample via `__getitem__`.
+    This is used when `sampler` rejects a sample, to avoid an infinite loop if no valid sample can be found.
+    """
 
     @staticmethod
     def compute_len(shape, patch_shape):
@@ -170,6 +204,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
         return raw, labels
 
     def crop(self, tensor):
+        """@private
+        """
         bb = self.inner_bb
         if tensor.ndim > len(bb):
             bb = (tensor.ndim - len(bb)) * (slice(None),) + bb

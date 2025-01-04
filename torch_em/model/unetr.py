@@ -20,7 +20,24 @@ except ImportError:
 
 
 class UNETR(nn.Module):
+    """A U-Net Transformer using a vision transformer as encoder and a convolutional decoder.
 
+    Args:
+        img_size: The size of the input for the image encoder. Input images will be resized to match this size.
+        backbone: The name of the vision transformer implementation. One of "sam" or "mae".
+        encoder: The vision transformer. Can either be a name, such as "vit_b" or a torch module.
+        decoder: The convolutional decoder.
+        out_channels: The number of output channels of the UNETR.
+        use_sam_stats: Whether to normalize the input data with the statistics of the pretrained SAM model.
+        use_mae_stats: Whether to normalize the input data with the statistics of the pretrained MAE model.
+        resize_input: Whether to resize the input images to match `img_size`.
+        encoder_checkpoint: Checkpoint for initializing the vision transformer.
+            Can either be a filepath or an already loaded checkpoint.
+        final_activation: The activation to apply to the UNETR output.
+        use_skip_connection: Whether to use skip connections.
+        embed_dim: The embedding dimensionality, corresponding to the output dimension of the vision transformer.
+        use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
+    """
     def _load_encoder_from_checkpoint(self, backbone, encoder, checkpoint):
         """Function to load pretrained weights to the image encoder.
         """
@@ -41,8 +58,7 @@ class UNETR(nn.Module):
                 #     - https://github.com/facebookresearch/mae/blob/main/main_finetune.py#L233-L242
                 encoder_state = torch.load(checkpoint)["model"]
                 encoder_state = OrderedDict({
-                    k: v for k, v in encoder_state.items()
-                    if (k != "mask_token" and not k.startswith("decoder"))
+                    k: v for k, v in encoder_state.items() if (k != "mask_token" and not k.startswith("decoder"))
                 })
                 # Let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
                 current_encoder_state = self.encoder.state_dict()
@@ -168,6 +184,15 @@ class UNETR(nn.Module):
     @staticmethod
     def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int) -> Tuple[int, int]:
         """Compute the output size given input size and target long side length.
+
+        Args:
+            oldh: The input image height.
+            oldw: The input image width.
+            long_side_length: The longest side length for resizing.
+
+        Returns:
+            The new image height.
+            The new image width.
         """
         scale = long_side_length * 1.0 / max(oldh, oldw)
         newh, neww = oldh * scale, oldw * scale
@@ -176,9 +201,15 @@ class UNETR(nn.Module):
         return (newh, neww)
 
     def resize_longest_side(self, image: torch.Tensor) -> torch.Tensor:
-        """Resizes the image so that the longest side has the correct length.
+        """Resize the image so that the longest side has the correct length.
 
         Expects batched images with shape BxCxHxW and float format.
+
+        Args:
+            image: The input image.
+
+        Returns:
+            The resized image.
         """
         target_size = self.get_preprocess_shape(image.shape[2], image.shape[3], self.encoder.img_size)
         return F.interpolate(
@@ -186,6 +217,8 @@ class UNETR(nn.Module):
         )
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
+        """@private
+        """
         device = x.device
 
         if self.use_sam_stats:
@@ -215,6 +248,8 @@ class UNETR(nn.Module):
         input_size: Tuple[int, ...],
         original_size: Tuple[int, ...],
     ) -> torch.Tensor:
+        """@private
+        """
         masks = F.interpolate(
             masks,
             (self.encoder.img_size, self.encoder.img_size),
@@ -225,7 +260,15 @@ class UNETR(nn.Module):
         masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
         return masks
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the UNETR to the input data.
+
+        Args:
+            x: The input tensor.
+
+        Returns:
+            The UNETR output.
+        """
         original_shape = x.shape[-2:]
 
         # Reshape the inputs to the shape expected by the encoder
@@ -280,6 +323,8 @@ class UNETR(nn.Module):
 
 
 class SingleDeconv2DBlock(nn.Module):
+    """@private
+    """
     def __init__(self, scale_factor, in_channels, out_channels):
         super().__init__()
         self.block = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2, padding=0, output_padding=0)
@@ -289,6 +334,8 @@ class SingleDeconv2DBlock(nn.Module):
 
 
 class SingleConv2DBlock(nn.Module):
+    """@private
+    """
     def __init__(self, in_channels, out_channels, kernel_size):
         super().__init__()
         self.block = nn.Conv2d(
@@ -300,6 +347,8 @@ class SingleConv2DBlock(nn.Module):
 
 
 class Conv2DBlock(nn.Module):
+    """@private
+    """
     def __init__(self, in_channels, out_channels, kernel_size=3):
         super().__init__()
         self.block = nn.Sequential(
@@ -313,6 +362,8 @@ class Conv2DBlock(nn.Module):
 
 
 class Deconv2DBlock(nn.Module):
+    """@private
+    """
     def __init__(self, in_channels, out_channels, kernel_size=3, use_conv_transpose=True):
         super().__init__()
         _upsampler = SingleDeconv2DBlock if use_conv_transpose else Upsampler2d

@@ -57,7 +57,7 @@ def get_autopet_dataset(
     Link: https://autopet-ii.grand-challenge.org/
     Please cite it if you use this dataset for publication.
 
-    Arguments:
+    Args:
         path: The path where the zip files / the prepared dataset exists.
             - Expected initial structure: `path` should have ...
         patch_shape: The patch shape (for 2d or 3d patches)
