@@ -128,17 +128,25 @@ def train_multi_gpu(
     Optionaly, functions / classes and keywords for the optimizer, learning rate scheduler and trainer class
     may be given, so that they can be instantiated for each training child process.
 
-    Here is an example for a 2D U-Net training:
+    Here is an example for training a 2D U-Net on the DSB dataset:
     ```python
-    TODO
+    from torch_em.model import UNet2d
+    from torch_em.multi_gpu_training import train_multi_gpu
+    from torch_em.data.datasets.light_microscopy.dsb import get_dsb_dataset, get_dsb_data
+
+    # Make sure the data is downloaded before starting multi-gpu training.
+    data_root = "/path/to/save/the/training/data"
+    get_dsb_data(data_root, source="reduced", download=True)
+
+    patch_shape = (256, 256)
     train_multi_gpu(
-        model_callable=,
-        model_kwargs=,
-        train_dataset_callable=,
-        train_dataset_kwargs=,
-        val_dataset_callable=,
-        val_dataset_kwargs=,
-        loader_kwargs=,
+        model_callable=UNet2d,
+        model_kwargs={"in_channels": 1, "out_channels": 1},
+        train_dataset_callable=get_dsb_dataset,
+        train_dataset_kwargs={"path": data_root, patch_shape: patch_shape, "split": "train"},
+        val_dataset_callable=get_dsb_dataset,
+        val_dataset_kwargs={"path": data_root, patch_shape: patch_shape, "split": "test"},
+        loader_kwargs={"shuffle": True},
         iterations=int(5e4),  # Train for 50.000 iterations.
     )
     ```

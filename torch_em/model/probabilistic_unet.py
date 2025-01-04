@@ -1,3 +1,6 @@
+"""@private
+"""
+
 # This code is based on the original TensorFlow implementation: https://github.com/SimonKohl/probabilistic_unet
 # The below implementation is from: https://github.com/stefanknegt/Probabilistic-Unet-Pytorch
 
@@ -12,6 +15,8 @@ from torch_em.loss.dice import DiceLossWithLogits
 
 
 def truncated_normal_(tensor, mean=0, std=1):
+    """@private
+    """
     size = tensor.shape
     tmp = tensor.new_empty(size + (4,)).normal_()
     valid = (tmp < 2) & (tmp > -2)
@@ -21,7 +26,9 @@ def truncated_normal_(tensor, mean=0, std=1):
 
 
 def init_weights(m):
-    if type(m) == nn.Conv2d or type(m) == nn.ConvTranspose2d:
+    """@private
+    """
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
         nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
         # nn.init.normal_(m.weight, std=0.001)
         # nn.init.normal_(m.bias, std=0.001)
@@ -29,7 +36,9 @@ def init_weights(m):
 
 
 def init_weights_orthogonal_normal(m):
-    if type(m) == nn.Conv2d or type(m) == nn.ConvTranspose2d:
+    """@private
+    """
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
         nn.init.orthogonal_(m.weight)
         truncated_normal_(m.bias, mean=0, std=0.001)
         # nn.init.normal_(m.bias, std=0.001)
@@ -41,7 +50,6 @@ class Encoder(nn.Module):
     convolutional layers, after each block a pooling operation is performed.
     And after each convolutional layer a non-linear (ReLU) activation function is applied.
     """
-
     def __init__(
         self,
         input_channels,
