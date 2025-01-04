@@ -1,15 +1,14 @@
 import os
 import warnings
 from collections import OrderedDict
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch_em
 from matplotlib import colors
+from numpy.typing import ArrayLike
 
-# this is a fairly brittle way to check if a module is compiled.
-# would be good to find a better solution, ideall something like
-# model.is_compiled()
 try:
     from torch._dynamo.eval_frame import OptimizedModule
 except ImportError:
@@ -22,24 +21,35 @@ DTYPE_MAP = {
     np.dtype("uint32"): np.int32,
     np.dtype("uint64"): np.int64
 }
+"""@private
+"""
 
 
+# This is a fairly brittle way to check if a module is compiled.
+# Would be good to find a better solution, ideall something like model.is_compiled().
 def is_compiled(model):
+    """@private
+    """
     if OptimizedModule is None:
         return False
     return isinstance(model, OptimizedModule)
 
 
-def auto_compile(model, compile_model, default_compile=True):
-    """Model compilation for pytorch >= 2
+def auto_compile(
+    model: torch.nn.Module, compile_model: Optional[Union[str, bool]] = None, default_compile: bool = True
+) -> torch.nn.Module:
+    """Automatically compile a model for pytorch >= 2.
 
-    Parameters:
-        model [torch.nn.Module] - the model
-        compile_model [None, bool, str] - whether to comile the model.
+    Args:
+        model: The model.
+        compile_model: Whether to comile the model.
             If None, it will not be compiled for torch < 2, and for torch > 2 the behavior
             specificed by 'default_compile' will be used. If a string is given it will be
-            intepreted as the compile mode (torch.compile(model, mode=compile_model)) (default: None)
-        default_compile [bool] - the default compilation behavior for torch 2
+            intepreted as the compile mode (torch.compile(model, mode=compile_model))
+        default_compile: Whether to use the default compilation behavior for torch 2.
+
+    Returns:
+        The compiled model.
     """
     torch_major = int(torch.__version__.split(".")[0])
 
@@ -64,8 +74,16 @@ def auto_compile(model, compile_model, default_compile=True):
     return model
 
 
-def ensure_tensor(tensor, dtype=None):
+def ensure_tensor(tensor: Union[torch.Tensor, ArrayLike], dtype: Optional[str] = None) -> torch.Tensor:
+    """Ensure that the input is a torch tensor, by converting it if necessary.
 
+    Args:
+        tensor: The input object, either a torch tensor or a numpy-array like object.
+        dtype: The required data type for the output tensor.
+
+    Returns:
+        The input, converted to a torch tensor if necessary.
+    """
     if isinstance(tensor, np.ndarray):
         if np.dtype(tensor.dtype) in DTYPE_MAP:
             tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
@@ -84,7 +102,19 @@ def ensure_tensor(tensor, dtype=None):
     return tensor
 
 
-def ensure_tensor_with_channels(tensor, ndim, dtype=None):
+def ensure_tensor_with_channels(
+    tensor: Union[torch.Tensor, ArrayLike], ndim: int, dtype: Optional[str] = None
+) -> torch.Tensor:
+    """Ensure that the input is a torch tensor of a given dimensionality with channels.
+
+    Args:
+        tensor: The input tensor or numpy-array like data.
+        ndim: The dimensionality of the output tensor.
+        dtype: The data type of the output tensor.
+
+    Returns:
+        The input converted to a torch tensor of the requested dimensionality.
+    """
     assert ndim in (2, 3, 4), f"{ndim}"
     tensor = ensure_tensor(tensor, dtype)
     if ndim == 2:
@@ -112,7 +142,16 @@ def ensure_tensor_with_channels(tensor, ndim, dtype=None):
     return tensor
 
 
-def ensure_array(array, dtype=None):
+def ensure_array(array: Union[np.ndarray, torch.Tensor], dtype: str = None) -> np.ndarray:
+    """Ensure that the input is a numpy array, by converting it if necessary.
+
+    Args:
+        array: The input torch tensor or numpy array.
+        dtype: The dtype of the ouptut array.
+
+    Returns:
+        The input converted to a numpy array if necessary.
+    """
     if torch.is_tensor(array):
         array = array.detach().cpu().numpy()
     assert isinstance(array, np.ndarray), f"Cannot convert {type(array)} to numpy"
@@ -121,7 +160,17 @@ def ensure_array(array, dtype=None):
     return array
 
 
-def ensure_spatial_array(array, ndim, dtype=None):
+def ensure_spatial_array(array: Union[np.ndarray, torch.Tensor], ndim: int, dtype: str = None) -> np.ndarray:
+    """Ensure that the input is a numpy array of a given dimensionality.
+
+    Args:
+        array: The input numpy array or torch tensor.
+        ndim: The requested dimensionality.
+        dtype: The dtype of the output array.
+
+    Returns:
+        A numpy array of the requested dimensionality and data type.
+    """
     assert ndim in (2, 3)
     array = ensure_array(array, dtype)
     if ndim == 2:
@@ -147,8 +196,29 @@ def ensure_spatial_array(array, ndim, dtype=None):
 
 
 def ensure_patch_shape(
-    raw, labels, patch_shape, have_raw_channels=False, have_label_channels=False, channel_first=True
-):
+    raw: np.ndarray,
+    labels: Optional[np.ndarray],
+    patch_shape: Tuple[int, ...],
+    have_raw_channels: bool = False,
+    have_label_channels: bool = False,
+    channel_first: bool = True,
+) -> Union[Tuple[np.ndarray, np.ndarray], np.ndarray]:
+    """Ensure that the raw data and labels have at least the requested patch shape.
+
+    If either raw data or labels do not have the patch shape they will be padded.
+
+    Args:
+        raw: The input raw data.
+        labels: The input labels.
+        patch_shape: The required minimal patch shape.
+        have_raw_channels: Whether the raw data has channels.
+        have_label_channels: Whether the label data has channels.
+        channel_first: Whether the channel axis is the first or last axis.
+
+    Returns:
+        The raw data.
+        The labels.
+    """
     raw_shape = raw.shape
     if labels is not None:
         labels_shape = labels.shape
@@ -193,17 +263,16 @@ def ensure_patch_shape(
 
 
 def get_constructor_arguments(obj):
-
-    # all relevant torch_em classes have 'init_kwargs' to
-    # directly recover the init call
+    """@private
+    """
+    # All relevant torch_em classes have 'init_kwargs' to directly recover the init call.
     if hasattr(obj, "init_kwargs"):
         return getattr(obj, "init_kwargs")
 
     def _get_args(obj, param_names):
         return {name: getattr(obj, name) for name in param_names}
 
-    # we don't need to find the constructor arguments for optimizers or schedulers
-    # because we deserialize the state later
+    # We don't need to find the constructor arguments for optimizers/schedulers because we deserialize the state later.
     if isinstance(
         obj, (
             torch.optim.Optimizer,
@@ -227,7 +296,6 @@ def get_constructor_arguments(obj):
         )
 
     # TODO support common torch losses (e.g. CrossEntropy, BCE)
-
     warnings.warn(
         f"Constructor arguments for {type(obj)} cannot be deduced.\n" +
         "For this object, empty constructor arguments will be used.\n" +
@@ -236,8 +304,16 @@ def get_constructor_arguments(obj):
     return {}
 
 
-def get_trainer(checkpoint, name="best", device=None):
+def get_trainer(checkpoint: str, name: str = "best", device: Optional[str] = None):
     """Load trainer from a checkpoint.
+
+    Args:
+        checkpoint: The path to the checkpoint.
+        name: The name of the checkpoint.
+        device: The device to use for loading the checkpoint.
+
+    Returns:
+        The trainer.
     """
     # try to load from file
     if isinstance(checkpoint, str):
@@ -250,6 +326,8 @@ def get_trainer(checkpoint, name="best", device=None):
 
 
 def get_normalizer(trainer):
+    """@private
+    """
     dataset = trainer.train_loader.dataset
     while (
         isinstance(dataset, torch_em.data.concat_dataset.ConcatDataset) or
@@ -268,19 +346,28 @@ def get_normalizer(trainer):
         return preprocessor
 
 
-def load_model(checkpoint, model=None, name="best", state_key="model_state", device=None):
-    """Convenience function to load a model from a trainer checkpoint.
+def load_model(
+    checkpoint: str,
+    model: Optional[torch.nn.Module] = None,
+    name: str = "best",
+    state_key: str = "model_state",
+    device: Optional[str] = None,
+) -> torch.nn.Module:
+    """Load model from a trainer checkpoint.
 
     This function can either load the model directly from the trainer (model is not passed),
     or deserialize the model state from the trainer and load the model state (model is passed).
 
-    Parameters:
-        checkpoint [str] - path to the checkpoint folder.
-        model [torch.nn.Module] - the model for which the state should be loaded.
-            If it is not passed the model class and parameters will also be loaded from the trainer. (default: None)
-        name [str] - the name of the checkpoint. (default: "best")
-        state_key [str] - the name of the model state to load. (default: "model_state")
-        device [torch.device] - the device on which to load the model. (default: None)
+    Args:
+        checkpoint: The path to the checkpoint folder.
+        model: The model for which the state should be loaded.
+            If it is not passed, the model class and parameters will also be loaded from the trainer.
+        name: The name of the checkpoint.
+        state_key: The name of the model state to load.
+        device: The device on which to load the model.
+
+    Returns:
+        The model.
     """
     if model is None:  # load the model and its state from the checkpoint
         model = get_trainer(checkpoint, name=name, device=device).model
@@ -306,14 +393,22 @@ def load_model(checkpoint, model=None, name="best", state_key="model_state", dev
 
 
 def model_is_equal(model1, model2):
+    """@private
+    """
     for p1, p2 in zip(model1.parameters(), model2.parameters()):
         if p1.data.ne(p2.data).sum() > 0:
             return False
     return True
 
 
-def get_random_colors(labels):
-    """Function to generate a random color map for a label image
+def get_random_colors(labels: np.ndarray) -> colors.ListedColormap:
+    """Generate a random color map for a label image.
+
+    Args:
+        labels: The labels.
+
+    Returns:
+        The color map.
     """
     n_labels = len(np.unique(labels)) - 1
     cmap = [[0, 0, 0]] + np.random.rand(n_labels, 3).tolist()

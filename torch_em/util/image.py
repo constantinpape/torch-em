@@ -1,25 +1,22 @@
-# TODO this should be partially refactored into elf.io before the next elf release
-# and then be used in image_stack_wrapper as welll
 import os
+from typing import Optional, Sequence, Union
+
+import imageio.v3 as imageio
 import numpy as np
-
 from elf.io import open_file
-
-try:
-    import imageio.v3 as imageio
-except ImportError:
-    import imageio
+from numpy.typing import ArrayLike
 
 try:
     import tifffile
 except ImportError:
     tifffile = None
 
-
 TIF_EXTS = (".tif", ".tiff")
 
 
 def supports_memmap(image_path):
+    """@private
+    """
     if tifffile is None:
         return False
     ext = os.path.splitext(image_path)[1]
@@ -33,6 +30,8 @@ def supports_memmap(image_path):
 
 
 def load_image(image_path, memmap=True):
+    """@private
+    """
     if supports_memmap(image_path) and memmap:
         return tifffile.memmap(image_path, mode="r")
     elif tifffile is not None and os.path.splitext(image_path)[1].lower() in (".tiff", ".tif"):
@@ -49,6 +48,8 @@ def load_image(image_path, memmap=True):
 
 
 class MultiDatasetWrapper:
+    """@private
+    """
     def __init__(self, *file_datasets):
         # Make sure we have the same shapes.
         reference_shape = file_datasets[0].shape
@@ -68,7 +69,24 @@ class MultiDatasetWrapper:
         return data
 
 
-def load_data(path, key, mode="r"):
+def load_data(
+    path: Union[str, Sequence[str]],
+    key: Optional[Union[str, Sequence[str]]] = None,
+    mode: str = "r",
+) -> ArrayLike:
+    """Load data from a file or multiple files.
+
+    Supports loading regular image formats, such as tif or jpg, or container data formats, such as hdf5, n5 or zarr.
+    For the latter case, specify the name of the internal dataset to load via the `key` argument.
+
+    Args:
+        path: The file path or paths to the data.
+        key: The key or keys to the internal datasets.
+        mode: The mode for reading datasets.
+
+    Returns:
+        The loaded data.
+    """
     have_single_file = isinstance(path, str)
     have_single_key = isinstance(key, str)
 

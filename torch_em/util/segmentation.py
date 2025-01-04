@@ -16,14 +16,24 @@ from elf.segmentation.mutex_watershed import mutex_watershed
 
 
 #
-# segmentation functionality
+# Segmentation Functionality
 #
 
 
-# could also refactor this into elf
 def size_filter(
     seg: np.ndarray, min_size: int, hmap: Optional[np.ndarray] = None, with_background: bool = False
 ) -> np.ndarray:
+    """Apply size filter to a segmentation to remove small segments.
+
+    Args:
+        seg: The input segmentation.
+        min_size: The minimal segmentation size.
+        hmap: A heightmap to use for watershed based segmentation filtering.
+        with_background: Whether this is a segmentation problem with background.
+
+    Returns:
+        The filtered segmentation.
+    """
     if min_size == 0:
         return seg
 
@@ -51,15 +61,18 @@ def mutex_watershed_segmentation(
     threshold: float = 0.5,
     strides: Optional[List[int]] = None
 ) -> np.ndarray:
-    """Computes the mutex watershed segmentation using the affinity maps for respective pixel offsets
+    """Compute the mutex watershed segmentation using the affinity map for given pixel offsets.
 
-    Arguments:
-        - foreground: [np.ndarray] - The foreground background channel for the objects
-        - affinities [np.ndarray] - The input affinity maps
-        - offsets: [list[list[int]]] - The pixel offsets corresponding to the affinity channels
-        - min_size: [int] - The minimum pixels (below which) to filter objects
-        - threshold: [float] - To threshold foreground predictions
-        - strides: [list[int]] - The strides used to sub-sample long range edges.
+    Args:
+        foreground: The foreground/background probabilities.
+        affinities: The input affinity maps.
+        offsets: The pixel offsets corresponding to the affinity channels.
+        min_size: The minimum pixel size for objects in the output segmentation.
+        threshold: The threshold for the foreground predictions.
+        strides: The strides used to subsample long range edges.
+
+    Returns:
+        The instance segmentation.
     """
     mask = (foreground >= threshold)
     if strides is None:
@@ -74,6 +87,16 @@ def mutex_watershed_segmentation(
 def connected_components_with_boundaries(
     foreground: np.ndarray, boundaries: np.ndarray, threshold: float = 0.5
 ) -> np.ndarray:
+    """Compute instance segmentation based on foreground and boundary predictions.
+
+    Args:
+        foreground: The foreground probability predictions.
+        boundaries: The boundary probability predictions.
+        threshold: The threshold for finding connected components.
+
+    Returns:
+        The instance segmentation.
+    """
     input_ = np.clip(foreground - boundaries, 0, 1)
     seeds = label(input_ > threshold)
     mask = normalize_input(foreground > threshold)
@@ -88,21 +111,23 @@ def watershed_from_components(
     threshold1: float = 0.5,
     threshold2: float = 0.5,
 ) -> np.ndarray:
-    """The default approach:
+    """Compute an instance segmentation based on boundary and foreground predictions
+
+    The segmentation is computed as follows:
     - Subtract the boundaries from the foreground to separate touching objects.
-    - Use the connected components of this as seeds.
+    - Use the connected components of the result as seeds.
     - Use the thresholded foreground predictions as mask to grow back the pieces
       lost by subtracting the boundary prediction.
 
-    Arguments:
-        - boundaries: [np.ndarray] - The boundaries for objects
-        - foreground: [np.ndarray] - The foregrounds for objects
-        - min_size: [int] - The minimum pixels (below which) to filter objects
-        - threshold1: [float] - To separate touching objects (by subtracting bd and fg) above threshold
-        - threshold2: [float] - To threshold foreground predictions
+    Args:
+        boundaries: The boundary probability predictions.
+        foreground: The foreground probability predictions.
+        min_size: The minimum pixel size for objects in the output segmentation.
+        threshold1: The threshold for finding connected components.
+        threshold2: The threshold for growing components via watershed on the boundary predictions.
 
     Returns:
-        seg: [np.ndarray] - instance segmentation
+        The instance segmentation.
     """
     seeds = label((foreground - boundaries) > threshold1)
     mask = foreground > threshold2
@@ -119,23 +144,26 @@ def watershed_from_maxima(
     sigma: float = 1.0,
     threshold1: float = 0.5,
 ) -> np.ndarray:
-    """Find objects via seeded watershed starting from the maxima of the distance transform instead.
-    This has the advantage that objects can be better separated, but it may over-segment
-    if the objects have complex shapes.
+    """Compute an instance segmentation based on a seeded watershed from distance maxima.
+
+    This function thresholds the boundary probabilities, computes a distance transform,
+    finds the distance maxima, and then applies a seeded watershed to obtain the instance segmentation.
+    Compared to `watershed_from_components` this has the advantage that objects can be better separated,
+    but it may over-segment objects with complex shapes.
 
     The min_distance parameter controls the minimal distance between seeds, which
     corresponds to the minimal distance between object centers.
 
-    Arguments:
-        - boundaries: [np.ndarray] - The boundaries for objects
-        - foreground: [np.ndarray] - The foreground for objects
-        - min_size: [int] - min. pixels (below which) to filter objects
-        - min_distance: [int] - min. distance of peaks (see `from skimage.feature import peak_local_max`)
-        - sigma: [float] - standard deviation for gaussian kernel. (see `from skimage.filters import gaussian`)
-        - threshold1: [float] - To threshold foreground predictions
+    Args:
+        boundaries: The boundary probability predictions.
+        foreground: The foreground probability predictions.
+        min_size: The minimum pixel size for objects in the output segmentation.
+        min_distance: The minimum distance between peaks, see `from skimage.feature.peak_local_max`.
+        sigma: The standard deviation for smoothing the distance map before computing maxima.
+        threshold1: The threshold for foreground predictions.
 
-    Returns
-        seg: [np.ndarray] - instance segmentation
+    Returns:
+        The instance segmentation.
     """
     mask = foreground > threshold1
     boundary_distances = distance_transform_edt(boundaries < 0.1)
@@ -145,8 +173,7 @@ def watershed_from_maxima(
     seeds = np.zeros(mask.shape, dtype="uint32")
     seeds[seed_points[:, 0], seed_points[:, 1]] = np.arange(1, len(seed_points) + 1)
     seg = watershed(boundaries, markers=seeds, mask=foreground)
-    seg = size_filter(seg, min_size)
-    return seg
+    return size_filter(seg, min_size)
 
 
 def watershed_from_center_and_boundary_distances(
@@ -160,28 +187,28 @@ def watershed_from_center_and_boundary_distances(
     min_size: int = 0,
     debug: bool = False,
 ) -> np.ndarray:
-    """Seeded watershed based on distance predictions to object center and boundaries.
+    """Compute an instance segmentation via a seeded watershed on distances to object centers and boundaries.
 
     The seeds are computed by finding connected components where both distance predictions
-    are smaller than the respective thresholds. Using both distances here should prevent merging
+    are smaller than the respective thresholds. Using both distances is supposed to prevent merging
     narrow adjacent objects (if only using the center distance) or finding multiple seeds for non-convex
     cells (if only using the boundary distances).
 
     Args:
-        center_distances [np.ndarray] - Distance prediction to the objcet center.
-        boundary_distances [np.ndarray] - Inverted distance prediction to object boundaries.
-        foreground_map [np.ndarray] - Predictio for foreground probabilities.
-        center_distance_threshold [float] - Center distance predictions below this value will be
+        center_distances: Distance prediction to the objcet centers.
+        boundary_distances: Inverted distance prediction to object boundaries.
+        foreground_map: Prediction for foreground probabilities.
+        center_distance_threshold: Center distance predictions below this value will be
             used to find seeds (intersected with thresholded boundary distance predictions).
-        boundary_distance_threshold [float] - Boundary distance predictions below this value will be
+        boundary_distance_threshold: oundary distance predictions below this value will be
             used to find seeds (intersected with thresholded center distance predictions).
-        foreground_threshold [float] - Foreground predictions above this value will be used as foreground mask.
-        distance_smoothing [float] - Sigma value for smoothing the distance predictions.
-        min_size [int] - Minimal object size in the segmentation result.
-        debug [bool] - Return all intermediate results for debugging.
+        foreground_threshold: Foreground predictions above this value will be used as foreground mask.
+        distance_smoothing: Sigma value for smoothing the distance predictions.
+        min_size: Minimal object size in the segmentation result.
+        debug: Return all intermediate results in a dictionary for debugging.
 
     Returns:
-        np.ndarray - The instance segmentation.
+        The instance segmentation.
     """
     center_distances = vigra.filters.gaussianSmoothing(center_distances, distance_smoothing)
     boundary_distances = vigra.filters.gaussianSmoothing(boundary_distances, distance_smoothing)

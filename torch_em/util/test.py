@@ -1,3 +1,5 @@
+"""@private
+"""
 import os
 import imageio
 import h5py
