@@ -36,7 +36,6 @@ INCONSISTENT_VOLUMES = {
     "er": ["cell_3.zarr", "cell_6.zarr", "cell_13.zarr"],
 }
 
-
 VOLUMES = {
     "cell_1": "cell_1/cell_1.zarr",  # mito (Y) golgi (Y) er (Y)
     "cell_2": "cell_2/cell_2.zarr",  # mito (Y) golgi (Y) er (Y)

@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 import torch_em
 import torch.nn as nn
@@ -7,19 +9,36 @@ from torch_em.loss import DiceLoss
 class DefaultSelfTrainingLoss(nn.Module):
     """Loss function for self training.
 
-    Parameters:
-        loss [nn.Module] - the loss function to be used. (default: torch_em.loss.DiceLoss)
-        activation [nn.Module, callable] - the activation function to be applied to the prediction
-            before passing it to the loss. (default: None)
+    This loss takes as input a model and its input, as well as (pseudo) labels and potentially
+    a mask for the labels. It then runs prediction with the model and compares the outputs
+    to the (pseudo) labels using an internal loss function. Typically, the labels are derived
+    from the predictions of a teacher model, and the model passed is the student model.
+
+    Args:
+        loss: The internal loss function to use for comparing predictions of the teacher and student model.
+        activation: The activation function to be applied to the prediction before passing it to the loss.
     """
-    def __init__(self, loss=torch_em.loss.DiceLoss(), activation=None):
+    def __init__(self, loss: nn.Module = torch_em.loss.DiceLoss(), activation: Optional[nn.Module] = None):
         super().__init__()
         self.activation = activation
         self.loss = loss
         # TODO serialize the class names and kwargs instead
         self.init_kwargs = {}
 
-    def __call__(self, model, input_, labels, label_filter=None):
+    def __call__(
+        self, model: nn.Module, input_: torch.Tensor, labels: torch.Tensor, label_filter: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """Compute the loss for self-training.
+
+        Args:
+            model: The model.
+            input_: The model inputs for this batch.
+            labels: The (pseudo) labels for this batch.
+            label_filter: A mask to exclude from the loss computation.
+
+        Returns:
+            The loss value.
+        """
         prediction = model(input_)
         if self.activation is not None:
             prediction = self.activation(prediction)
@@ -33,13 +52,20 @@ class DefaultSelfTrainingLoss(nn.Module):
 class DefaultSelfTrainingLossAndMetric(nn.Module):
     """Loss and metric function for self training.
 
-    Parameters:
-        loss [nn.Module] - the loss function to be used. (default: torch_em.loss.DiceLoss)
-        metric [nn.Module] - the metric function to be used. (default: torch_em.loss.DiceLoss)
-        activation [nn.Module, callable] - the activation function to be applied to the prediction
-            before passing it to the loss. (default: None)
+    Similar to `DefaultSelfTrainingLoss`, but computes loss and metric value in one call
+    to avoid running prediction with the model twice.
+
+    Args:
+        loss: The internal loss function to use for comparing predictions of the teacher and student model.
+        metric: The internal metric function to use for comparing predictions of the teacher and student model.
+        activation: The activation function to be applied to the prediction before passing it to the loss.
     """
-    def __init__(self, loss=torch_em.loss.DiceLoss(), metric=torch_em.loss.DiceLoss(), activation=None):
+    def __init__(
+        self,
+        loss: nn.Module = torch_em.loss.DiceLoss(),
+        metric: nn.Module = torch_em.loss.DiceLoss(),
+        activation: Optional[nn.Module] = None
+    ):
         super().__init__()
         self.activation = activation
         self.loss = loss
@@ -59,9 +85,14 @@ class DefaultSelfTrainingLossAndMetric(nn.Module):
         return loss, metric
 
 
-def l2_regularisation(m):
-    l2_reg = None
+# TODO: The probabilistic U-Net related code should be refactored to `torch_em.loss`
+# and should be documented properly.
 
+
+def l2_regularisation(m):
+    """@private
+    """
+    l2_reg = None
     for W in m.parameters():
         if l2_reg is None:
             l2_reg = W.norm(2)
@@ -71,13 +102,14 @@ def l2_regularisation(m):
 
 
 class ProbabilisticUNetLoss(nn.Module):
+    """@private
     """
-    Loss function for Probabilistic UNet
+    # """Loss function for Probabilistic UNet
 
-    Parameters :
-        # TODO : Implement a generic utility function for all Probabilistic UNet schemes (ELBO, GECO, etc.)
-        loss [nn.Module] - the loss function to be used. (default: None)
-    """
+    # Args:
+    #     # TODO : Implement a generic utility function for all Probabilistic UNet schemes (ELBO, GECO, etc.)
+    #     loss [nn.Module] - the loss function to be used. (default: None)
+    # """
     def __init__(self, loss=None):
         super().__init__()
         self.loss = loss
@@ -95,16 +127,18 @@ class ProbabilisticUNetLoss(nn.Module):
 
 
 class ProbabilisticUNetLossAndMetric(nn.Module):
-    """Loss and metric function for Probabilistic UNet.
-
-    Parameters:
-        # TODO : Implement a generic utility function for all Probabilistic UNet schemes (ELBO, GECO, etc.)
-        loss [nn.Module] - the loss function to be used. (default: None)
-
-        metric [nn.Module] - the metric function to be used. (default: torch_em.loss.DiceLoss)
-        activation [nn.Module, callable] - the activation function to be applied to the prediction
-            before evaluating the average predictions. (default: None)
+    """@private
     """
+    # """Loss and metric function for Probabilistic UNet.
+
+    # Args:
+    #     # TODO : Implement a generic utility function for all Probabilistic UNet schemes (ELBO, GECO, etc.)
+    #     loss [nn.Module] - the loss function to be used. (default: None)
+
+    #     metric [nn.Module] - the metric function to be used. (default: torch_em.loss.DiceLoss)
+    #     activation [nn.Module, callable] - the activation function to be applied to the prediction
+    #         before evaluating the average predictions. (default: None)
+    # """
     def __init__(self, loss=None, metric=DiceLoss(), activation=torch.nn.Sigmoid(), prior_samples=16):
         super().__init__()
         self.activation = activation

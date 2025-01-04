@@ -10,8 +10,40 @@ from ..util import (
 
 
 class ImageCollectionDataset(torch.utils.data.Dataset):
+    """Dataset that provides raw data and labels stored in a regular image data format for segmentation training.
+
+    The dataset returns patches loaded from the images and labels as sample for a batch.
+    The raw data and labels are expected to be images of the same shape, except for possible channels.
+    It supports all file formats that can be loaded with the imageio or tiffile library, such as tif, png or jpeg files.
+
+    Args:
+        raw_image_paths: The file paths to the raw data.
+        label_image_paths: The file path to the label data.
+        patch_shape: The patch shape for a training sample.
+        raw_transform: Transformation applied to the raw data of a sample.
+        label_transform: Transformation applied to the label data of a sample,
+            before applying augmentations via `transform`.
+        label_transform2: Transformation applied to the label data of a sample,
+            after applying augmentations via `transform`.
+        transform: Transformation applied to both the raw data and label data of a sample.
+            This can be used to implement data augmentations.
+        dtype: The return data type of the raw data.
+        label_dtype: The return data type of the label data.
+        n_samples: The length of this dataset. If None, the length will be set to `len(raw_image_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data and label data (as numpy arrays) as input.
+        full_check: Whether to check that the input data is valid for all image paths.
+            This will ensure that the data is valid, but will take longer for creating the dataset.
+        with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
+    """
     max_sampling_attempts = 500
+    """The maximal number of sampling attempts, for loading a sample via `__getitem__`.
+    This is used when `sampler` rejects a sample, to avoid an infinite loop if no valid sample can be found.
+    """
     max_sampling_attempts_image = 50
+    """The maximal number of sampling attempts for a single image, for loading a sample via `__getitem__`.
+    This is used when `sampler` rejects a sample, to avoid an infinite loop if no valid sample can be found.
+    """
 
     def _check_inputs(self, raw_images, label_images, full_check):
         if len(raw_images) != len(label_images):

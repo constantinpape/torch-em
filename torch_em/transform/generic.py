@@ -1,10 +1,11 @@
+"""@private
+"""
 from math import ceil, floor
 from typing import Any, Dict, Optional, Sequence, Union
 
 import numpy as np
-from skimage.transform import rescale, resize
-
 import torch
+from skimage.transform import rescale, resize
 
 
 class Tile(torch.nn.Module):

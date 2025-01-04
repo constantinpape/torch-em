@@ -1,3 +1,5 @@
+from typing import List, Optional, Union
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -10,9 +12,9 @@ import torch.nn as nn
 # inside of the model unless its defined in the general spec
 
 
-# TODO think about more (multicut-friendly) boundary postprocessing
-# e.g. max preserving smoothing: bd = np.maximum(bd, gaussian(bd, sigma=1))
 class AccumulateChannels(nn.Module):
+    """@private
+    """
     def __init__(
         self,
         invariant_channels,
@@ -43,30 +45,44 @@ class AccumulateChannels(nn.Module):
 
 
 def affinities_to_boundaries(aff_channels, accumulator="max"):
+    """@private
+    """
     return AccumulateChannels(None, aff_channels, accumulator)
 
 
 def affinities_with_foreground_to_boundaries(aff_channels, fg_channel=(0, 1), accumulator="max"):
+    """@private
+    """
     return AccumulateChannels(fg_channel, aff_channels, accumulator)
 
 
 def affinities_to_boundaries2d():
+    """@private
+    """
     return affinities_to_boundaries((0, 2))
 
 
 def affinities_with_foreground_to_boundaries2d():
+    """@private
+    """
     return affinities_with_foreground_to_boundaries((1, 3))
 
 
 def affinities_to_boundaries3d():
+    """@private
+    """
     return affinities_to_boundaries((0, 3))
 
 
 def affinities_with_foreground_to_boundaries3d():
+    """@private
+    """
     return affinities_with_foreground_to_boundaries((1, 4))
 
 
 def affinities_to_boundaries_anisotropic():
+    """@private
+    """
     return AccumulateChannels(None, (1, 3), "max")
 
 
@@ -77,6 +93,8 @@ POSTPROCESSING = {
     "affinities_to_boundaries3d": affinities_to_boundaries3d,
     "affinities_with_foreground_to_boundaries3d": affinities_with_foreground_to_boundaries3d,
 }
+"""@private
+"""
 
 
 #
@@ -84,17 +102,26 @@ POSTPROCESSING = {
 #
 
 class UNetBase(nn.Module):
-    """
+    """Base class for implementing a U-Net.
+
+    Args:
+        encoder: The encoder of the U-Net.
+        base: The base layer of the U-Net.
+        decoder: The decoder of the U-Net.
+        out_conv: The output convolution applied after the last decoder layer.
+        final_activation: The activation applied after the output convolution or last decoder layer.
+        postprocessing: A postprocessing function to apply after the U-Net output.
+        check_shape: Whether to check the input shape to the U-Net forward call.
     """
     def __init__(
         self,
-        encoder,
-        base,
-        decoder,
-        out_conv=None,
-        final_activation=None,
-        postprocessing=None,
-        check_shape=True,
+        encoder: nn.Module,
+        base: nn.Module,
+        decoder: nn.Module,
+        out_conv: Optional[nn.Module] = None,
+        final_activation: Optional[Union[nn.Module, str]] = None,
+        postprocessing: Optional[Union[nn.Module, str]] = None,
+        check_shape: bool = True,
     ):
         super().__init__()
         if len(encoder) != len(decoder):
@@ -207,8 +234,16 @@ class UNetBase(nn.Module):
             msg = f"Invalid shape for U-Net: {spatial_shape} is not divisible by {factor}"
             raise ValueError(msg)
 
-    def forward(self, x):
-        # cast input data to float, hotfix for modelzoo deployment issues, leaving it here for reference
+    def forward(self, x: torch.Tensor) -> torch.tensor:
+        """Apply U-Net to input data.
+
+        Args:
+            x: The input data.
+
+        Returns:
+            The output of the U-Net.
+        """
+        # Cast input data to float, hotfix for modelzoo deployment issues, leaving it here for reference.
         # x = x.float()
         if getattr(self, "check_shape", True):
             self._check_shape(x)
@@ -238,6 +273,8 @@ def _update_conv_kwargs(kwargs, scale_factor):
 
 
 class Encoder(nn.Module):
+    """@private
+    """
     def __init__(
         self,
         features,
@@ -285,6 +322,8 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
+    """@private
+    """
     def __init__(
         self,
         features,
@@ -350,6 +389,8 @@ class Decoder(nn.Module):
 
 
 def get_norm_layer(norm, dim, channels, n_groups=32):
+    """@private
+    """
     if norm is None:
         return None
     if norm == "InstanceNorm":
@@ -366,8 +407,9 @@ def get_norm_layer(norm, dim, channels, n_groups=32):
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, dim,
-                 kernel_size=3, padding=1, norm="InstanceNorm"):
+    """@private
+    """
+    def __init__(self, in_channels, out_channels, dim, kernel_size=3, padding=1, norm="InstanceNorm"):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -400,9 +442,9 @@ class ConvBlock(nn.Module):
 
 
 class Upsampler(nn.Module):
-    def __init__(self, scale_factor,
-                 in_channels, out_channels,
-                 dim, mode):
+    """@private
+    """
+    def __init__(self, scale_factor, in_channels, out_channels, dim, mode):
         super().__init__()
         self.mode = mode
         self.scale_factor = scale_factor
@@ -411,8 +453,7 @@ class Upsampler(nn.Module):
         self.conv = conv(in_channels, out_channels, 1)
 
     def forward(self, x):
-        x = nn.functional.interpolate(x, scale_factor=self.scale_factor,
-                                      mode=self.mode, align_corners=False)
+        x = nn.functional.interpolate(x, scale_factor=self.scale_factor, mode=self.mode, align_corners=False)
         x = self.conv(x)
         return x
 
@@ -422,33 +463,58 @@ class Upsampler(nn.Module):
 #
 
 class ConvBlock2d(ConvBlock):
+    """@private
+    """
     def __init__(self, in_channels, out_channels, **kwargs):
         super().__init__(in_channels, out_channels, dim=2, **kwargs)
 
 
 class Upsampler2d(Upsampler):
+    """@private
+    """
     def __init__(self, scale_factor,
                  in_channels, out_channels,
                  mode="bilinear"):
-        super().__init__(scale_factor, in_channels, out_channels,
-                         dim=2, mode=mode)
+        super().__init__(scale_factor, in_channels, out_channels, dim=2, mode=mode)
 
 
 class UNet2d(UNetBase):
+    """A 2D U-Net network for segmentation and other image-to-image tasks.
+
+    The number of features for each level of the U-Net are computed as follows: initial_features * gain ** level.
+    The number of levels is determined by the depth argument. By default the U-Net uses two convolutional layers
+    per level, max-pooling for downsampling and linear interpolation for upsampling.
+    These implementations can be changed by providing arguments for `conv_block_impl`, `pooler_impl`
+    and `sampler_impl` respectively.
+
+    Args:
+        in_channels: The number of input image channels.
+        out_channels: The number of output image channels.
+        depth: The number of encoder / decoder levels of the U-Net.
+        initial_features: The initial number of features, corresponding to the features of the first conv block.
+        gain: The gain factor for increasing the features after each level.
+        final_activation: The activation applied after the output convolution or last decoder layer.
+        return_side_outputs: Whether to return the outputs after each decoder level.
+        conv_block_impl: The implementation of the convolutional block.
+        pooler_impl: The implementation of the pooling layer.
+        postprocessing: A postprocessing function to apply after the U-Net output.
+        check_shape: Whether to check the input shape to the U-Net forward call.
+        conv_block_kwargs: The keyword arguments for the convolutional block.
+    """
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        depth=4,
-        initial_features=32,
-        gain=2,
+        in_channels: int,
+        out_channels: int,
+        depth: int = 4,
+        initial_features: int = 32,
+        gain: int = 2,
         final_activation=None,
-        return_side_outputs=False,
-        conv_block_impl=ConvBlock2d,
-        pooler_impl=nn.MaxPool2d,
-        sampler_impl=Upsampler2d,
-        postprocessing=None,
-        check_shape=True,
+        return_side_outputs: bool = False,
+        conv_block_impl: nn.Module = ConvBlock2d,
+        pooler_impl: nn.Module = nn.MaxPool2d,
+        sampler_impl: nn.Module = Upsampler2d,
+        postprocessing: Optional[Union[nn.Module, str]] = None,
+        check_shape: bool = True,
         **conv_block_kwargs,
     ):
         features_encoder = [in_channels] + [initial_features * gain ** i for i in range(depth)]
@@ -502,32 +568,58 @@ class UNet2d(UNetBase):
 #
 
 class ConvBlock3d(ConvBlock):
+    """@private
+    """
     def __init__(self, in_channels, out_channels, **kwargs):
         super().__init__(in_channels, out_channels, dim=3, **kwargs)
 
 
 class Upsampler3d(Upsampler):
-    def __init__(self, scale_factor,
-                 in_channels, out_channels,
-                 mode="trilinear"):
-        super().__init__(scale_factor, in_channels, out_channels,
-                         dim=3, mode=mode)
+    """@private
+    """
+    def __init__(self, scale_factor, in_channels, out_channels, mode="trilinear"):
+        super().__init__(scale_factor, in_channels, out_channels, dim=3, mode=mode)
 
 
 class AnisotropicUNet(UNetBase):
+    """A 3D U-Net network for segmentation and other image-to-image tasks.
+
+    The number of features for each level of the U-Net are computed as follows: initial_features * gain ** level.
+    The number of levels is determined by the length of the scale_factors argument.
+    The scale factors determine the pooling factors for each level. By specifying [1, 2, 2] the pooling
+    is done in an anisotropic fashion, i.e. only across the xy-plane,
+    by specifying [2, 2, 2] it is done in an isotropic fashion.
+
+    By default the U-Net uses two convolutional layers per level.
+    This can be changed by providing an argument for `conv_block_impl`.
+
+    Args:
+        in_channels: The number of input image channels.
+        out_channels: The number of output image channels.
+        scale_factors: The factors for max pooling for the levels of the U-Net.
+        initial_features: The initial number of features, corresponding to the features of the first conv block.
+        gain: The gain factor for increasing the features after each level.
+        final_activation: The activation applied after the output convolution or last decoder layer.
+        return_side_outputs: Whether to return the outputs after each decoder level.
+        conv_block_impl: The implementation of the convolutional block.
+        anisotropic_kernel: Whether to use an anisotropic kernel in addition to anisotropic scaling factor.
+        postprocessing: A postprocessing function to apply after the U-Net output.
+        check_shape: Whether to check the input shape to the U-Net forward call.
+        conv_block_kwargs: The keyword arguments for the convolutional block.
+    """
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        scale_factors,
-        initial_features=32,
-        gain=2,
-        final_activation=None,
-        return_side_outputs=False,
-        conv_block_impl=ConvBlock3d,
-        anisotropic_kernel=False,  # TODO benchmark which option is better and set as default
-        postprocessing=None,
-        check_shape=True,
+        in_channels: int,
+        out_channels: int,
+        scale_factors: List[List[int]],
+        initial_features: int = 32,
+        gain: int = 2,
+        final_activation: Optional[Union[str, nn.Module]] = None,
+        return_side_outputs: bool = False,
+        conv_block_impl: nn.Module = ConvBlock3d,
+        anisotropic_kernel: bool = False,
+        postprocessing: Optional[Union[str, nn.Module]] = None,
+        check_shape: bool = True,
         **conv_block_kwargs,
     ):
         depth = len(scale_factors)
@@ -563,8 +655,7 @@ class AnisotropicUNet(UNetBase):
                 **conv_block_kwargs
             ),
             base=conv_block_impl(
-                features_encoder[-1], features_encoder[-1] * gain,
-                **conv_block_kwargs
+                features_encoder[-1], features_encoder[-1] * gain, **conv_block_kwargs
             ),
             out_conv=out_conv,
             final_activation=final_activation,
@@ -590,18 +681,35 @@ class AnisotropicUNet(UNetBase):
 
 
 class UNet3d(AnisotropicUNet):
+    """A 3D U-Net network for segmentation and other image-to-image tasks.
+
+    This class uses the same implementation as `AnisotropicUNet`, with isotropic scaling in each level.
+
+    Args:
+        in_channels: The number of input image channels.
+        out_channels: The number of output image channels.
+        depth: The number of encoder / decoder levels of the U-Net.
+        initial_features: The initial number of features, corresponding to the features of the first conv block.
+        gain: The gain factor for increasing the features after each level.
+        final_activation: The activation applied after the output convolution or last decoder layer.
+        return_side_outputs: Whether to return the outputs after each decoder level.
+        conv_block_impl: The implementation of the convolutional block.
+        postprocessing: A postprocessing function to apply after the U-Net output.
+        check_shape: Whether to check the input shape to the U-Net forward call.
+        conv_block_kwargs: The keyword arguments for the convolutional block.
+    """
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        depth=4,
-        initial_features=32,
-        gain=2,
-        final_activation=None,
-        return_side_outputs=False,
-        conv_block_impl=ConvBlock3d,
-        postprocessing=None,
-        check_shape=True,
+        in_channels: int,
+        out_channels: int,
+        depth: int = 4,
+        initial_features: int = 32,
+        gain: int = 2,
+        final_activation: Optional[Union[str, nn.Module]] = None,
+        return_side_outputs: bool = False,
+        conv_block_impl: nn.Module = ConvBlock3d,
+        postprocessing: Optional[Union[str, nn.Module]] = None,
+        check_shape: bool = True,
         **conv_block_kwargs,
     ):
         scale_factors = depth * [2]

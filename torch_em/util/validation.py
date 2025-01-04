@@ -1,7 +1,8 @@
 import os
-import numpy as np
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import imageio.v3 as imageio
+import numpy as np
 
 from elf.io import open_file
 from elf.util import normalize_index
@@ -15,10 +16,10 @@ try:
 except ImportError:
     napari = None
 
-# TODO implement prefab metrics
-
 
 class SampleGenerator:
+    """@private
+    """
     def __init__(self, trainer, max_samples, need_gt, n_threads):
         self.need_gt = need_gt
         self.n_threads = n_threads
@@ -41,7 +42,7 @@ class SampleGenerator:
 
         if self.load_2d_from_3d:
             shapes = [
-                open_file(rp, 'r')[self.raw_key].shape if roi is None else tuple(r.stop - r.start for r in roi)
+                open_file(rp, "r")[self.raw_key].shape if roi is None else tuple(r.stop - r.start for r in roi)
                 for rp, roi in zip(self.raw_paths, self.rois)
             ]
             lens = [shape[0] for shape in shapes]
@@ -140,10 +141,9 @@ class SampleGenerator:
 
 
 def _predict(model, raw, trainer, gpu_ids, save_path, sample_id):
-
     save_key = f"sample{sample_id}"
     if save_path is not None and os.path.exists(save_path):
-        with open_file(save_path, 'r') as f:
+        with open_file(save_path, "r") as f:
             if save_key in f:
                 print("Loading predictions for sample", sample_id, "from file")
                 ds = f[save_key]
@@ -169,19 +169,13 @@ def _predict(model, raw, trainer, gpu_ids, save_path, sample_id):
     if save_path is None:
         output = None
     else:
-        f = open_file(save_path, 'a')
+        f = open_file(save_path, "a")
         out_shape = (trainer.model.out_channels,) + raw.shape
         chunks = (1,) + block_shape
-        output = f.create_dataset(
-            save_key, shape=out_shape, chunks=chunks, compression='gzip', dtype='float32'
-        )
+        output = f.create_dataset(save_key, shape=out_shape, chunks=chunks, compression="gzip", dtype="float32")
 
-    gpu_ids = [int(gpu) if gpu != 'cpu' else gpu for gpu in gpu_ids]
-    pred = predict_with_halo(
-        raw, model, gpu_ids, block_shape, halo,
-        preprocess=normalizer,
-        output=output
-    )
+    gpu_ids = [int(gpu) if gpu != "cpu" else gpu for gpu in gpu_ids]
+    pred = predict_with_halo(raw, model, gpu_ids, block_shape, halo, preprocess=normalizer, output=output)
     if output is not None:
         f.close()
 
@@ -198,21 +192,34 @@ def _visualize(raw, prediction, ground_truth):
 
 
 def validate_checkpoint(
-    checkpoint,
-    gpu_ids,
-    save_path=None,
-    samples=None,
-    max_samples=None,
-    visualize=True,
-    metrics=None,
-    n_threads=None
-):
+    checkpoint: str,
+    gpu_ids: List[int],
+    save_path: Optional[str] = None,
+    samples: Optional[Sequence[Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]]] = None,
+    max_samples: Optional[int] = None,
+    visualize: bool = True,
+    metrics: Optional[Callable] = None,
+    n_threads: Optional[int] = None,
+) -> List[float]:
     """Validate model for the given checkpoint visually and/or via metrics.
+
+    Args:
+        checkpoint: The path to the checkpoint to evaluate.
+        gpu_ids: The gpu ids to use for prediction.
+        save_path: Optional path for saving the predictions.
+        samples: The samples to use for evaluation. If None, the validation loader of the trainer is used.
+        max_samples: The maximum number of samples to evaluate.
+        visualize: Whether to visualize the predictions with napari.
+        metrics: The metric to use for evaluating the samples.
+        n_threads: The number of threads to use for parallelization.
+
+    Returns:
+        A list of metric scores.
     """
     if visualize and napari is None:
         raise RuntimeError
 
-    trainer = get_trainer(checkpoint, device='cpu')
+    trainer = get_trainer(checkpoint, device="cpu")
     n_threads = trainer.train_loader.num_workers if n_threads is None else n_threads
     model = trainer.model
     model.eval()
@@ -240,20 +247,19 @@ def validate_checkpoint(
 
 
 def main():
+    """@private
+    """
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--path', required=True,
-                        help="Path to the checkpoint")
-    parser.add_argument('-g', '--gpus', type=str, nargs='+', required=True)
-    parser.add_argument('-n', '--max_samples', type=int, default=None)
-    parser.add_argument('-d', '--data', default=None)
-    parser.add_argument('-s', '--save_path', default=None)
-    parser.add_argument('-k', '--key', default=None)
-    parser.add_argument('-t', '--n_threads', type=int, default=None)
+    parser.add_argument("-p", "--path", required=True, help="Path to the checkpoint")
+    parser.add_argument("-g", "--gpus", type=str, nargs="+", required=True)
+    parser.add_argument("-n", "--max_samples", type=int, default=None)
+    parser.add_argument("-d", "--data", default=None)
+    parser.add_argument("-s", "--save_path", default=None)
+    parser.add_argument("-k", "--key", default=None)
+    parser.add_argument("-t", "--n_threads", type=int, default=None)
 
     args = parser.parse_args()
     # TODO implement loading data
     assert args.data is None
-    validate_checkpoint(
-        args.path, args.gpus, args.save_path, max_samples=args.max_samples, n_threads=args.n_threads
-    )
+    validate_checkpoint(args.path, args.gpus, args.save_path, max_samples=args.max_samples, n_threads=args.n_threads)

@@ -1,3 +1,6 @@
+"""@private
+"""
+
 # installation from https://github.com/hustvl/Vim
 # encoder from https://github.com/hustvl/Vim
 # decoder from https://github.com/constantinpape/torch-em

@@ -121,11 +121,26 @@ def check_trainer(
     instance_labels: bool = False,
     split: str = "val",
     loader: Optional[torch.utils.data.DataLoader] = None,
-    plt: bool = False
+    plt: bool = False,
 ):
+    """Check a trainer visually.
+
+    This function shows images and labels from the training or validation loader
+    and predictions from the trainer's model for the images.
+    The data will be plotted either with napari or matplotlib.
+
+    Args:
+        trainer: The trainer.
+        n_samples: The number of samples to plot.
+        instance_labels: Whether to visualize the label data as instances.
+        split: Which split to use. This will determine which data loader is used for plotting.
+            Can be one of "val" or "train".
+        loader: An optional loader to use for getting the data. Will be used instead of the loader from the trainer.
+        plt: Whether to plot the data with matplotlib instead of napari.
+    """
     if loader is None:
         assert split in ("val", "train")
-        loader = trainer.val_loader
+        loader = trainer.val_loader if split == "val" else trainer.train_loader
     with torch.no_grad():
         model = trainer.model
         model.eval()
@@ -141,8 +156,21 @@ def check_loader(
     instance_labels: bool = False,
     plt: bool = False,
     rgb: bool = False,
-    save_path: Optional[Union[str, os.PathLike]] = None
+    save_path: Optional[Union[str, os.PathLike]] = None,
 ):
+    """Check a loader visually.
+
+    This function shows images and labels from the loader with napari or matplotlib.
+
+    Args:
+        loader: The data loader.
+        n_samples: The number of samples to plot.
+        instance_labels: Whether to visualize the label data as instances.
+        plt: Whether to plot the data with matplotlib instead of napari.
+        rgb: Whether the image data is rgb.
+        save_path: Path for saving the images instead of showing them.
+            This argument only has an effect if `plt=True`.
+    """
     if plt:
         _check_plt(loader, n_samples, instance_labels, save_path=save_path)
     else:

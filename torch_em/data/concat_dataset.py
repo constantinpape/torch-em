@@ -4,6 +4,11 @@ from torch.utils.data import Dataset
 
 
 class ConcatDataset(Dataset):
+    """Dataset to concatenate multiple PyTorch datasets.
+
+    Args:
+        datasets: The datasets to concatenate.
+    """
     def __init__(self, *datasets: Dataset):
         self.datasets = datasets
         self.ndim = datasets[0].ndim
