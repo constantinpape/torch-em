@@ -285,7 +285,7 @@ class EmbeddingMWSRandMetric(BaseInstanceSegmentationMetric):
         min_seg_size: Size for filtering the segmentation objects.
         strides: The strides for the mutex watershed.
     """
-    def __init__(self, delta: float, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int] ] = None):
+    def __init__(self, delta: float, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int]] = None):
         segmenter = EmbeddingMWS(delta, offsets, with_background=False, min_seg_size=min_seg_size)
         metric = AdaptedRandError()
         super().__init__(segmenter, metric)
@@ -368,7 +368,9 @@ class MulticutVOIMetric(BaseInstanceSegmentationMetric):
         dt_threshold: The threshold to apply to the boundary predictions before computing the distance transform.
         sigma_seeds: The sigma value for smoothing the distance transform before computing seeds.
     """
-    def __init__(self, min_seg_size: int, anisotropic: bool = False, dt_threshold: float = 0.25, sigma_seeds: float = 2.0):
+    def __init__(
+        self, min_seg_size: int, anisotropic: bool = False, dt_threshold: float = 0.25, sigma_seeds: float = 2.0
+    ):
         segmenter = Multicut(dt_threshold, anisotropic, sigma_seeds)
         metric = VariationOfInformation()
         super().__init__(segmenter, metric)
@@ -387,7 +389,9 @@ class MulticutRandMetric(BaseInstanceSegmentationMetric):
         dt_threshold: The threshold to apply to the boundary predictions before computing the distance transform.
         sigma_seeds: The sigma value for smoothing the distance transform before computing seeds.
     """
-    def __init__(self, min_seg_size: int, anisotropic: bool = False, dt_threshold: float = 0.25, sigma_seeds: float = 2.0):
+    def __init__(
+        self, min_seg_size: int, anisotropic: bool = False, dt_threshold: float = 0.25, sigma_seeds: float = 2.0
+    ):
         segmenter = Multicut(dt_threshold, anisotropic, sigma_seeds)
         metric = AdaptedRandError()
         super().__init__(segmenter, metric)
@@ -406,7 +410,13 @@ class MWSIOUMetric(BaseInstanceSegmentationMetric):
         iou_threshold: The threshold for the intersection over union value.
         strides: The strides for the mutex watershed.
     """
-    def __init__(self, offsets: List[List[int]], min_seg_size: int, iou_threshold: float = 0.5, strides: Optional[List[int]] = None):
+    def __init__(
+        self,
+        offsets: List[List[int]],
+        min_seg_size: int,
+        iou_threshold: float = 0.5,
+        strides: Optional[List[int]] = None
+    ):
         segmenter = MWS(offsets, with_background=True, min_seg_size=min_seg_size, strides=strides)
         metric = IOUError(iou_threshold)
         super().__init__(segmenter, metric)
@@ -458,7 +468,7 @@ class MWSRandMetric(BaseInstanceSegmentationMetric):
         min_seg_size: The minimal segment size.
         strides: The strides for the mutex watershed.
     """
-    def __init__(self, offsets: List[Listt[int]], min_seg_size: int, strides: Optional[List[int]] = None):
+    def __init__(self, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int]] = None):
         segmenter = MWS(offsets, with_background=False, min_seg_size=min_seg_size, strides=strides)
         metric = AdaptedRandError()
         super().__init__(segmenter, metric)
