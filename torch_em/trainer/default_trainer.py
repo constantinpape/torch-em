@@ -23,7 +23,41 @@ from ..util import auto_compile, get_constructor_arguments, is_compiled
 class DefaultTrainer:
     """Trainer class for training a segmentation network.
 
-    TODO
+    The trainer class implements the core logic for training a network with pytorch.
+    It implements a training loop to run training and validation, which is started with `fit`.
+    The checkpoints and logs from the training run will be saved in the current working directory,
+    or in the directory specifified by `save_root`. Training can be continued from a checkpoint
+    by passing it's location to the `load_from_checkpoint` argument of `fit`.
+
+    A pre-configured instance of the trainer can be obtained from `torch_em.default_segmentation_trainer`.
+    Alternatively, the trainer class can also be instantiated as in this example:
+    ```python
+    import torch
+    from torch_em.loss import DiceLoss
+    from torch_em.model import UNet2d
+    from torch_em.data.datasets.light_microscopy import get_dsb_loader
+    from torch_em.trainer import DefaultTrainer
+
+    # The training data will be downloaded to this location.
+    data_root = "/path/to/save/the/training/data"
+    patch_shape = (256, 256)
+
+    # Create the model and optimizer.
+    model = UNet2d(in_channels=1, out_channels=1)
+    optimizer = torch.optim.AdamW(model.parameters())
+
+    trainer = DefaultTrainer(
+        name="unet-training",
+        train_loader=get_dsb_loader(path=data_root, patch_shape=patch_shape, split="train"),
+        val_loader=get_dsb_loader(path=data_root, patch_shape=patch_shape, split="test"),
+        model=model,
+        loss=DiceLoss(),  # The loss function.
+        optimizer=optimizer,
+        metric=DiceLoss(),  # The metric. The trainer expects smaller values to represent better results.
+        device="cuda",  # The device to use for training.
+    )
+    trainer.fit(iterations=int(2.5e4))  # Train for 25.000 iterations.
+    ```
 
     Args:
         name: The name of the checkpoint that will be created by the trainer.
@@ -31,10 +65,10 @@ class DefaultTrainer:
         val_loader: The data loader containing the validation data.
         model: The model to train.
         loss: The loss function for training.
-        optimizer: TODO
+        optimizer: The optimizer.
         metric: The metric for validation.
         device: The torch device to use for training. If None, will use a GPU if available.
-        lr_scheduler: TODO
+        lr_scheduler: The learning rate scheduler.
         log_image_interval: The interval for saving images during logging, in training iterations.
         mixed_precision: Whether to train with mixed precision.
         early_stopping: The patience for early stopping in epochs. If None, early stopping will not be used.
@@ -56,7 +90,7 @@ class DefaultTrainer:
         optimizer: torch.optim.Optimizer,
         metric: Callable,
         device: Union[str, torch.device],
-        lr_scheduler: torch.optim.lr_scheduler._LRScheduler = None,
+        lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
         log_image_interval: int = 100,
         mixed_precision: bool = True,
         early_stopping: Optional[int] = None,
@@ -106,12 +140,12 @@ class DefaultTrainer:
         self.logger_kwargs = logger_kwargs
         self.log_image_interval = log_image_interval
 
-    @property  # because the logger may generate and set trainer.id on logger.__init__
+    @property
     def checkpoint_folder(self):
-        assert self.id_ is not None
-        # save_root enables saving the checkpoints somewhere else than in the local
-        # folder. This is handy for filesystems with limited space, where saving the checkpoints
-        # and log files can easily lead to running out of space.
+        assert self.id_ is not None  # Because the logger may generate and set trainer.id on logger.__init__.
+        # Save_root enables saving the checkpoints somewhere else than in the local older.
+        # This is handy for filesystems with limited space, where saving the checkpoints
+        # and log files can ead to running out of space.
         save_root = getattr(self, "save_root", None)
         return os.path.join("./checkpoints", self.id_) if save_root is None else\
             os.path.join(save_root, "./checkpoints", self.id_)
@@ -125,7 +159,7 @@ class DefaultTrainer:
         return self._epoch
 
     class Deserializer:
-        """Determines how to deserialize the trainer kwargs from serialized 'init_data'
+        """Determines how to deserialize the trainer kwargs from serialized 'init_data'.
 
         Examples:
             To extend the initialization process you can inherite from this Deserializer in an inherited Trainer class.
@@ -146,19 +180,25 @@ class DefaultTrainer:
             >>>                 self.trainer_kwargs["the_answer"] = generic_answer + 1
             >>>             else:
             >>>                 self.trainer_kwargs["the_answer"] = generic_answer * 2
+
+        Args:
+            init_data: The initialization data of the trainer.
+            save_path: The path where the checkpoint was saved.
+            device: The device.
         """
 
-        def __init__(self, init_data: dict, save_path: str, device: Union[str, torch.device]):
+        def __init__(self, init_data: Dict, save_path: str, device: Union[str, torch.device]):
             self.init_data = init_data
             self.save_path = save_path
-            # populate with deserialized trainer kwargs during deserialization; possibly overwrite 'device'
+            # Populate with deserialized trainer kwargs during deserialization; possibly overwrite 'device'.
             self.trainer_kwargs: Dict[str, Any] = dict(
                 device=torch.device(self.init_data["device"]) if device is None else torch.device(device)
             )
 
         def load(self, kwarg_name: str, optional):
-            """`optional` is True if self.trainer.__class__.__init__ specifies a default value for 'kwarg_name'"""
-
+            """@private
+            """
+            # `optional` is True if self.trainer.__class__.__init__ specifies a default value for 'kwarg_name'
             if kwarg_name == "device":
                 pass  # deserialized in __init__
             elif kwarg_name.endswith("_loader"):
@@ -168,6 +208,8 @@ class DefaultTrainer:
                 load(kwarg_name, optional=optional)
 
         def load_data_loader(self, loader_name, optional) -> None:
+            """@private
+            """
             ds = self.init_data.get(loader_name.replace("_loader", "_dataset"))
             if ds is None and optional:
                 return
@@ -186,6 +228,8 @@ class DefaultTrainer:
             only_class: bool = False,
             dynamic_kwargs: Optional[Dict[str, Any]] = None,
         ) -> None:
+            """@private
+            """
             if kwarg_name in self.init_data:
                 self.trainer_kwargs[kwarg_name] = self.init_data[kwarg_name]
                 return
@@ -209,16 +253,24 @@ class DefaultTrainer:
                 )
 
         def load_name(self, kwarg_name: str, optional: bool):
+            """@private
+            """
             self.trainer_kwargs[kwarg_name] = os.path.split(os.path.dirname(self.save_path))[1]
 
         def load_optimizer(self, kwarg_name: str, optional: bool):
+            """@private
+            """
             self.load_generic(kwarg_name, self.trainer_kwargs["model"].parameters(), optional=optional)
 
         def load_lr_scheduler(self, kwarg_name: str, optional: bool):
+            """@private
+            """
             self.load_generic(kwarg_name, self.trainer_kwargs["optimizer"], optional=optional)
 
         # todo: remove and rename kwarg 'logger' to 'logger_class'
         def load_logger(self, kwarg_name: str, optional: bool):
+            """@private
+            """
             assert kwarg_name == "logger"
             self.load_generic("logger", optional=optional, only_class=True)
 
@@ -235,6 +287,8 @@ class DefaultTrainer:
         name: Literal["best", "latest"] = "best",
         device: Optional[Union[str, torch.device]] = None,
     ):
+        """@private
+        """
         save_path = os.path.join(checkpoint_folder, f"{name}.pt")
         # make sure the correct device is set if we don't have access to CUDA
         if not torch.cuda.is_available():
@@ -271,7 +325,7 @@ class DefaultTrainer:
         return trainer
 
     class Serializer:
-        """Implements how to serialize trainer kwargs from a trainer instance
+        """Implements how to serialize trainer kwargs from a trainer instance.
 
         Examples:
             To extend the serialization process you can inherite from this Serializer in a derived Trainer class.
@@ -317,6 +371,9 @@ class DefaultTrainer:
             >>>             assert kwarg_name == "the_answer"
             >>>             # 'optional' is True if MyTrainer.__init__ specifies a default value for 'kwarg_name'
             >>>             self.trainer_kwargs[kwarg_name] = self.init_data["the"] * 10 + self.init_data["answer"]
+
+        Args:
+            trainer: The trainer instance.
         """
 
         def __init__(self, trainer: DefaultTrainer):
@@ -324,6 +381,8 @@ class DefaultTrainer:
             self.init_data = {}  # to be populated during serialization process
 
         def dump(self, kwarg_name: str) -> None:
+            """@private
+            """
             dumper = getattr(self, f"dump_{kwarg_name}", None)
             if dumper is not None:
                 dumper(kwarg_name)
@@ -357,16 +416,22 @@ class DefaultTrainer:
                     self.dump_generic_instance(kwarg_name)
 
         def dump_generic_builtin(self, kwarg_name: str) -> None:
+            """@private
+            """
             assert hasattr(self.trainer, kwarg_name)
             self.init_data[kwarg_name] = getattr(self.trainer, kwarg_name)
 
         def dump_generic_class(self, kwarg_name: str) -> None:
+            """@private
+            """
             assert hasattr(self.trainer, kwarg_name)
             assert kwarg_name.endswith("_class")
             obj = getattr(self.trainer, kwarg_name)
             self.init_data[kwarg_name] = None if obj is None else f"{obj.__module__}.{obj.__name__}"
 
         def dump_generic_instance(self, kwarg_name: str) -> None:
+            """@private
+            """
             assert hasattr(self.trainer, kwarg_name)
             instance = getattr(self.trainer, kwarg_name)
             self.init_data.update(
@@ -377,10 +442,14 @@ class DefaultTrainer:
             )
 
         def dump_device(self, kwarg_name: str):
+            """@private
+            """
             assert hasattr(self.trainer, kwarg_name)
             self.init_data[kwarg_name] = str(getattr(self.trainer, kwarg_name))
 
         def dump_data_loader(self, kwarg_name: str) -> None:
+            """@private
+            """
             assert hasattr(self.trainer, kwarg_name)
             loader = getattr(self.trainer, kwarg_name)
             if loader is None:
@@ -393,9 +462,13 @@ class DefaultTrainer:
             )
 
         def dump_logger(self, kwarg_name: str):  # todo: remove and rename kwarg 'logger' to 'logger_class'
+            """@private
+            """
             self.dump_generic_class(f"{kwarg_name}_class")
 
         def dump_model(self, kwarg_name: str):
+            """@private
+            """
             if is_compiled(self.trainer.model):
                 self.init_data.update(
                     {"model_class": self.trainer._model_class, "model_kwargs": self.trainer._model_kwargs}
@@ -497,6 +570,8 @@ class DefaultTrainer:
         return best_metric
 
     def save_checkpoint(self, name, current_metric, best_metric, train_time=0.0, **extra_save_dict):
+        """@private
+        """
         save_path = os.path.join(self.checkpoint_folder, f"{name}.pt")
         extra_init_dict = extra_save_dict.pop("init", {})
         save_dict = {
@@ -521,6 +596,8 @@ class DefaultTrainer:
             torch.save(save_dict, save_path)
 
     def load_checkpoint(self, checkpoint="best"):
+        """@private
+        """
         if isinstance(checkpoint, str):
             save_path = os.path.join(self.checkpoint_folder, f"{checkpoint}.pt")
             if not os.path.exists(save_path):
@@ -577,15 +654,14 @@ class DefaultTrainer:
 
         Exactly one of 'iterations' or 'epochs' has to be passed.
 
-        Parameters:
-            iterations [int] - how long to train, specified in iterations (default: None)
-            load_from_checkpoint [str] - path to a checkpoint from where training should be continued (default: None)
-            epochs [int] - how long to train, specified in epochs (default: None)
-            save_every_kth_epoch [int] - save checkpoints after every kth epoch separately.
-                The corresponding checkpoints will be saved with the naming scheme 'epoch-{epoch}.pt'. (default: None)
-            progress [progress_bar] - optional progress bar for integration with external tools.
-                Expected to follow the tqdm interface.
-            overwrite_training [bool] - Whether to overwrite the trained model.
+        Args:
+            iterations: How long to train, specified in iterations.
+            load_from_checkpoint: Path to a checkpoint from where training should be continued .
+            epochs: How long to train, specified in epochs.
+            save_every_kth_epoch: Save checkpoints after every kth epoch in a separate file.
+                The corresponding checkpoints will be saved with the naming scheme 'epoch-{epoch}.pt'.
+            progress: Optional progress bar for integration with external tools. Expected to follow the tqdm interface.
+            overwrite_training: Whether to overwrite existing checkpoints in the save directory.
         """
         best_metric = self._initialize(iterations, load_from_checkpoint, epochs)
 

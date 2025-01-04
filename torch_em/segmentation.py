@@ -446,11 +446,30 @@ def default_segmentation_trainer(
     compile_model: Optional[Union[bool, str]] = None,
     rank: Optional[int] = None,
 ):
-    """Get a trainer for training a segmentation network.
+    """Get a trainer for a segmentation network.
 
-    It will create a `torch.optim.AdamW` optimizer and learning rate scheduler
-    that reduces the learning rate on plateau.
+    It creates a `torch.optim.AdamW` optimizer and learning rate scheduler that reduces the learning rate on plateau.
+    By default, it uses the dice score as loss and metric.
+    This can be changed by passing arguments for `loss` and/or `metric`.
     See `torch_em.trainer.DefaultTrainer` for additional details on how to configure and use the trainer.
+
+    Here's an example for training a 2D U-Net with this function:
+    ```python
+    import torch_em
+    from torch_em.model import UNet2d
+    from torch_em.data.datasets.light_microscopy import get_dsb_loader
+
+    # The training data will be downloaded to this location.
+    data_root = "/path/to/save/the/training/data"
+    patch_shape = (256, 256)
+    trainer = default_segmentation_trainer(
+        name="unet-training"
+        model=UNet2d(in_channels=1, out_channels=1)
+        train_loader=get_dsb_loader(path=data_root, patch_shape=patch_shape, split="train"),
+        val_loader=get_dsb_loader(path=data_root, patch_shape=patch_shape, split="test"),
+    )
+    trainer.fit(iterations=int(2.5e4))  # Train for 25.000 iterations.
+    ```
 
     Args:
         name: The name of the checkpoint that will be created by the trainer.
