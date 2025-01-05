@@ -1,3 +1,5 @@
+"""Implementations of Datasets and Samplers for training neural networks with PyTorch.
+"""
 from .concat_dataset import ConcatDataset
 from .dataset_wrapper import DatasetWrapper
 from .image_collection_dataset import ImageCollectionDataset

@@ -1,3 +1,5 @@
+"""Data and label transformations for training neural networks.
+"""
 from .augmentation import get_augmentations
 from .defect import EMDefectAugmentation, get_artifact_source
 from .generic import Compose, Rescale, Tile, PadIfNecessary
