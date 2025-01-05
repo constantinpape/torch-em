@@ -58,12 +58,12 @@ def get_pseudolabel_dataset(
     patch_shape: Tuple[int, ...],
     raw_transform: Optional[Callable] = None,
     transform: Optional[Callable] = None,
-    rois: Optional[Tuple[slice, ...], Sequence[Tuple[slice, ...]]] = None,
+    rois: Optional[Union[Tuple[slice, ...], Sequence[Tuple[slice, ...]]]] = None,
     n_samples: Optional[int] = None,
     ndim: Optional[int] = None,
     is_raw_dataset: Optional[bool] = None,
     pseudo_labeler_device: str = "cpu",
-) -> torch.utils.Dataset:
+) -> torch.utils.data.Dataset:
     """Get a pseudo-label dataset for training from a Shallow2Deep model.
 
     Args:
@@ -123,13 +123,13 @@ def get_pseudolabel_loader(
     patch_shape: Tuple[int, ...],
     raw_transform: Optional[Callable] = None,
     transform: Optional[Callable] = None,
-    rois: Optional[Tuple[slice, ...], Sequence[Tuple[slice, ...]]] = None,
+    rois: Optional[Union[Tuple[slice, ...], Sequence[Tuple[slice, ...]]]] = None,
     n_samples: Optional[int] = None,
     ndim: Optional[int] = None,
     is_raw_dataset: Optional[bool] = None,
     pseudo_labeler_device: str = "cpu",
     **loader_kwargs,
-):
+) -> torch.utils.data.DataLoader:
     """Get a pseudo-label dataloader for training from a Shallow2Deep model.
 
     Args:

@@ -1,3 +1,6 @@
+"""Neural network architectures for classifcation, segmentation or image-to-image translation tasks.
+"""
+
 from .unet import AnisotropicUNet, UNet2d, UNet3d
 from .probabilistic_unet import ProbabilisticUNet
 from .unetr import UNETR
