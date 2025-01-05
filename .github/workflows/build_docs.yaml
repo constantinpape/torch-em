@@ -41,7 +41,7 @@ jobs:
 
     - name: Generate Documentation
       shell: bash -l {0}
-      run: pdoc synapse_net/ -d google -o doc/
+      run: pdoc torch_em/ -d google -o doc/
 
     - name: Verify Documentation Output
       run: ls -la doc/

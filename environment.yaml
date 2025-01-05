@@ -10,7 +10,7 @@ dependencies:
     - python-elf
     - pytorch
     - tensorboard
-    - tifffile
+    - tifffile >=2024
     - torchvision
     - tqdm
     - kornia
