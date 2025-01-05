@@ -5,13 +5,22 @@ import numpy as np
 import torch.nn as nn
 import xarray
 
-from micro_sam.instance_segmentation import InstanceSegmentationWithDecoder
-from micro_sam.evaluation.instance_segmentation import (
-    default_grid_search_values_instance_segmentation_with_decoder,
-    evaluate_instance_segmentation_grid_search,
-    run_instance_segmentation_grid_search,
-    _get_range_of_search_values,
-)
+try:
+    from micro_sam.instance_segmentation import InstanceSegmentationWithDecoder
+    from micro_sam.evaluation.instance_segmentation import (
+        default_grid_search_values_instance_segmentation_with_decoder,
+        evaluate_instance_segmentation_grid_search,
+        run_instance_segmentation_grid_search,
+        _get_range_of_search_values,
+    )
+
+    HAVE_MICRO_SAM = True
+except ImportError:
+    class InstanceSegmentationWithDecoder:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    HAVE_MICRO_SAM = False
 
 from ..transform.raw import standardize
 from .prediction import predict_with_padding, predict_with_halo
@@ -199,6 +208,11 @@ def instance_segmentation_grid_search(
         The best parameters found by the grid search.
         The best score of the grid search.
     """
+    if not HAVE_MICRO_SAM:
+        raise RuntimeError(
+            "The gridsearch functionality requires micro_sam. Install it via `conda install -c conda-forge micro_sam.`"
+        )
+
     if grid_search_values is None:
         if isinstance(segmenter, DistanceBasedInstanceSegmentation):
             grid_search_values = default_grid_search_values_instance_segmentation_with_decoder()
