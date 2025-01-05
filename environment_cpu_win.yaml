@@ -9,6 +9,7 @@ dependencies:
     - bioimageio.core >=0.6.0
     - cpuonly
     - imagecodecs
+    - natsort
     # This pin is necessary because later nifty versions have import errors on windows.
     - nifty =1.2.1=*_4
     - protobuf <5
