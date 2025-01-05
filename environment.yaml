@@ -7,6 +7,7 @@ dependencies:
     - bioimageio.spec
     - bioimageio.core
     - imagecodecs
+    - natsort
     - python-elf
     - pytorch
     - tensorboard
