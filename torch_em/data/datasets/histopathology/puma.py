@@ -54,6 +54,7 @@ def _create_split_csv(path, split):
         split_list = df.iloc[0][split]
 
     else:
+        print(f"Creating a new split file at '{csv_path}'.")
         metastatic_ids = [
             os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*metastatic*"))
         ]

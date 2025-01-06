@@ -51,6 +51,7 @@ def _create_split_csv(path, split):
         split_list = df.iloc[0][split]
 
     else:
+        print(f"Creating a new split file at '{csv_path}'.")
         patient_ids = [
             os.path.basename(image).split("_original")[0]
             for image in glob(os.path.join(path, 'data', 'nuclei', '*original.tif'))
