@@ -38,6 +38,7 @@ def _create_split_csv(path, data_dir, split):
         split_list = df.iloc[0][split]
 
     else:
+        print(f"Creating a new split file at '{csv_path}'.")
         image_names = [
             os.path.basename(image).split(".")[0] for image in glob(os.path.join(data_dir, '*.h5'))
         ]
