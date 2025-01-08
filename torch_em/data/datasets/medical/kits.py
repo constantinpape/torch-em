@@ -120,7 +120,7 @@ def _preprocess_inputs(path):
                 for p in glob(os.path.join(patient_dir, "instances", f"tumor_instance*-{rater}.nii.gz")):
                     masks[nib.load(p).get_fdata() > 0] = 1
 
-                f.create_dataset(f"labels/tumor/rater_{rater_id}", data=masks, compression="gzip")
+                f.create_dataset(f"labels/tumor/rater_{rater}", data=masks, compression="gzip")
 
             # Add annotations for cysts per rater.
             if len(cyst_anns) > 0:
@@ -133,7 +133,7 @@ def _preprocess_inputs(path):
                     for p in glob(os.path.join(patient_dir, "instances", f"cyst_instance*-{rater}.nii.gz")):
                         masks[nib.load(p).get_fdata() > 0] = 1
 
-                    f.create_dataset(f"labels/cyst/rater_{rater_id}", data=masks, compression="gzip")
+                    f.create_dataset(f"labels/cyst/rater_{rater}", data=masks, compression="gzip")
 
 
 def get_kits_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
