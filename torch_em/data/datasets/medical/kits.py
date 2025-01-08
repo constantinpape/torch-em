@@ -28,7 +28,14 @@ URL = "https://github.com/neheller/kits23"
 
 
 def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """
+    """Download the KiTS data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The folder where the dataset is downloaded and preprocessed.
     """
     data_dir = os.path.join(path, "preprocessed")
     if os.path.exists(data_dir):
@@ -122,7 +129,14 @@ def _preprocess_inputs(path):
 
 
 def get_kits_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
-    """
+    """Get paths to the KiTS data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the input data.
     """
     data_dir = get_kits_data(path, download)
     volume_paths = natsorted(glob(os.path.join(data_dir, "*.h5")))
@@ -138,7 +152,19 @@ def get_kits_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the KiTS dataset for kidney, tumor and cyst segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        rater: The choice of rater.
+        annotation_choice: The choice of annotations.
+        resize_inputs:  Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     volume_paths = get_kits_paths(path, download)
 
@@ -180,7 +206,20 @@ def get_kits_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the KiTS dataloader for kidney, tumor and cyst segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        rater: The choice of rater.
+        annotation_choice: The choice of annotations.
+        resize_inputs:  Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_kits_dataset(path, patch_shape, rater, annotation_choice, resize_inputs, download, **ds_kwargs)
