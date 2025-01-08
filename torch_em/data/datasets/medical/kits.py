@@ -135,8 +135,6 @@ def _preprocess_inputs(path):
 
                     f.create_dataset(f"labels/cyst/rater_{rater_id}", data=masks, compression="gzip")
 
-        breakpoint()
-
 
 def get_kits_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
     """Get paths to the KiTS data.
