@@ -38,24 +38,24 @@ def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
         The folder where the dataset is downloaded and preprocessed.
     """
     data_dir = os.path.join(path, "preprocessed")
-    if os.path.exists(data_dir):
-        return data_dir
+    # if os.path.exists(data_dir):
+    #     return data_dir
 
-    os.makedirs(path, exist_ok=True)
+    # os.makedirs(path, exist_ok=True)
 
-    if not download:
-        raise RuntimeError("The dataset is not found and download is set to False.")
+    # if not download:
+    #     raise RuntimeError("The dataset is not found and download is set to False.")
 
-    # We clone the environment.
-    subprocess.run(["git", "clone", URL, os.path.join(path, "kits23")])
+    # # We clone the environment.
+    # subprocess.run(["git", "clone", URL, os.path.join(path, "kits23")])
 
-    # # # We install the package-only (with the assumption that the other necessary packages already exists).
-    subprocess.run(["pip", "install", "-e", os.path.join(path, "kits23"), "--no-deps"])
+    # # We install the package-only (with the assumption that the other necessary packages already exists).
+    # subprocess.run(["pip", "install", "-e", os.path.join(path, "kits23"), "--no-deps"])
 
-    print("The download might take several hours. Make sure you have consistent internet connection.")
+    # print("The download might take several hours. Make sure you have consistent internet connection.")
 
     # # Now, we run the CLI.
-    subprocess.run(["kits23_download_data"])
+    # subprocess.run(["kits23_download_data"])
 
     # Preprocess the images.
     _preprocess_inputs(path)
@@ -65,8 +65,6 @@ def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
 
 def _preprocess_inputs(path):
     patient_dirs = glob(os.path.join(path, "kits23", "dataset", "case*"))
-
-    breakpoint()
 
     preprocessed_dir = os.path.join(path, "preprocessed")
     os.makedirs(preprocessed_dir, exist_ok=True)
@@ -86,46 +84,58 @@ def _preprocess_inputs(path):
         with h5py.File(patient_path, "w") as f:
             # Input image.
             raw = nib.load(os.path.join(patient_dir, "imaging.nii.gz")).get_fdata()
-            f.create_dataset("raw", data=raw.get_fdata())
+            f.create_dataset("raw", data=raw, compression="gzip")
 
             # Valid segmentation masks for all classes.
             labels = nib.load(os.path.join(patient_dir, "segmentation.nii.gz")).get_fdata()
             assert raw.shape == labels.shape, "The shape of inputs and corresponding segmentation does not match."
 
-            f.create_dataset("labels/all", data=labels)
+            f.create_dataset("labels/all", data=labels, compression="gzip")
 
             # Add annotations for kidneys per rater.
-            if len(kidney_anns) > 0:
-                for p in kidney_anns:
-                    masks = np.zeros_like(raw)
-                    rater_id = p[-8]  # The rater count
+            assert len(kidney_anns) > 0, "There must be kidney annotations."
+            for p in kidney_anns:
+                masks = np.zeros_like(raw)
+                rater_id = p[-8]  # The rater count
 
-                    # Get the other kidney instance.
-                    other_p = p.replace("instance-1", "instance-2")
-                    assert os.path.exists(other_p), "The kidney instance does not exist. That is unexpected."
+                # Get the other kidney instance.
+                other_p = p.replace("instance-1", "instance-2")
+                assert os.path.exists(other_p), "The kidney instance does not exist. That is unexpected."
 
-                    # Merge both left and right kidney as one semantic id.
-                    masks[nib.load(p).get_fdata() > 0] = 1
-                    masks[nib.load(other_p).get_fdata() > 0] = 1
+                # Merge both left and right kidney as one semantic id.
+                masks[nib.load(p).get_fdata() > 0] = 1
+                masks[nib.load(other_p).get_fdata() > 0] = 1
 
-                    # Create a hierarchy for the particular rater's kidney annotations.
-                    f.create_dataset(f"labels/kidney/rater_{rater_id}", data=masks)
+                # Create a hierarchy for the particular rater's kidney annotations.
+                f.create_dataset(f"labels/kidney/rater_{rater_id}", data=masks, compression="gzip")
 
             # Add annotations for tumor per rater.
-            if len(tumor_anns) > 0:
-                for p in tumor_anns:
-                    masks = np.zeros_like(raw)
-                    rater_id = p[-8]
+            assert len(tumor_anns) > 0, "There must be tumor annotations."
+            # Find the raters.
+            raters = [p[-8] for p in tumor_anns]
+            # Get masks per rater
+            unique_raters = np.unique(raters)
+            for rater in unique_raters:
+                masks = np.zeros_like(raw)
+                for p in glob(os.path.join(patient_dir, "instances", f"tumor_instance*-{rater}.nii.gz")):
                     masks[nib.load(p).get_fdata() > 0] = 1
-                    f.create_dataset(f"labels/tumor/rater_{rater_id}", data=masks)
+
+                f.create_dataset(f"labels/tumor/rater_{rater_id}", data=masks, compression="gzip")
 
             # Add annotations for cysts per rater.
             if len(cyst_anns) > 0:
-                for p in cyst_anns:
+                # Find the raters first
+                raters = [p[-8] for p in cyst_anns]
+                # Get masks per rater
+                unique_raters = np.unique(raters)
+                for rater in unique_raters:
                     masks = np.zeros_like(raw)
-                    rater_id = p[-8]
-                    masks[nib.load(p).get_fdata() > 0] = 1
-                    f.create_dataset(f"labels/cyst/rater_{rater_id}", data=masks)
+                    for p in glob(os.path.join(patient_dir, "instances", f"cyst_instance*-{rater}.nii.gz")):
+                        masks[nib.load(p).get_fdata() > 0] = 1
+
+                    f.create_dataset(f"labels/cyst/rater_{rater_id}", data=masks, compression="gzip")
+
+        breakpoint()
 
 
 def get_kits_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
