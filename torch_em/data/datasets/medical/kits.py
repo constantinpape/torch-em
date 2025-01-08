@@ -38,24 +38,24 @@ def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
         The folder where the dataset is downloaded and preprocessed.
     """
     data_dir = os.path.join(path, "preprocessed")
-    # if os.path.exists(data_dir):
-    #     return data_dir
+    if os.path.exists(data_dir):
+        return data_dir
 
-    # os.makedirs(path, exist_ok=True)
+    os.makedirs(path, exist_ok=True)
 
-    # if not download:
-    #     raise RuntimeError("The dataset is not found and download is set to False.")
+    if not download:
+        raise RuntimeError("The dataset is not found and download is set to False.")
 
-    # # We clone the environment.
-    # subprocess.run(["git", "clone", URL, os.path.join(path, "kits23")])
+    # We clone the environment.
+    subprocess.run(["git", "clone", URL, os.path.join(path, "kits23")])
 
-    # # We install the package-only (with the assumption that the other necessary packages already exists).
-    # subprocess.run(["pip", "install", "-e", os.path.join(path, "kits23"), "--no-deps"])
+    # We install the package-only (with the assumption that the other necessary packages already exists).
+    subprocess.run(["pip", "install", "-e", os.path.join(path, "kits23"), "--no-deps"])
 
-    # print("The download might take several hours. Make sure you have consistent internet connection.")
+    print("The download might take several hours. Make sure you have consistent internet connection.")
 
-    # # Now, we run the CLI.
-    # subprocess.run(["kits23_download_data"])
+    # Now, we run the CLI.
+    subprocess.run(["kits23_download_data"])
 
     # Preprocess the images.
     _preprocess_inputs(path)
