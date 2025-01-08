@@ -9,9 +9,7 @@ sys.path.append("..")
 
 
 def check_kits():
-    # from util import ROOT
-    # ROOT = "/media/anwai/ANWAI/data"
-    ROOT = "/mnt/vast-nhr/projects/cidas/cca/data"
+    from util import ROOT
 
     loader = get_kits_loader(
         path=os.path.join(ROOT, "kits"),

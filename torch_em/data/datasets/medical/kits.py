@@ -76,6 +76,9 @@ def _preprocess_inputs(path):
         patient_id = os.path.basename(patient_dir)
         patient_path = os.path.join(preprocessed_dir, Path(patient_id).with_suffix(".h5"))
 
+        if os.path.exists(patient_path):
+            continue
+
         # Next, we find all rater annotations.
         kidney_anns = natsorted(glob(os.path.join(patient_dir, "instances", "kidney_instance-1*")))
         tumor_anns = natsorted(glob(os.path.join(patient_dir, "instances", "tumor_instance*")))
@@ -103,12 +106,13 @@ def _preprocess_inputs(path):
 
                 # Get the other kidney instance.
                 other_p = p.replace("instance-1", "instance-2")
-                if not os.path.exists(other_p):
-                    print(f"The kidney instance does not exist for patient: '{patient_id}'.")
 
                 # Merge both left and right kidney as one semantic id.
                 masks[nib.load(p).get_fdata() > 0] = 1
-                masks[nib.load(other_p).get_fdata() > 0] = 1
+                if os.path.exists(other_p):
+                    masks[nib.load(other_p).get_fdata() > 0] = 1
+                else:
+                    print(f"The second kidney instance does not exist for patient: '{patient_id}'.")
 
                 # Create a hierarchy for the particular rater's kidney annotations.
                 f.create_dataset(f"labels/kidney/rater_{rater_id}", data=masks, compression="gzip")
