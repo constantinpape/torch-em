@@ -47,15 +47,18 @@ def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
         raise RuntimeError("The dataset is not found and download is set to False.")
 
     # We clone the environment.
-    subprocess.run(["git", "clone", URL, os.path.join(path, "kits23")])
+    if not os.path.exists(os.path.join(path, "kits23")):
+        subprocess.run(["git", "clone", URL, os.path.join(path, "kits23")])
 
     # We install the package-only (with the assumption that the other necessary packages already exists).
-    subprocess.run(["pip", "install", "-e", os.path.join(path, "kits23"), "--no-deps"])
+    chosen_patient_dir = natsorted(glob(os.path.join(path, "kits23", "dataset", "case*")))[-1]
+    if not os.path.exists(os.path.join(chosen_patient_dir, "imaging.nii.gz")):
+        subprocess.run(["pip", "install", "-e", os.path.join(path, "kits23"), "--no-deps"])
 
-    print("The download might take several hours. Make sure you have consistent internet connection.")
+        print("The download might take several hours. Make sure you have consistent internet connection.")
 
-    # Now, we run the CLI.
-    subprocess.run(["kits23_download_data"])
+        # Run the CLI to download the input images.
+        subprocess.run(["kits23_download_data"])
 
     # Preprocess the images.
     _preprocess_inputs(path)
@@ -93,14 +96,15 @@ def _preprocess_inputs(path):
             f.create_dataset("labels/all", data=labels, compression="gzip")
 
             # Add annotations for kidneys per rater.
-            assert len(kidney_anns) > 0, "There must be kidney annotations."
+            assert kidney_anns, "There must be kidney annotations."
             for p in kidney_anns:
                 masks = np.zeros_like(raw)
                 rater_id = p[-8]  # The rater count
 
                 # Get the other kidney instance.
                 other_p = p.replace("instance-1", "instance-2")
-                assert os.path.exists(other_p), "The kidney instance does not exist. That is unexpected."
+                if not os.path.exists(other_p):
+                    print(f"The kidney instance does not exist for patient: '{patient_id}'.")
 
                 # Merge both left and right kidney as one semantic id.
                 masks[nib.load(p).get_fdata() > 0] = 1
@@ -110,7 +114,7 @@ def _preprocess_inputs(path):
                 f.create_dataset(f"labels/kidney/rater_{rater_id}", data=masks, compression="gzip")
 
             # Add annotations for tumor per rater.
-            assert len(tumor_anns) > 0, "There must be tumor annotations."
+            assert tumor_anns, "There must be tumor annotations."
             # Find the raters.
             raters = [p[-8] for p in tumor_anns]
             # Get masks per rater
@@ -123,7 +127,7 @@ def _preprocess_inputs(path):
                 f.create_dataset(f"labels/tumor/rater_{rater}", data=masks, compression="gzip")
 
             # Add annotations for cysts per rater.
-            if len(cyst_anns) > 0:
+            if cyst_anns:
                 # Find the raters first
                 raters = [p[-8] for p in cyst_anns]
                 # Get masks per rater
