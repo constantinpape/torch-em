@@ -62,8 +62,8 @@ def get_cryonuseg_data(path: Union[os.PathLike, str], download: bool = False):
 
 
 def get_cryonuseg_paths(
-    path: Union[os.PathLike, str], rater_choice: Literal["b1", "b2", "b3"] = "b1", download: bool = False, split: Literal["train", "val", "test"] = None
-) -> Tuple[List[str], List[str]]:
+    path: Union[os.PathLike, str], rater_choice: Literal["b1", "b2", "b3"] = "b1", download: bool = False, 
+    split: Literal["train", "val", "test"] = None) -> Tuple[List[str], List[str]]:
     """Get paths to the CryoNuSeg data.
 
     Args:
@@ -155,6 +155,7 @@ def get_cryonuseg_loader(
         rater: The choice of annotator.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
+        split: The choice of a data split.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
