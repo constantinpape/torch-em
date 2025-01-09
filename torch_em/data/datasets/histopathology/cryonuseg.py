@@ -11,11 +11,36 @@ from natsort import natsorted
 from typing import Union, Tuple, Literal, List
 
 from torch.utils.data import Dataset, DataLoader
+import json
+import pandas as pd
+from sklearn.model_selection import train_test_split
 
 import torch_em
 
 from .. import util
 
+def _create_split_csv(path, data_dir, split):
+    csv_path = os.path.join(path, 'cryonuseg_split.csv')
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df[split] = df[split].apply(lambda x: json.loads(x.replace("'", '"')))  # ensures all items from column in list.
+        split_list = df.iloc[0][split]
+
+    else:
+        print(f"Creating a new split file at '{csv_path}'.")
+        image_names = [
+            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, data_dir, '*.tif'))
+        ]
+        train_ids, test_ids = train_test_split(image_names, test_size=0.2)  # 20% for test split.
+        train_ids, val_ids = train_test_split(train_ids, test_size=0.15)  # 15% for val split.
+        split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
+
+        df = pd.DataFrame.from_dict([split_ids])
+        df.to_csv(csv_path, index=False)
+
+        split_list = split_ids[split]
+
+    return split_list
 
 def get_cryonuseg_data(path: Union[os.PathLike, str], download: bool = False):
     """Download the CryoNuSeg dataset for nucleus segmentation.
@@ -37,7 +62,7 @@ def get_cryonuseg_data(path: Union[os.PathLike, str], download: bool = False):
 
 
 def get_cryonuseg_paths(
-    path: Union[os.PathLike, str], rater_choice: Literal["b1", "b2", "b3"] = "b1", download: bool = False
+    path: Union[os.PathLike, str], rater_choice: Literal["b1", "b2", "b3"] = "b1", download: bool = False, split: Literal["train", "val", "test"] = None
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the CryoNuSeg data.
 
@@ -63,9 +88,9 @@ def get_cryonuseg_paths(
 
     # Point to the instance labels folder
     label_dir += r"label masks modify"
-
-    label_paths = natsorted(glob(os.path.join(path, label_dir, "*.tif")))
-    raw_paths = natsorted(glob(os.path.join(path, r"tissue images", "*.tif")))
+    split_list = _create_split_csv(path, label_dir, split)
+    label_paths = natsorted([os.path.join(path, label_dir, f'{fname}.tif') for fname in split_list])
+    raw_paths = natsorted([os.path.join(path, r"tissue images", f'{fname}.tif') for fname in split_list])
 
     return raw_paths, label_paths
 
@@ -76,6 +101,7 @@ def get_cryonuseg_dataset(
     rater: Literal["b1", "b2", "b3"] = "b1",
     resize_inputs: bool = False,
     download: bool = False,
+    split: Literal["train", "val", "test"] = None,
     **kwargs
 ) -> Dataset:
     """Get the CryoNuSeg dataset for nucleus segmentation.
@@ -91,7 +117,7 @@ def get_cryonuseg_dataset(
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_cryonuseg_paths(path, rater, download)
+    raw_paths, label_paths = get_cryonuseg_paths(path, rater, download, split)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -117,6 +143,7 @@ def get_cryonuseg_loader(
     rater: Literal["b1", "b2", "b3"] = "b1",
     resize_inputs: bool = False,
     download: bool = False,
+    split: Literal["train", "val", "test"] = None,
     **kwargs
 ) -> DataLoader:
     """Get the CryoNuSeg dataloader for nucleus segmentation.
@@ -134,5 +161,5 @@ def get_cryonuseg_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cryonuseg_dataset(path, patch_shape, rater, resize_inputs, download, **ds_kwargs)
+    dataset = get_cryonuseg_dataset(path, patch_shape, rater, resize_inputs, download, split, **ds_kwargs)
     return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
