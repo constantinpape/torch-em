@@ -20,6 +20,7 @@ import torch_em
 
 from .. import util
 
+
 def _create_split_csv(path, data_dir, split):
     csv_path = os.path.join(path, 'cryonuseg_split.csv')
     if os.path.exists(csv_path):
@@ -32,6 +33,8 @@ def _create_split_csv(path, data_dir, split):
         image_names = [
             os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, data_dir, '*.tif'))
         ]
+
+        # Create random splits per dataset.
         train_ids, test_ids = train_test_split(image_names, test_size=0.2)  # 20% for test split.
         train_ids, val_ids = train_test_split(train_ids, test_size=0.15)  # 15% for val split.
         split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
@@ -42,6 +45,7 @@ def _create_split_csv(path, data_dir, split):
         split_list = split_ids[split]
 
     return split_list
+
 
 def get_cryonuseg_data(path: Union[os.PathLike, str], download: bool = False):
     """Download the CryoNuSeg dataset for nucleus segmentation.
@@ -63,12 +67,16 @@ def get_cryonuseg_data(path: Union[os.PathLike, str], download: bool = False):
 
 
 def get_cryonuseg_paths(
-    path: Union[os.PathLike, str], rater_choice: Literal["b1", "b2", "b3"] = "b1", download: bool = False, 
-    split: Literal["train", "val", "test"] = None) -> Tuple[List[str], List[str]]:
+    path: Union[os.PathLike, str],
+    split: Literal["train", "val", "test"],
+    rater_choice: Literal["b1", "b2", "b3"] = "b1",
+    download: bool = False,
+) -> Tuple[List[str], List[str]]:
     """Get paths to the CryoNuSeg data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data split.
         rater: The choice of annotator.
         download: Whether to download the data if it is not present.
 
@@ -99,10 +107,10 @@ def get_cryonuseg_paths(
 def get_cryonuseg_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
     rater: Literal["b1", "b2", "b3"] = "b1",
     resize_inputs: bool = False,
     download: bool = False,
-    split: Literal["train", "val", "test"] = None,
     **kwargs
 ) -> Dataset:
     """Get the CryoNuSeg dataset for nucleus segmentation.
@@ -110,6 +118,7 @@ def get_cryonuseg_dataset(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         rater: The choice of annotator.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
@@ -118,7 +127,7 @@ def get_cryonuseg_dataset(
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_cryonuseg_paths(path, rater, download, split)
+    raw_paths, label_paths = get_cryonuseg_paths(path, split, rater, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -141,10 +150,10 @@ def get_cryonuseg_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"],
     rater: Literal["b1", "b2", "b3"] = "b1",
     resize_inputs: bool = False,
     download: bool = False,
-    split: Literal["train", "val", "test"] = None,
     **kwargs
 ) -> DataLoader:
     """Get the CryoNuSeg dataloader for nucleus segmentation.
@@ -153,15 +162,15 @@ def get_cryonuseg_loader(
         path: Filepath to a folder where the downloaded data will be saved.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         rater: The choice of annotator.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
-        split: The choice of a data split.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cryonuseg_dataset(path, patch_shape, rater, resize_inputs, download, split, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_cryonuseg_dataset(path, patch_shape, split, rater, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
