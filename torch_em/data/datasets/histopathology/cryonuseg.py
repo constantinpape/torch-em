@@ -10,10 +10,11 @@ from glob import glob
 from natsort import natsorted
 from typing import Union, Tuple, Literal, List
 
-from torch.utils.data import Dataset, DataLoader
 import json
 import pandas as pd
 from sklearn.model_selection import train_test_split
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
