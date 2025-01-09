@@ -24,6 +24,7 @@ from .isic import get_isic_dataset, get_isic_loader
 from .isles import get_isles_dataset, get_isles_loader
 from .jsrt import get_jsrt_dataset, get_jsrt_loader
 from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
+from .kits import get_kits_dataset, get_kits_loader
 from .kvasir import get_kvasir_dataset, get_kvasir_loader
 from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
