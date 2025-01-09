@@ -47,15 +47,19 @@ def _create_split_csv(path, data_dir, split):
     return split_list
 
 
-def get_cryonuseg_data(path: Union[os.PathLike, str], download: bool = False):
+def get_cryonuseg_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Download the CryoNuSeg dataset for nucleus segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         download: Whether to download the data if it is not present.
+
+    Returns:
+        The folder where the data is downloaded and preprocessed.
     """
+    data_dir = os.path.join(path, r"tissue images")
     if os.path.exists(os.path.join(path, r"tissue images")):
-        return
+        return data_dir
 
     os.makedirs(path, exist_ok=True)
     util.download_source_kaggle(
@@ -64,6 +68,8 @@ def get_cryonuseg_data(path: Union[os.PathLike, str], download: bool = False):
 
     zip_path = os.path.join(path, "segmentation-of-nuclei-in-cryosectioned-he-images.zip")
     util.unzip(zip_path=zip_path, dst=path)
+
+    return data_dir
 
 
 def get_cryonuseg_paths(
@@ -84,7 +90,7 @@ def get_cryonuseg_paths(
         List of filepaths to the image data.
         List of filepaths to the label data.
     """
-    get_cryonuseg_data(path, download)
+    data_dir = get_cryonuseg_data(path, download)
 
     if rater_choice == "b1":
         label_dir = r"Annotator 1 (biologist)/"
@@ -98,8 +104,12 @@ def get_cryonuseg_paths(
     # Point to the instance labels folder
     label_dir += r"label masks modify"
     split_list = _create_split_csv(path, label_dir, split)
+
+    # Get the raw and label paths
     label_paths = natsorted([os.path.join(path, label_dir, f'{fname}.tif') for fname in split_list])
-    raw_paths = natsorted([os.path.join(path, r"tissue images", f'{fname}.tif') for fname in split_list])
+    raw_paths = natsorted([os.path.join(data_dir, f'{fname}.tif') for fname in split_list])
+
+    assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
     return raw_paths, label_paths
 
