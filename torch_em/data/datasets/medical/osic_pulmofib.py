@@ -57,22 +57,7 @@ def get_osic_pulmofib_data(path: Union[os.PathLike, str], download: bool = False
     return data_dir
 
 
-def get_osic_pulmofib_paths(
-    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
-) -> Tuple[List[str], List[str]]:
-    """Get paths to the OSIC PulmoFib data.
-
-    Args:
-        path: Filepath to a folder where the data is downloaded for further processing.
-        split: The choice of data split.
-        download: Whether to download the data if it is not present.
-
-    Returns:
-        List of filepaths for the image data.
-        List of filepaths for the label data.
-    """
-    data_dir = get_osic_pulmofib_data(path=path, download=download)
-
+def _preprocess_inputs(data_dir, split):
     image_dir = os.path.join(data_dir, "preprocessed", "images")
     gt_dir = os.path.join(data_dir, "preprocessed", "ground_truth")
 
@@ -84,7 +69,7 @@ def get_osic_pulmofib_paths(
 
     image_paths, gt_paths = [], []
     uid_paths = natsorted(glob(os.path.join(data_dir, "train", "*")))
-    for uid_path in tqdm(uid_paths, desc="Preprocessing inputs"):
+    for uid_path in tqdm(uid_paths, desc="Preprocessing inputs", disable=_completed_preproc):
         uid = uid_path.split("/")[-1]
 
         image_path = os.path.join(image_dir, f"{uid}.nii.gz")
@@ -154,6 +139,25 @@ def get_osic_pulmofib_paths(
     else:
         raise ValueError(f"'{split}' is not a valid split.")
 
+    return image_paths, gt_paths
+
+
+def get_osic_pulmofib_paths(
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the OSIC PulmoFib data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
+    data_dir = get_osic_pulmofib_data(path=path, download=download)
+    image_paths, gt_paths = _preprocess_inputs(data_dir, split)
     return image_paths, gt_paths
 
 
