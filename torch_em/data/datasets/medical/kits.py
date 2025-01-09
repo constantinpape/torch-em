@@ -99,13 +99,22 @@ def _preprocess_inputs(path):
             f.create_dataset("labels/all", data=labels, compression="gzip")
 
             # Add annotations for kidneys per rater.
-            assert kidney_anns, "There must be kidney annotations."
+            _k_exclusive = False
+            if not kidney_anns:
+                _k_exclusive = True
+                kidney_anns = natsorted(glob(os.path.join(patient_dir, "instances", "kidney_instance-2*")))
+
+            assert kidney_anns, f"There must be kidney annotations for '{patient_id}'."
             for p in kidney_anns:
                 masks = np.zeros_like(raw)
                 rater_id = p[-8]  # The rater count
 
                 # Get the other kidney instance.
-                other_p = p.replace("instance-1", "instance-2")
+                if _k_exclusive:
+                    print("The kidney annotations are numbered strangely.")
+                    other_p = p.replace("instance-2", "instance-3")
+                else:
+                    other_p = p.replace("instance-1", "instance-2")
 
                 # Merge both left and right kidney as one semantic id.
                 masks[nib.load(p).get_fdata() > 0] = 1
@@ -118,7 +127,7 @@ def _preprocess_inputs(path):
                 f.create_dataset(f"labels/kidney/rater_{rater_id}", data=masks, compression="gzip")
 
             # Add annotations for tumor per rater.
-            assert tumor_anns, "There must be tumor annotations."
+            assert tumor_anns, f"There must be tumor annotations for '{patient_id}'."
             # Find the raters.
             raters = [p[-8] for p in tumor_anns]
             # Get masks per rater
