@@ -1,4 +1,8 @@
-"""
+"""The GlaS dataset contains annotations for gland segmentation in colon histology images.
+
+This dataset is located at https://www.kaggle.com/datasets/sani84/glasmiccai2015-gland-segmentation.
+The dataset is from the publication http://arxiv.org/abs/1603.00275.
+Please cite it if you use this dataset for your research.
 """
 
 import os
