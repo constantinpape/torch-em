@@ -9,7 +9,7 @@ import torch_em
 
 from torch.utils.data import Dataset, DataLoader
 
-from torch_em.data.datasets import util
+from .. import util
 
 def _extract_images(split: Literal["train", "test"], data_folder, output_dir):
     import h5py
