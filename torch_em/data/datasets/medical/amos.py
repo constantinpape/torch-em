@@ -1,5 +1,4 @@
-"""The AMOS dataset contains annotations for abdominal multi-organ segmentation
-in CT and MRI scans.
+"""The AMOS dataset contains annotations for abdominal multi-organ segmentation in CT and MRI scans.
 
 This dataset is located at https://doi.org/10.5281/zenodo.7155725.
 The dataset is from AMOS 2022 Challenge https://doi.org/10.48550/arXiv.2206.08023.
@@ -10,6 +9,8 @@ import os
 from glob import glob
 from pathlib import Path
 from typing import Union, Tuple, Optional, Literal, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -111,7 +112,7 @@ def get_amos_dataset(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
+) -> Dataset:
     """Get the AMOS dataset for abdominal multi-organ segmentation in CT and MRI scans.
 
     Args:
@@ -119,6 +120,7 @@ def get_amos_dataset(
         patch_shape: The patch shape to use for traiing.
         split: The choice of data split.
         modality: The choice of imaging modality.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -146,14 +148,14 @@ def get_amos_dataset(
 
 def get_amos_loader(
     path: Union[os.PathLike, str],
-    split: str,
-    patch_shape: Tuple[int, ...],
     batch_size: int,
-    modality: Optional[str] = None,
+    patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
+    modality: Optional[Literal['CT', 'MRI']] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
+) -> DataLoader:
     """Get the AMOS dataloader for abdominal multi-organ segmentation in CT and MRI scans.
 
     Args:
@@ -162,6 +164,7 @@ def get_amos_loader(
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
         modality: The choice of imaging modality.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -169,5 +172,5 @@ def get_amos_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_amos_dataset(path, split, patch_shape, modality, resize_inputs, download, **ds_kwargs)
+    dataset = get_amos_dataset(path, patch_shape, split, modality, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
