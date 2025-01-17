@@ -47,7 +47,7 @@ def get_busi_paths(
     path: Union[os.PathLike, str],
     category: Optional[Literal["normal", "benign", "malignant"]] = None,
     download: bool = False
-) -> Tuple[List[str, List[str]]]:
+) -> Tuple[List[str], List[str]]:
     """Get paths to the BUSI data.
 
     Args:
