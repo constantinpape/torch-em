@@ -156,7 +156,7 @@ def get_osic_pulmofib_paths(
         List of filepaths for the image data.
         List of filepaths for the label data.
     """
-    data_dir = get_osic_pulmofib_data(path=path, download=download)
+    data_dir = get_osic_pulmofib_data(path, download)
     image_paths, gt_paths = _preprocess_inputs(data_dir, split)
     return image_paths, gt_paths
 

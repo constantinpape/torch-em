@@ -1,5 +1,4 @@
-"""The PALM dataset contains annotations for optic disc and lesion segmentation
-in Fundus images.
+"""The PALM dataset contains annotations for optic disc and lesion segmentation in Fundus images.
 
 The dataset is from the publication https://doi.org/10.1038/s41597-024-02911-2.
 Please cite it if you use this dataset for your research.

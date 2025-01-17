@@ -1,24 +1,40 @@
+"""The BUSI dataset contains annotations for breast cancer segmentation in ultrasound images.
+
+This dataset is located at https://scholar.cu.edu.eg/?q=afahmy/pages/dataset.
+The dataset is from the publication https://doi.org/10.1016/j.dib.2019.104863.
+Please cite it if you use this dataset for a publication.
+"""
+
 import os
 from glob import glob
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple, Optional, Literal, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
-from torch_em.transform.generic import ResizeInputs
 
 from .. import util
-from ... import ImageCollectionDataset
 
 
 URL = "https://scholar.cu.edu.eg/Dataset_BUSI.zip"
 CHECKSUM = "b2ce09f6063a31a73f628b6a6ee1245187cbaec225e93e563735691d68654de7"
 
 
-def get_busi_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_busi_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the BUSI dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "Dataset_BUSI_with_GT")
     if os.path.exists(data_dir):
         return data_dir
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "Dataset_BUSI.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM, verify=False)
@@ -27,11 +43,28 @@ def get_busi_data(path, download):
     return data_dir
 
 
-def _get_busi_paths(path, category, download):
+def get_busi_paths(
+    path: Union[os.PathLike, str],
+    category: Optional[Literal["normal", "benign", "malignant"]] = None,
+    download: bool = False
+) -> Tuple[List[str, List[str]]]:
+    """Get paths to the BUSI data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        category: The choice of data sub-category.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = get_busi_data(path=path, download=download)
 
     if category is None:
         category = "*"
+    else:
+        if category not in ["normal", "benign", "malignant"]:
+            raise ValueError(f"'{category}' is not a valid category choice.")
 
     data_dir = os.path.join(data_dir, category)
 
@@ -44,62 +77,64 @@ def _get_busi_paths(path, category, download):
 def get_busi_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    category: Optional[str] = None,
+    category: Optional[Literal["normal", "benign", "malignant"]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """"Dataset for segmentation of breast cancer in ultrasound images.
+) -> Dataset:
+    """Get the BUSI dataset for breast cancer segmentation.
 
-    This database is located at https://scholar.cu.edu.eg/?q=afahmy/pages/dataset
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        category: The choice of data sub-category.
+        resize_inputs: Whether to resize the inputs.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    The dataset is from Al-Dhabyani et al. - https://doi.org/10.1016/j.dib.2019.104863
-    Please cite it if you use this dataset for a publication.
+    Returns:
+        The segmentation dataset.
     """
-    if category is not None:
-        assert category in ["normal", "benign", "malignant"]
-
-    image_paths, gt_paths = _get_busi_paths(path=path, category=category, download=download)
+    image_paths, gt_paths = get_busi_paths(path, category, download)
 
     if resize_inputs:
-        raw_trafo = ResizeInputs(target_shape=patch_shape, is_rgb=True)
-        label_trafo = ResizeInputs(target_shape=patch_shape, is_label=True)
-        patch_shape = None
-    else:
-        patch_shape = patch_shape
-        raw_trafo, label_trafo = None, None
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
-    dataset = ImageCollectionDataset(
-        raw_image_paths=image_paths,
-        label_image_paths=gt_paths,
+    return torch_em.default_segmentation_dataset(
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
         patch_shape=patch_shape,
-        raw_transform=raw_trafo,
-        label_transform=label_trafo,
         **kwargs
     )
-
-    return dataset
 
 
 def get_busi_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
-    category: Optional[str] = None,
+    patch_shape: Tuple[int, int],
+    category: Optional[Literal["normal", "benign", "malignant"]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for segmentation of breast cancer in ultrasound images. See `get_busi_dataset` for details.
+) -> DataLoader:
+    """Get the BUSI dataloader for breast cancer segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        category: The choice of data sub-category.
+        resize_inputs: Whether to resize the inputs.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_busi_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        category=category,
-        resize_inputs=resize_inputs,
-        download=download,
-        **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_busi_dataset(path, patch_shape, category, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

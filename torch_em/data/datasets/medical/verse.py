@@ -82,8 +82,8 @@ def get_verse_paths(
 
 def get_verse_dataset(
     path: Union[os.PathLike, str],
-    split: str,
     patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -96,6 +96,7 @@ def get_verse_dataset(
         split: The data split to use. Either 'train', 'val' or 'test'.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
@@ -115,9 +116,9 @@ def get_verse_dataset(
 
 def get_verse_loader(
     path: Union[os.PathLike, str],
-    split: Literal['train', 'val', 'test'],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -126,15 +127,16 @@ def get_verse_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
         resize_inputs: Whether to resize inputs to the desired patch shape.
-        download: Whether to download the data if it is not present or for the PyTorch DataLoader.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_verse_dataset(path, split, patch_shape, resize_inputs, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_verse_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -151,8 +151,8 @@ def get_jsrt_dataset(
 
 def get_jsrt_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
     split: Literal['train', 'test'],
     choice: Optional[Literal['Segmentation01', 'Segmentation02']] = None,
     resize_inputs: bool = False,
@@ -163,8 +163,8 @@ def get_jsrt_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', or 'test'.
         choice: The choice of data subset. Either 'Segmentation01' or 'Segmentation02'.
         resize_inputs: Whether to resize the inputs.
@@ -176,4 +176,4 @@ def get_jsrt_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_jsrt_dataset(path, patch_shape, split, choice, resize_inputs, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

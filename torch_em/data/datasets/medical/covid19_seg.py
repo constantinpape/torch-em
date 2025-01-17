@@ -41,7 +41,9 @@ ZIP_FNAMES = {
 
 
 def get_covid19_seg_data(
-    path: Union[os.PathLike, str], task: Literal['lung', 'infection', 'lung_and_infection'], download: bool = False
+    path: Union[os.PathLike, str],
+    task: Literal['lung', 'infection', 'lung_and_infection'],
+    download: bool = False
 ) -> Tuple[str, str]:
     """Download the Covid19Seg dataset.
 
@@ -77,7 +79,9 @@ def get_covid19_seg_data(
 
 
 def get_covid19_seg_paths(
-    path: Union[os.PathLike, str], task: Literal['lung', 'infection', 'lung_and_infection'], download: bool = False
+    path: Union[os.PathLike, str],
+    task: Optional[Literal['lung', 'infection', 'lung_and_infection']] = None,
+    download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the Covid19Seg data.
 
@@ -95,18 +99,17 @@ def get_covid19_seg_paths(
     else:
         assert task in ["lung", "infection", "lung_and_infection"], f"{task} is not a valid task."
 
-    image_dir, gt_dir = get_covid19_seg_data(path=path, task=task, download=download)
-
+    image_dir, gt_dir = get_covid19_seg_data(path, task, download)
     image_paths = natsorted(glob(os.path.join(image_dir, "*.nii.gz")))
     gt_paths = natsorted(glob(os.path.join(gt_dir, "*.nii.gz")))
-
     return image_paths, gt_paths
 
 
 def get_covid19_seg_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    task: Optional[str] = None,
+    task: Optional[Literal['lung', 'infection', 'lung_and_infection']] = None,
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -125,7 +128,13 @@ def get_covid19_seg_dataset(
     """
     image_paths, gt_paths = get_covid19_seg_paths(path, task, download)
 
-    dataset = torch_em.default_segmentation_dataset(
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
+
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -135,14 +144,12 @@ def get_covid19_seg_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_covid19_seg_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    task: Optional[str] = None,
+    task: Optional[Literal['lung', 'infection', 'lung_and_infection']] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:

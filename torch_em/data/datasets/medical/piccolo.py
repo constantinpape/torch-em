@@ -60,9 +60,7 @@ def get_piccolo_data(path: Union[os.PathLike, str], download: bool = False) -> s
 
 
 def get_piccolo_paths(
-    path: Union[os.PathLike, str],
-    split: Literal['train', 'validation', 'test'],
-    download: bool = False
+    path: Union[os.PathLike, str], split: Literal['train', 'validation', 'test'], download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the PICCOLO data.
 
