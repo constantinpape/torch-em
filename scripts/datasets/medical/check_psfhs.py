@@ -14,7 +14,8 @@ def check_psfhs():
     loader = get_psfhs_loader(
         path=os.path.join(ROOT, "psfhs"),
         patch_shape=(1, 512, 512),
-        batch_size=1,
+        batch_size=2,
+        split="test",
         resize_inputs=True,
         download=True,
     )

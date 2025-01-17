@@ -66,7 +66,7 @@ def get_organoidnet_data(path: Union[os.PathLike, str], split: str, download: bo
 
     assert os.path.exists(data_dir)
 
-    os.remove(zip_path)
+    # os.remove(zip_path)
     return data_dir
 
 

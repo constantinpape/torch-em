@@ -9,7 +9,7 @@ Please cite it if you use this dataset for your research.
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, List
+from typing import Union, Tuple, Literal, List
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -45,11 +45,14 @@ def get_psfhs_data(path: Union[os.PathLike, str], download: bool = False) -> str
     return data_dir
 
 
-def get_psfhs_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[int], List[int]]:
+def get_psfhs_paths(
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> Tuple[List[int], List[int]]:
     """Get paths to the PSFHS dataset.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -61,12 +64,24 @@ def get_psfhs_paths(path: Union[os.PathLike, str], download: bool = False) -> Tu
     raw_paths = natsorted(glob(os.path.join(data_dir, "image_mha", "*.mha")))
     label_paths = natsorted(glob(os.path.join(data_dir, "label_mha", "*.mha")))
 
+    if split == "train":
+        raw_paths, label_paths = raw_paths[:900], label_paths[:900]
+    elif split == "val":
+        raw_paths, label_paths = raw_paths[900:1050], label_paths[900:1050]
+    elif split == "test":
+        raw_paths, label_paths = raw_paths[1050:], label_paths[1050:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
+
+    assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
+
     return raw_paths, label_paths
 
 
 def get_psfhs_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    split: Literal['train', 'val', 'test'],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -76,14 +91,15 @@ def get_psfhs_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
-        download: Whether to download the data if it is not present.
+        split: The choice of data split.
         resize_inputs: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_psfhs_paths(path, download)
+    raw_paths, label_paths = get_psfhs_paths(path, split, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -108,6 +124,7 @@ def get_psfhs_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
+    split: Literal['train', 'val', 'test'],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -118,6 +135,7 @@ def get_psfhs_loader(
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
         resize_inputs: Whether to resize the inputs to the patch shape.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -126,5 +144,5 @@ def get_psfhs_loader(
         The segmentation dataset.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_psfhs_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
+    dataset = get_psfhs_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

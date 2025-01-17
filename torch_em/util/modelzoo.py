@@ -8,6 +8,7 @@ import tempfile
 
 from glob import glob
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 from warnings import warn
 
 import imageio
@@ -30,12 +31,11 @@ from .util import get_trainer, get_normalizer
 
 
 def normalize_with_batch(data, normalizer):
+    """@private
+    """
     if normalizer is None:
         return data
-    normalized = np.concatenate(
-        [normalizer(da)[None] for da in data],
-        axis=0
-    )
+    normalized = np.concatenate([normalizer(da)[None] for da in data], axis=0)
     return normalized
 
 
@@ -45,9 +45,9 @@ def normalize_with_batch(data, normalizer):
 
 
 def get_default_citations(model=None, model_output=None):
-    citations = [
-        {"text": "training library", "doi": "10.5281/zenodo.5108853"}
-    ]
+    """@private
+    """
+    citations = [{"text": "training library", "doi": "10.5281/zenodo.5108853"}]
 
     # try to derive the correct network citation from the model class
     if model is not None:
@@ -499,32 +499,56 @@ def _get_input_data(trainer):
     return x
 
 
-# TODO config: training details derived from loss and optimizer, custom params, e.g. offsets for mws
 def export_bioimageio_model(
-    checkpoint,
-    output_path,
-    input_data=None,
-    name=None,
-    description=None,
-    authors=None,
-    tags=None,
-    license=None,
-    documentation=None,
-    covers=None,
-    git_repo=None,
-    cite=None,
-    input_optional_parameters=True,
-    model_postprocessing=None,
-    for_deepimagej=False,
-    links=None,
-    maintainers=None,
-    min_shape=None,
-    halo=None,
-    checkpoint_name="best",
-    training_data=None,
-    config={}
-):
+    checkpoint: str,
+    output_path: str,
+    input_data: Optional[np.ndarray] = None,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    authors: Optional[List[Dict[str, str]]] = None,
+    tags: Optional[List[str]] = None,
+    license: Optional[str] = None,
+    documentation: Optional[str] = None,
+    covers: Optional[str] = None,
+    git_repo: Optional[str] = None,
+    cite: Optional[List[Dict[str, str]]] = None,
+    input_optional_parameters: bool = True,
+    model_postprocessing: Optional[str] = None,
+    for_deepimagej: bool = False,
+    links: Optional[List[str]] = None,
+    maintainers: Optional[List[Dict[str, str]]] = None,
+    min_shape: Tuple[int, ...] = None,
+    halo: Tuple[int, ...] = None,
+    checkpoint_name: str = "best",
+    config: Dict = {},
+) -> bool:
     """Export model to bioimage.io model format.
+
+    Args:
+        checkpoint: The path to the checkpoint with the model to export.
+        output_path: The output path for saving the model.
+        input_data: The input data for creating model test data.
+        name: The export name of the model.
+        description: The description of the model.
+        authors: The authors that created this model.
+        tags: List of tags for this model.
+        license: The license under which to publish the model.
+        documentation: The documentation of the model.
+        covers: The covers to show when displaying the model.
+        git_repo: A github repository associated with this model.
+        cite: References to cite for this model.
+        input_optional_parameters: Whether to input optional parameters via the command line.
+        model_postprocessing: Postprocessing to apply to the model outputs.
+        for_deepimagej: Whether this model can be run in DeepImageJ.
+        links: Linked modelzoo apps or software for this model.
+        maintainers: The maintainers of this model.
+        min_shape: The minimal valid input shape for the model.
+        halo: The halo to cut away from model outputs.
+        checkpoint_name: The name of the model checkpoint to load for the export.
+        config: Dictionary with additional configuration for this model.
+
+    Returns:
+        Whether the exported model was successfully validated.
     """
     # Load the trainer and model.
     trainer = get_trainer(checkpoint, name=checkpoint_name, device="cpu")
@@ -600,7 +624,8 @@ def _load_data(path, key):
 
 
 def main():
-    import argparse
+    """@private
+    """
     parser = argparse.ArgumentParser(
         "Export model trained with torch_em to the BioImage.IO model format."
         "The exported model can be run in any tool supporting BioImage.IO."
@@ -630,7 +655,9 @@ def _load_model(model_spec, device):
     model = PytorchModelAdapter.get_network(weight_spec)
     weight_file = weight_spec.source.path
     if not os.path.exists(weight_file):
-        weight_file = os.path.join(model_spec.root, weight_file)
+        root_folder = f"{model_spec.root.filename}.unzip"
+        assert os.path.exists(root_folder), root_folder
+        weight_file = os.path.join(root_folder, weight_file)
     assert os.path.exists(weight_file), weight_file
     state = torch.load(weight_file, map_location=device)
     model.load_state_dict(state)
@@ -703,6 +730,8 @@ def _load_normalizer(model_spec):
 
 
 def import_bioimageio_model(spec_path, return_spec=False, device="cpu"):
+    """@private
+    """
     model_spec = core.load_description(spec_path)
 
     model = _load_model(model_spec, device=device)
@@ -712,11 +741,6 @@ def import_bioimageio_model(spec_path, return_spec=False, device="cpu"):
         return model, normalizer, model_spec
     else:
         return model, normalizer
-
-
-# TODO
-def import_trainer_from_bioimageio_model(spec_path):
-    pass
 
 
 # TODO: the weight conversion needs to be updated once the
@@ -737,6 +761,8 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
 
 
 def convert_to_onnx(spec_path, opset_version=12):
+    """@private
+    """
     raise NotImplementedError
     # converter = weight_converter.convert_weights_to_onnx
     # _convert_impl(spec_path, "weights.onnx", converter, "onnx", opset_version=opset_version)
@@ -744,6 +770,8 @@ def convert_to_onnx(spec_path, opset_version=12):
 
 
 def convert_to_torchscript(model_path):
+    """@private
+    """
     raise NotImplementedError
     # from bioimageio.core.weight_converter.torch._torchscript import convert_weights_to_torchscript
 
@@ -762,6 +790,8 @@ def convert_to_torchscript(model_path):
 
 
 def add_weight_formats(model_path, additional_formats):
+    """@private
+    """
     for add_format in additional_formats:
 
         if add_format == "onnx":
@@ -776,14 +806,11 @@ def add_weight_formats(model_path, additional_formats):
 
 
 def convert_main():
-    import argparse
-    parser = argparse.ArgumentParser(
-        "Convert weights from native pytorch format to onnx or torchscript"
-    )
-    parser.add_argument("-f", "--model_folder", required=True,
-                        help="")
-    parser.add_argument("-w", "--weight_format", required=True,
-                        help="")
+    """@private
+    """
+    parser = argparse.ArgumentParser("Convert weights from native pytorch format to onnx or torchscript")
+    parser.add_argument("-f", "--model_folder", required=True, help="")
+    parser.add_argument("-w", "--weight_format", required=True, help="")
     args = parser.parse_args()
     weight_format = args.weight_format
     assert weight_format in ("onnx", "torchscript")
@@ -798,6 +825,8 @@ def convert_main():
 #
 
 def export_parser_helper():
+    """@private
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--checkpoint", required=True)
     parser.add_argument("-i", "--input", required=True)
@@ -808,6 +837,8 @@ def export_parser_helper():
 
 
 def get_mws_config(offsets, config=None):
+    """@private
+    """
     mws_config = {"offsets": offsets}
     if config is None:
         config = {"mws": mws_config}
@@ -818,15 +849,14 @@ def get_mws_config(offsets, config=None):
 
 
 def get_shallow2deep_config(rf_path, config=None):
+    """@private
+    """
     if os.path.isdir(rf_path):
         rf_path = glob(os.path.join(rf_path, "*.pkl"))[0]
     assert os.path.exists(rf_path), rf_path
     with open(rf_path, "rb") as f:
         rf = pickle.load(f)
-    shallow2deep_config = {
-        "ndim": rf.feature_ndim,
-        "features": rf.feature_config,
-    }
+    shallow2deep_config = {"ndim": rf.feature_ndim, "features": rf.feature_config}
     if config is None:
         config = {"shallow2deep": shallow2deep_config}
     else:

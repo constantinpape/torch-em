@@ -1,20 +1,23 @@
 import os
 from glob import glob
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union, Tuple, List, Callable
 
 import torch
 import torch.utils.data
+from torch.utils.data import DataLoader
 
-from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
 from .loss import DiceLoss
+from .util import load_data
 from .trainer import DefaultTrainer
 from .trainer.tensorboard_logger import TensorboardLogger
 from .transform import get_augmentations, get_raw_transform
-from .util import load_data
+from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
 
 
 # TODO add a heuristic to estimate this from the number of epochs
 DEFAULT_SCHEDULER_KWARGS = {"mode": "min", "factor": 0.5, "patience": 5}
+"""@private
+"""
 
 
 #
@@ -24,6 +27,8 @@ DEFAULT_SCHEDULER_KWARGS = {"mode": "min", "factor": 0.5, "patience": 5}
 # TODO implement balanced and make it the default
 # def samples_to_datasets(n_samples, raw_paths, raw_key, split="balanced"):
 def samples_to_datasets(n_samples, raw_paths, raw_key, split="uniform"):
+    """@private
+    """
     assert split in ("balanced", "uniform")
     n_datasets = len(raw_paths)
     if split == "uniform":
@@ -37,6 +42,8 @@ def samples_to_datasets(n_samples, raw_paths, raw_key, split="uniform"):
 
 
 def check_paths(raw_paths, label_paths):
+    """@private
+    """
     if not isinstance(raw_paths, type(label_paths)):
         raise ValueError(f"Expect raw and label paths of same type, got {type(raw_paths)}, {type(label_paths)}")
 
@@ -61,10 +68,10 @@ def check_paths(raw_paths, label_paths):
             _check_path(lp)
 
 
+# Check if we can load the data as SegmentationDataset.
 def is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key):
-    """ Check if we can load the data as SegmentationDataset
+    """@private
     """
-
     def _can_open(path, key):
         try:
             load_data(path, key)
@@ -127,6 +134,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
         rpath.sort()
         if len(rpath) == 0:
             raise ValueError(f"Could not find any images for pattern {os.path.join(rpath, rkey)}")
+
         lpath = glob(os.path.join(lpath, lkey))
         lpath.sort()
         if len(rpath) != len(lpath):
@@ -148,11 +156,13 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
     if isinstance(raw_paths, str):
         raw_paths, label_paths = _get_paths(raw_paths, raw_key, label_paths, label_key, roi)
         ds = ImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape, **kwargs)
+
     elif raw_key is None:
         assert label_key is None
         assert isinstance(raw_paths, (list, tuple)) and isinstance(label_paths, (list, tuple))
         assert len(raw_paths) == len(label_paths)
         ds = ImageCollectionDataset(raw_paths, label_paths, patch_shape=patch_shape, **kwargs)
+
     else:
         ds = []
         n_samples = kwargs.pop("n_samples", None)
@@ -168,6 +178,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
             dset = ImageCollectionDataset(rpath, lpath, patch_shape=patch_shape, n_samples=samples_per_ds[i], **kwargs)
             ds.append(dset)
         ds = ConcatDataset(*ds)
+
     return ds
 
 
@@ -180,36 +191,78 @@ def _get_default_transform(path, key, is_seg_dataset, ndim):
             # heuristics to figure out whether to use default 3d
             # or default anisotropic augmentations
             ndim = "anisotropic" if shape[0] < shape[1] // 2 else 3
+
     elif is_seg_dataset and ndim is not None:
         pass
+
     else:
         ndim = 2
+
     return get_augmentations(ndim)
 
 
 def default_segmentation_loader(
-    raw_paths,
-    raw_key,
-    label_paths,
-    label_key,
-    batch_size,
-    patch_shape,
-    label_transform=None,
-    label_transform2=None,
-    raw_transform=None,
-    transform=None,
-    dtype=torch.float32,
-    label_dtype=torch.float32,
-    rois=None,
-    n_samples=None,
-    sampler=None,
-    ndim=None,
-    is_seg_dataset=None,
-    with_channels=False,
-    with_label_channels=False,
-    verify_paths=True,
+    raw_paths: Union[List[Any], str, os.PathLike],
+    raw_key: Optional[str],
+    label_paths: Union[List[Any], str, os.PathLike],
+    label_key: Optional[str],
+    batch_size: int,
+    patch_shape: Tuple[int, ...],
+    label_transform: Optional[Callable] = None,
+    label_transform2: Optional[Callable] = None,
+    raw_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
+    dtype: torch.device = torch.float32,
+    label_dtype: torch.device = torch.float32,
+    rois: Optional[Union[slice, Tuple[slice, ...]]] = None,
+    n_samples: Optional[int] = None,
+    sampler: Optional[Callable] = None,
+    ndim: Optional[int] = None,
+    is_seg_dataset: Optional[bool] = None,
+    with_channels: bool = False,
+    with_label_channels: bool = False,
+    verify_paths: bool = True,
+    with_padding: bool = True,
+    z_ext: Optional[int] = None,
     **loader_kwargs,
-):
+) -> torch.utils.data.DataLoader:
+    """Get data loader for training a segmentation network.
+
+    See `torch_em.data.SegmentationDataset` and `torch_em.data.ImageCollectionDataset` for details
+    on the data formats that are supported.
+
+    Args:
+        raw_paths: The file path(s) to the raw data. Can either be a single path or multiple file paths.
+        raw_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+        label_paths: The file path(s) to the label data. Can either be a single path or multiple file paths.
+        label_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+        batch_size: The batch size for the data loader.
+        patch_shape: The patch shape for the training samples.
+        label_transform: Transformation applied to the label data of a sample,
+            before applying augmentations via `transform`.
+        label_transform2: Transformation applied to the label data of a sample,
+            after applying augmentations via `transform`.
+        transform: Transformation applied to both the raw data and label data of a sample.
+            This can be used to implement data augmentations.
+        dtype: The return data type of the raw data.
+        label_dtype: The return data type of the label data.
+        rois: Regions of interest in the data.  If given, the data will only be loaded from the corresponding area.
+        n_samples: The length of the underlying dataset. If None, the length will be set to `len(raw_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data (as numpy arrays) as input.
+        ndim: The spatial dimensionality of the data. If None, will be derived from the raw data.
+        is_seg_dataset: Whether this is a segmentation dataset or an image collection dataset.
+            If None, the type of dataset will be derived from the data.
+        with_channels: Whether the raw data has channels.
+        with_label_channels: Whether the label data has channels.
+        verify_paths: Whether to verify all paths before creating the dataset.
+        with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
+        z_ext: Extra bounding box for loading the data across z.
+        loader_kwargs: Keyword arguments for `torch.utils.data.DataLoder`.
+
+    Returns:
+        The torch data loader.
+    """
     ds = default_segmentation_dataset(
         raw_paths=raw_paths,
         raw_key=raw_key,
@@ -229,45 +282,83 @@ def default_segmentation_loader(
         is_seg_dataset=is_seg_dataset,
         with_channels=with_channels,
         with_label_channels=with_label_channels,
+        with_padding=with_padding,
+        z_ext=z_ext,
         verify_paths=verify_paths,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
 
 def default_segmentation_dataset(
-    raw_paths,
-    raw_key,
-    label_paths,
-    label_key,
-    patch_shape,
-    label_transform=None,
-    label_transform2=None,
-    raw_transform=None,
-    transform=None,
-    dtype=torch.float32,
-    label_dtype=torch.float32,
-    rois=None,
-    n_samples=None,
-    sampler=None,
-    ndim=None,
-    is_seg_dataset=None,
-    with_channels=False,
-    with_label_channels=False,
-    verify_paths=True,
-    with_padding=True,
-    z_ext=None,
-):
+    raw_paths: Union[List[Any], str, os.PathLike],
+    raw_key: Optional[str],
+    label_paths: Union[List[Any], str, os.PathLike],
+    label_key: Optional[str],
+    patch_shape: Tuple[int, ...],
+    label_transform: Optional[Callable] = None,
+    label_transform2: Optional[Callable] = None,
+    raw_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
+    dtype: torch.dtype = torch.float32,
+    label_dtype: torch.dtype = torch.float32,
+    rois: Optional[Union[slice, Tuple[slice, ...]]] = None,
+    n_samples: Optional[int] = None,
+    sampler: Optional[Callable] = None,
+    ndim: Optional[int] = None,
+    is_seg_dataset: Optional[bool] = None,
+    with_channels: bool = False,
+    with_label_channels: bool = False,
+    verify_paths: bool = True,
+    with_padding: bool = True,
+    z_ext: Optional[int] = None,
+) -> torch.utils.data.Dataset:
+    """Get data set for training a segmentation network.
+
+    See `torch_em.data.SegmentationDataset` and `torch_em.data.ImageCollectionDataset` for details
+    on the data formats that are supported.
+
+    Args:
+        raw_paths: The file path(s) to the raw data. Can either be a single path or multiple file paths.
+        raw_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+        label_paths: The file path(s) to the label data. Can either be a single path or multiple file paths.
+        label_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+        patch_shape: The patch shape for the training samples.
+        label_transform: Transformation applied to the label data of a sample,
+            before applying augmentations via `transform`.
+        label_transform2: Transformation applied to the label data of a sample,
+            after applying augmentations via `transform`.
+        transform: Transformation applied to both the raw data and label data of a sample.
+            This can be used to implement data augmentations.
+        dtype: The return data type of the raw data.
+        label_dtype: The return data type of the label data.
+        rois: Regions of interest in the data.  If given, the data will only be loaded from the corresponding area.
+        n_samples: The length of the dataset. If None, the length will be set to `len(raw_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data (as numpy arrays) as input.
+        ndim: The spatial dimensionality of the data. If None, will be derived from the raw data.
+        is_seg_dataset: Whether this is a segmentation dataset or an image collection dataset.
+            If None, the type of dataset will be derived from the data.
+        with_channels: Whether the raw data has channels.
+        with_label_channels: Whether the label data has channels.
+        verify_paths: Whether to verify all paths before creating the dataset.
+        with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
+        z_ext: Extra bounding box for loading the data across z.
+        loader_kwargs: Keyword arguments for `torch.utils.data.DataLoder`.
+
+    Returns:
+        The torch data set.
+    """
     if verify_paths:
         check_paths(raw_paths, label_paths)
 
     if is_seg_dataset is None:
         is_seg_dataset = is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key)
 
-    # we always use a raw transform in the convenience function
+    # We always use a raw transform in the convenience function.
     if raw_transform is None:
         raw_transform = get_raw_transform()
 
-    # we always use augmentations in the convenience function
+    # We always use augmentations in the convenience function.
     if transform is None:
         transform = _get_default_transform(
             raw_paths if isinstance(raw_paths, str) else raw_paths[0], raw_key, is_seg_dataset, ndim
@@ -295,6 +386,7 @@ def default_segmentation_dataset(
             with_padding=with_padding,
             z_ext=z_ext,
         )
+
     else:
         ds = _load_image_collection_dataset(
             raw_paths,
@@ -318,6 +410,8 @@ def default_segmentation_dataset(
 
 
 def get_data_loader(dataset: torch.utils.data.Dataset, batch_size: int, **loader_kwargs) -> torch.utils.data.DataLoader:
+    """@private
+    """
     pin_memory = loader_kwargs.pop("pin_memory", True)
     loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, pin_memory=pin_memory, **loader_kwargs)
     # monkey patch shuffle attribute to the loader
@@ -331,27 +425,79 @@ def get_data_loader(dataset: torch.utils.data.Dataset, batch_size: int, **loader
 
 
 def default_segmentation_trainer(
-    name,
-    model,
-    train_loader,
-    val_loader,
-    loss=None,
-    metric=None,
-    learning_rate=1e-3,
-    device=None,
-    log_image_interval=100,
-    mixed_precision=True,
-    early_stopping=None,
+    name: str,
+    model: torch.nn.Module,
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    loss: Optional[torch.nn.Module] = None,
+    metric: Optional[Callable] = None,
+    learning_rate: float = 1e-3,
+    device: Optional[Union[str, torch.device]] = None,
+    log_image_interval: int = 100,
+    mixed_precision: bool = True,
+    early_stopping: Optional[int] = None,
     logger=TensorboardLogger,
     logger_kwargs: Optional[Dict[str, Any]] = None,
-    scheduler_kwargs=DEFAULT_SCHEDULER_KWARGS,
-    optimizer_kwargs={},
+    scheduler_kwargs: Dict[str, Any] = DEFAULT_SCHEDULER_KWARGS,
+    optimizer_kwargs: Dict[str, Any] = {},
     trainer_class=DefaultTrainer,
-    id_=None,
-    save_root=None,
-    compile_model=None,
-    rank=None,
+    id_: Optional[str] = None,
+    save_root: Optional[str] = None,
+    compile_model: Optional[Union[bool, str]] = None,
+    rank: Optional[int] = None,
 ):
+    """Get a trainer for a segmentation network.
+
+    It creates a `torch.optim.AdamW` optimizer and learning rate scheduler that reduces the learning rate on plateau.
+    By default, it uses the dice score as loss and metric.
+    This can be changed by passing arguments for `loss` and/or `metric`.
+    See `torch_em.trainer.DefaultTrainer` for additional details on how to configure and use the trainer.
+
+    Here's an example for training a 2D U-Net with this function:
+    ```python
+    import torch_em
+    from torch_em.model import UNet2d
+    from torch_em.data.datasets.light_microscopy import get_dsb_loader
+
+    # The training data will be downloaded to this location.
+    data_root = "/path/to/save/the/training/data"
+    patch_shape = (256, 256)
+    trainer = default_segmentation_trainer(
+        name="unet-training"
+        model=UNet2d(in_channels=1, out_channels=1)
+        train_loader=get_dsb_loader(path=data_root, patch_shape=patch_shape, split="train"),
+        val_loader=get_dsb_loader(path=data_root, patch_shape=patch_shape, split="test"),
+    )
+    trainer.fit(iterations=int(2.5e4))  # Train for 25.000 iterations.
+    ```
+
+    Args:
+        name: The name of the checkpoint that will be created by the trainer.
+        model: The model to train.
+        train_loader: The data loader containing the training data.
+        val_loader: The data loader containing the validation data.
+        loss: The loss function for training.
+        metric: The metric for validation.
+        learning_rate: The initial learning rate for the AdamW optimizer.
+        device: The torch device to use for training. If None, will use a GPU if available.
+        log_image_interval: The interval for saving images during logging, in training iterations.
+        mixed_precision: Whether to train with mixed precision.
+        early_stopping: The patience for early stopping in epochs. If None, early stopping will not be used.
+        logger: The logger class. Will be instantiated for logging.
+            By default uses `torch_em.training.tensorboard_logger.TensorboardLogger`.
+        logger_kwargs: The keyword arguments for the logger class.
+        scheduler_kwargs: The keyword arguments for ReduceLROnPlateau.
+        optimizer_kwargs: The keyword arguments for the AdamW optimizer.
+        trainer_class: The trainer class. Uses `torch_em.trainer.DefaultTrainer` by default,
+            but can be set to a custom trainer class to enable custom training procedures.
+        id_: Unique identifier for the trainer. If None then `name` will be used.
+        save_root: The root folder for saving the checkpoint and logs.
+        compile_model: Whether to compile the model before training.
+        rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+
+    Returns:
+        The trainer.
+    """
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, **optimizer_kwargs)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, **scheduler_kwargs)
 
@@ -363,11 +509,11 @@ def default_segmentation_trainer(
     else:
         device = torch.device(device)
 
-    # cpu does not support mixed precision training
+    # CPU does not support mixed precision training.
     if device.type == "cpu":
         mixed_precision = False
 
-    trainer = trainer_class(
+    return trainer_class(
         name=name,
         model=model,
         train_loader=train_loader,
@@ -387,4 +533,3 @@ def default_segmentation_trainer(
         compile_model=compile_model,
         rank=rank,
     )
-    return trainer

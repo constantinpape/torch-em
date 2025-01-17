@@ -15,6 +15,7 @@ def check_ifnuclei():
         patch_shape=(512, 512),
         batch_size=1,
         download=True,
+        shuffle=True,
     )
 
     check_loader(loader, 8, instance_labels=True)

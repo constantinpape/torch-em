@@ -1,4 +1,5 @@
 import time
+from typing import Callable, List, Optional
 
 import torch
 import torch_em
@@ -9,11 +10,13 @@ from .mean_teacher import Dummy
 
 
 class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
-    """This trainer implements self-traning for semi-supervised learning and domain following the 'FixMatch' approach
-    of Sohn et al. (https://arxiv.org/abs/2001.07685). This approach uses a (teacher) model derived from the
-    student model via sharing the weights to predict pseudo-labels on unlabeled data.
-    We support two training strategies: joint training on labeled and unlabeled data
-    (with a supervised and unsupervised loss function). And training only on the unsupervised data.
+    """Trainer for semi-supervised learning and domain adaptation following the FixMatch approach.
+
+    FixMatch was introduced by Sohn et al. in https://arxiv.org/abs/2001.07685).
+    It uses a teacher model derived from the student model via weight sharing to predict pseudo-labels
+    on unlabeled data. We support two training strategies:
+    - Joint training on labeled and unlabeled data (with a supervised and unsupervised loss function).
+    - Taining only on the unsupervised data.
 
     This class expects the following data loaders:
     - unsupervised_train_loader: Returns two augmentations (weak and strong) of the same input.
@@ -22,7 +25,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
     - supervised_val_loader (optional): Same as supervised_train_loader
     At least one of unsupervised_val_loader and supervised_val_loader must be given.
 
-    And the following elements to customize the pseudo labeling:
+    The following arguments can be used to customize the pseudo labeling:
     - pseudo_labeler: to compute the psuedo-labels
         - Parameters: model, teacher_input
         - Returns: pseudo_labels, label_filter (<- label filter can for example be mask, weight or None)
@@ -41,38 +44,39 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
     At least one of unsupervised_loss_and_metric and supervised_loss_and_metric must be given.
 
     Note: adjust the batch size ratio between the 'unsupervised_train_loader' and 'supervised_train_loader'
-    for setting the ratio between supervised and unsupervised training samples
+    for setting the ratio between supervised and unsupervised training samples.
 
-    Parameters:
-        model [nn.Module] -
-        unsupervised_train_loader [torch.DataLoader] -
-        unsupervised_loss [callable] -
-        pseudo_labeler [callable] -
-        supervised_train_loader [torch.DataLoader] - (default: None)
-        supervised_loss [callable] - (default: None)
-        unsupervised_loss_and_metric [callable] - (default: None)
-        supervised_loss_and_metric [callable] - (default: None)
-        logger [TorchEmLogger] - (default: SelfTrainingTensorboardLogger)
-        momentum [float] - (default: 0.999)
-        source_distribution [list] - (default: None)
-        **kwargs - keyword arguments for torch_em.DataLoader
+    Args:
+        model: The model to be trained.
+        unsupervised_train_loader: The loader for unsupervised training.
+        unsupervised_loss: The loss for unsupervised training.
+        pseudo_labeler: The pseudo labeler that predicts labels in unsupervised training.
+        supervised_train_loader: The loader for supervised training.
+        supervised_loss: The loss for supervised training.
+        unsupervised_loss_and_metric: The loss and metric for unsupervised training.
+        supervised_loss_and_metric: The loss and metrhic for supervised training.
+        logger: The logger.
+        source_distribution: The ratio of labels in the source label distribution.
+            If given, the predicted distribution of the trained model will be regularized to
+            match this source label distribution.
+        kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
     """
 
     def __init__(
         self,
-        model,
-        unsupervised_train_loader,
-        unsupervised_loss,
-        pseudo_labeler,
-        supervised_train_loader=None,
-        unsupervised_val_loader=None,
-        supervised_val_loader=None,
-        supervised_loss=None,
-        unsupervised_loss_and_metric=None,
-        supervised_loss_and_metric=None,
+        model: torch.nn.Module,
+        unsupervised_train_loader: torch.utils.data.DataLoader,
+        unsupervised_loss: torch.utils.data.DataLoader,
+        pseudo_labeler: Callable,
+        supervised_train_loader: Optional[torch.utils.data.DataLoader] = None,
+        unsupervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
+        supervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
+        supervised_loss: Optional[Callable] = None,
+        unsupervised_loss_and_metric: Optional[Callable] = None,
+        supervised_loss_and_metric: Optional[Callable] = None,
         logger=SelfTrainingTensorboardLogger,
-        source_distribution=None,
-        **kwargs
+        source_distribution: List[float] = None,
+        **kwargs,
     ):
         # Do we have supervised data or not?
         if supervised_train_loader is None:
@@ -137,6 +141,8 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
     #
 
     def save_checkpoint(self, name, current_metric, best_metric, **extra_save_dict):
+        """@private
+        """
         train_loader_kwargs = get_constructor_arguments(self.train_loader)
         val_loader_kwargs = get_constructor_arguments(self.val_loader)
         extra_state = {
@@ -154,10 +160,12 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         extra_state.update(**extra_save_dict)
         super().save_checkpoint(name, current_metric, best_metric, **extra_state)
 
-    # distribution alignment - encourages the distribution of the model's generated pseudo labels to match the marginal
-    #                          distribution of pseudo labels from the source transfer
-    #                          (key idea: to maximize the mutual information)
+    # Distribution alignment:
+    # Encourages the distribution of the model's generated pseudo labels to match the marginal
+    # distribution of pseudo labels from the source transfer (key idea: to maximize the mutual information).
     def get_distribution_alignment(self, pseudo_labels, label_threshold=0.5):
+        """@private
+        """
         if self.source_distribution is not None:
             pseudo_labels_binary = torch.where(pseudo_labels >= label_threshold, 1, 0)
             _, target_distribution = torch.unique(pseudo_labels_binary, return_counts=True)

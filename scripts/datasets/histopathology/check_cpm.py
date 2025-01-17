@@ -15,7 +15,9 @@ def check_cpm():
         path=os.path.join(ROOT, "cpm"),
         patch_shape=(512, 512),
         batch_size=2,
-        data_choice="cpm15",
+        data_choice="cpm17",
+        split="train",
+        resize_inputs=True,
     )
     check_loader(loader, 8, rgb=True, instance_labels=True)
 

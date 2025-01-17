@@ -3,11 +3,11 @@ H&E stained histopathology images for different tissue images.
 
 NOTE: You must download the files manually.
 1. The dataset is located at https://drive.google.com/drive/folders/1l55cv3DuY-f7-JotDN7N5nbNnjbLWchK.
-2. The restructuring details are mentioned by the authors here: https://github.com/vqdang/hover_net/issues/5#issuecomment-508431862.  # noqa
+2. The restructuring details are mentioned by the authors here: https://github.com/vqdang/hover_net/issues/5#issuecomment-508431862.
 
 This dataset is from the publication https://doi.org/10.3389/fbioe.2019.00053.
 Please cite it if you use this dataset for your research.
-"""
+"""  # noqa
 
 import os
 from glob import glob
@@ -15,8 +15,11 @@ from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Literal, Optional, Tuple, List
 
+import json
+import pandas as pd
 from scipy.io import loadmat
 import imageio.v3 as imageio
+from sklearn.model_selection import train_test_split
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -31,9 +34,31 @@ URL = {
 }
 
 
-def get_cpm_data(
-    path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False
-) -> str:
+def _create_split_csv(path, split):
+    csv_path = os.path.join(path, 'cpm15_split.csv')
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df[split] = df[split].apply(lambda x: json.loads(x.replace("'", '"')))  # ensures all items from column in list.
+        split_list = df.iloc[0][split]
+
+    else:
+        print(f"Creating a new split file at '{csv_path}'.")
+        image_names = [
+            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, 'cpm15', 'Images', '*.png'))
+        ]
+
+        train_ids, test_ids = train_test_split(image_names, test_size=0.25)  # 20% split for test.
+        train_ids, val_ids = train_test_split(train_ids, test_size=0.20)  # 15% split for val.
+        split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
+
+        df = pd.DataFrame.from_dict([split_ids])
+        df.to_csv(csv_path)
+        split_list = split_ids[split]
+
+    return split_list
+
+
+def get_cpm_data(path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False) -> str:
     """Obtain the CPM data.
 
     NOTE: The dataset is located at https://drive.google.com/drive/folders/1l55cv3DuY-f7-JotDN7N5nbNnjbLWchK.
@@ -61,20 +86,30 @@ def get_cpm_data(
         )
 
     os.makedirs(path, exist_ok=True)
-    zip_path = glob(os.path.join(path, f"{data_choice}*.zip"))[0]
+    zip_path = glob(os.path.join(path, f"{data_choice}*.zip"))
+    if len(zip_path) == 0:
+        raise AssertionError(
+            f"zip file for '{data_choice}' dataset is not found. Please download it from '{URL[data_choice]}'."
+        )
+
+    zip_path = zip_path[0]
     util.unzip(zip_path=zip_path, dst=path, remove=False)
 
     return data_dir
 
 
 def get_cpm_paths(
-    path: Union[os.PathLike, str], data_choice: Literal['cpm15', 'cpm17'], download: bool = False
+    path: Union[os.PathLike, str],
+    data_choice: Literal['cpm15', 'cpm17'],
+    split: Literal["train", "val", "test"],
+    download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the CPM data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         data_choice: The choice of data.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -85,11 +120,16 @@ def get_cpm_paths(
 
     if data_choice == "cpm15":
         raw_dir, label_dir = "Images", "Labels"
-    else:
-        raw_dir, label_dir = "*/Images", "*/Labels"
+        split_list = _create_split_csv(path, split)
 
-    raw_paths = [p for p in natsorted(glob(os.path.join(data_dir, raw_dir, "*.png")))]
-    label_mat_paths = [p for p in natsorted(glob(os.path.join(data_dir, label_dir, "*.mat")))]
+        raw_paths = [os.path.join(data_dir, raw_dir, f"{fname}.png") for fname in split_list]
+        label_mat_paths = [os.path.join(data_dir, label_dir, f"{fname}.mat") for fname in split_list]
+
+    else:
+        assert split in ['train', 'test'], 'Explicit val split does not exist for cpm17.'
+        raw_dir, label_dir = f"{split}/Images", f"{split}/Labels"
+        raw_paths = [p for p in natsorted(glob(os.path.join(data_dir, raw_dir, "*.png")))]
+        label_mat_paths = [p for p in natsorted(glob(os.path.join(data_dir, label_dir, "*.mat")))]
 
     label_paths = []
     for mpath in tqdm(label_mat_paths, desc="Preprocessing labels"):
@@ -101,7 +141,7 @@ def get_cpm_paths(
         label = loadmat(mpath)["inst_map"]
         imageio.imwrite(label_path, label, compression="zlib")
 
-    assert len(raw_paths) == len(label_paths)
+    assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
     return raw_paths, label_paths
 
@@ -110,6 +150,8 @@ def get_cpm_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     data_choice: Optional[Literal['cpm15', 'cpm17']] = None,
+    split: Literal["train", "val", "test"] = None,
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -119,13 +161,20 @@ def get_cpm_dataset(
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
         data_choice: The choice of data.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_cpm_paths(path, data_choice, download)
+    raw_paths, label_paths = get_cpm_paths(path, data_choice, split, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -145,6 +194,8 @@ def get_cpm_loader(
     batch_size: int,
     patch_shape: Tuple[int, int],
     data_choice: Optional[Literal['cpm15', 'cpm17']] = None,
+    split: Literal["train", "val", "test"] = None,
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -155,6 +206,7 @@ def get_cpm_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         data_choice: The choice of data.
+        resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -162,5 +214,5 @@ def get_cpm_loader(
         The DataLoader
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cpm_dataset(path, patch_shape, data_choice, download, **ds_kwargs)
+    dataset = get_cpm_dataset(path, patch_shape, data_choice, split, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

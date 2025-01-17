@@ -15,11 +15,12 @@ def check_janowczyk():
         path=os.path.join(ROOT, "janowczyk"),
         patch_shape=(512, 512),
         annotation="nuclei",
+        split="train",
         batch_size=2,
         download=True,
     )
 
-    check_loader(loader, 8, instance_labels=True)
+    check_loader(loader, 8, instance_labels=True, rgb=True)
 
 
 if __name__ == "__main__":

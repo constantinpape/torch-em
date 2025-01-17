@@ -15,6 +15,7 @@ def check_cryonuseg():
         path=os.path.join(ROOT, "cryonuseg"),
         patch_shape=(1, 512, 512),
         batch_size=1,
+        split="train",
         rater="b1",
         download=True,
     )

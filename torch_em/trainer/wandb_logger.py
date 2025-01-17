@@ -19,10 +19,22 @@ except ImportError:
 
 
 class WandbLogger(TorchEmLogger):
+    """Logger to write training progress to weights and biases.
+
+    Args:
+        trainer: The instantiated trainer.
+        save_root: The root directury for writing checkpoints and log files.
+        project_name: The name of the weights and biases project for these logs.
+        log_model_freq: The frequency for logging the model.
+        log_model_graph: Whether to log the model graph.
+        mode: The logging mode.
+        config: The configuration.
+        resume:
+    """
     def __init__(
         self,
         trainer,
-        save_root,
+        save_root: str,
         *,
         project_name: Optional[str] = None,
         log_model: Optional[Literal["gradients", "parameters", "all"]] = "all",
@@ -44,7 +56,8 @@ class WandbLogger(TorchEmLogger):
         config = dict(config or {})
         config.update(trainer.init_data)
         self.wand_run = wandb.init(
-            id=resume, project=project_name, name=trainer.name, dir=self.log_dir, mode=mode, config=config, resume="allow"
+            id=resume, project=project_name, name=trainer.name, dir=self.log_dir,
+            mode=mode, config=config, resume="allow"
         )
         trainer.id = self.wand_run.id
 
@@ -77,6 +90,8 @@ class WandbLogger(TorchEmLogger):
         wandb.log({f"images_{name}/{grid_name}": [wandb.Image(grid_image, caption=grid_name)]}, step=step)
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
+        """@private
+        """
         wandb.log({"train/loss": loss}, step=step)
         if loss < self.wand_run.summary.get("train/loss", np.inf):
             self.wand_run.summary["train/loss"] = loss
@@ -86,6 +101,8 @@ class WandbLogger(TorchEmLogger):
             self._log_images(step, x, y, prediction, "train", gradients=gradients)
 
     def log_validation(self, step, metric, loss, x, y, prediction):
+        """@private
+        """
         wandb.log({"validation/loss": loss, "validation/metric": metric}, step=step)
         if loss < self.wand_run.summary.get("validation/loss", np.inf):
             self.wand_run.summary["validation/loss"] = loss
@@ -96,4 +113,6 @@ class WandbLogger(TorchEmLogger):
         self._log_images(step, x, y, prediction, "validation")
 
     def get_wandb(self):
+        """@private
+        """
         return wandb

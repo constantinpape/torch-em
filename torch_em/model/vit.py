@@ -23,15 +23,23 @@ except ImportError:
 
 
 class ViT_Sam(ImageEncoderViT):
-    """Vision Transformer derived from the Segment Anything Codebase (https://arxiv.org/abs/2304.02643):
+    """Vision Transformer derived from the Segment Anything Codebase (https://arxiv.org/abs/2304.02643).
+
+    Based on:
     https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/image_encoder.py
+
+    Args:
+        in_chans: The number of input channels.
+        embed_dim: The embedding dimension, corresponding to the number of output channels of the vision transformer.
+        global_attn_indexes: The global attention indices.
+        kwargs: Keyword arguments for the image encoder base class.
     """
     def __init__(
         self,
         in_chans: int = 3,
         embed_dim: int = 768,
         global_attn_indexes: Tuple[int, ...] = ...,
-        **kwargs
+        **kwargs,
     ) -> None:
         if not _sam_import_success:
             raise RuntimeError(
@@ -46,6 +54,14 @@ class ViT_Sam(ImageEncoderViT):
         self.embed_dim = embed_dim
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the vision transformer to input data.
+
+        Args:
+            x: The input data.
+
+        Returns:
+            The vision transformer output.
+        """
         x = self.patch_embed(x)
         if self.pos_embed is not None:
             x = x + self.pos_embed
@@ -62,14 +78,22 @@ class ViT_Sam(ImageEncoderViT):
 
 
 class ViT_MAE(VisionTransformer):
-    """Vision Transformer derived from the Masked Auto Encoder Codebase (https://arxiv.org/abs/2111.06377)
+    """Vision Transformer derived from the Masked Auto Encoder Codebase (https://arxiv.org/abs/2111.06377).
+
+    Based on:
     https://github.com/facebookresearch/mae/blob/main/models_vit.py#L20-L53
+
+    Args:
+        img_size: The size of the input for the image encoder. Input images will be resized to match this size.
+        in_chans: The number of input channels.
+        depth: The depth of the vision transformer.
+        kwargs: Additional keyword arguments for the vision transformer base class.
     """
     def __init__(
         self,
-        img_size=1024,  # chosen to match our experiments with Segment Anything
-        in_chans=3,
-        depth=12,
+        img_size: int = 1024,  # chosen to match our experiments with segment anything
+        in_chans: int = 3,
+        depth: int = 12,
         **kwargs
     ):
         if not _timm_import_success:
@@ -84,6 +108,8 @@ class ViT_MAE(VisionTransformer):
         self.depth = depth
 
     def convert_to_expected_dim(self, inputs_):
+        """@private
+        """
         inputs_ = inputs_[:, 1:, :]  # removing the class tokens
         # reshape the outputs to desired shape (N x H*W X C -> N x H x W x C)
         rdim = inputs_.shape[1]
@@ -93,6 +119,8 @@ class ViT_MAE(VisionTransformer):
         return inputs_
 
     def forward_features(self, x):
+        """@private
+        """
         B = x.shape[0]
         x = self.patch_embed(x)
 
@@ -115,7 +143,15 @@ class ViT_MAE(VisionTransformer):
         x = self.convert_to_expected_dim(x)
         return x, list_from_encoder[:3]
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the vision transformer to input data.
+
+        Args:
+            x: The input data.
+
+        Returns:
+            The vision transformer output.
+        """
         x, list_from_encoder = self.forward_features(x)
         return x, list_from_encoder
 
@@ -322,7 +358,17 @@ class ViT_ScaleMAE(VisionTransformer):
         return x, list_from_encoder
 
 
-def get_vision_transformer(backbone: str, model: str, img_size: int = 1024):
+def get_vision_transformer(backbone: str, model: str, img_size: int = 1024) -> nn.Module:
+    """Get vision transformer encoder.
+
+    Args:
+        backbone: The name of the vision transformer implementation. One of "sam" or "mae".
+        model: The name of the model. One of "vit_b", "vit_l" or "vit_h".
+        img_size: The size of the input for the image encoder. Input images will be resized to match this size.
+
+    Returns:
+        The vision transformer.
+    """
     if backbone == "sam":
         if model == "vit_b":
             encoder = ViT_Sam(
@@ -393,5 +439,6 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024):
 
     else:
         raise ValueError("The 'UNETR' supported backbones are `sam`, `mae` or 'scalemae. Please choose one of them.")
+        raise ValueError("The UNETR supported backbones are `sam` or `mae`. Please choose either of the two.")
 
     return encoder

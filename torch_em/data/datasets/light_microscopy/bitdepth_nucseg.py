@@ -93,6 +93,8 @@ def get_bitdepth_nucseg_paths(
     raw_paths = natsorted(glob(os.path.join(data_dir, magnification, "images_16bit", "*.tif")))
     label_paths = natsorted(glob(os.path.join(data_dir, magnification, "label masks", "*.tif")))
 
+    assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
+
     return raw_paths, label_paths
 
 
