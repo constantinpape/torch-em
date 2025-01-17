@@ -1,5 +1,4 @@
-"""The Acouslic AI dataset contains annotations for fetal segmentation
-in ultrasound images.
+"""The Acouslic AI dataset contains annotations for fetal segmentation in ultrasound images.
 
 This dataset is from the challenge: https://acouslic-ai.grand-challenge.org/.
 Please cite the challenge if you use this dataset for your publication.
@@ -31,11 +30,11 @@ def get_acouslic_ai_data(path: Union[os.PathLike, str], download: bool = False) 
     Returns:
         Filepath where the data is downlaoded.
     """
-    os.makedirs(path, exist_ok=True)
-
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
         return data_dir
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "acouslic-ai-train-set.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
@@ -102,8 +101,8 @@ def get_acouslic_ai_dataset(
 
 def get_acouslic_ai_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -112,8 +111,8 @@ def get_acouslic_ai_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -122,8 +121,5 @@ def get_acouslic_ai_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_acouslic_ai_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_acouslic_ai_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

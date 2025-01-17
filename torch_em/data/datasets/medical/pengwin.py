@@ -131,14 +131,19 @@ def get_pengwin_dataset(
         )
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths, raw_key=None, label_paths=gt_paths, label_key=None, patch_shape=patch_shape, **kwargs
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
+        patch_shape=patch_shape,
+        **kwargs
     )
 
 
 def get_pengwin_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
     modality: Literal["CT", "X-Ray"],
     resize_inputs: bool = False,
     download: bool = False,
@@ -148,6 +153,7 @@ def get_pengwin_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         modality: The choice of modality for inputs.
         resize_inputs: Whether to resize inputs to the desired patch shape.
@@ -159,4 +165,4 @@ def get_pengwin_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_pengwin_dataset(path, patch_shape, modality, resize_inputs, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
