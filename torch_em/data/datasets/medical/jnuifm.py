@@ -51,10 +51,8 @@ def get_jnuifm_paths(path: Union[os.PathLike, str], download: bool = False) -> T
         List of filepaths for the label data.
     """
     data_dir = get_jnuifm_data(path, download)
-
     image_paths = natsorted(glob(os.path.join(data_dir, "image_mha", "*.mha")))
     gt_paths = natsorted(glob(os.path.join(data_dir, "label_mha", "*.mha")))
-
     return image_paths, gt_paths
 
 
@@ -100,8 +98,8 @@ def get_jnuifm_dataset(
 
 def get_jnuifm_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -110,8 +108,8 @@ def get_jnuifm_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
         resize_inputs: Whether to resize the inputs to the expected patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -121,4 +119,4 @@ def get_jnuifm_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_jnuifm_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -1,15 +1,26 @@
+"""The FETA24 contains annotations for fetal brain tissue segmentation in MRI.
+
+This dataset is from FeTa 2024 Challenge: https://doi.org/10.5281/zenodo.11192452.
+The dataset is from the publication https://doi.org/10.1038/s41597-021-00946-3.
+Please cite it if you use this dataset in your publication.
+"""
+
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple
+from typing import Union, Tuple, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
 from .. import util
 
 
-def get_feta24_data(path, download):
-    """This function describes the download fucntionality and ensures your data has been downloaded in expected format.
+def get_feta24_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Obtain the FETA24 data.
+    
+    This function describes the download functionality and ensures your data has been downloaded in expected format.
 
     The dataset is from the FeTa Challenge 2024 - https://fetachallenge.github.io/ (Task 1: Segmentation).
     A detailed description of the dataset is provided here: https://fetachallenge.github.io/pages/Data_description.
@@ -26,6 +37,13 @@ def get_feta24_data(path, download):
     the zipped files. It contains 80 scans paired with their segmentations (more details in the challenge website).
 
     Finally, you should provide the path to the parent directory where the zipfile is stored.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
     """
     if download:
         print("Download is not supported due to the challenge's setup. See 'get_feta24_data' for details.")
@@ -43,7 +61,17 @@ def get_feta24_data(path, download):
     return data_dir
 
 
-def _get_feta24_paths(path, download):
+def get_feta24_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[str], List[str]]:
+    """Get the FETA24 dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_feta24_data(path=path, download=download)
 
     base_dir = os.path.join(data_dir, "sub-*", "anat")
@@ -59,18 +87,20 @@ def get_feta24_dataset(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataset for segmentation of fetal brain tissues in MRI.
+) -> Dataset:
+    """Get the FETA24 dataset for fetal brain tissue segmentation.
 
-    The dataset cannot be automatically download. See `get_feta24_data` for details.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    This dataset is from FeTa 2024 Challenge:
-    - https://doi.org/10.5281/zenodo.11192452
-    - Payete et al. - https://doi.org/10.1038/s41597-021-00946-3
-
-    Please cite it if you use this dataset in your publication.
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_feta24_paths(path=path, download=download)
+    image_paths, gt_paths = get_feta24_paths(path, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -78,7 +108,7 @@ def get_feta24_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -87,23 +117,28 @@ def get_feta24_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_feta24_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for segmentation of fetal brain tissues in MRI.
-    See `get_feta24_dataset` for details.
+) -> DataLoader:
+    """Get the FETA24 dataloader for fetal brain tissue segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_feta24_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_feta24_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

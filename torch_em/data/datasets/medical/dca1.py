@@ -123,8 +123,8 @@ def get_dca1_dataset(
 
 def get_dca1_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
     split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
@@ -134,6 +134,7 @@ def get_dca1_loader(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
         resize_inputs: Whether to resize the inputs to the expected patch shape.
@@ -145,4 +146,4 @@ def get_dca1_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_dca1_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

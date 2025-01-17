@@ -136,8 +136,8 @@ def get_idrid_dataset(
 
 def get_idrid_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
     split: Literal['train', 'test'],
     task: Literal['microaneurysms', 'haemorrhages', 'hard_exudates', 'soft_exudates', 'optic_disc'] = 'optic_disc',
     resize_inputs: bool = False,
@@ -148,8 +148,8 @@ def get_idrid_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
         split: The choice of data split.
         task: The choice of labels for the specific task.
         resize_inputs: Whether to resize the inputs to the expected patch shape.
