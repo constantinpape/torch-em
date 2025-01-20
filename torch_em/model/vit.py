@@ -300,7 +300,7 @@ class ViT_ScaleMAE(VisionTransformer):
             rescale_transform=K.RandomResizedCrop(
                 (448, 448),
                 ratio=(1.0, 1.0),
-                scale=(0.2, 1.0),
+                scale=(1.0, 1.0),
                 resample=Resample.BICUBIC.name,
             ),
             other_transforms=None,
