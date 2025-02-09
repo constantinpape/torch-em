@@ -63,10 +63,10 @@ def get_brifiseg_data(path: Union[os.PathLike, str], download: bool = False) -> 
     if os.path.exists(data_dir):
         return data_dir
 
-    tar_path = os.path.join(path, "1channel.tar")
-    if not os.path.exists(tar_path) and not download:
-        raise ValueError("The tar file is not found and download is set to 'False'.")
+    os.makedirs(path, exist_ok=True)
 
+    tar_path = os.path.join(path, "1channel.tar")
+    util.download_source(path=tar_path, url=URL, checksum=CHECKSUM, download=download)
     util.unzip_tarfile(tar_path=tar_path, dst=path)
 
     for zip_path in glob(os.path.join(os.path.join(path, "1channel"), "*.zip")):

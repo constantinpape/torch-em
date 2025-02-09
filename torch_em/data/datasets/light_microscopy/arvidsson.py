@@ -62,6 +62,8 @@ def get_arvidsson_data(
     if os.path.exists(data_dir):
         return data_dir
 
+    os.makedirs(path, exist_ok=True)
+
     zip_path = os.path.join(path, f"{dname}.zip")
     util.download_source(path=zip_path, url=URLS[split], download=download, checksum=CHECKSUMS[split])
     util.unzip(zip_path=os.path.join(path, f"{dname}.zip"), dst=path)
