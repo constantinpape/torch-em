@@ -67,7 +67,7 @@ def get_bitdepth_nucseg_data(path: Union[os.PathLike, str], download: bool = Fal
 
 def get_bitdepth_nucseg_paths(
     path: Union[os.PathLike, str],
-    magnification: Optional[Literal['20x', '40x_air', '40x_oil' '63x_oil']] = None,
+    magnification: Optional[Literal['20x', '40x_air', '40x_oil', '63x_oil']] = None,
     download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the BitDepth NucSeg data.
@@ -101,7 +101,7 @@ def get_bitdepth_nucseg_paths(
 def get_bitdepth_nucseg_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    magnification: Optional[Literal['20x', '40x_air', '40x_oil' '63x_oil']] = None,
+    magnification: Optional[Literal['20x', '40x_air', '40x_oil', '63x_oil']] = None,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -134,7 +134,7 @@ def get_bitdepth_nucseg_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    magnification: Optional[Literal['20x', '40x_air', '40x_oil' '63x_oil']] = None,
+    magnification: Optional[Literal['20x', '40x_air', '40x_oil', '63x_oil']] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
