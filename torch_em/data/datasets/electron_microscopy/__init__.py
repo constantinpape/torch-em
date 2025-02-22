@@ -1,3 +1,4 @@
+from .aimseg import get_aimseg_loader, get_aimseg_dataset
 from .asem import get_asem_loader, get_asem_dataset
 from .axondeepseg import get_axondeepseg_loader, get_axondeepseg_dataset
 from .cem import get_mitolab_loader
