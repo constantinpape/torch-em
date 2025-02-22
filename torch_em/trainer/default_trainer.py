@@ -278,7 +278,7 @@ class DefaultTrainer:
     def _get_save_dict(save_path, device):
         if not os.path.exists(save_path):
             raise ValueError(f"Cannot find checkpoint {save_path}")
-        return torch.load(save_path, map_location=device)
+        return torch.load(save_path, map_location=device, weights_only=False)
 
     @classmethod
     def from_checkpoint(
