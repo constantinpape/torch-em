@@ -1,4 +1,9 @@
-"""
+"""AimSeg contanins annotations for semantic segmentation of myelins, axons and inner cytoplasmic tongue,
+and for instance segmentation of myelinated axons in TEM images of corpus callosum (CC) in adult mice.
+
+This dataset is available at https://zenodo.org/records/8351731.
+The dataset is from the publication https://doi.org/10.1371/journal.pcbi.1010845.
+Please cite them if you use this dataset in your research.
 """
 
 import os
