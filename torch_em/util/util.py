@@ -378,7 +378,7 @@ def load_model(
         else:
             ckpt = checkpoint
 
-        state = torch.load(ckpt, map_location=device)[state_key]
+        state = torch.load(ckpt, map_location=device, weights_only=False)[state_key]
         # to enable loading compiled models
         compiled_prefix = "_orig_mod."
         state = OrderedDict(

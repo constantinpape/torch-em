@@ -51,12 +51,12 @@ class UNETR(nn.Module):
                     encoder_state = model.image_encoder.state_dict()
                 except Exception:
                     # Try loading the encoder state directly from a checkpoint.
-                    encoder_state = torch.load(checkpoint)
+                    encoder_state = torch.load(checkpoint, weights_only=False)
 
             elif backbone == "mae":
                 # vit initialization hints from:
                 #     - https://github.com/facebookresearch/mae/blob/main/main_finetune.py#L233-L242
-                encoder_state = torch.load(checkpoint)["model"]
+                encoder_state = torch.load(checkpoint, weights_only=False)["model"]
                 encoder_state = OrderedDict({
                     k: v for k, v in encoder_state.items() if (k != "mask_token" and not k.startswith("decoder"))
                 })
