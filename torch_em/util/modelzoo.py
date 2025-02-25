@@ -659,7 +659,7 @@ def _load_model(model_spec, device):
         assert os.path.exists(root_folder), root_folder
         weight_file = os.path.join(root_folder, weight_file)
     assert os.path.exists(weight_file), weight_file
-    state = torch.load(weight_file, map_location=device)
+    state = torch.load(weight_file, map_location=device, weights_only=False)
     model.load_state_dict(state)
     model.eval()
     return model

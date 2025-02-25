@@ -238,7 +238,7 @@ def get_vimunet_model(
 
     model_state = None
     if checkpoint is not None:
-        state = torch.load(checkpoint, map_location="cpu")
+        state = torch.load(checkpoint, map_location="cpu", weights_only=False)
 
         if checkpoint.endswith(".pth"):  # from Vim
             encoder_state = state["model"]

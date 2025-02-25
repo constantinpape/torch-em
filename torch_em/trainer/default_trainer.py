@@ -603,7 +603,7 @@ class DefaultTrainer:
             if not os.path.exists(save_path):
                 warnings.warn(f"Cannot load checkpoint. {save_path} does not exist.")
                 return
-            save_dict = torch.load(save_path)
+            save_dict = torch.load(save_path, weights_only=False)
         elif isinstance(checkpoint, dict):
             save_dict = checkpoint
         else:
@@ -636,7 +636,7 @@ class DefaultTrainer:
 
     def _verify_if_training_completed(self, checkpoint="latest"):
         save_path = os.path.join(self.checkpoint_folder, f"{checkpoint}.pt")
-        save_dict = torch.load(save_path) if os.path.exists(save_path) else None
+        save_dict = torch.load(save_path, weights_only=False) if os.path.exists(save_path) else None
         if save_dict and self.max_iteration == save_dict.get("iteration"):
             return True
         return False
