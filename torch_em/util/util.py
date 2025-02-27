@@ -410,7 +410,9 @@ def get_random_colors(labels: np.ndarray) -> colors.ListedColormap:
     Returns:
         The color map.
     """
-    n_labels = len(np.unique(labels)) - 1
-    cmap = [[0, 0, 0]] + np.random.rand(n_labels, 3).tolist()
+    unique_labels = np.unique(labels)
+    have_zero = 0 in unique_labels
+    cmap = [[0, 0, 0]] if have_zero else []
+    cmap += np.random.rand(len(unique_labels), 3).tolist()
     cmap = colors.ListedColormap(cmap)
     return cmap
