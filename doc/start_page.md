@@ -9,10 +9,6 @@ You can use `conda` (or its faster alternative [mamba](https://mamba.readthedocs
 ```bash
 conda install -c conda-forge torch_em
 ```
-This command should work on Linux and Mac OS, on windows the installation is a bit more complex:
-```bash
-conda install -c pytorch -c nvidia -c conda-forge torch_em "nifty=1.2.1=*_4" "protobuf <5"
-```
 
 ## From source
 
@@ -24,9 +20,6 @@ conda env create -f environment.yaml
 conda activate torch-em-dev
 pip install -e .
 ```
-This should work on Linux and Mac OS. On windows you have to use a different environment file:
-`environment_cpu_win.yaml` for setting up an environment with a PyTorch version with CPU support or
-`environment_gpu_win.yaml` for a PyTorch version with GPU support.
 
 # Usage & Examples
 
