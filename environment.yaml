@@ -8,6 +8,7 @@ dependencies:
     - bioimageio.core
     - imagecodecs
     - natsort
+    - nifty >= 1.2.2
     - python-elf
     - pytorch
     - tensorboard
