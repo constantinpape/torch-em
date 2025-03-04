@@ -45,18 +45,17 @@ CHECKSUM = {
     }
 }
 
-# this assigns every PUMA class the corresponding PanNuke class
 CLASS_DICT = {
-    "nuclei_stroma": 3,
-    "nuclei_tumor": 1,
-    "nuclei_plasma_cell": 2,
-    "nuclei_histiocyte": 2,
-    "nuclei_lymphocyte": 2,
-    "nuclei_melanophage": 2,
-    "nuclei_neutrophil": 2,
-    "nuclei_endothelium": 3,
-    "nuclei_epithelium": 5,
-    "nuclei_apoptosis": 4,
+    "nuclei_stroma": 1,
+    "nuclei_tumor": 2,
+    "nuclei_plasma_cell": 3,
+    "nuclei_histiocyte": 4,
+    "nuclei_lymphocyte": 5,
+    "nuclei_melanophage": 6,
+    "nuclei_neutrophil": 7,
+    "nuclei_endothelium": 8,
+    "nuclei_epithelium": 9,
+    "nuclei_apoptosis": 10,
 }
 
 
