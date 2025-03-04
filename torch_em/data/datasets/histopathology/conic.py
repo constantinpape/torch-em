@@ -22,6 +22,9 @@ import torch_em
 from torch_em.data.datasets import util
 
 
+URL = "https://drive.google.com/drive/folders/1il9jG7uA4-ebQ_lNmXbbF2eOK9uNwheb"
+
+
 def _create_split_list(path, split):
     # this takes a split.csv with indices for train and test images
     # generated according to HoVerNet repo: https://github.com/vqdang/hover_net/blob/conic/generate_split.py 
@@ -85,9 +88,8 @@ def get_conic_data(path: Union[os.PathLike, str], split: Literal["train", "test"
     os.makedirs(path, exist_ok=True)
 
     # Load data if not in the given directory
-    if not os.path.exists(os.path.join(path, "images.npy")) and download:
-        gdown.download_folder("https://drive.google.com/drive/folders/1il9jG7uA4-ebQ_lNmXbbF2eOK9uNwheb", output=path,
-                              quiet=False)
+    if not os.path.exists(os.path.join(path, "images.npy")):
+        gdown.download_folder(URL, output=path, quiet=False)
     # Extract and preprocess images for all splits
     for _split in ['train', 'test']:
         _extract_images(_split, path)
