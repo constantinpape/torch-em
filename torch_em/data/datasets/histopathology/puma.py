@@ -147,9 +147,9 @@ def _preprocess_inputs(path, annotations, split):
         with h5py.File(volume_path, "a") as f:
             if "raw" not in f.keys():
                 f.create_dataset("raw", data=image, compression="gzip")
-            if f"labels/{annotations}" not in f.keys():
-                f.create_dataset(f"labels/{annotations}/instance", data=instance_mask, compression="gzip")
-                f.create_dataset(f"labels/{annotations}/semantic", data=semantic_mask, compression="gzip")
+            if "labels" not in f.keys():
+                f.create_dataset(f"labels/instance/{annotations}", data=instance_mask, compression="gzip")
+                f.create_dataset(f"labels/semantic/{annotations}", data=semantic_mask, compression="gzip")
 
 
 def get_puma_data(
@@ -256,7 +256,7 @@ def get_puma_dataset(
         raw_paths=volume_paths,
         raw_key="raw",
         label_paths=volume_paths,
-        label_key=f"labels/{annotations}/{label_choice}",
+        label_key=f"labels/{label_choice}/{annotations}",
         patch_shape=patch_shape,
         with_channels=True,
         is_seg_dataset=True,

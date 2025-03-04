@@ -20,21 +20,73 @@ from torch.utils.data import Dataset, DataLoader
 import torch_em
 
 from torch_em.data.datasets import util
+from sklearn.model_selection import StratifiedShuffleSplit
 
 
 URL = "https://drive.google.com/drive/folders/1il9jG7uA4-ebQ_lNmXbbF2eOK9uNwheb"
 
 
 def _create_split_list(path, split):
-    # this takes a split.csv with indices for train and test images
-    # generated according to HoVerNet repo: https://github.com/vqdang/hover_net/blob/conic/generate_split.py 
+    # Ref. HoVerNet repo: https://github.com/vqdang/hover_net/blob/conic/generate_split.py 
     # We take the FOLD_IDX = 0 as used for the baseline model
-    try:
-        df = pd.read_csv(os.path.join(path, 'split.csv'))
-    except FileNotFoundError:
-        raise FileNotFoundError("split.csv with curator-defined split not found in dataset directory")
+    split_csv = os.path.join(path, "split.csv")
 
-    split_list = [int(v) for v in df[split].dropna()]
+    if os.path.exists(split_csv):
+        split_df = pd.read_csv(split_csv)
+
+    else:
+        SEED = 5
+        info = pd.read_csv(os.path.join(path, "patch_info.csv"))
+        file_names = np.squeeze(info.to_numpy()).tolist()
+
+        img_sources = [v.split('-')[0] for v in file_names]
+        img_sources = np.unique(img_sources)
+
+        cohort_sources = [v.split('_')[0] for v in img_sources]
+        _, cohort_sources = np.unique(cohort_sources, return_inverse=True)
+
+        num_trials = 10
+        splitter = StratifiedShuffleSplit(
+            n_splits=num_trials,
+            train_size=0.8,
+            test_size=0.2,
+            random_state=SEED
+        )
+
+        splits = {}
+        split_generator = splitter.split(img_sources, cohort_sources)
+        for train_indices, valid_indices in split_generator:
+            train_cohorts = img_sources[train_indices]
+            valid_cohorts = img_sources[valid_indices]
+            assert np.intersect1d(train_cohorts, valid_cohorts).size == 0
+            train_names = [
+                file_name
+                for file_name in file_names
+                for source in train_cohorts
+                if source == file_name.split('-')[0]
+            ]
+            valid_names = [
+                file_name
+                for file_name in file_names
+                for source in valid_cohorts
+                if source == file_name.split('-')[0]
+            ]
+            train_names = np.unique(train_names)
+            valid_names = np.unique(valid_names)
+            print(f'Train: {len(train_names):04d} - Valid: {len(valid_names):04d}')
+            assert np.intersect1d(train_names, valid_names).size == 0
+            train_indices = [file_names.index(v) for v in train_names]
+            valid_indices = [file_names.index(v) for v in valid_names]
+
+            while len(train_indices) > len(valid_indices):
+                valid_indices.append(np.nan)
+            splits['train'] = train_indices
+            splits['test'] = valid_indices
+            break
+        split_df = pd.DataFrame(splits)
+        split_df.to_csv(split_csv, index=False)
+
+    split_list = [int(v) for v in split_df[split].dropna()]
     return split_list
 
 
@@ -90,6 +142,7 @@ def get_conic_data(path: Union[os.PathLike, str], split: Literal["train", "test"
     # Load data if not in the given directory
     if not os.path.exists(os.path.join(path, "images.npy")) and download:
         gdown.download_folder(URL, output=path, quiet=False)
+
     # Extract and preprocess images for all splits
     for _split in ['train', 'test']:
         _extract_images(_split, path)
