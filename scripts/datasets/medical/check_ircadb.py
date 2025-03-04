@@ -1,6 +1,7 @@
 import os
 import sys
 
+from torch_em.data import MinInstanceSampler
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets import get_ircadb_loader
 
@@ -14,12 +15,14 @@ def check_ircadb():
 
     loader = get_ircadb_loader(
         path=os.path.join(ROOT, "3d_ircadb"),
-        patch_shape=(8, 512, 512),
-        split="train",
-        label_choice="bone",
-        ndim=3,
         batch_size=2,
+        patch_shape=(8, 512, 512),
+        label_choice="liver",
+        split="train",
+        ndim=3,
         download=True,
+        resize_inputs=True,
+        sampler=MinInstanceSampler(),
     )
 
     check_loader(loader, 8)

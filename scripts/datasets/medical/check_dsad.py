@@ -8,7 +8,7 @@ from torch_em.data.datasets import get_dsad_loader
 sys.path.append("..")
 
 
-def check_ircadb():
+def check_dsad():
     # from util import ROOT
     ROOT = "/media/anwai/ANWAI/data"
 
@@ -24,4 +24,4 @@ def check_ircadb():
 
 
 if __name__ == "__main__":
-    check_ircadb()
+    check_dsad()
