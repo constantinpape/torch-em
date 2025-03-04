@@ -15,8 +15,9 @@ def check_puma():
         path=os.path.join(ROOT, "puma"),
         patch_shape=(512, 512),
         batch_size=2,
-        split="test",
+        split="train",
         annotations="nuclei",
+        label_choice="semantic",
         download=True,
     )
 

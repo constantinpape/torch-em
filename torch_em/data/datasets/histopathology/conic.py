@@ -112,7 +112,7 @@ def _extract_images(split, path):
     import h5py
     with h5py.File(os.path.join(path, f"{split}.h5"), "a") as f:
         f.create_dataset("raw", data=raw, compression="gzip")
-        f.create_dataset("labels/instance", data=instance_masks, compression="gzip")
+        f.create_dataset("labels/instances", data=instance_masks, compression="gzip")
         f.create_dataset("labels/semantic", data=semantic_masks, compression="gzip")
 
 
@@ -167,7 +167,7 @@ def get_conic_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     split: Literal["train", "test"],
-    label_choice: Literal["instance", "semantic"] = "instance",
+    label_choice: Literal["instances", "semantic"] = "instances",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -210,7 +210,7 @@ def get_conic_loader(
     batch_size: int,
     patch_shape: Tuple[int, int],
     split: Literal["train", "test"],
-    label_choice: Literal["instance", "semantic"] = "instance",
+    label_choice: Literal["instances", "semantic"] = "instances",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs

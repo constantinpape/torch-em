@@ -9,15 +9,14 @@ sys.path.append("..")
 
 
 def check_conic():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_conic_loader(
         path=os.path.join(ROOT, "conic"),
         split="train",
         batch_size=2,
         patch_shape=(1, 512, 512),
-        label_choice="semantic",
+        label_choice="instances",
         download=True,
     )
 
