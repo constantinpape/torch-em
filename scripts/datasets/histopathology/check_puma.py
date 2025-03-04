@@ -9,14 +9,16 @@ sys.path.append("..")
 
 
 def check_puma():
-    from util import ROOT
+    # from util import ROOT
+    ROOT = "/media/anwai/ANWAI/data"
 
     loader = get_puma_loader(
         path=os.path.join(ROOT, "puma"),
         patch_shape=(512, 512),
         batch_size=2,
-        split="test",
+        split="train",
         annotations="nuclei",
+        label_choice="semantic",
         download=True,
     )
 
