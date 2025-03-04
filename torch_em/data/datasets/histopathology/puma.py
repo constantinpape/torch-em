@@ -44,15 +44,28 @@ CHECKSUM = {
     }
 }
 
+CLASS_DICT = {
+    "nuclei_stroma": 1,
+    "nuclei_tumor": 2,
+    "nuclei_plasma_cell": 3,
+    "nuclei_histiocyte": 4,
+    "nuclei_lymphocyte": 5,
+    "nuclei_melanophage": 6,
+    "nuclei_neutrophil": 7,
+    "nuclei_endothelium": 8,
+    "nuclei_epithelium": 9,
+    "nuclei_apoptosis": 10,
+}
+
 
 def _create_split_csv(path, split):
     "This creates a split saved to a .csv file in the dataset directory"
     csv_path = os.path.join(path, "puma_split.csv")
+
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
         df[split] = df[split].apply(lambda x: json.loads(x.replace("'", '"')))  # ensures all items from column in list.
         split_list = df.iloc[0][split]
-
     else:
         print(f"Creating a new split file at '{csv_path}'.")
         metastatic_ids = [
@@ -82,6 +95,7 @@ def _create_split_csv(path, split):
 
 
 def _preprocess_inputs(path, annotations, split):
+    import ast
     import h5py
     import geopandas as gpd
     from rasterio.features import rasterize
@@ -98,6 +112,7 @@ def _preprocess_inputs(path, annotations, split):
     for ann_path in tqdm(annotation_paths, desc=f"Preprocessing '{annotations}'"):
         fname = os.path.basename(ann_path).replace(f"_{annotations}.geojson", ".tif")
         image_path = os.path.join(roi_dir, fname)
+
         if os.path.basename(image_path).split(".")[0] not in split_list:
             continue
 
@@ -108,13 +123,27 @@ def _preprocess_inputs(path, annotations, split):
         width, height = 1024, 1024  # roi shape
         transform = from_bounds(minx, miny, maxx, maxy, width, height)
 
+        # Extract class ids mapped to each class name.
+        class_ids = [
+            CLASS_DICT[nuc_class["name"]] for nuc_class in gdf["classification"].apply(lambda x: ast.literal_eval(x))
+        ]
+        semantic_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, class_ids))
+        semantic_mask = rasterize(
+            semantic_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.uint8
+        )
+
         gdf['id'] = range(1, len(gdf) + 1)
-        shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, gdf['id']))
-        mask = rasterize(shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.int32)
+        instance_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, gdf['id']))
+        instance_mask = rasterize(
+            instance_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.int32
+        )
 
         # Transform labels to match expected orientation
-        mask = np.flip(mask)
-        mask = np.fliplr(mask)
+        instance_mask = np.flip(instance_mask)
+        instance_mask = np.fliplr(instance_mask)
+
+        semantic_mask = np.flip(semantic_mask)
+        semantic_mask = np.fliplr(semantic_mask)
 
         image = imageio.imread(image_path)
         image = image[..., :-1].transpose(2, 0, 1)
@@ -123,15 +152,18 @@ def _preprocess_inputs(path, annotations, split):
             if "raw" not in f.keys():
                 f.create_dataset("raw", data=image, compression="gzip")
 
-            if f"labels/{annotations}" not in f.keys():
-                f.create_dataset(f"labels/{annotations}", data=mask, compression="gzip")
+            if f"labels/instances/{annotations}" not in f.keys():
+                f.create_dataset(f"labels/instances/{annotations}", data=instance_mask, compression="gzip")
+
+            if f"labels/semantic/{annotations}" not in f.keys():
+                f.create_dataset(f"labels/semantic/{annotations}", data=semantic_mask, compression="gzip")
 
 
 def get_puma_data(
     path: Union[os.PathLike, str],
     split: Literal["train", "val", "test"],
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
-    download: bool = False
+    download: bool = False,
 ) -> str:
     """Download the PUMA data.
 
@@ -184,6 +216,7 @@ def get_puma_paths(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data split.
         annotations: The choice of annotations.
         download: Whether to download the data if it is not present.
 
@@ -200,6 +233,7 @@ def get_puma_dataset(
     patch_shape: Tuple[int, int],
     split: Literal["train", "val", "test"],
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
+    label_choice: Literal["instance", "semantic"] = "instance",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -211,6 +245,7 @@ def get_puma_dataset(
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
         annotations: The choice of annotations.
+        label_choice: The choice of segmentation type.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -230,7 +265,7 @@ def get_puma_dataset(
         raw_paths=volume_paths,
         raw_key="raw",
         label_paths=volume_paths,
-        label_key=f"labels/{annotations}",
+        label_key=f"labels/{label_choice}/{annotations}",
         patch_shape=patch_shape,
         with_channels=True,
         is_seg_dataset=True,
@@ -245,6 +280,7 @@ def get_puma_loader(
     patch_shape: Tuple[int, int],
     split: Literal["train", "val", "test"],
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
+    label_choice: Literal["instances", "semantic"] = "instances",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -257,6 +293,7 @@ def get_puma_loader(
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
         annotations: The choice of annotations.
+        label_choice: The choice of segmentation type.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -265,5 +302,7 @@ def get_puma_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_puma_dataset(path, patch_shape, split, annotations, resize_inputs, download, **ds_kwargs)
+    dataset = get_puma_dataset(
+        path, patch_shape, split, annotations, label_choice, resize_inputs, download, **ds_kwargs
+    )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
