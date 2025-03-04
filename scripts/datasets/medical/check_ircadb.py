@@ -10,8 +10,7 @@ sys.path.append("..")
 
 
 def check_ircadb():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_ircadb_loader(
         path=os.path.join(ROOT, "3d_ircadb"),
