@@ -2,7 +2,7 @@ import os
 import sys
 
 from torch_em.util.debug import check_loader
-from torch_em.data.datasets import get_ircadb_loader
+from torch_em.data.datasets import get_dsad_loader
 
 
 sys.path.append("..")
@@ -12,12 +12,10 @@ def check_ircadb():
     # from util import ROOT
     ROOT = "/media/anwai/ANWAI/data"
 
-    loader = get_ircadb_loader(
-        path=os.path.join(ROOT, "3d_ircadb"),
-        patch_shape=(8, 512, 512),
+    loader = get_dsad_loader(
+        path=os.path.join(ROOT, "dsad"),
+        patch_shape=(1, 512, 512),
         split="train",
-        label_choice="bone",
-        ndim=3,
         batch_size=2,
         download=True,
     )
