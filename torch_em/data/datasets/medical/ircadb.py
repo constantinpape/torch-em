@@ -71,7 +71,14 @@ def _preprocess_inputs(path):
 
 
 def get_ircadb_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """
+    """Download the IRCADb dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
     """
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
@@ -91,7 +98,14 @@ def get_ircadb_data(path: Union[os.PathLike, str], download: bool = False) -> st
 def get_ircadb_paths(
     path: Union[os.PathLike, str], split: Optional[Literal["train", "val", "test"]] = None, download: bool = False,
 ) -> List[str]:
-    """
+    """Get paths to the IRCADb data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the volumetric data.
     """
 
     data_dir = get_ircadb_data(path, download)
@@ -120,7 +134,19 @@ def get_ircadb_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the IRCADb dataset for liver (and other organ) segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        label_choice: The choice of labelled organs.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     volume_paths = get_ircadb_paths(path, split, download)
 
@@ -155,7 +181,20 @@ def get_ircadb_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the IRCADb dataloader for liver (and other organ) segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        label_choice: The choice of labelled organs.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_ircadb_dataset(path, patch_shape, label_choice, split, resize_inputs, download, **ds_kwargs)

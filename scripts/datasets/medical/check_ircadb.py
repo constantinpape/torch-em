@@ -16,10 +16,10 @@ def check_ircadb():
     loader = get_ircadb_loader(
         path=os.path.join(ROOT, "3d_ircadb"),
         batch_size=2,
-        patch_shape=(8, 512, 512),
+        patch_shape=(1, 512, 512),
         label_choice="liver",
         split="train",
-        ndim=3,
+        ndim=2,
         download=True,
         resize_inputs=True,
         sampler=MinInstanceSampler(),
