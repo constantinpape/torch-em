@@ -88,7 +88,7 @@ def get_conic_data(path: Union[os.PathLike, str], split: Literal["train", "test"
     os.makedirs(path, exist_ok=True)
 
     # Load data if not in the given directory
-    if not os.path.exists(os.path.join(path, "images.npy")):
+    if not os.path.exists(os.path.join(path, "images.npy")) and download:
         gdown.download_folder(URL, output=path, quiet=False)
     # Extract and preprocess images for all splits
     for _split in ['train', 'test']:
