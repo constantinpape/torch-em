@@ -87,7 +87,7 @@ def get_idrid_paths(
     )
 
     image_dir = os.path.join(data_dir, r"A. Segmentation", r"1. Original Images", split)
-    image_paths = [os.path.join(image_dir, f"{ Path(p).stem[:-3]}.jpg") for p in gt_paths]
+    image_paths = [os.path.join(image_dir, f"{Path(p).stem[:-3]}.jpg") for p in gt_paths]
 
     return image_paths, gt_paths
 

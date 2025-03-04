@@ -16,6 +16,8 @@ def check_ircadb():
         path=os.path.join(ROOT, "3d_ircadb"),
         patch_shape=(1, 512, 512),
         split="train",
+        label_choice="bone",
+        ndim=3,
         batch_size=2,
         download=True,
     )
