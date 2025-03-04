@@ -1,18 +1,16 @@
-
 """The CONIC dataset contains annotations for nucleus segmentation
 in histopathology images in H&E stained colon tissue.
 
-This dataset is from the publication https://doi.org/10.48550/arXiv.2303.06274.
+This dataset is from the publication https://doi.org/10.1016/j.media.2023.103047.
 Please cite it if you use this dataset for your research.
 """
 
 import os
-import numpy as np
 from glob import glob
-from typing import Tuple, Union, List, Literal
-import gdown
 from tqdm import tqdm
+from typing import Tuple, Union, List, Literal
 
+import numpy as np
 import pandas as pd
 
 from torch.utils.data import Dataset, DataLoader
@@ -23,17 +21,17 @@ from torch_em.data.datasets import util
 from sklearn.model_selection import StratifiedShuffleSplit
 
 
-URL = "https://drive.google.com/drive/folders/1il9jG7uA4-ebQ_lNmXbbF2eOK9uNwheb"
+URL = "https://drive.google.com/drive/folders/1il9jG7uA4-ebQ_lNmXbbF2eOK9uNwheb?usp=sharing"
 
 
 def _create_split_list(path, split):
-    # Ref. HoVerNet repo: https://github.com/vqdang/hover_net/blob/conic/generate_split.py 
+    # source: HoVerNet repo: https://github.com/vqdang/hover_net/blob/conic/generate_split.py.
     # We take the FOLD_IDX = 0 as used for the baseline model
+
     split_csv = os.path.join(path, "split.csv")
 
     if os.path.exists(split_csv):
         split_df = pd.read_csv(split_csv)
-
     else:
         SEED = 5
         info = pd.read_csv(os.path.join(path, "patch_info.csv"))
@@ -46,43 +44,39 @@ def _create_split_list(path, split):
         _, cohort_sources = np.unique(cohort_sources, return_inverse=True)
 
         num_trials = 10
-        splitter = StratifiedShuffleSplit(
-            n_splits=num_trials,
-            train_size=0.8,
-            test_size=0.2,
-            random_state=SEED
-        )
+        splitter = StratifiedShuffleSplit(n_splits=num_trials, train_size=0.8, test_size=0.2, random_state=SEED)
 
         splits = {}
         split_generator = splitter.split(img_sources, cohort_sources)
         for train_indices, valid_indices in split_generator:
             train_cohorts = img_sources[train_indices]
             valid_cohorts = img_sources[valid_indices]
+
             assert np.intersect1d(train_cohorts, valid_cohorts).size == 0
+
             train_names = [
-                file_name
-                for file_name in file_names
-                for source in train_cohorts
-                if source == file_name.split('-')[0]
+                file_name for file_name in file_names for source in train_cohorts if source == file_name.split('-')[0]
             ]
             valid_names = [
-                file_name
-                for file_name in file_names
-                for source in valid_cohorts
-                if source == file_name.split('-')[0]
+                file_name for file_name in file_names for source in valid_cohorts if source == file_name.split('-')[0]
             ]
+
             train_names = np.unique(train_names)
             valid_names = np.unique(valid_names)
             print(f'Train: {len(train_names):04d} - Valid: {len(valid_names):04d}')
+
             assert np.intersect1d(train_names, valid_names).size == 0
+
             train_indices = [file_names.index(v) for v in train_names]
             valid_indices = [file_names.index(v) for v in valid_names]
 
             while len(train_indices) > len(valid_indices):
                 valid_indices.append(np.nan)
+
             splits['train'] = train_indices
             splits['test'] = valid_indices
             break
+
         split_df = pd.DataFrame(splits)
         split_df.to_csv(split_csv, index=False)
 
@@ -91,7 +85,6 @@ def _create_split_list(path, split):
 
 
 def _extract_images(split, path):
-    import h5py
 
     split_list = _create_split_list(path, split)
 
@@ -102,8 +95,9 @@ def _extract_images(split, path):
     raw = []
     semantic_masks = []
 
-    for idx, (image, label) in tqdm(enumerate(zip(images, labels)), desc=f"Extracting {split} data",
-                                    total=images.shape[0]):
+    for idx, (image, label) in tqdm(
+        enumerate(zip(images, labels)), desc=f"Extracting '{split}' data", total=images.shape[0]
+    ):
         if idx not in split_list:
             continue
 
@@ -115,37 +109,41 @@ def _extract_images(split, path):
     instance_masks = np.stack(instance_masks)
     semantic_masks = np.stack(semantic_masks)
 
-    output_file = os.path.join(path, f"{split}.h5")
-    with h5py.File(output_file, "a") as f:
+    import h5py
+    with h5py.File(os.path.join(path, f"{split}.h5"), "a") as f:
         f.create_dataset("raw", data=raw, compression="gzip")
         f.create_dataset("labels/instance", data=instance_masks, compression="gzip")
         f.create_dataset("labels/semantic", data=semantic_masks, compression="gzip")
 
 
-def get_conic_data(path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False):
+def get_conic_data(path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False) -> str:
     """Download the CONIC dataset for nucleus segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         split: The choice of data split.
         download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is download for further processing.
     """
     if split not in ['train', 'test']:
         raise ValueError(f"'{split}' is not a valid split.")
 
-    image_files = glob(os.path.join(path, "*.h5"))
-    if len(image_files) > 0:
-        return
+    data_dir = os.path.join(path, "data")
+    if os.path.exists(data_dir) and glob(os.path.join(data_dir, "*.h5")):
+        return data_dir
 
     os.makedirs(path, exist_ok=True)
 
-    # Load data if not in the given directory
-    if not os.path.exists(os.path.join(path, "images.npy")) and download:
-        gdown.download_folder(URL, output=path, quiet=False)
+    # Download the files from google drive.
+    util.download_source_gdrive(path=data_dir, url=URL, download=download, download_type="folder", quiet=False)
 
     # Extract and preprocess images for all splits
     for _split in ['train', 'test']:
-        _extract_images(_split, path)
+        _extract_images(_split, data_dir)
+
+    return data_dir
 
 
 def get_conic_paths(
@@ -161,8 +159,8 @@ def get_conic_paths(
     Returns:
         List of filepaths for the stored data.
     """
-    get_conic_data(path, split, download)
-    return os.path.join(path, f"{split}.h5")
+    data_dir = get_conic_data(path, split, download)
+    return os.path.join(data_dir, f"{split}.h5")
 
 
 def get_conic_dataset(

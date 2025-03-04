@@ -1,22 +1,23 @@
+import os
 import hashlib
 import inspect
-import os
 import zipfile
-
+import requests
+from tqdm import tqdm
+from warnings import warn
+from subprocess import run
+from xml.dom import minidom
 from packaging import version
 from shutil import copyfileobj, which
-from subprocess import run
-from typing import Optional, Tuple
-from warnings import warn
-from xml.dom import minidom
+
+from typing import Optional, Tuple, Literal
 
 import numpy as np
-import requests
-import torch
-import torch_em
-
 from skimage.draw import polygon
-from tqdm import tqdm
+
+import torch
+
+import torch_em
 from torch_em.transform import get_raw_transform
 from torch_em.transform.generic import ResizeLongestSideInputs, Compose
 
@@ -134,7 +135,7 @@ def download_source_gdrive(
     url: str,
     download: bool,
     checksum: Optional[str] = None,
-    download_type: str = "zip",
+    download_type: Literal["zip", "folder"] = "zip",
     expected_samples: int = 10000,
     quiet: bool = True,
 ) -> None:
@@ -160,6 +161,7 @@ def download_source_gdrive(
             "Need gdown library to download data from google drive. "
             "Please install gdown: 'conda install -c conda-forge gdown==4.6.3'."
         )
+
     print("Downloading the files. Might take a few minutes...")
 
     if download_type == "zip":
@@ -171,6 +173,7 @@ def download_source_gdrive(
         gdown.download_folder(url=url, output=path, quiet=quiet, remaining_ok=True)
     else:
         raise ValueError("`download_path` argument expects either `zip`/`folder`")
+
     print("Download completed.")
 
 
