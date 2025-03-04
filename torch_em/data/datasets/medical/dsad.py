@@ -26,7 +26,14 @@ ORGANS = [
 
 
 def get_dsad_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """
+    """Download the DSAD dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
     """
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
@@ -41,8 +48,19 @@ def get_dsad_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     return data_dir
 
 
-def get_dsad_paths(path: Union[os.PathLike, str], organ: Optional[str] = None, download: bool = False) -> List[str]:
-    """
+def get_dsad_paths(
+    path: Union[os.PathLike, str], organ: Optional[str] = None, download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the DSAD data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        organ: The choice of organ annotations.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
     data_dir = get_dsad_data(path, download)
 
@@ -52,14 +70,17 @@ def get_dsad_paths(path: Union[os.PathLike, str], organ: Optional[str] = None, d
         assert organ in ORGANS, f"'{organ}' is not a valid organ choice."
         assert isinstance(organ, str), "We currently support choosing one organ at a time."
 
-    image_paths = natsorted(glob(os.path.join(data_dir, organ, "*", "image*")))
-    mask_paths = natsorted(glob(os.path.join(data_dir, organ, "*", "mask*")))
+    image_paths = natsorted(glob(os.path.join(data_dir, organ, "*", "image*.png")))
+    # Remove multi-label inputs.
+    image_paths = [p for p in image_paths if "multilabel" not in p]
+
+    # Get label paths.
+    mask_paths = [p.replace("image", "mask") for p in image_paths]
+    assert all([os.path.exists(p) for p in mask_paths])
 
     assert image_paths and len(image_paths) == len(mask_paths)
 
-    breakpoint()
-
-    return volume_paths
+    return image_paths, mask_paths
 
 
 def get_dsad_dataset(
@@ -70,9 +91,20 @@ def get_dsad_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
+    """Get the DSAD dataset for organ segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        organ: The choice of organ annotations.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    """
-    volume_paths = get_dsad_paths(path, organ, download)
+    image_paths, mask_paths = get_dsad_paths(path, organ, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -81,12 +113,13 @@ def get_dsad_dataset(
         )
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=volume_paths,
-        raw_key="raw",
-        label_paths=volume_paths,
-        label_key="labels",
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=mask_paths,
+        label_key=None,
         patch_shape=patch_shape,
         with_channels=True,
+        is_seg_dataset=False,
         **kwargs
     )
 
@@ -100,7 +133,19 @@ def get_dsad_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the DSAD dataloader for organ segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        organ: The choice of organ annotations.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The Dataloader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_dsad_dataset(path, patch_shape, organ, resize_inputs, download, **ds_kwargs)

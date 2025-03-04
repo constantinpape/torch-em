@@ -15,8 +15,8 @@ def check_dsad():
     loader = get_dsad_loader(
         path=os.path.join(ROOT, "dsad"),
         patch_shape=(1, 512, 512),
-        split="train",
         batch_size=2,
+        resize_inputs=True,
         download=True,
     )
 
