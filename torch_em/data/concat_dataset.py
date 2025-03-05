@@ -1,6 +1,6 @@
 import numpy as np
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 
 
 class ConcatDataset(Dataset):
@@ -11,7 +11,10 @@ class ConcatDataset(Dataset):
     """
     def __init__(self, *datasets: Dataset):
         self.datasets = datasets
-        self.ndim = datasets[0].ndim
+        if isinstance(datasets[0], Subset):
+            self.ndim = datasets[0].dataset.ndim  # Access the underlying dataset's ndim
+        else:
+            self.ndim = datasets[0].ndim
 
         # compute the number of samples for each volume
         self.ds_lens = [len(dataset) for dataset in self.datasets]
