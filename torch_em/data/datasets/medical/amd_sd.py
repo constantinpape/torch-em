@@ -88,7 +88,7 @@ def get_amd_sd_data(path: Union[os.PathLike, str], download: bool = False):
 
 def get_amd_sd_paths(
     path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
-) -> List[str]:
+) -> Tuple[List[str], List[str]]:
     """Get paths to the AMD-SD data.
 
     Args:
