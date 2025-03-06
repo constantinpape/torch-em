@@ -9,7 +9,7 @@ NOTE: The label legends are described as follows:
 
 The dataset is located at https://www.cs.cit.tum.de/camp/publications/leg-3d-us-dataset/.
 
-This dataset is from the article: https://doi.org/10.1371/journal.pone.0268550.
+This dataset is from the article: https://doi.org/10.1007/s11548-024-03170-7.
 Please cite it if you use this dataset in your research.
 """
 
