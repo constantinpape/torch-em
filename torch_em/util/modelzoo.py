@@ -661,7 +661,7 @@ def main():
 
 
 def _unzip_and_load_model(model_spec, device, spec_path, output_path):
-    unpack_archive(spec_path, output_path)
+    unpack_archive(str(spec_path), str(output_path))
     weight_spec = model_spec.weights.pytorch_state_dict
     model = PytorchModelAdapter.get_network(weight_spec)
     weight_file = os.path.join(output_path, weight_spec.source.path)
