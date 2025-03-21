@@ -468,31 +468,31 @@ def _validate_model(spec_path, output_path):
     if not os.path.exists(spec_path):
         return False
 
-    try:
-        model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True, output_path=output_path)
-        root = output_path
+    # try:
+    model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True, output_path=output_path)
+    root = output_path
 
-        input_paths = [os.path.join(root, ipt.test_tensor.source.path) for ipt in model_spec.inputs]
-        inputs = [normalize_with_batch(np.load(ipt), normalizer) for ipt in input_paths]
+    input_paths = [os.path.join(root, ipt.test_tensor.source.path) for ipt in model_spec.inputs]
+    inputs = [normalize_with_batch(np.load(ipt), normalizer) for ipt in input_paths]
 
-        expected_paths = [os.path.join(root, opt.test_tensor.source.path) for opt in model_spec.outputs]
-        expected = [np.load(opt) for opt in expected_paths]
+    expected_paths = [os.path.join(root, opt.test_tensor.source.path) for opt in model_spec.outputs]
+    expected = [np.load(opt) for opt in expected_paths]
 
-        with torch.no_grad():
-            inputs = [torch.from_numpy(input_) for input_ in inputs]
-            outputs = model(*inputs)
-            if torch.is_tensor(outputs):
-                outputs = [outputs]
-            outputs = [out.numpy() for out in outputs]
+    with torch.no_grad():
+        inputs = [torch.from_numpy(input_) for input_ in inputs]
+        outputs = model(*inputs)
+        if torch.is_tensor(outputs):
+            outputs = [outputs]
+        outputs = [out.numpy() for out in outputs]
 
-        for out, exp in zip(outputs, expected):
-            if not np.allclose(out, exp):
-                return False
+    for out, exp in zip(outputs, expected):
+        if not np.allclose(out, exp):
+            return False
 
-    except Exception as e:
-        print("Model validation failed with the following exception:")
-        print(e)
-        return False
+    # except Exception as e:
+    #     print("Model validation failed with the following exception:")
+    #     print(e)
+    #     return False
 
     return True
 
