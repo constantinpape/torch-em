@@ -489,7 +489,9 @@ def _validate_model(spec_path, output_path):
             if not np.allclose(out, exp):
                 return False
 
-    except Exception:
+    except Exception as e:
+        print("Model validation failed with the following exception:")
+        print(e)
         return False
 
     return True
