@@ -8,7 +8,8 @@ import tempfile
 
 from glob import glob
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from shutil import unpack_archive
+from typing import Callable, Dict, List, Optional, Tuple
 from warnings import warn
 
 import imageio
@@ -463,13 +464,13 @@ def _get_inout_descriptions(trainer, model, model_kwargs, input_tensors, output_
     return input_description, output_description, notebook_link
 
 
-def _validate_model(spec_path):
+def _validate_model(spec_path, output_path):
     if not os.path.exists(spec_path):
         return False
 
     try:
-        model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True)
-        root = model_spec.root
+        model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True, output_path=output_path)
+        root = output_path
 
         input_paths = [os.path.join(root, ipt.test_tensor.source.path) for ipt in model_spec.inputs]
         inputs = [normalize_with_batch(np.load(ipt), normalizer) for ipt in input_paths]
@@ -487,8 +488,10 @@ def _validate_model(spec_path):
         for out, exp in zip(outputs, expected):
             if not np.allclose(out, exp):
                 return False
+
     except Exception:
         return False
+
     return True
 
 
@@ -605,7 +608,8 @@ def export_bioimageio_model(
         save_bioimageio_package(model_description, output_path=output_path)
 
     # Validate the model.
-    val_success = _validate_model(output_path)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        val_success = _validate_model(output_path, tmp_dir)
     if val_success:
         print(f"The model was successfully exported to '{output_path}'.")
     else:
@@ -653,19 +657,25 @@ def main():
 # model import functionality
 #
 
-def _load_model(model_spec, device):
+
+def _unzip_and_load_model(model_spec, device, spec_path, output_path):
+    unpack_archive(spec_path, output_path)
     weight_spec = model_spec.weights.pytorch_state_dict
     model = PytorchModelAdapter.get_network(weight_spec)
-    weight_file = weight_spec.source.path
-    if not os.path.exists(weight_file):
-        root_folder = f"{model_spec.root.filename}.unzip"
-        assert os.path.exists(root_folder), root_folder
-        weight_file = os.path.join(root_folder, weight_file)
+    weight_file = os.path.join(output_path, weight_spec.source.path)
     assert os.path.exists(weight_file), weight_file
     state = torch.load(weight_file, map_location=device, weights_only=False)
     model.load_state_dict(state)
     model.eval()
     return model
+
+
+def _load_model(model_spec, device, spec_path, output_path):
+    if output_path is None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            return _unzip_and_load_model(model_spec, device, spec_path, tmp_dir)
+    else:
+        return _unzip_and_load_model(model_spec, device, spec_path, output_path)
 
 
 def _load_normalizer(model_spec):
@@ -732,12 +742,29 @@ def _load_normalizer(model_spec):
     return normalizer
 
 
-def import_bioimageio_model(spec_path, return_spec=False, device="cpu"):
-    """@private
+def import_bioimageio_model(
+    spec_path: str,
+    return_spec: bool = False,
+    device: Optional[str] = None,
+    output_path: Optional[str] = None,
+) -> Tuple[torch.nn.Module, Callable]:
+    """Import a pytorch model from a bioimageio model.
+
+    Args:
+        spec_path: The path to the bioimageio model. Expects a zipped model file.
+        return_spec: Whether to return the deserialized model description in additon to the model.
+        device: The device to use for loading the model.
+        output_path: The output path for deserializing model files.
+            By default the files will be deserialized to a temporary path.
+
+    Returns:
+        The model loaded as torch.nn.Module.
+        The preprocessing function.
     """
     model_spec = core.load_description(spec_path)
 
-    model = _load_model(model_spec, device=device)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = _load_model(model_spec, device=device, spec_path=spec_path, output_path=output_path)
     normalizer = _load_normalizer(model_spec)
 
     if return_spec:
