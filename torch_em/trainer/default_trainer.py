@@ -6,8 +6,9 @@ import inspect
 import warnings
 import contextlib
 from tqdm import tqdm
-from collections import OrderedDict
 from functools import partial
+from datetime import datetime
+from collections import OrderedDict
 from importlib import import_module
 from typing import Any, Callable, Dict, Optional, Union, Literal
 
@@ -584,6 +585,7 @@ class DefaultTrainer:
             "optimizer_state": self.optimizer.state_dict(),
             "init": self.init_data | extra_init_dict,
             "train_time": train_time,
+            "timestamp": datetime.now().strftime("%d-%m-%Y (%H:%M:%S)"),
         }
         save_dict.update(**extra_save_dict)
         if self.scaler is not None:
