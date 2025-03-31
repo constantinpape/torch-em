@@ -36,27 +36,40 @@ def _test_loading(data_root):
         print(f["recon-1/em/fibsem-uint8/s0"])
 
         # Corresponding labels
+        label_choice = "all"
         print(list(f["recon-1/labels/groundtruth"].keys()))
-        print(f["recon-1/labels/groundtruth/crop234/mito/s0"])
-
-        scale, translation = _get_scale_and_translation(f["recon-1/labels/groundtruth/crop234/mito"], "s0")
-
-        if scale is None and translation is None:
-            raise RuntimeError
-
-        offset = (np.array(translation) / np.array(scale)).astype(int)
-        print("Voxel offset:", offset)
+        print(f[f"recon-1/labels/groundtruth/crop234/{label_choice}/s0"])
 
         # Map labels back to the original spatial shapes.
-        label_crop = f["recon-1/labels/groundtruth/crop234/mito/s0"][:]
-        image_crop = _get_matching_crop(f["recon-1/em/fibsem-uint8/s0"], offset, label_crop.shape)
+        for crop_name in list(f["recon-1/labels/groundtruth"].keys()):
 
-        breakpoint()
+            # Get the offset values from the translation and scale values given.
+            scale, translation = _get_scale_and_translation(
+                f[f"recon-1/labels/groundtruth/{crop_name}/{label_choice}"], "s0"
+            )
+
+            if scale is None and translation is None:
+                raise RuntimeError
+
+            offset = (np.array(translation) / np.array(scale)).astype(int)
+
+            label_crop = f[f"recon-1/labels/groundtruth/{crop_name}/{label_choice}/s0"][:]
+            image_crop = _get_matching_crop(f["recon-1/em/fibsem-uint8/s0"], offset, label_crop.shape)
+
+            # Visualize image and corresponding label crops.
+            import napari
+            v = napari.Viewer()
+            v.add_image(image_crop, name="Image")
+            v.add_labels(label_crop, name="Labels")
+            napari.run()
 
 
 def main():
-    ROOT = "/mnt/vast-nhr/projects/cidas/cca/data/cellmap-challenge"
+    # ROOT = "/mnt/vast-nhr/projects/cidas/cca/data/cellmap-challenge"
+    ROOT = "/media/anwai/ANWAI/data/cellmap-challenge"
+
     data_root = os.path.join(ROOT, "data_matched_res_no_pad")
+
     _test_loading(data_root)
 
 
