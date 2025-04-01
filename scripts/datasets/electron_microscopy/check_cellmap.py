@@ -53,16 +53,19 @@ def _test_loading(data_root):
                 raise RuntimeError
 
             offset = (np.array(translation) / np.array(scale)).astype(int)
+            print(offset)
 
-            label_crop = f[f"recon-1/labels/groundtruth/{crop_name}/{label_choice}/s0"][:]
-            image_crop = _get_matching_crop(f["recon-1/em/fibsem-uint8/s0"], offset, label_crop.shape)
+            view = False
+            if view:
+                label_crop = f[f"recon-1/labels/groundtruth/{crop_name}/{label_choice}/s0"][:]
+                image_crop = _get_matching_crop(f["recon-1/em/fibsem-uint8/s0"], offset, label_crop.shape)
 
-            # Visualize image and corresponding label crops.
-            import napari
-            v = napari.Viewer()
-            v.add_image(image_crop, name="Image")
-            v.add_labels(label_crop, name="Labels")
-            napari.run()
+                # Visualize image and corresponding label crops.
+                import napari
+                v = napari.Viewer()
+                v.add_image(image_crop, name="Image")
+                v.add_labels(label_crop, name="Labels")
+                napari.run()
 
 
 def _download_cellmap_data(path, crops="all", fetch_all_em_resolutions=False):
@@ -330,7 +333,7 @@ def main():
     ROOT = "/media/anwai/ANWAI/data/cellmap-challenge"
 
     # _test_loading(os.path.join(ROOT, "data_matched_res_no_pad"))
-    _download_cellmap_data(path=os.path.join(ROOT, "data2"), crops="234", fetch_all_em_resolutions=True)
+    _download_cellmap_data(path=os.path.join(ROOT, "data"), crops="234", fetch_all_em_resolutions=False)
 
 
 if __name__ == "__main__":
