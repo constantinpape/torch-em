@@ -3,7 +3,7 @@ It contains a large amount of annotation crops from several species.
 This dataset is released for the `CellMap Segmentation Challenge`: https://cellmapchallenge.janelia.org/.
 - Official documentation: https://janelia-cellmap.github.io/cellmap-segmentation-challenge/.
 - Original GitHub repository for the toolbox: https://github.com/janelia-cellmap/cellmap-segmentation-challenge.
-- And associated collection doi for the data: https://doi.org/10.25378/janelia.c.7456966. 
+- And associated collection doi for the data: https://doi.org/10.25378/janelia.c.7456966.
 
 Please cite them if you use this data for your research.
 """
