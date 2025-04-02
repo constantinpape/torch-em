@@ -1,22 +1,27 @@
+import os
+import sys
+
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_papila_loader
 
 
-ROOT = "/scratch/share/cidas/cca/data/papila"
+sys.path.append("..")
 
 
 def check_papila():
+    from util import ROOT
+
     loader = get_papila_loader(
-        path=ROOT,
-        patch_shape=(256, 256),
+        path=os.path.join(ROOT, "papila"),
+        patch_shape=(512, 512),
         batch_size=2,
+        split="test",
         resize_inputs=True,
-        task="cup",
-        expert_choice="exp1",
+        task="disc",
         download=True,
     )
 
-    check_loader(loader, 8, plt=True, save_path="./papila.png")
+    check_loader(loader, 8, rgb=True)
 
 
 if __name__ == "__main__":

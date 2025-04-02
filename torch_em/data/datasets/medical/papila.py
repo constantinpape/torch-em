@@ -1,8 +1,16 @@
+"""The Papila dataset contains annotations for optic disc and optic cup
+segmentation in Fundus images.
+
+This dataset is located at https://figshare.com/articles/dataset/PAPILA/14798004/2.
+The dataset is from the publication https://doi.org/10.1038/s41597-022-01388-1.
+Please cite it if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
-from typing import Union, Tuple, Literal
+from typing import Union, Tuple, Literal, List
 
 import numpy as np
 from skimage import draw
@@ -17,12 +25,21 @@ URL = "https://figshare.com/ndownloader/files/35013982"
 CHECKSUM = "15b053dff496bc8e53eb8a8d0707ef73ba3d56c988eea92b65832c9c82852a7d"
 
 
-def get_papila_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_papila_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the Papila dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "PapilaDB-PAPILA-17f8fa7746adb20275b5b6a0d99dc9dfe3007e9f")
     if os.path.exists(data_dir):
         return data_dir
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "papila.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
@@ -42,11 +59,7 @@ def contour_to_mask(cont, img_shape):
     return mask
 
 
-def _get_papila_paths(path, task, expert_choice, download):
-    data_dir = get_papila_data(path=path, download=download)
-
-    image_paths = sorted(glob(os.path.join(data_dir, "FundusImages", "*.jpg")))
-
+def _preprocess_labels(data_dir, image_paths, task, expert_choice):
     gt_dir = os.path.join(data_dir, "ground_truth")
     os.makedirs(gt_dir, exist_ok=True)
 
@@ -69,29 +82,77 @@ def _get_papila_paths(path, task, expert_choice, download):
             semantic_labels = contour_to_mask(cont=gt_contour, img_shape=input_shape)
             imageio.imwrite(gt_path, semantic_labels)
 
+    return gt_paths
+
+
+def get_papila_paths(
+    path: Union[os.PathLike, str],
+    split: Literal['train', 'val', 'test'],
+    task: Literal["cup", "disc"] = "disc",
+    expert_choice: Literal["exp1", "exp2"] = "exp1",
+    download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the Papila dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
+        task: The choice of labels for specific task.
+        expert_choice: The choice of expert annotator.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
+    data_dir = get_papila_data(path=path, download=download)
+
+    assert expert_choice in ["exp1", "exp2"], f"'{expert_choice}' is not a valid expert choice."
+    assert task in ["cup", "disc"], f"'{task}' is not a valid task."
+
+    image_paths = sorted(glob(os.path.join(data_dir, "FundusImages", "*.jpg")))
+    gt_paths = _preprocess_labels(data_dir, image_paths, task, expert_choice)
+
+    if split == "train":
+        image_paths, gt_paths = image_paths[:350], gt_paths[:350]
+    elif split == "val":
+        image_paths, gt_paths = image_paths[350:400], gt_paths[350:400]
+    elif split == "test":
+        image_paths, gt_paths = image_paths[400:], gt_paths[400:]
+    else:
+        raise ValueError(f"'{split}' is not a valid split.")
+
+    assert len(image_paths) == len(gt_paths) and len(image_paths) > 0
+
     return image_paths, gt_paths
 
 
 def get_papila_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    split: Literal['train', 'val', 'test'],
     task: Literal["cup", "disc"] = "disc",
     expert_choice: Literal["exp1", "exp2"] = "exp1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
-    """Dataset for segmentation of optic cup and optic disc in fundus images.
+    """Get the Papila dataset for segmentation of optic cup and optic disc in fundus images.
 
-    The database is located at https://figshare.com/articles/dataset/PAPILA/14798004/2
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        split: Te choice of data split.
+        task: The choice of labels for specific task.
+        expert_choice: The choice of expert annotator.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    The dataset is from Kovalyk et al. - https://doi.org/10.1038/s41597-022-01388-1.
-    Please cite it if you use this dataset for a publication.
+    Returns:
+        The segmentation dataset.
     """
-    assert expert_choice in ["exp1", "exp2"], f"'{expert_choice}' is not a valid expert choice."
-    assert task in ["cup", "disc"], f"'{task}' is not a valid task."
-
-    image_paths, gt_paths = _get_papila_paths(path=path, task=task, expert_choice=expert_choice, download=download)
+    image_paths, gt_paths = get_papila_paths(path, split, task, expert_choice, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -114,25 +175,31 @@ def get_papila_dataset(
 
 def get_papila_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
+    split: Literal['train', 'val', 'test'],
     task: Literal["cup", "disc"] = "disc",
     expert_choice: Literal["exp1", "exp2"] = "exp1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ):
-    """Dataloader for segmentation of optic cup and optic disc in fundus images. See `get_papila_dataset` for details.
+    """Get the Papila dataloader for segmentation of optic cup and optic disc in fundus images.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        task: The choice of labels for specific task.
+        expert_choice: The choice of expert annotator.
+        resize_inputs: Whether to resize the inputs to the expected patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_papila_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        task=task,
-        expert_choice=expert_choice,
-        resize_inputs=resize_inputs,
-        download=download,
-        **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_papila_dataset(path, patch_shape, split, task, expert_choice, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

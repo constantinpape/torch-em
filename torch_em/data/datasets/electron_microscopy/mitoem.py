@@ -146,8 +146,6 @@ def get_mitoem_data(path: Union[os.PathLike, str], samples: Sequence[str], split
         splits: The data splits to download. The available splits are 'train', 'val' and 'test'.
         download: Whether to download the data if it is not present.
     """
-    if isinstance(splits, str):
-        splits = [splits]
     assert len(set(splits) - {"train", "val"}) == 0, f"{splits}"
     assert len(set(samples) - {"human", "rat"}) == 0, f"{samples}"
     os.makedirs(path, exist_ok=True)
@@ -181,8 +179,15 @@ def get_mitoem_paths(
     Returns:
         The filepaths for the stored data.
     """
+    if isinstance(splits, str):
+        splits = [splits]
+
+    if isinstance(samples, str):
+        samples = [samples]
+
     get_mitoem_data(path, samples, splits, download)
     data_paths = [os.path.join(path, f"{sample}_{split}.n5") for split in splits for sample in samples]
+
     return data_paths
 
 
@@ -215,7 +220,7 @@ def get_mitoem_dataset(
     """
     assert len(patch_shape) == 3
 
-    data_paths = get_mitoem_paths(path, samples, splits, download)
+    data_paths = get_mitoem_paths(path, splits, samples, download)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
@@ -261,8 +266,5 @@ def get_mitoem_loader(
        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_mitoem_dataset(
-        path, splits, patch_shape, samples=samples, download=download,
-        offsets=offsets, boundaries=boundaries, binary=binary, **ds_kwargs
-    )
+    dataset = get_mitoem_dataset(path, splits, patch_shape, samples, download, offsets, boundaries, binary, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

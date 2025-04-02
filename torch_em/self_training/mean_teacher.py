@@ -1,5 +1,6 @@
 import time
 from copy import deepcopy
+from typing import Callable, Optional
 
 import torch
 import torch_em
@@ -13,11 +14,13 @@ class Dummy(torch.nn.Module):
 
 
 class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
-    """This trainer implements self-training for semi-supervised learning and domain following the 'MeanTeacher'
-    approach of Tarvainen & Vapola (https://arxiv.org/abs/1703.01780). This approach uses a teacher model derived from
-    the student model via EMA of weights to predict pseudo-labels on unlabeled data.
-    We support two training strategies: joint training on labeled and unlabeled data
-    (with a supervised and unsupervised loss function). And training only on the unsupervised data.
+    """Trainer for semi-supervised learning and domain adaptation following the MeanTeacher approach.
+
+    Mean Teacher was introduced by Tarvainen & Vapola in https://arxiv.org/abs/1703.01780.
+    It uses a teacher model derived from the student model via EMA of weights
+    to predict pseudo-labels on unlabeled data. We support two training strategies:
+    - Joint training on labeled and unlabeled data (with a supervised and unsupervised loss function).
+    - Training only on the unsupervised data.
 
     This class expects the following data loaders:
     - unsupervised_train_loader: Returns two augmentations of the same input.
@@ -52,38 +55,41 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
     Note: adjust the batch size ratio between the 'unsupervised_train_loader' and 'supervised_train_loader'
     for setting the ratio between supervised and unsupervised training samples
 
-    Parameters:
-        model [nn.Module] -
-        unsupervised_train_loader [torch.DataLoader] -
-        unsupervised_loss [callable] -
-        pseudo_labeler [callable] -
-        supervised_train_loader [torch.DataLoader] - (default: None)
-        supervised_loss [callable] - (default: None)
-        unsupervised_loss_and_metric [callable] - (default: None)
-        supervised_loss_and_metric [callable] - (default: None)
-        logger [TorchEmLogger] - (default: SelfTrainingTensorboardLogger)
-        momentum [float] - (default: 0.999)
-        reinit_teacher [bool] - (default: None)
-        **kwargs - keyword arguments for torch_em.DataLoader
+    Args:
+        model: The model to be trained.
+        unsupervised_train_loader: The loader for unsupervised training.
+        unsupervised_loss: The loss for unsupervised training.
+        pseudo_labeler: The pseudo labeler that predicts labels in unsupervised training.
+        supervised_train_loader: The loader for supervised training.
+        supervised_loss: The loss for supervised training.
+        unsupervised_loss_and_metric: The loss and metric for unsupervised training.
+        supervised_loss_and_metric: The loss and metrhic for supervised training.
+        logger: The logger.
+        momentum: The momentum value for the exponential moving weight average of the teacher model.
+        reinit_teacher: Whether to reinit the teacher model before starting the training.
+        sampler: A sampler for rejecting pseudo-labels according to a defined criterion.
+        kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
     """
 
     def __init__(
         self,
-        model,
-        unsupervised_train_loader,
-        unsupervised_loss,
-        pseudo_labeler,
-        supervised_train_loader=None,
-        unsupervised_val_loader=None,
-        supervised_val_loader=None,
-        supervised_loss=None,
-        unsupervised_loss_and_metric=None,
-        supervised_loss_and_metric=None,
+        model: torch.nn.Module,
+        unsupervised_train_loader: torch.utils.data.DataLoader,
+        unsupervised_loss: torch.utils.data.DataLoader,
+        pseudo_labeler: Callable,
+        supervised_train_loader: Optional[torch.utils.data.DataLoader] = None,
+        unsupervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
+        supervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
+        supervised_loss: Optional[Callable] = None,
+        unsupervised_loss_and_metric: Optional[Callable] = None,
+        supervised_loss_and_metric: Optional[Callable] = None,
         logger=SelfTrainingTensorboardLogger,
-        momentum=0.999,
-        reinit_teacher=None,
-        **kwargs
+        momentum: float = 0.999,
+        reinit_teacher: Optional[bool] = None,
+        sampler: Optional[Callable] = None,
+        **kwargs,
     ):
+        self.sampler = sampler
         # Do we have supervised data or not?
         if supervised_train_loader is None:
             # No. -> We use the unsupervised training logic.
@@ -172,6 +178,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
     #
 
     def save_checkpoint(self, name, current_metric, best_metric, **extra_save_dict):
+        """@private
+        """
         train_loader_kwargs = get_constructor_arguments(self.train_loader)
         val_loader_kwargs = get_constructor_arguments(self.val_loader)
         extra_state = {
@@ -191,6 +199,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         super().save_checkpoint(name, current_metric, best_metric, **extra_state)
 
     def load_checkpoint(self, checkpoint="best"):
+        """@private
+        """
         save_dict = super().load_checkpoint(checkpoint)
         self.teacher.load_state_dict(save_dict["teacher_state"])
         self.teacher.to(self.device)
@@ -220,6 +230,12 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
+
+            # If we have a sampler then check if the current batch matches the condition for inclusion in training.
+            if self.sampler is not None:
+                keep_batch = self.sampler(pseudo_labels, label_filter)
+                if not keep_batch:
+                    continue
 
             self.optimizer.zero_grad()
             # Perform unsupervised training

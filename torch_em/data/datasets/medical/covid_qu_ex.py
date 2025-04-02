@@ -114,6 +114,7 @@ def get_covid_qu_ex_dataset(
     task: Literal['lung', 'infection'],
     patient_type: Optional[Literal['covid19', 'non-covid', 'normal']] = None,
     segmentation_mask: Literal['lung', 'infection'] = "lung",
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -121,11 +122,13 @@ def get_covid_qu_ex_dataset(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
         task: The choice for the subset of dataset. Either 'lung' or 'infection'.
         patient_type: The choice of subset of patients. Either 'covid19', 'non-covid' or 'normal'.
             By default is None, i.e. all the patient data will be chosen.
         segmentation_mask: The choice of segmentation labels. Either 'lung' or 'infection'.
+        resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -134,8 +137,19 @@ def get_covid_qu_ex_dataset(
     """
     image_paths, gt_paths = get_covid_qu_ex_paths(path, split, task, patient_type, segmentation_mask, download)
 
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
+
     return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths, raw_key=None, label_paths=gt_paths, label_key=None, patch_shape=patch_shape, **kwargs
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
+        patch_shape=patch_shape,
+        **kwargs
     )
 
 
@@ -147,6 +161,7 @@ def get_covid_qu_ex_loader(
     task: Literal['lung', 'infection'],
     patient_type: Optional[Literal['covid19', 'non-covid', 'normal']] = None,
     segmentation_mask: Literal['lung', 'infection'] = "lung",
+    resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -154,11 +169,14 @@ def get_covid_qu_ex_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', 'val' or 'test'.
         task: The choice for the subset of dataset. Either 'lung' or 'infection'.
         patient_type: The choice of subset of patients. Either 'covid19', 'non-covid' or 'normal'.
             By default is None, i.e. all the patient data will be chosen.
         segmentation_mask: The choice of segmentation labels. Either 'lung' or 'infection'.
+        resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -167,6 +185,6 @@ def get_covid_qu_ex_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_covid_qu_ex_dataset(
-        path, patch_shape, split, task, patient_type, segmentation_mask, download, **ds_kwargs
+        path, patch_shape, split, task, patient_type, segmentation_mask, resize_inputs, download, **ds_kwargs
     )
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

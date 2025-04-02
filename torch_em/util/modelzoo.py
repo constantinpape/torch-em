@@ -8,6 +8,8 @@ import tempfile
 
 from glob import glob
 from pathlib import Path
+from shutil import unpack_archive
+from typing import Callable, Dict, List, Optional, Tuple
 from warnings import warn
 
 import imageio
@@ -30,12 +32,11 @@ from .util import get_trainer, get_normalizer
 
 
 def normalize_with_batch(data, normalizer):
+    """@private
+    """
     if normalizer is None:
         return data
-    normalized = np.concatenate(
-        [normalizer(da)[None] for da in data],
-        axis=0
-    )
+    normalized = np.concatenate([normalizer(da)[None] for da in data], axis=0)
     return normalized
 
 
@@ -45,9 +46,9 @@ def normalize_with_batch(data, normalizer):
 
 
 def get_default_citations(model=None, model_output=None):
-    citations = [
-        {"text": "training library", "doi": "10.5281/zenodo.5108853"}
-    ]
+    """@private
+    """
+    citations = [{"text": "training library", "doi": "10.5281/zenodo.5108853"}]
 
     # try to derive the correct network citation from the model class
     if model is not None:
@@ -211,7 +212,7 @@ def _get_kwargs(
             return save_path
 
         if is_list and isinstance(val, str):
-            val = val.replace(""", """)  # enable single quotes
+            val = val.replace("'", '"')  # enable single quotes
             val = json.loads(val)
         if is_list:
             assert isinstance(val, (list, tuple)), type(val)
@@ -463,29 +464,36 @@ def _get_inout_descriptions(trainer, model, model_kwargs, input_tensors, output_
     return input_description, output_description, notebook_link
 
 
-def _validate_model(spec_path):
+def _validate_model(spec_path, output_path):
     if not os.path.exists(spec_path):
         return False
 
-    model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True)
-    root = model_spec.root
+    try:
+        model, normalizer, model_spec = import_bioimageio_model(spec_path, return_spec=True, output_path=output_path)
+        root = output_path
 
-    input_paths = [os.path.join(root, ipt.test_tensor.source.path) for ipt in model_spec.inputs]
-    inputs = [normalize_with_batch(np.load(ipt), normalizer) for ipt in input_paths]
+        input_paths = [os.path.join(root, ipt.test_tensor.source.path) for ipt in model_spec.inputs]
+        inputs = [normalize_with_batch(np.load(ipt), normalizer) for ipt in input_paths]
 
-    expected_paths = [os.path.join(root, opt.test_tensor.source.path) for opt in model_spec.outputs]
-    expected = [np.load(opt) for opt in expected_paths]
+        expected_paths = [os.path.join(root, opt.test_tensor.source.path) for opt in model_spec.outputs]
+        expected = [np.load(opt) for opt in expected_paths]
 
-    with torch.no_grad():
-        inputs = [torch.from_numpy(input_) for input_ in inputs]
-        outputs = model(*inputs)
-        if torch.is_tensor(outputs):
-            outputs = [outputs]
-        outputs = [out.numpy() for out in outputs]
+        with torch.no_grad():
+            inputs = [torch.from_numpy(input_) for input_ in inputs]
+            outputs = model(*inputs)
+            if torch.is_tensor(outputs):
+                outputs = [outputs]
+            outputs = [out.numpy() for out in outputs]
 
-    for out, exp in zip(outputs, expected):
-        if not np.allclose(out, exp):
-            return False
+        for out, exp in zip(outputs, expected):
+            if not np.allclose(out, exp):
+                return False
+
+    except Exception as e:
+        print("Model validation failed with the following exception:")
+        print(e)
+        return False
+
     return True
 
 
@@ -499,32 +507,56 @@ def _get_input_data(trainer):
     return x
 
 
-# TODO config: training details derived from loss and optimizer, custom params, e.g. offsets for mws
 def export_bioimageio_model(
-    checkpoint,
-    output_path,
-    input_data=None,
-    name=None,
-    description=None,
-    authors=None,
-    tags=None,
-    license=None,
-    documentation=None,
-    covers=None,
-    git_repo=None,
-    cite=None,
-    input_optional_parameters=True,
-    model_postprocessing=None,
-    for_deepimagej=False,
-    links=None,
-    maintainers=None,
-    min_shape=None,
-    halo=None,
-    checkpoint_name="best",
-    training_data=None,
-    config={}
-):
+    checkpoint: str,
+    output_path: str,
+    input_data: Optional[np.ndarray] = None,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    authors: Optional[List[Dict[str, str]]] = None,
+    tags: Optional[List[str]] = None,
+    license: Optional[str] = None,
+    documentation: Optional[str] = None,
+    covers: Optional[str] = None,
+    git_repo: Optional[str] = None,
+    cite: Optional[List[Dict[str, str]]] = None,
+    input_optional_parameters: bool = True,
+    model_postprocessing: Optional[str] = None,
+    for_deepimagej: bool = False,
+    links: Optional[List[str]] = None,
+    maintainers: Optional[List[Dict[str, str]]] = None,
+    min_shape: Tuple[int, ...] = None,
+    halo: Tuple[int, ...] = None,
+    checkpoint_name: str = "best",
+    config: Dict = {},
+) -> bool:
     """Export model to bioimage.io model format.
+
+    Args:
+        checkpoint: The path to the checkpoint with the model to export.
+        output_path: The output path for saving the model.
+        input_data: The input data for creating model test data.
+        name: The export name of the model.
+        description: The description of the model.
+        authors: The authors that created this model.
+        tags: List of tags for this model.
+        license: The license under which to publish the model.
+        documentation: The documentation of the model.
+        covers: The covers to show when displaying the model.
+        git_repo: A github repository associated with this model.
+        cite: References to cite for this model.
+        input_optional_parameters: Whether to input optional parameters via the command line.
+        model_postprocessing: Postprocessing to apply to the model outputs.
+        for_deepimagej: Whether this model can be run in DeepImageJ.
+        links: Linked modelzoo apps or software for this model.
+        maintainers: The maintainers of this model.
+        min_shape: The minimal valid input shape for the model.
+        halo: The halo to cut away from model outputs.
+        checkpoint_name: The name of the model checkpoint to load for the export.
+        config: Dictionary with additional configuration for this model.
+
+    Returns:
+        Whether the exported model was successfully validated.
     """
     # Load the trainer and model.
     trainer = get_trainer(checkpoint, name=checkpoint_name, device="cpu")
@@ -578,7 +610,8 @@ def export_bioimageio_model(
         save_bioimageio_package(model_description, output_path=output_path)
 
     # Validate the model.
-    val_success = _validate_model(output_path)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        val_success = _validate_model(output_path, tmp_dir)
     if val_success:
         print(f"The model was successfully exported to '{output_path}'.")
     else:
@@ -600,7 +633,8 @@ def _load_data(path, key):
 
 
 def main():
-    import argparse
+    """@private
+    """
     parser = argparse.ArgumentParser(
         "Export model trained with torch_em to the BioImage.IO model format."
         "The exported model can be run in any tool supporting BioImage.IO."
@@ -625,17 +659,25 @@ def main():
 # model import functionality
 #
 
-def _load_model(model_spec, device):
+
+def _unzip_and_load_model(model_spec, device, spec_path, output_path):
+    unpack_archive(str(spec_path), str(output_path))
     weight_spec = model_spec.weights.pytorch_state_dict
     model = PytorchModelAdapter.get_network(weight_spec)
-    weight_file = weight_spec.source.path
-    if not os.path.exists(weight_file):
-        weight_file = os.path.join(model_spec.root, weight_file)
+    weight_file = os.path.join(output_path, weight_spec.source.path)
     assert os.path.exists(weight_file), weight_file
-    state = torch.load(weight_file, map_location=device)
+    state = torch.load(weight_file, map_location=device, weights_only=False)
     model.load_state_dict(state)
     model.eval()
     return model
+
+
+def _load_model(model_spec, device, spec_path, output_path):
+    if output_path is None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            return _unzip_and_load_model(model_spec, device, spec_path, tmp_dir)
+    else:
+        return _unzip_and_load_model(model_spec, device, spec_path, output_path)
 
 
 def _load_normalizer(model_spec):
@@ -702,21 +744,35 @@ def _load_normalizer(model_spec):
     return normalizer
 
 
-def import_bioimageio_model(spec_path, return_spec=False, device="cpu"):
+def import_bioimageio_model(
+    spec_path: str,
+    return_spec: bool = False,
+    device: Optional[str] = None,
+    output_path: Optional[str] = None,
+) -> Tuple[torch.nn.Module, Callable]:
+    """Import a pytorch model from a bioimageio model.
+
+    Args:
+        spec_path: The path to the bioimageio model. Expects a zipped model file.
+        return_spec: Whether to return the deserialized model description in additon to the model.
+        device: The device to use for loading the model.
+        output_path: The output path for deserializing model files.
+            By default the files will be deserialized to a temporary path.
+
+    Returns:
+        The model loaded as torch.nn.Module.
+        The preprocessing function.
+    """
     model_spec = core.load_description(spec_path)
 
-    model = _load_model(model_spec, device=device)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = _load_model(model_spec, device=device, spec_path=spec_path, output_path=output_path)
     normalizer = _load_normalizer(model_spec)
 
     if return_spec:
         return model, normalizer, model_spec
     else:
         return model, normalizer
-
-
-# TODO
-def import_trainer_from_bioimageio_model(spec_path):
-    pass
 
 
 # TODO: the weight conversion needs to be updated once the
@@ -737,6 +793,8 @@ def _convert_impl(spec_path, weight_name, converter, weight_type, **kwargs):
 
 
 def convert_to_onnx(spec_path, opset_version=12):
+    """@private
+    """
     raise NotImplementedError
     # converter = weight_converter.convert_weights_to_onnx
     # _convert_impl(spec_path, "weights.onnx", converter, "onnx", opset_version=opset_version)
@@ -744,6 +802,8 @@ def convert_to_onnx(spec_path, opset_version=12):
 
 
 def convert_to_torchscript(model_path):
+    """@private
+    """
     raise NotImplementedError
     # from bioimageio.core.weight_converter.torch._torchscript import convert_weights_to_torchscript
 
@@ -762,6 +822,8 @@ def convert_to_torchscript(model_path):
 
 
 def add_weight_formats(model_path, additional_formats):
+    """@private
+    """
     for add_format in additional_formats:
 
         if add_format == "onnx":
@@ -776,14 +838,11 @@ def add_weight_formats(model_path, additional_formats):
 
 
 def convert_main():
-    import argparse
-    parser = argparse.ArgumentParser(
-        "Convert weights from native pytorch format to onnx or torchscript"
-    )
-    parser.add_argument("-f", "--model_folder", required=True,
-                        help="")
-    parser.add_argument("-w", "--weight_format", required=True,
-                        help="")
+    """@private
+    """
+    parser = argparse.ArgumentParser("Convert weights from native pytorch format to onnx or torchscript")
+    parser.add_argument("-f", "--model_folder", required=True, help="")
+    parser.add_argument("-w", "--weight_format", required=True, help="")
     args = parser.parse_args()
     weight_format = args.weight_format
     assert weight_format in ("onnx", "torchscript")
@@ -798,6 +857,8 @@ def convert_main():
 #
 
 def export_parser_helper():
+    """@private
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--checkpoint", required=True)
     parser.add_argument("-i", "--input", required=True)
@@ -808,6 +869,8 @@ def export_parser_helper():
 
 
 def get_mws_config(offsets, config=None):
+    """@private
+    """
     mws_config = {"offsets": offsets}
     if config is None:
         config = {"mws": mws_config}
@@ -818,15 +881,14 @@ def get_mws_config(offsets, config=None):
 
 
 def get_shallow2deep_config(rf_path, config=None):
+    """@private
+    """
     if os.path.isdir(rf_path):
         rf_path = glob(os.path.join(rf_path, "*.pkl"))[0]
     assert os.path.exists(rf_path), rf_path
     with open(rf_path, "rb") as f:
         rf = pickle.load(f)
-    shallow2deep_config = {
-        "ndim": rf.feature_ndim,
-        "features": rf.feature_config,
-    }
+    shallow2deep_config = {"ndim": rf.feature_ndim, "features": rf.feature_config}
     if config is None:
         config = {"shallow2deep": shallow2deep_config}
     else:

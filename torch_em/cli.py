@@ -1,3 +1,5 @@
+"""@private
+"""
 import argparse
 import json
 import multiprocessing
@@ -206,6 +208,8 @@ def _determine_channels(train_loader, args):
 
 
 def train_2d_unet():
+    """@private
+    """
     parser = _get_training_parser("Train a 2D UNet.")
     args = parser.parse_args()
 
@@ -234,6 +238,8 @@ def train_2d_unet():
 
 
 def train_3d_unet():
+    """@private
+    """
     parser = _get_training_parser("Train a 3D UNet.")
     parser.add_argument("-s", "--scale_factors", type=str,
                         help="The scale factors for the downsampling factures of the 3D U-Net."
@@ -324,6 +330,8 @@ def _prediction(args, predict, device):
 
 
 def predict():
+    """@private
+    """
     parser = _get_prediction_parser("Run prediction (with padding if necessary).")
     parser.add_argument("--min_divisible", nargs="+", type=int,
                         help="The minimal divisible factors for the input shape of the models."
@@ -362,6 +370,8 @@ def _pred_2d(model, input_):
 
 
 def predict_with_tiling():
+    """@private
+    """
     parser = _get_prediction_parser("Run prediction over tiled input.")
     parser.add_argument("-b", "--block_shape", nargs="+", required=True, type=int,
                         help="The shape of the blocks that will be used to tile the input."

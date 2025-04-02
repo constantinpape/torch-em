@@ -141,7 +141,7 @@ def get_ctc_segmentation_paths(
         Filepath to the folder where image data is stored.
         Filepath to the folder where label data is stored.
     """
-    data_path = get_ctc_segmentation_data(path, dataset_name, download, split)
+    data_path = get_ctc_segmentation_data(path, dataset_name, split, download)
 
     if vol_id is None:
         vol_ids = glob(os.path.join(data_path, "*_GT"))
@@ -222,7 +222,5 @@ def get_ctc_segmentation_loader(
        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_ctc_segmentation_dataset(
-        path, dataset_name, patch_shape, split=split, vol_id=vol_id, download=download, **ds_kwargs,
-    )
+    dataset = get_ctc_segmentation_dataset(path, dataset_name, patch_shape, split, vol_id, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

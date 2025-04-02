@@ -54,7 +54,7 @@ class TestSegmentation(unittest.TestCase):
 
         def _test_checkpoint(cp_path, check_progress):
             self.assertTrue(os.path.exists(cp_path))
-            checkpoint = torch.load(cp_path)
+            checkpoint = torch.load(cp_path, weights_only=False)
 
             self.assertIn("optimizer_state", checkpoint)
             self.assertIn("model_state", checkpoint)

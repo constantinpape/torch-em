@@ -1,12 +1,18 @@
 import os
 
-import torch
 import torch_em
 
 from torchvision.utils import make_grid
+from torch.utils.tensorboard import SummaryWriter
 
 
 class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
+    """Logger for self-training via `torch_em.self_training.FixMatch` or `torch_em.self_training.MeanTeacher`.
+
+    Args:
+        trainer: The instantiated trainer class.
+        save_root: The root directory for saving the checkpoints and logs.
+    """
     def __init__(self, trainer, save_root, **unused_kwargs):
         super().__init__(trainer, save_root)
         self.my_root = save_root
@@ -14,7 +20,7 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
             os.path.join(self.my_root, "logs", trainer.name)
         os.makedirs(self.log_dir, exist_ok=True)
 
-        self.tb = torch.utils.tensorboard.SummaryWriter(self.log_dir)
+        self.tb = SummaryWriter(self.log_dir)
         self.log_image_interval = trainer.log_image_interval
 
     def _add_supervised_images(self, step, name, x, y, pred):
@@ -52,32 +58,46 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         self.tb.add_image(tag=im_name, img_tensor=grid, global_step=step)
 
     def log_combined_loss(self, step, loss):
+        """@private
+        """
         self.tb.add_scalar(tag="train/combined_loss", scalar_value=loss, global_step=step)
 
     def log_lr(self, step, lr):
+        """@private
+        """
         self.tb.add_scalar(tag="train/learning_rate", scalar_value=lr, global_step=step)
 
     def log_train_supervised(self, step, loss, x, y, pred):
+        """@private
+        """
         self.tb.add_scalar(tag="train/supervised/loss", scalar_value=loss, global_step=step)
         if step % self.log_image_interval == 0:
             self._add_supervised_images(step, "validation", x, y, pred)
 
     def log_validation_supervised(self, step, metric, loss, x, y, pred):
+        """@private
+        """
         self.tb.add_scalar(tag="validation/supervised/loss", scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag="validation/supervised/metric", scalar_value=metric, global_step=step)
         self._add_supervised_images(step, "validation", x, y, pred)
 
     def log_train_unsupervised(self, step, loss, x1, x2, pred, pseudo_labels, label_filter=None):
+        """@private
+        """
         self.tb.add_scalar(tag="train/unsupervised/loss", scalar_value=loss, global_step=step)
         if step % self.log_image_interval == 0:
             self._add_unsupervised_images(step, "validation", x1, x2, pred, pseudo_labels, label_filter)
 
     def log_validation_unsupervised(self, step, metric, loss, x1, x2, pred, pseudo_labels, label_filter=None):
+        """@private
+        """
         self.tb.add_scalar(tag="validation/unsupervised/loss", scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag="validation/unsupervised/metric", scalar_value=metric, global_step=step)
         self._add_unsupervised_images(step, "validation", x1, x2, pred, pseudo_labels, label_filter)
 
     def log_validation(self, step, metric, loss, xt, xt1, xt2, y, z, gt, samples, gt_metric=None):
+        """@private
+        """
         self.tb.add_scalar(tag="validation/loss", scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag="validation/metric", scalar_value=metric, global_step=step)
         if gt_metric is not None:

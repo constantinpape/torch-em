@@ -181,7 +181,6 @@ def get_chaos_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
-        batch_size: The batch size for training.
         split: The data split to use. Either 'train', or 'test'.
         modality: The choice of modality. Either 'CT' or 'MRI'.
         resize_inputs: Whether to resize inputs to the desired patch shape.
@@ -209,8 +208,8 @@ def get_chaos_dataset(
 
 def get_chaos_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
     split: str = "train",
     modality: Optional[str] = None,
     resize_inputs: bool = False,
@@ -221,8 +220,8 @@ def get_chaos_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
         split: The data split to use. Either 'train', or 'test'.
         modality: The choice of modality. Either 'CT' or 'MRI'.
         resize_inputs: Whether to resize inputs to the desired patch shape.

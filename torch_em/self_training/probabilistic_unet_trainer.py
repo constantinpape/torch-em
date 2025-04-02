@@ -1,3 +1,6 @@
+"""@private
+"""
+
 import time
 import torch
 import torch_em
@@ -13,7 +16,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
     segmentations. The heuristic trains by taking into account the feature maps from UNet and the samples from
     the posterior distribution, estimating the loss and further sampling from the prior for validation.
 
-    Parameters:
+    Args:
         clipping_value [float] - (default: None)
         prior_samples [int] - (default: 16)
         loss [callable] - (default: None)

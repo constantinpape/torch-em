@@ -43,7 +43,9 @@ def get_emneuron_data(path: Union[os.PathLike, str], split: Literal['train', 'va
         download: Whether to download the data if it is not present.
     """
     if download:
-        raise ValueError()
+        raise NotImplementedError(
+            "Automatic download is not supported for this data. Please read the docstring for more details."
+        )
 
     os.makedirs(path, exist_ok=True)
 
@@ -99,7 +101,7 @@ def get_emneuron_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the dataset for EMNeuron dataset.
+    """Get the dataset for neuron segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -133,7 +135,7 @@ def get_emneuron_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the dataloader for EMNeuron dataset.
+    """Get the dataloader for neuron segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.

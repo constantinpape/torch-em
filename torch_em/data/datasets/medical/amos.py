@@ -1,7 +1,16 @@
+"""The AMOS dataset contains annotations for abdominal multi-organ segmentation in CT and MRI scans.
+
+This dataset is located at https://doi.org/10.5281/zenodo.7155725.
+The dataset is from AMOS 2022 Challenge https://doi.org/10.48550/arXiv.2206.08023.
+Please cite them if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from pathlib import Path
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple, Optional, Literal, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -12,22 +21,47 @@ URL = "https://zenodo.org/records/7155725/files/amos22.zip"
 CHECKSUM = "d2fbf2c31abba9824d183f05741ce187b17905b8cca64d1078eabf1ba96775c2"
 
 
-def get_amos_data(path, download, remove_zip=False):
-    os.makedirs(path, exist_ok=True)
+def get_amos_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the AMOS dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "amos22")
     if os.path.exists(data_dir):
         return data_dir
 
-    zip_path = os.path.join(path, "amos22.zip")
+    os.makedirs(path, exist_ok=True)
 
+    zip_path = os.path.join(path, "amos22.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
-    util.unzip(zip_path=zip_path, dst=path, remove=remove_zip)
+    util.unzip(zip_path=zip_path, dst=path)
 
     return data_dir
 
 
-def _get_amos_paths(path, split, modality, download):
+def get_amos_paths(
+    path: Union[os.PathLike, str],
+    split: Literal['train', 'val', 'test'],
+    modality: Optional[Literal['CT', 'MRI']] = None,
+    download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the AMOS data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
+        modality: The choice of imaging modality.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_amos_data(path=path, download=download)
 
     if split == "train":
@@ -72,20 +106,28 @@ def _get_amos_paths(path, split, modality, download):
 
 def get_amos_dataset(
     path: Union[os.PathLike, str],
-    split: str,
     patch_shape: Tuple[int, ...],
-    modality: Optional[str] = None,
+    split: Literal['train', 'val', 'test'],
+    modality: Optional[Literal['CT', 'MRI']] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataset for abdominal multi-organ segmentation in CT and MRI scans.
+) -> Dataset:
+    """Get the AMOS dataset for abdominal multi-organ segmentation in CT and MRI scans.
 
-    The database is located at https://doi.org/10.5281/zenodo.7155725
-    The dataset is from AMOS 2022 Challenge - https://doi.org/10.48550/arXiv.2206.08023
-    Please cite it if you use this dataset for publication.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for traiing.
+        split: The choice of data split.
+        modality: The choice of imaging modality.
+        resize_inputs: Whether to resize the inputs.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_amos_paths(path=path, split=split, modality=modality, download=download)
+    image_paths, gt_paths = get_amos_paths(path, split, modality, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -93,7 +135,7 @@ def get_amos_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -103,30 +145,32 @@ def get_amos_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_amos_loader(
     path: Union[os.PathLike, str],
-    split: str,
-    patch_shape: Tuple[int, ...],
     batch_size: int,
-    modality: Optional[str] = None,
+    patch_shape: Tuple[int, ...],
+    split: Literal['train', 'val', 'test'],
+    modality: Optional[Literal['CT', 'MRI']] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for abdominal multi-organ segmentation in CT and MRI scans. See `get_amos_dataset` for details.
+) -> DataLoader:
+    """Get the AMOS dataloader for abdominal multi-organ segmentation in CT and MRI scans.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        modality: The choice of imaging modality.
+        resize_inputs: Whether to resize the inputs.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_amos_dataset(
-        path=path,
-        split=split,
-        patch_shape=patch_shape,
-        modality=modality,
-        resize_inputs=resize_inputs,
-        download=download,
-        **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_amos_dataset(path, patch_shape, split, modality, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -72,8 +72,8 @@ def get_ravir_paths(path: Union[os.PathLike, str], download: bool = False) -> Tu
 def get_ravir_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    download: bool = False,
     resize_inputs: bool = False,
+    download: bool = False,
     **kwargs
 ):
     """Get the RAVIR dataset for segmentation of retinal arteries and veins.
@@ -81,8 +81,8 @@ def get_ravir_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
-        download: Whether to download the data if it is not present.
         resize_inputs: Whether to resize the inputs to the patch shape.
+        download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
@@ -109,16 +109,17 @@ def get_ravir_dataset(
 
 def get_ravir_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
-    download: bool = False,
+    patch_shape: Tuple[int, int],
     resize_inputs: bool = False,
+    download: bool = False,
     **kwargs
 ):
     """Get the RAVIR dataloader for segmentation of retinal arteries and veins.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         download: Whether to download the data if it is not present.
         resize_inputs: Whether to resize the inputs to the patch shape.
@@ -128,5 +129,5 @@ def get_ravir_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_ravir_dataset(path, patch_shape, download, resize_inputs, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_ravir_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
