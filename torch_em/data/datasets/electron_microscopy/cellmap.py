@@ -1,4 +1,11 @@
-"""
+"""CellMap is a dataset for segmenting various organelles in electron microscopy.
+It contains a large amount of annotation crops from several species.
+This dataset is released for the `CellMap Segmentation Challenge`: https://cellmapchallenge.janelia.org/.
+- Official documentation: https://janelia-cellmap.github.io/cellmap-segmentation-challenge/.
+- Original GitHub repository for the toolbox: https://github.com/janelia-cellmap/cellmap-segmentation-challenge.
+- And associated collection doi for the data: https://doi.org/10.25378/janelia.c.7456966. 
+
+Please cite them if you use this data for your research.
 """
 
 import os
@@ -14,25 +21,16 @@ import torch_em
 from .. import util
 
 
-def _get_scale_and_translation(label_zobj, resolution="s0"):
-    all_scales = label_zobj.attrs.get("multiscales", [])[0]
-    for ds in all_scales.get("datasets", []):
-        if ds.get("path") == resolution:
-            transforms = ds.get("coordinateTransformations", [])
-            scale = next((t["scale"] for t in transforms if t["type"] == "scale"), None)
-            translation = next((t["translation"] for t in transforms if t["type"] == "translation"), None)
-            return scale, translation
-    return None, None
-
-
 def _download_cellmap_data(
     path: Union[os.PathLike, str],
-    crops: str = "all",
-    organelles: Sequence[str] = ("all"),
+    organelles: Optional[Union[str, Sequence[str]]] = None,
+    crops: Sequence[str] = ("all"),
     resolution: str = "s0",
     download: bool = False,
 ):
-    """Inspired by https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/main/src/cellmap_segmentation_challenge/cli/fetch_data.py
+    """Download scripts for the CellMap data.
+    
+    Inspired by https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/main/src/cellmap_segmentation_challenge/cli/fetch_data.py
 
     NOTE: The download scripts below are intended to stay as close to the original `fetch-data` CLI,
     in order to ensure easy syncing with any changes to the original repository in future.
@@ -126,10 +124,6 @@ def _download_cellmap_data(
 
         gt_crop_shape = gt_source_group[f"all/{resolution}"].shape  # since "all" exists "al"ways, we rely on it.
 
-        # scale, translation = _get_scale_and_translation(gt_source_group["all"])
-        # if scale is None and translation is None:
-        #     raise RuntimeError
-
         # Get the offset values for the ground truth crops.
         for _, group in gt_source_group.groups():
             try:
@@ -205,39 +199,61 @@ def _download_cellmap_data(
     log.info(f"Done after {time.time() - fetch_save_start:0.3f}s")
     log.info(f"Data saved to '{dest_path_abs}'.")
 
+    return path
+
 
 def get_cellmap_data(
     path: Union[os.PathLike, str],
-    organelles: Sequence[str] = ("all"),
+    organelles: Optional[Union[str, Sequence[str]]] = None,
     crops: Sequence[str] = ("all"),
     resolution: str = "s0",
     download: bool = False,
-) -> List:
-    """Downloads the CellMap data.
+) -> str:
+    """Downloads the CellMap training data.
 
     Args:
-        path:
-        organelles:
-        crops:
-        resolution:
-        download:
+        path: Filepath to a folder where the data will be downloaded for further processing
+        organelles: The choice of organelles to download. By default, downloads al types of labels available.
+        crops: The choice of crops to download. By default, downloads `all` crops.
+        resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        download: Whether to download the data if it is not present.
 
     Returns:
-        Filepath where the data is stored for further processing.
+        The filepath where the data is stored for further processing.
     """
 
+    data_path = os.path.join(path, "data_crops")
+    os.makedirs(data_path, exist_ok=True)
+
     # NOTE: The function below is comparable to the CLI `csc fetch-data` from the original repo.
-    _download_cellmap_data(path=path, crops=crops, organelles=organelles, resolution=resolution, download=download)
+    _data_path = _download_cellmap_data(
+        path=data_path, organelles=organelles, crops=crops, resolution=resolution, download=download
+    )
+
+    if _data_path is None:
+        raise RuntimeError("Something went wrong. Please read the information logged above.")
+
+    return data_path
 
 
 def get_cellmap_paths(
     path: Union[os.PathLike, str],
-    organelles: Sequence[str] = ("all"),
+    organelles: Optional[Union[str, Sequence[str]]] = None,
     crops: Sequence[str] = ("all"),
     resolution: str = "s0",
     download: bool = False,
-):
-    """
+) -> List[str]:
+    """Get the paths to CellMap training data.
+
+    Args:
+        path: Filepath to a folder where the data will be downloaded for further processing
+        organelles: The choice of organelles to download. By default, downloads al types of labels available.
+        crops: The choice of crops to download. By default, downloads `all` crops.
+        resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of the cropped volume data paths.
     """
 
     # HACK: hard-coded atm to a certain crop for debugging purposes.
@@ -245,10 +261,12 @@ def get_cellmap_paths(
     crops = "234"
 
     # Get the CellMap data crops.
-    get_cellmap_data(path=path, organelles=organelles, crops=crops, resolution=resolution, download=download)
+    data_path = get_cellmap_data(
+        path=path, organelles=organelles, crops=crops, resolution=resolution, download=download
+    )
 
     # TODO: Extend it to multiple crops later.
-    volume_paths = os.path.join(path, f"crop_{crops}.h5")
+    volume_paths = os.path.join(data_path, f"crop_{crops}.h5")
 
     return [volume_paths]
 
@@ -256,15 +274,26 @@ def get_cellmap_paths(
 def get_cellmap_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[str, ...],
-    organelles: Sequence[str] = ("all"),
+    organelles: Optional[Union[str, Sequence[str]]] = None,
     crops: Sequence[str] = ("all"),
     resolution: str = "s0",
     download: bool = False,
     **kwargs,
 ) -> Dataset:
-    """
-    """
+    """Get the dataset for the CellMap training data for organelle segmentation.
 
+    Args:
+        path: Filepath to a folder where the data will be downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        organelles: The choice of organelles to download. By default, downloads al types of labels available.
+        crops: The choice of crops to download. By default, downloads `all` crops.
+        resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
+    """
     volume_paths = get_cellmap_paths(
         path=path, organelles=organelles, crops=crops, resolution=resolution, download=download
     )
@@ -284,13 +313,26 @@ def get_cellmap_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[str, ...],
-    organelles: Optional[Sequence[str]] = None,
+    organelles: Optional[Union[str, Sequence[str]]] = None,
     crops: Sequence[str] = ("all"),
     resolution: str = "s0",
     download: bool = False,
     **kwargs,
 ) -> DataLoader:
-    """
+    """Get the dataloader for the CellMap training data for organelle segmentation.
+
+    Args:
+        path: Filepath to a folder where the data will be downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        organelles: The choice of organelles to download. By default, downloads al types of labels available.
+        crops: The choice of crops to download. By default, downloads `all` crops.
+        resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_cellmap_dataset(path, patch_shape, organelles, crops, resolution, download, **ds_kwargs)
