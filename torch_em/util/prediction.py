@@ -136,6 +136,7 @@ def predict_with_halo(
     tqdm_desc: str = "predict with halo",
     prediction_function: Optional[Callable] = None,
     roi: Optional[Tuple[slice]] = None,
+    iter_list: Optional[List[int]] = [],
 ) -> ArrayLike:
     """Run block-wise network prediction with a halo.
 
@@ -246,7 +247,11 @@ def predict_with_halo(
                 output[bb] = prediction
 
     n_blocks = blocking.numberOfBlocks
+    if 0 == len(iter_list):
+        iteration_ids = range(n_blocks)
+    else:
+        iteration_ids = np.array(iter_list)
     with futures.ThreadPoolExecutor(n_workers) as tp:
-        list(tqdm(tp.map(predict_block, range(n_blocks)), total=n_blocks, disable=disable_tqdm, desc=tqdm_desc))
+        list(tqdm(tp.map(predict_block, iteration_ids), total=n_blocks, disable=disable_tqdm, desc=tqdm_desc))
 
     return output
