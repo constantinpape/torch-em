@@ -19,6 +19,7 @@ def check_cellmap():
         patch_shape=(8, 256, 256),
         download=True,
         sampler=MinInstanceSampler(),
+        crops=["234", "235"],
     )
     check_loader(loader, 8)
 
