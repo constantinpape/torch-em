@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Literal, Optional, Union
 
 import torch
 
@@ -58,7 +58,7 @@ class DefaultPseudoLabeler:
             label_mask = self._compute_label_mask_both_sides(pseudo_labels) if self.threshold_from_both_sides\
                 else self._compute_label_mask_one_side(pseudo_labels)
         return pseudo_labels, label_mask
-    
+
     def step(self, metric, epoch):
         pass
 
@@ -140,7 +140,7 @@ class ProbabilisticPseudoLabeler:
                 label_mask = torch.where(label_mask == 1, 1, 0)
 
         return pseudo_labels, label_mask
-    
+
     def step(self, metric, epoch):
         pass
 
@@ -155,57 +155,41 @@ class ScheduledPseudoLabeler:
     The threshold can be dynamically reduced to improve the quality of the pseudo labels
     when the model performance does not improve for a given number of epochs (patience).
 
-    Parameters:
-
-    activation : nn.Module, callable
-        Activation function applied to the teacher prediction.
-    confidence_threshold : float
-        Threshold for computing a mask for filtering the pseudo labels.
-        If none is given no mask will be computed (default: None)
-    threshold_from_both_sides : bool
-        Whether to include both values bigger than the threshold and smaller than 1 - it, 
-        or only values bigger than it in the mask. The former should be used for binary labels, 
-        the latter for for multiclass labels (default: False)
-    mode : {'min', 'max'}, optional
-        Determines whether the confidence threshold reduction is triggered by a "min" or "max" metric.
-        - 'min': A lower value of the monitored metric is considered better (e.g., loss).
-        - 'max': A higher value of the monitored metric is considered better (e.g., accuracy).
-        (default: "min")
-    factor : float, optional
-        Factor by which the confidence threshold is reduced when the performance stagnates. (default: 0.05)
-    patience : int, optional
-        Number of epochs (with no improvement) after which the confidence threshold will be reduced. 
-        (default: 10)
-    threshold : float, optional
-        Threshold value for determining a significant improvement in the performance metric 
-        to reset the patience counter. This can be relative (percentage improvement) or absolute 
-        depending on `threshold_mode`. (default: 1e-4)
-    threshold_mode : {'rel', 'abs'}, optional
-        Determines whether the `threshold` is interpreted as a relative improvement ('rel')
-        or an absolute improvement ('abs'). (default: "abs")
-    min_ct : float, optional
-        Minimum allowed confidence threshold. The threshold will not be reduced below this value. 
-        (default: 0.5)
-    eps : float, optional
-        A small value to avoid floating-point precision errors during threshold comparison. 
-        (default: 1e-8)
-    verbose : bool, optional
-        If True, prints messages when the confidence threshold is reduced. (default: True)
+    Args:
+        activation: Activation function applied to the teacher prediction.
+        confidence_threshold: Threshold for computing a mask for filtering the pseudo labels.
+            If none is given no mask will be computed.
+        threshold_from_both_sides: Whether to include both values bigger than the threshold and smaller than 1 - it,
+            or only values bigger than it in the mask. The former should be used for binary labels,
+            the latter for for multiclass labels.
+        mode: Determines whether the confidence threshold reduction is triggered by a "min" or "max" metric.
+            - 'min': A lower value of the monitored metric is considered better (e.g., loss).
+            - 'max': A higher value of the monitored metric is considered better (e.g., accuracy).
+        factor Factor by which the confidence threshold is reduced when the performance stagnates.
+        patience: Number of epochs (with no improvement) after which the confidence threshold will be reduced.
+        threshold: Threshold value for determining a significant improvement in the performance metric
+            to reset the patience counter. This can be relative (percentage improvement)
+            or absolute depending on `threshold_mode`.
+        threshold_mode: Determines whether the `threshold` is interpreted as a relative improvement ('rel')
+            or an absolute improvement ('abs').
+        min_ct: Minimum allowed confidence threshold. The threshold will not be reduced below this value.
+        eps: A small value to avoid floating-point precision errors during threshold comparison.
+        verbose: If True, prints messages when the confidence threshold is reduced.
     """
 
     def __init__(
         self,
-        activation=None,
-        confidence_threshold=None,
+        activation: Optional[Union[torch.nn.Module, Callable]] = None,
+        confidence_threshold: Optional[float] = None,
         threshold_from_both_sides=True,
-        mode="min",
-        factor=0.05,
-        patience=10,
-        threshold=1e-4,
-        threshold_mode="abs",
-        min_ct=0.5,
-        eps=1e-8,
-        verbose=True,
+        mode: Literal["min", "max"] = "min",
+        factor: float = 0.05,
+        patience: int = 10,
+        threshold: float = 1e-4,
+        threshold_mode: Literal["rel", "abs"] = "abs",
+        min_ct: float = 0.5,
+        eps: float = 1e-8,
+        verbose: bool = True,
     ):
         self.activation = activation
         self.confidence_threshold = confidence_threshold
@@ -215,7 +199,7 @@ class ScheduledPseudoLabeler:
             "threshold_from_both_sides": threshold_from_both_sides
         }
         # scheduler arguments
-        if mode not in {'min', 'max'}:
+        if mode not in {"min", "max"}:
             raise ValueError(f"Invalid mode: {mode}. Mode should be 'min' or 'max'.")
         self.mode = mode
 
@@ -226,7 +210,7 @@ class ScheduledPseudoLabeler:
         self.patience = patience
         self.threshold = threshold
 
-        if threshold_mode not in {'rel', 'abs'}:
+        if threshold_mode not in {"rel", "abs"}:
             raise ValueError(f"Invalid threshold mode: {mode}. Threshold mode should be 'rel' or 'abs'.")
         self.threshold_mode = threshold_mode
 
@@ -235,14 +219,13 @@ class ScheduledPseudoLabeler:
         self.verbose = verbose
 
         if mode == "min":
-            self.best = float('inf')
-        else: # mode == 'max':
-            self.best = float('-inf')
-            
+            self.best = float("inf")
+        else:  # mode == "max":
+            self.best = float("-inf")
+
         # self.best = 0
         self.num_bad_epochs: int = 0
         self.last_epoch = 0
-        
 
     def _compute_label_mask_both_sides(self, pseudo_labels):
         upper_threshold = self.confidence_threshold
@@ -264,7 +247,6 @@ class ScheduledPseudoLabeler:
             label_mask = self._compute_label_mask_both_sides(pseudo_labels) if self.threshold_from_both_sides\
                 else self._compute_label_mask_one_side(pseudo_labels)
         return pseudo_labels, label_mask
-    
 
     def _is_better(self, a, best):
         if self.mode == "min" and self.threshold_mode == "rel":
@@ -280,25 +262,23 @@ class ScheduledPseudoLabeler:
 
         else:  # mode == 'max' and epsilon_mode == 'abs':
             return a > best + self.threshold
-    
 
     def _reduce_ct(self, epoch):
         old_ct = self.confidence_threshold
         if self.threshold_mode == "rel":
             new_ct = max(self.confidence_threshold * self.factor, self.min_ct)
-        else: # threshold_mode == 'abs':
+        else:  # threshold_mode == 'abs':
             new_ct = max(self.confidence_threshold - self.factor, self.min_ct)
         if old_ct - new_ct > self.eps:
-                self.confidence_threshold = new_ct
+            self.confidence_threshold = new_ct
         if self.verbose:
             print(f"Epoch {epoch}: reducing confidence threshold from {old_ct} to {self.confidence_threshold}")
-
 
     def step(self, metric, epoch=None):
         if epoch is None:
             epoch = self.last_epoch + 1
             self.last_epoch = epoch
-        
+
         # If the metric is None, reduce the confidence threshold every epoch
         if metric is None:
             if epoch == 0:
@@ -306,9 +286,8 @@ class ScheduledPseudoLabeler:
             if epoch % self.patience == 0:
                 self._reduce_ct(epoch)
             return
-        
 
-        else: 
+        else:
             current = float(metric)
 
             if self._is_better(current, self.best):
@@ -320,4 +299,3 @@ class ScheduledPseudoLabeler:
             if self.num_bad_epochs > self.patience:
                 self._reduce_ct(epoch)
                 self.num_bad_epochs = 0
-
