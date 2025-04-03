@@ -136,7 +136,7 @@ def predict_with_halo(
     tqdm_desc: str = "predict with halo",
     prediction_function: Optional[Callable] = None,
     roi: Optional[Tuple[slice]] = None,
-    iter_list: Optional[List[int]] = [],
+    iter_list: Optional[List[int]] = None,
 ) -> ArrayLike:
     """Run block-wise network prediction with a halo.
 
@@ -247,7 +247,7 @@ def predict_with_halo(
                 output[bb] = prediction
 
     n_blocks = blocking.numberOfBlocks
-    if 0 == len(iter_list):
+    if iter_list is None:
         iteration_ids = range(n_blocks)
     else:
         iteration_ids = np.array(iter_list)
