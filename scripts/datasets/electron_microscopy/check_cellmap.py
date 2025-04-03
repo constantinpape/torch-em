@@ -11,17 +11,19 @@ sys.path.append("..")
 
 def check_cellmap():
     # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    ROOT = "/home/anwai/data"
 
     loader = get_cellmap_loader(
         path=os.path.join(ROOT, "cellmap-segmentation-challenge"),
         batch_size=2,
         patch_shape=(8, 256, 256),
+        ndim=3,
         download=True,
-        sampler=MinInstanceSampler(),
-        crops=["234", "235"],
+        sampler=MinInstanceSampler(min_num_instances=3),
+        crops="234",
+        organelles=["mito", "ves"],
     )
-    check_loader(loader, 8)
+    check_loader(loader, 8, instance_labels=True)
 
 
 if __name__ == "__main__":

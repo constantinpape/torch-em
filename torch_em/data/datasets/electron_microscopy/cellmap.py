@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import h5py
 import numpy as np
+import pandas as pd
 from xarray import DataArray
 
 from torch.utils.data import Dataset, DataLoader
@@ -26,7 +27,7 @@ import torch_em
 from .. import util
 
 
-def _download_cellmap_data(path, organelles, crops, resolution, padding=0, download=False):
+def _download_cellmap_data(path, crops, resolution, padding=0, download=False):
     """Download scripts for the CellMap data.
     
     Inspired by https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/main/src/cellmap_segmentation_challenge/cli/fetch_data.py
@@ -218,7 +219,8 @@ def get_cellmap_data(
 
     Args:
         path: Filepath to a folder where the data will be downloaded for further processing
-        organelles: The choice of organelles to download. By default, downloads all types of labels available.
+        organelles: The choice of organelles to download. By default, loads all types of labels available.
+            For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
@@ -238,10 +240,42 @@ def get_cellmap_data(
 
     # NOTE: The function below is comparable to the CLI `csc fetch-data` from the original repo.
     _data_path, final_crops = _download_cellmap_data(
-        path=data_path, organelles=organelles, crops=crops, resolution=resolution, download=download
+        path=data_path,
+        crops=crops,
+        resolution=resolution,
+        padding=0,
+        download=download,
     )
 
-    if _data_path is None:
+    # Get the organelle-crop mapping.
+    from cellmap_segmentation_challenge import utils
+
+    # There is a file named 'train_crop_manifest' in the 'utils' sub-module. We need to get that first
+    train_metadata_file = os.path.join(str(Path(utils.__file__).parent / "train_crop_manifest.csv"))
+    train_metadata = pd.read_csv(train_metadata_file)
+
+    # Let's get the label to crop mapping from the manifest file.
+    organelle_to_crops = train_metadata.groupby('class_label')['crop_name'].apply(list).to_dict()
+
+    # By default, 'organelles' set to 'None' will give you 'all' organelle types.
+    if organelles is not None:  # The assumption here is that the user wants specific organelle(s).
+        # Validate whether the organelle exists in the desired crops at all.
+        if isinstance(organelles, str):
+            organelles = [organelles]
+
+        # Next, we check whether they match the crops.
+        for curr_organelle in organelles:
+            if curr_organelle not in organelle_to_crops:  # Check whether the organelle is valid or not.
+                raise ValueError(f"The chosen organelle: '{curr_organelle}' seems to be an invalid choice.")
+
+            # Lastly, we check whether the final crops have the organelle(s) or not.
+            # Otherwise, we throw a warning and go ahead with the true valid choices.
+            # NOTE: The priority below is higher for organelles than crops.
+            for curr_crop in final_crops:
+                if curr_crop not in organelle_to_crops.get(curr_organelle):
+                    raise ValueError(f"The crop '{curr_crop}' does not have the chosen organelle '{curr_organelle}'.")
+
+    if _data_path is None or len(_data_path) == 0:
         raise RuntimeError("Something went wrong. Please read the information logged above.")
 
     return data_path, final_crops
@@ -258,7 +292,8 @@ def get_cellmap_paths(
 
     Args:
         path: Filepath to a folder where the data will be downloaded for further processing
-        organelles: The choice of organelles to download. By default, downloads all types of labels available.
+        organelles: The choice of organelles to download. By default, loads all types of labels available.
+            For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
@@ -293,7 +328,8 @@ def get_cellmap_dataset(
     Args:
         path: Filepath to a folder where the data will be downloaded for further processing.
         patch_shape: The patch shape to use for training.
-        organelles: The choice of organelles to download. By default, downloads all types of labels available.
+        organelles: The choice of organelles to download. By default, loads all types of labels available.
+            For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
@@ -307,11 +343,21 @@ def get_cellmap_dataset(
         path=path, organelles=organelles, crops=crops, resolution=resolution, download=download
     )
 
+    # Arrange the organelle choices as expected for loading labels.
+    if organelles is None:
+        organelles = "label_crop/all"
+    else:
+        if isinstance(organelles, str):
+            organelles = f"label_crop/{organelles}"
+        else:
+            organelles = [f"label_crop/{curr_organelle}" for curr_organelle in organelles]
+            kwargs = util.update_kwargs(kwargs, "with_label_channels", True)
+
     return torch_em.default_segmentation_dataset(
         raw_paths=volume_paths,
         raw_key="raw_crop",
         label_paths=volume_paths,
-        label_key="label_crop/all",  # TODO: hard-coded atm.
+        label_key=organelles,
         patch_shape=patch_shape,
         is_seg_dataset=True,
         **kwargs
@@ -334,7 +380,8 @@ def get_cellmap_loader(
         path: Filepath to a folder where the data will be downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
-        organelles: The choice of organelles to download. By default, downloads all types of labels available.
+        organelles: The choice of organelles to download. By default, loads all types of labels available.
+            For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
