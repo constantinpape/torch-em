@@ -16,12 +16,12 @@ def check_cellmap():
     loader = get_cellmap_loader(
         path=os.path.join(ROOT, "cellmap-segmentation-challenge"),
         batch_size=2,
-        patch_shape=(8, 256, 256),
+        patch_shape=(16, 512, 512),
         ndim=3,
         download=True,
         sampler=MinInstanceSampler(min_num_instances=3),
         crops="234",
-        organelles=["mito", "ves"],
+        organelles=None,
     )
     check_loader(loader, 8, instance_labels=True)
 

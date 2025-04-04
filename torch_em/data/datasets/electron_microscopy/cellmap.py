@@ -27,7 +27,7 @@ import torch_em
 from .. import util
 
 
-def _download_cellmap_data(path, crops, resolution, padding=0, download=False):
+def _download_cellmap_data(path, crops, resolution, padding, download=False):
     """Download scripts for the CellMap data.
     
     Inspired by https://github.com/janelia-cellmap/cellmap-segmentation-challenge/blob/main/src/cellmap_segmentation_challenge/cli/fetch_data.py
@@ -185,12 +185,30 @@ def _download_cellmap_data(path, crops, resolution, padding=0, download=False):
             f.attrs["translation"] = translation.translation
 
             # Store inputs.
-            f.create_dataset(name="raw_crop", data=em_crop, compression="gzip")
+            f.create_dataset(name="raw_crop", data=em_crop, dtype=em_crop.dtype, compression="gzip")
 
             def _fetch_and_write_label(label_name):
                 gt_crop = gt_source_group[f"{label_name}/{resolution}"][:]
+
+                # Next, pad the labels to match the input shape.
+                def _pad_to_shape(array):
+                    return np.pad(
+                        array=array.astype(np.int16),
+                        pad_width=[
+                            (orig.start - padded.start, padded.stop - orig.stop)
+                            for orig, padded in zip(slices, slices_padded)
+                        ],
+                        mode="constant",
+                        constant_values=-1,
+                    )
+
+                gt_crop = _pad_to_shape(gt_crop)
+
+                # Write each label to their corresponding hierarchy names.
                 with write_lock:
-                    f.create_dataset(name=f"label_crop/{label_name}", data=gt_crop, compression="gzip")
+                    f.create_dataset(
+                        name=f"label_crop/{label_name}", data=gt_crop, dtype=gt_crop.dtype, compression="gzip"
+                    )
                 return label_name
 
             with ThreadPoolExecutor() as pool:
@@ -243,8 +261,10 @@ def get_cellmap_data(
         path=data_path,
         crops=crops,
         resolution=resolution,
-        padding=0,
         download=download,
+        # NOTE: Set this to 0 for no padding or a higher number to pad in all dims.
+        # eg. with 16, it means that along each dims, we pad them with this value of pixels.
+        padding=16,  # NOTE: @CP: Should I expose this param / make it a global variable?
     )
 
     # Get the organelle-crop mapping.
@@ -316,7 +336,7 @@ def get_cellmap_paths(
 
 def get_cellmap_dataset(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[str, ...],
+    patch_shape: Tuple[int, ...],
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence] = "all",
     resolution: str = "s0",
@@ -367,7 +387,7 @@ def get_cellmap_dataset(
 def get_cellmap_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
-    patch_shape: Tuple[str, ...],
+    patch_shape: Tuple[int, ...],
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence] = "all",
     resolution: str = "s0",
