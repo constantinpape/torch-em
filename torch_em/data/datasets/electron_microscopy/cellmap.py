@@ -48,7 +48,7 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
             "'pip install git+https://github.com/janelia-cellmap/cellmap-segmentation-challenge.git'."
         )
 
-    # NOTE: The imports below will come with the above lines of 'csc' installation.
+    # The imports below will come with the above lines of 'csc' installation.
     import structlog
     from xarray_ome_ngff import read_multiscale_group
     from xarray_ome_ngff.v04.multiscale import transforms_from_coords
@@ -231,6 +231,7 @@ def get_cellmap_data(
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence] = "all",
     resolution: str = "s0",
+    padding: int = 64,
     download: bool = False,
 ) -> Tuple[str, List[str]]:
     """Downloads the CellMap training data.
@@ -242,6 +243,10 @@ def get_cellmap_data(
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        padding: The choice of padding along each dimensions.
+            By default, it pads '64' pixels along all dimensions.
+            You can set it to '0' for no padding at all.
+            For pixel regions without annotations, it labels the masks with id '-1'.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -261,10 +266,8 @@ def get_cellmap_data(
         path=data_path,
         crops=crops,
         resolution=resolution,
+        padding=padding,
         download=download,
-        # NOTE: Set this to 0 for no padding or a higher number to pad in all dims.
-        # eg. with 16, it means that along each dims, we pad them with this value of pixels.
-        padding=16,  # NOTE: @CP: Should I expose this param / make it a global variable?
     )
 
     # Get the organelle-crop mapping.
@@ -306,6 +309,7 @@ def get_cellmap_paths(
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence] = "all",
     resolution: str = "s0",
+    padding: int = 64,
     download: bool = False,
 ) -> List[str]:
     """Get the paths to CellMap training data.
@@ -317,6 +321,10 @@ def get_cellmap_paths(
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        padding: The choice of padding along each dimensions.
+            By default, it pads '64' pixels along all dimensions.
+            You can set it to '0' for no padding at all.
+            For pixel regions without annotations, it labels the masks with id '-1'.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -325,7 +333,7 @@ def get_cellmap_paths(
 
     # Get the CellMap data crops.
     data_path, crops = get_cellmap_data(
-        path=path, organelles=organelles, crops=crops, resolution=resolution, download=download
+        path=path, organelles=organelles, crops=crops, resolution=resolution, padding=padding, download=download
     )
 
     # Get all crops.
@@ -340,6 +348,7 @@ def get_cellmap_dataset(
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence] = "all",
     resolution: str = "s0",
+    padding: int = 64,
     download: bool = False,
     **kwargs,
 ) -> Dataset:
@@ -353,6 +362,10 @@ def get_cellmap_dataset(
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        padding: The choice of padding along each dimensions.
+            By default, it pads '64' pixels along all dimensions.
+            You can set it to '0' for no padding at all.
+            For pixel regions without annotations, it labels the masks with id '-1'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -360,7 +373,7 @@ def get_cellmap_dataset(
         The segmentation dataset.
     """
     volume_paths = get_cellmap_paths(
-        path=path, organelles=organelles, crops=crops, resolution=resolution, download=download
+        path=path, organelles=organelles, crops=crops, resolution=resolution, padding=padding, download=download
     )
 
     # Arrange the organelle choices as expected for loading labels.
@@ -391,6 +404,7 @@ def get_cellmap_loader(
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence] = "all",
     resolution: str = "s0",
+    padding: int = 64,
     download: bool = False,
     **kwargs,
 ) -> DataLoader:
@@ -405,6 +419,10 @@ def get_cellmap_loader(
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        padding: The choice of padding along each dimensions.
+            By default, it pads '64' pixels along all dimensions.
+            You can set it to '0' for no padding at all.
+            For pixel regions without annotations, it labels the masks with id '-1'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -412,5 +430,5 @@ def get_cellmap_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cellmap_dataset(path, patch_shape, organelles, crops, resolution, download, **ds_kwargs)
+    dataset = get_cellmap_dataset(path, patch_shape, organelles, crops, resolution, padding, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
