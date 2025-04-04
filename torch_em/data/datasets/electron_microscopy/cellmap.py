@@ -229,7 +229,7 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
 def get_cellmap_data(
     path: Union[os.PathLike, str],
     organelles: Optional[Union[str, List[str]]] = None,
-    crops: Union[str, Sequence] = "all",
+    crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
     download: bool = False,
 ) -> Tuple[str, List[str]]:
@@ -304,7 +304,7 @@ def get_cellmap_data(
 def get_cellmap_paths(
     path: Union[os.PathLike, str],
     organelles: Optional[Union[str, List[str]]] = None,
-    crops: Union[str, Sequence] = "all",
+    crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
     download: bool = False,
 ) -> List[str]:
@@ -338,7 +338,7 @@ def get_cellmap_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     organelles: Optional[Union[str, List[str]]] = None,
-    crops: Union[str, Sequence] = "all",
+    crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
     download: bool = False,
     **kwargs,
@@ -389,7 +389,7 @@ def get_cellmap_loader(
     batch_size: int,
     patch_shape: Tuple[int, ...],
     organelles: Optional[Union[str, List[str]]] = None,
-    crops: Union[str, Sequence] = "all",
+    crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
     download: bool = False,
     **kwargs,
