@@ -88,7 +88,11 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
 
 
 def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types):
-    assert COCO is not None, "pycocotools is required for processing the LIVECell ground-truth."
+    if COCO is None:
+        raise ModuleNotFoundError(
+            "'pycocotools' is required for processing the LIVECell ground-truth. "
+            "Install it with 'conda install -c conda-forge pycocotools'."
+        )
 
     coco = COCO(annotation_file)
     category_ids = coco.getCatIds(catNms=["cell"])
