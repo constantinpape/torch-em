@@ -16,4 +16,3 @@ dependencies:
     - torchvision
     - tqdm
     - kornia
-    - xarray <2025.3.0
