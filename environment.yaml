@@ -5,10 +5,10 @@ name:
 dependencies:
     - affogato
     - bioimageio.spec
-    - bioimageio.core
+    - bioimageio.core >=0.8.0
     - imagecodecs
     - natsort
-    - nifty >= 1.2.3
+    - nifty >=1.2.3
     - python-elf
     - pytorch
     - tensorboard
