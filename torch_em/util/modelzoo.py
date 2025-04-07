@@ -19,8 +19,14 @@ import torch_em
 
 import bioimageio.core as core
 import bioimageio.spec.model.v0_5 as spec
-from bioimageio.core.model_adapters._pytorch_model_adapter import PytorchModelAdapter
 from bioimageio.spec import save_bioimageio_package
+
+# The location of this package changed recently, we include the
+# import guard in order to support less recent versions of bioimageio.core.
+try:
+    from bioimageio.core.backends.pytorch_backend import PytorchModelAdapter
+except Exception:
+    from bioimageio.core.model_adapters._pytorch_model_adapter import PytorchModelAdapter
 
 from elf.io import open_file
 from .util import get_trainer, get_normalizer
