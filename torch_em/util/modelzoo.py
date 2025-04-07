@@ -20,13 +20,7 @@ import torch_em
 import bioimageio.core as core
 import bioimageio.spec.model.v0_5 as spec
 from bioimageio.spec import save_bioimageio_package
-
-# The location of this package changed recently, we include the
-# import guard in order to support less recent versions of bioimageio.core.
-try:
-    from bioimageio.core.backends.pytorch_backend import PytorchModelAdapter
-except Exception:
-    from bioimageio.core.model_adapters._pytorch_model_adapter import PytorchModelAdapter
+from bioimageio.core.backends.pytorch_backend import load_torch_model
 
 from elf.io import open_file
 from .util import get_trainer, get_normalizer
@@ -669,11 +663,7 @@ def main():
 def _unzip_and_load_model(model_spec, device, spec_path, output_path):
     unpack_archive(str(spec_path), str(output_path))
     weight_spec = model_spec.weights.pytorch_state_dict
-    model = PytorchModelAdapter.get_network(weight_spec)
-    weight_file = os.path.join(output_path, weight_spec.source.path)
-    assert os.path.exists(weight_file), weight_file
-    state = torch.load(weight_file, map_location=device, weights_only=False)
-    model.load_state_dict(state)
+    model = load_torch_model(weight_spec, devices=[device])
     model.eval()
     return model
 
