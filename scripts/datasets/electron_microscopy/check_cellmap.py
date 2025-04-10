@@ -19,8 +19,7 @@ def check_cellmap():
         ndim=3,
         download=True,
         sampler=MinInstanceSampler(min_num_instances=3),
-        crops="239",
-        # padding=0,
+        crops=["234", "23", "237", "238", "239"],
     )
     check_loader(loader, 8, instance_labels=True)
 
