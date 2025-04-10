@@ -120,8 +120,6 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
         crop_group_inventory = np.unique(crop_group_inventory).tolist()
         crop_group_inventory = [curr_cg for curr_cg in crop_group_inventory if curr_cg not in [".zattrs", ".zgroup"]]
 
-        gt_crop_shape = gt_source_group[f"all/{resolution}"].shape  # since "all" exists "al"ways, we rely on it.
-
         # Get the offset values for the ground truth crops.
         crop_multiscale_group = None
         for _, group in gt_source_group.groups():
