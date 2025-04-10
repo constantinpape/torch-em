@@ -18,7 +18,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import h5py
 import numpy as np
 import pandas as pd
-from xarray import DataArray
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -40,7 +39,7 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
     # NOTE: Keeping the relevant imports here to avoid `torch-em` throwing missing module error.
 
     try:
-        from cellmap_segmentation_challenge.utils.fetch_data import read_group, subset_to_slice
+        from cellmap_segmentation_challenge.utils.fetch_data import read_group
         from cellmap_segmentation_challenge.utils.crops import fetch_crop_manifest, get_test_crops
     except ImportError:
         raise ModuleNotFoundError(
@@ -56,6 +55,8 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
     # Some important stuff.
     fetch_save_start = time.time()
     log = structlog.get_logger()
+    array_wrapper = {"name": "dask_array", "config": {"chunks": "auto"}}
+
     # Get the absolute path location to store crops.
     dest_path_abs = Path(path).absolute()
     dest_path_abs.mkdir(exist_ok=True)
@@ -105,15 +106,6 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
             log.error(f"Cannot download the crop '{crop.id}' as 'download' is set to 'False'.")
             return
 
-        # Get the EM volume of highest resolution.
-        em_source_group = read_group(str(crop.em_url), storage_options={"anon": True})
-        log.info(f"Found EM data at {crop.em_url}.")
-
-        # Let's get the multiscale model of the source em group.
-        array_wrapper = {"name": "dask_array", "config": {"chunks": "auto"}}
-        em_source_arrays = read_multiscale_group(em_source_group, array_wrapper)
-        em_s0_array = em_source_arrays[resolution]
-
         # Get the ground-truth (gt) masks.
         gt_source_group = read_group(str(crop.gt_source), storage_options={"anon": True})
 
@@ -143,29 +135,64 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
             log.info(f"No multiscale groups found in '{crop.gt_source}'. No EM data can be fetched.")
             continue
 
-        # Arrange the groups in descending order of resolution.
-        gt_source_arrays_sorted = sorted(
-            crop_multiscale_group.items(), key=lambda kv: np.prod(kv[1].shape), reverse=True
-        )
-        # Check whether the first resolution matches our expected resolution.
-        if resolution != gt_source_arrays_sorted[0][0]:
-            raise ValueError(
-                f"The expected resolution '{resolution}' does not match the "
-                f"highest available resolution '{gt_source_arrays_sorted[0][0]}'."
-            )
+        # Get the EM volume group.
+        em_source_group = read_group(str(crop.em_url), storage_options={"anon": True})
+        log.info(f"Found EM data at '{crop.em_url}'.")
 
-        _, (scale, translation) = transforms_from_coords(
-            coords=gt_source_arrays_sorted[0][1].coords,  # accesing the metadata for 's0'.
-            transform_precision=4,
-        )
+        # Let's get the multiscale model of the source em group.
+        em_source_arrays = read_multiscale_group(em_source_group, array_wrapper)
+
+        # Next, we need to rely on the scales of each resolution to identify whether the resolution-level is same
+        # for the EM volume and corresponding ground-truth mask crops.
+
+        # For this, we first extract the ground-truth scales per resolution.
+        gt_resolutions = {}
+        for res_key, array in crop_multiscale_group.items():
+            try:
+                _, (gt_scale, gt_translation) = transforms_from_coords(array.coords, transform_precision=4)
+                gt_resolutions[res_key] = (gt_scale.scale, gt_translation.translation)
+            except Exception:
+                continue
+
+        # Next, we extract the EM volume scales per resolution.
+        em_resolutions = {}
+        for res_key, array in em_source_arrays.items():
+            try:
+                _, (em_scale, em_translation) = transforms_from_coords(array.coords, transform_precision=4)
+                em_resolutions[res_key] = (em_scale.scale, em_translation.translation)
+            except Exception:
+                continue
+
+        # Now, we find the matching scales and use the respoective "resolution" keys.
+        matching_keys = []
+        for gt_key, (gt_scale, gt_translation) in gt_resolutions.items():
+            for em_key, (em_scale, em_translation) in em_resolutions.items():
+                if np.allclose(gt_scale, em_scale, rtol=1e-3, atol=1e-6):
+                    matching_keys.append((gt_key, em_key, gt_scale, gt_translation, em_translation))
+
+        # If no match found, that is pretty weird.
+        if not matching_keys:
+            log.error(f"No EM resolution level matches any GT scale for crop ID '{crop.id}'.")
+            continue
+
+        # We get the desired resolution level for the EM volume, labels, and the scale of choice.
+        matching_keys.sort(key=lambda x: np.prod(x[2]))
+        gt_level, em_level, scale, gt_translation, em_translation = matching_keys[0]
+
+        # Get the desired values for the particular resolution level.
+        em_s0_array = em_source_arrays[em_level]
+        gt_crop_shape = gt_source_group[f"all/{gt_level}"].shape
+
+        log.info(f"Found a resolution match for EM data at level '{em_level}' and GT data at level '{gt_level}'.")
 
         # Compute the input reference crop from the ground truth metadata.
-        starts = translation.translation
-        stops = [start + size * vs for start, size, vs in zip(translation.translation, gt_crop_shape, scale.scale)]
+        start = gt_translation
+        stop = [start + size * vs for start, size, vs in zip(start, gt_crop_shape, scale)]
 
         # Get the slices.
-        coords = {dim: np.array([start, stop]) for dim, (start, stop) in zip(em_s0_array.dims, zip(starts, stops))}
-        slices = subset_to_slice(em_s0_array, DataArray(dims=em_s0_array.dims, coords=coords))
+        em_starts = [int(round((p_start - em_translation[i]) / scale[i])) for i, p_start in enumerate(start)]
+        em_stops = [int(round((p_stop - em_translation[i]) / scale[i])) for i, p_stop in enumerate(stop)]
+        slices = tuple(slice(start, stop) for start, stop in zip(em_starts, em_stops))
 
         # Pad the slices (in voxel space)
         slices_padded = tuple(
@@ -181,14 +208,19 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
         with h5py.File(crop_path, "w") as f:
             # Store metadata
             f.attrs["crop_id"] = crop.id
-            f.attrs["scale"] = scale.scale
-            f.attrs["translation"] = translation.translation
+            f.attrs["scale"] = scale
+            f.attrs["translation"] = gt_translation
+            f.attrs["em_level"] = em_level
+            f.attrs["gt_level"] = gt_level
 
             # Store inputs.
             f.create_dataset(name="raw_crop", data=em_crop, dtype=em_crop.dtype, compression="gzip")
 
+            # HACK:
+            crop_group_inventory = ["all"]
+
             def _fetch_and_write_label(label_name):
-                gt_crop = gt_source_group[f"{label_name}/{resolution}"][:]
+                gt_crop = gt_source_group[f"{label_name}/{gt_level}"][:]
 
                 # Next, pad the labels to match the input shape.
                 def _pad_to_shape(array):
