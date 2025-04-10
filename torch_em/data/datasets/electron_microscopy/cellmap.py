@@ -179,17 +179,17 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
 
         # Get the desired values for the particular resolution level.
         em_s0_array = em_source_arrays[em_level]
-        gt_crop_shape = gt_source_group[f"all/{gt_level}"].shape
+        gt_crop_shape = gt_source_group[f"all/{gt_level}"].shape  # since "all" exists "al"ways, we rely on it.
 
         log.info(f"Found a resolution match for EM data at level '{em_level}' and GT data at level '{gt_level}'.")
 
         # Compute the input reference crop from the ground truth metadata.
-        start = gt_translation
-        stop = [start + size * vs for start, size, vs in zip(start, gt_crop_shape, scale)]
+        starts = gt_translation
+        stops = [start + size * vs for start, size, vs in zip(starts, gt_crop_shape, scale)]
 
         # Get the slices.
-        em_starts = [int(round((p_start - em_translation[i]) / scale[i])) for i, p_start in enumerate(start)]
-        em_stops = [int(round((p_stop - em_translation[i]) / scale[i])) for i, p_stop in enumerate(stop)]
+        em_starts = [int(round((p_start - em_translation[i]) / scale[i])) for i, p_start in enumerate(starts)]
+        em_stops = [int(round((p_stop - em_translation[i]) / scale[i])) for i, p_stop in enumerate(stops)]
         slices = tuple(slice(start, stop) for start, stop in zip(em_starts, em_stops))
 
         # Pad the slices (in voxel space)
