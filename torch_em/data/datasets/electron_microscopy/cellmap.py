@@ -216,9 +216,6 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
             # Store inputs.
             f.create_dataset(name="raw_crop", data=em_crop, dtype=em_crop.dtype, compression="gzip")
 
-            # HACK:
-            crop_group_inventory = ["all"]
-
             def _fetch_and_write_label(label_name):
                 gt_crop = gt_source_group[f"{label_name}/{gt_level}"][:]
 
