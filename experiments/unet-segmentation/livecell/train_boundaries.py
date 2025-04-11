@@ -53,7 +53,7 @@ def train_boundaries(args):
         metric=loss,
         learning_rate=1e-4,
         device=torch.device("cuda"),
-        mixed_precision=True,
+        mixed_precision=False,
         log_image_interval=50,
         compile_model=False,
     )
