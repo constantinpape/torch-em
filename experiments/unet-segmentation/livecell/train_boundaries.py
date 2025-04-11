@@ -18,14 +18,21 @@ def train_boundaries(args):
     # Get the dataloaders.
     patch_shape = (512, 512)
     train_loader = get_livecell_loader(
-        args.input, patch_shape, "train",
-        download=True, boundaries=True, batch_size=args.batch_size,
-        cell_types=None if args.cell_type is None else [args.cell_type]
+        path=args.input,
+        patch_shape=patch_shape,
+        split="train",
+        download=True,
+        boundaries=True,
+        batch_size=args.batch_size,
+        cell_types=None if args.cell_type is None else [args.cell_type],
     )
     val_loader = get_livecell_loader(
-        args.input, patch_shape, "val",
-        boundaries=True, batch_size=args.batch_size,
-        cell_types=None if args.cell_type is None else [args.cell_type]
+        path=args.input,
+        patch_shape=patch_shape,
+        split="val",
+        boundaries=True,
+        batch_size=args.batch_size,
+        cell_types=None if args.cell_type is None else [args.cell_type],
     )
 
     # Get the loss function and other stuff for training.
@@ -48,6 +55,7 @@ def train_boundaries(args):
         device=torch.device("cuda"),
         mixed_precision=True,
         log_image_interval=50,
+        compile_model=False,
     )
     trainer.fit(iterations=args.n_iterations)
 
@@ -58,17 +66,25 @@ def check_loader(args, train=True, val=True, n_images=5):
     if train:
         print("Check train loader")
         loader = get_livecell_loader(
-            args.input, patch_shape, "train",
-            download=True, boundaries=True, batch_size=1,
-            cell_types=None if args.cell_type is None else [args.cell_type]
+            path=args.input,
+            patch_shape=patch_shape,
+            split="train",
+            download=True,
+            boundaries=True,
+            batch_size=1,
+            cell_types=None if args.cell_type is None else [args.cell_type],
         )
         check_loader(loader, n_images)
     if val:
         print("Check val loader")
         loader = get_livecell_loader(
-            args.input, patch_shape, "val",
-            download=True, boundaries=True, batch_size=1,
-            cell_types=None if args.cell_type is None else [args.cell_type]
+            path=args.input,
+            patch_shape=patch_shape,
+            split="val",
+            download=True,
+            boundaries=True,
+            batch_size=1,
+            cell_types=None if args.cell_type is None else [args.cell_type],
         )
         check_loader(loader, n_images)
 
