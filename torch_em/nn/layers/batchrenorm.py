@@ -59,8 +59,8 @@ class BatchRenormNd(nn.Module):
         running_std = torch.sqrt(self.running_var + self.eps)
 
         if self.training:
-            b_mean = x.mean(dim=self.dims)
-            b_var = x.var(dim=self.dims, unbiased=False)
+            b_mean = x.mean(dim=self.dims).float()
+            b_var = x.var(dim=self.dims, unbiased=False).float()
             b_std = (b_var + self.eps).sqrt_()
 
             r = torch.clamp((b_std.detach() / running_std), 1 / self.max_r, self.max_r)
