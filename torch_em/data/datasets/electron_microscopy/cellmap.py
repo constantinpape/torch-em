@@ -65,15 +65,12 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
     crops_from_manifest = fetch_crop_manifest()
 
     # Get the desired crop info from the manifest.
-    if crops in ["all", "test"]:
-        test_crops = get_test_crops()
-        log.info(f"Found '{len(test_crops)}' test crops.")
-
-    # Fetch all the crop manifests.
     if crops == "all":
-        crops_parsed = crops_from_manifest + test_crops
+        crops_parsed = crops_from_manifest
     elif crops == "test":
-        crops_parsed = test_crops
+        raise NotImplementedError("The test crops do not have GT. Hence we do not allow using them in our setup.")
+        crops_parsed = get_test_crops()
+        log.info(f"Found '{len(crops_parsed)}' test crops.")
     else:  # Otherwise, custom crops are parsed.
         crops_split = tuple(int(x) for x in crops.split(","))
         crops_parsed = tuple(filter(lambda v: v.id in crops_split, crops_from_manifest))
@@ -328,6 +325,8 @@ def get_cellmap_data(
     if _data_path is None or len(_data_path) == 0:
         raise RuntimeError("Something went wrong. Please read the information logged above.")
 
+    assert len(final_crops) > 0, "There seems to be no valid crops in the list."
+
     return data_path, final_crops
 
 
@@ -365,6 +364,11 @@ def get_cellmap_paths(
 
     # Get all crops.
     volume_paths = [os.path.join(data_path, f"crop_{c}.h5") for c in crops]
+
+    # Check whether all volume paths exist.
+    for volume_path in volume_paths:
+        if not os.path.exists(volume_path):
+            raise FileNotFoundError(f"The volume '{volume_path}' could not be found.")
 
     return volume_paths
 
