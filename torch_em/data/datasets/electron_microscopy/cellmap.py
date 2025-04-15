@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import h5py
 import numpy as np
 import pandas as pd
+from xarray import DataArray
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -39,8 +40,8 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
     # NOTE: Keeping the relevant imports here to avoid `torch-em` throwing missing module error.
 
     try:
-        from cellmap_segmentation_challenge.utils.fetch_data import read_group
-        from cellmap_segmentation_challenge.utils.crops import fetch_crop_manifest, get_test_crops
+        from cellmap_segmentation_challenge.utils.fetch_data import read_group, subset_to_slice
+        from cellmap_segmentation_challenge.utils.crops import fetch_crop_manifest, get_test_crops, TestCropRow
     except ImportError:
         raise ModuleNotFoundError(
             "Please install 'cellmap_segmentation_challenge' package using "
@@ -68,7 +69,6 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
     if crops == "all":
         crops_parsed = crops_from_manifest
     elif crops == "test":
-        raise NotImplementedError("The test crops do not have GT. Hence we do not allow using them in our setup.")
         crops_parsed = get_test_crops()
         log.info(f"Found '{len(crops_parsed)}' test crops.")
     else:  # Otherwise, custom crops are parsed.
@@ -103,32 +103,42 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
             log.error(f"Cannot download the crop '{crop.id}' as 'download' is set to 'False'.")
             return
 
-        # Get the ground-truth (gt) masks.
-        gt_source_group = read_group(str(crop.gt_source), storage_options={"anon": True})
+        # Check whether the crop is a part of the test crops, i.e. where GT masks is not available.
+        if isinstance(crop.gt_source, TestCropRow):
+            log.info(f"The test crop '{crop.id}' does not have GT data. Fetching em data only.")
+        else:
+            log.info(f"Fetching GT data for crop '{crop.id}' from '{crop.gt_source}'.")
 
-        # Let's get all ground-truth hierarchies.
-        # NOTE: Following the same as the original repo, relying on fs.find to avoid slowness in traversing online zarr.
-        fs = gt_source_group.store.fs
-        store_path = gt_source_group.store.path
-        gt_files = fs.find(store_path)
+            # Get the ground-truth (gt) masks.
+            gt_source_group = read_group(str(crop.gt_source), storage_options={"anon": True})
 
-        crop_group_inventory = tuple(fn.split(store_path)[-1] for fn in gt_files)
-        crop_group_inventory = tuple(curr_cg[1:].split("/")[0] for curr_cg in crop_group_inventory)
-        crop_group_inventory = np.unique(crop_group_inventory).tolist()
-        crop_group_inventory = [curr_cg for curr_cg in crop_group_inventory if curr_cg not in [".zattrs", ".zgroup"]]
+            log.info(f"Found GT data at '{crop.gt_source}'.")
 
-        # Get the offset values for the ground truth crops.
-        crop_multiscale_group = None
-        for _, group in gt_source_group.groups():
-            try:  # Get groups for all resolutions.
-                crop_multiscale_group = read_multiscale_group(group, array_wrapper=array_wrapper)
-                break
-            except (ValueError, TypeError):
+            # Let's get all ground-truth hierarchies.
+            # NOTE: Following same as the original repo, relying on fs.find to avoid slowness in traversing online zarr.
+            fs = gt_source_group.store.fs
+            store_path = gt_source_group.store.path
+            gt_files = fs.find(store_path)
+
+            crop_group_inventory = tuple(fn.split(store_path)[-1] for fn in gt_files)
+            crop_group_inventory = tuple(curr_cg[1:].split("/")[0] for curr_cg in crop_group_inventory)
+            crop_group_inventory = np.unique(crop_group_inventory).tolist()
+            crop_group_inventory = [
+                curr_cg for curr_cg in crop_group_inventory if curr_cg not in [".zattrs", ".zgroup"]
+            ]
+
+            # Get the offset values for the ground truth crops.
+            crop_multiscale_group = None
+            for _, group in gt_source_group.groups():
+                try:  # Get groups for all resolutions.
+                    crop_multiscale_group = read_multiscale_group(group, array_wrapper=array_wrapper)
+                    break
+                except (ValueError, TypeError):
+                    continue
+
+            if crop_multiscale_group is None:
+                log.info(f"No multiscale groups found in '{crop.gt_source}'. No EM data can be fetched.")
                 continue
-
-        if crop_multiscale_group is None:
-            log.info(f"No multiscale groups found in '{crop.gt_source}'. No EM data can be fetched.")
-            continue
 
         # Get the EM volume group.
         em_source_group = read_group(str(crop.em_url), storage_options={"anon": True})
@@ -138,18 +148,9 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
         em_source_arrays = read_multiscale_group(em_source_group, array_wrapper)
 
         # Next, we need to rely on the scales of each resolution to identify whether the resolution-level is same
-        # for the EM volume and corresponding ground-truth mask crops.
+        # for the EM volume and corresponding ground-truth mask crops (if available).
 
-        # For this, we first extract the ground-truth scales per resolution.
-        gt_resolutions = {}
-        for res_key, array in crop_multiscale_group.items():
-            try:
-                _, (gt_scale, gt_translation) = transforms_from_coords(array.coords, transform_precision=4)
-                gt_resolutions[res_key] = (gt_scale.scale, gt_translation.translation)
-            except Exception:
-                continue
-
-        # Next, we extract the EM volume scales per resolution.
+        # For this, we first extract the EM volume scales per resolution.
         em_resolutions = {}
         for res_key, array in em_source_arrays.items():
             try:
@@ -158,45 +159,86 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
             except Exception:
                 continue
 
-        # Now, we find the matching scales and use the respoective "resolution" keys.
-        matching_keys = []
-        for gt_key, (gt_scale, gt_translation) in gt_resolutions.items():
-            for em_key, (em_scale, em_translation) in em_resolutions.items():
-                if np.allclose(gt_scale, em_scale, rtol=1e-3, atol=1e-6):
-                    matching_keys.append((gt_key, em_key, gt_scale, gt_translation, em_translation))
+        if isinstance(crop.gt_source, TestCropRow):
+            # Choose the scale ratio threshold (from the original scripts)
+            ratio_threshold = 0.8
 
-        # If no match found, that is pretty weird.
-        if not matching_keys:
-            log.error(f"No EM resolution level matches any GT scale for crop ID '{crop.id}'.")
-            continue
+            # Choose the matching resolution level with marked GT.
+            em_level = next(
+                (
+                    k for k, (scale, _) in em_resolutions.items()
+                    if all(s / vs > ratio_threshold for s, vs in zip(scale, crop.gt_source.voxel_size))
+                ), None
+            )
 
-        # We get the desired resolution level for the EM volume, labels, and the scale of choice.
-        matching_keys.sort(key=lambda x: np.prod(x[2]))
-        gt_level, em_level, scale, gt_translation, em_translation = matching_keys[0]
+            assert em_level is not None, "There has to be a scale match for the EM volume. Something went wrong."
 
-        # Get the desired values for the particular resolution level.
-        em_s0_array = em_source_arrays[em_level]
-        gt_crop_shape = gt_source_group[f"all/{gt_level}"].shape  # since "all" exists "al"ways, we rely on it.
+            scale = em_resolutions[em_level][0]
+            em_array = em_source_arrays[em_level]
 
-        log.info(f"Found a resolution match for EM data at level '{em_level}' and GT data at level '{gt_level}'.")
+            # Get the slices (NOTE: there is info for some crop logic stuff)
+            starts = crop.gt_source.translation
+            stops = tuple(
+                start + size * vs for start, size, vs in zip(starts, crop.gt_source.shape, crop.gt_source.voxel_size)
+            )
+            coords = em_array.coords.copy()
+            for k, v in zip(em_array.coords.keys(), np.array((starts, stops)).T):
+                coords[k] = v
 
-        # Compute the input reference crop from the ground truth metadata.
-        starts = gt_translation
-        stops = [start + size * vs for start, size, vs in zip(starts, gt_crop_shape, scale)]
+            slices = subset_to_slice(outer_array=em_array, inner_array=DataArray(dims=em_array.dims, coords=coords))
 
-        # Get the slices.
-        em_starts = [int(round((p_start - em_translation[i]) / scale[i])) for i, p_start in enumerate(starts)]
-        em_stops = [int(round((p_stop - em_translation[i]) / scale[i])) for i, p_stop in enumerate(stops)]
-        slices = tuple(slice(start, stop) for start, stop in zip(em_starts, em_stops))
+            # Set 'gt_level' to 'None' for better handling of crops without labels.
+            gt_level = None
+
+        else:
+            # Next, we extract the ground-truth scales per resolution (for labeled crops).
+            gt_resolutions = {}
+            for res_key, array in crop_multiscale_group.items():
+                try:
+                    _, (gt_scale, gt_translation) = transforms_from_coords(array.coords, transform_precision=4)
+                    gt_resolutions[res_key] = (gt_scale.scale, gt_translation.translation)
+                except Exception:
+                    continue
+
+            # Now, we find the matching scales and use the respoective "resolution" keys.
+            matching_keys = []
+            for gt_key, (gt_scale, gt_translation) in gt_resolutions.items():
+                for em_key, (em_scale, em_translation) in em_resolutions.items():
+                    if np.allclose(gt_scale, em_scale, rtol=1e-3, atol=1e-6):
+                        matching_keys.append((gt_key, em_key, gt_scale, gt_translation, em_translation))
+
+            # If no match found, that is pretty weird.
+            if not matching_keys:
+                log.error(f"No EM resolution level matches any GT scale for crop ID '{crop.id}'.")
+                continue
+
+            # We get the desired resolution level for the EM volume, labels, and the scale of choice.
+            matching_keys.sort(key=lambda x: np.prod(x[2]))
+            gt_level, em_level, scale, gt_translation, em_translation = matching_keys[0]
+
+            # Get the desired values for the particular resolution level.
+            em_array = em_source_arrays[em_level]
+            gt_crop_shape = gt_source_group[f"all/{gt_level}"].shape  # since "all" exists "al"ways, we rely on it.
+
+            log.info(f"Found a resolution match for EM data at level '{em_level}' and GT data at level '{gt_level}'.")
+
+            # Compute the input reference crop from the ground truth metadata.
+            starts = gt_translation
+            stops = [start + size * vs for start, size, vs in zip(starts, gt_crop_shape, scale)]
+
+            # Get the slices.
+            em_starts = [int(round((p_start - em_translation[i]) / scale[i])) for i, p_start in enumerate(starts)]
+            em_stops = [int(round((p_stop - em_translation[i]) / scale[i])) for i, p_stop in enumerate(stops)]
+            slices = tuple(slice(start, stop) for start, stop in zip(em_starts, em_stops))
 
         # Pad the slices (in voxel space)
         slices_padded = tuple(
             slice(max(0, sl.start - padding), min(sl.stop + padding, dim), sl.step)
-            for sl, dim in zip(slices, em_s0_array.shape)
+            for sl, dim in zip(slices, em_array.shape)
         )
 
         # Extract cropped EM volume from remote zarr files.
-        em_crop = em_s0_array[tuple(slices_padded)].data.compute()
+        em_crop = em_array[tuple(slices_padded)].data.compute()
 
         # Write all stuff in a crop-level h5 file.
         write_lock = Lock()
@@ -204,9 +246,11 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
             # Store metadata
             f.attrs["crop_id"] = crop.id
             f.attrs["scale"] = scale
-            f.attrs["translation"] = gt_translation
             f.attrs["em_level"] = em_level
-            f.attrs["gt_level"] = gt_level
+
+            if gt_level is not None:
+                f.attrs["translation"] = gt_translation
+                f.attrs["gt_level"] = gt_level
 
             # Store inputs.
             f.create_dataset(name="raw_crop", data=em_crop, dtype=em_crop.dtype, compression="gzip")
@@ -235,11 +279,12 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
                     )
                 return label_name
 
-            with ThreadPoolExecutor() as pool:
-                futures = {pool.submit(_fetch_and_write_label, name): name for name in crop_group_inventory}
-                for future in as_completed(futures):
-                    label_name = future.result()
-                    log.info(f"Saved ground truth crop '{crop.id}' for '{label_name}'.")
+            if gt_level is not None:
+                with ThreadPoolExecutor() as pool:
+                    futures = {pool.submit(_fetch_and_write_label, name): name for name in crop_group_inventory}
+                    for future in as_completed(futures):
+                        label_name = future.result()
+                        log.info(f"Saved ground truth crop '{crop.id}' for '{label_name}'.")
 
         log.info(f"Saved crop '{crop.id}' to '{crop_path}'.")
         log = log.unbind("crop_id", "dataset")
@@ -356,6 +401,9 @@ def get_cellmap_paths(
     Returns:
         List of the cropped volume data paths.
     """
+
+    if ("test" in crops if isinstance(crops, (List, Tuple)) else crops == "test"):
+        raise NotImplementedError("The 'test' crops cannot be used in the dataloader.")
 
     # Get the CellMap data crops.
     data_path, crops = get_cellmap_data(
