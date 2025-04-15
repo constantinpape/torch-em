@@ -161,7 +161,7 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
 
         if isinstance(crop.gt_source, TestCropRow):
             # Choose the scale ratio threshold (from the original scripts)
-            ratio_threshold = 0.8
+            ratio_threshold = 0.8  # NOTE: hard-coded atm to follow along the original data download code logic.
 
             # Choose the matching resolution level with marked GT.
             em_level = next(
