@@ -382,6 +382,7 @@ def get_cellmap_paths(
     resolution: str = "s0",
     padding: int = 64,
     download: bool = False,
+    return_test_crops: bool = False,
 ) -> List[str]:
     """Get the paths to CellMap training data.
 
@@ -397,12 +398,13 @@ def get_cellmap_paths(
             You can set it to '0' for no padding at all.
             For pixel regions without annotations, it labels the masks with id '-1'.
         download: Whether to download the data if it is not present.
+        return_test_crops: Whether to forcefully return the filepaths of the test crops for other analysis.
 
     Returns:
         List of the cropped volume data paths.
     """
 
-    if ("test" in crops if isinstance(crops, (List, Tuple)) else crops == "test"):
+    if not return_test_crops and ("test" in crops if isinstance(crops, (List, Tuple)) else crops == "test"):
         raise NotImplementedError("The 'test' crops cannot be used in the dataloader.")
 
     # Get the CellMap data crops.
