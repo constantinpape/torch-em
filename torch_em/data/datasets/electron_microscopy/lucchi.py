@@ -80,7 +80,7 @@ def get_lucchi_data(path: Union[os.PathLike, str], split: Literal["train", "test
     if os.path.exists(data_path):
         return data_path
 
-    os.makedirs(path)
+    os.makedirs(path, exist_ok=True)
     tmp_path = os.path.join(path, "lucchi.zip")
     util.download_source(tmp_path, URL, download, checksum=CHECKSUM)
     util.unzip(tmp_path, path, remove=True)
