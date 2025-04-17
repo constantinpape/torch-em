@@ -25,6 +25,7 @@ from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
 )
+from .nis3d import get_nis3d_loader, get_nis3d_dataset
 from .omnipose import get_omnipose_dataset, get_omnipose_loader
 from .orgasegment import get_orgasegment_dataset, get_orgasegment_loader
 from .organoidnet import get_organoidnet_dataset, get_organoidnet_loader
