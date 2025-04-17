@@ -128,7 +128,7 @@ def get_mouse_embryo_loader(
     binary: bool = False,
     **kwargs,
 ) -> DataLoader:
-    """Get the mouse embryo dataset for cell or nucleus segmentation.
+    """Get the mouse embryo dataloader for cell or nucleus segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
