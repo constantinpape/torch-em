@@ -1,5 +1,12 @@
-"""
-"""
+"""The NIS3D dataset contains fluorescence microscopy volumetric images of
+multiple species (drosophila, zebrafish, etc) for nucleus segmentation.
+
+The dataset is from the publication https://proceedings.neurips.cc/paper_files/paper/2023/hash/0f2cd3d09a132757555b602e2dd43784-Abstract-Datasets_and_Benchmarks.html
+The original codebase for downloading the data and other stuff is located at https://github.com/yu-lab-vt/NIS3D.
+And the dataset is open-sourced at https://zenodo.org/records/11456029.
+
+Please cite them if you use this dataset for your research.
+"""  # noqa
 
 import os
 import shutil
