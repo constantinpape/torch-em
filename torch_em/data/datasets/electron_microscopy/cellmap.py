@@ -254,6 +254,7 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
 
             # Store inputs.
             f.create_dataset(name="raw_crop", data=em_crop, dtype=em_crop.dtype, compression="gzip")
+            log.info(f"Saved EM data crop for crop '{crop.id}'.")
 
             def _fetch_and_write_label(label_name):
                 gt_crop = gt_source_group[f"{label_name}/{gt_level}"][:]
@@ -280,11 +281,18 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
                 return label_name
 
             if gt_level is not None:
-                with ThreadPoolExecutor() as pool:
-                    futures = {pool.submit(_fetch_and_write_label, name): name for name in crop_group_inventory}
-                    for future in as_completed(futures):
-                        label_name = future.result()
-                        log.info(f"Saved ground truth crop '{crop.id}' for '{label_name}'.")
+                # For this one (large) crop in particular, we store labels in serial
+                # as multiple threads cannot handle it and silently crash.
+                if crop.id == 247:
+                    for name in crop_group_inventory:
+                        _fetch_and_write_label(name)
+                        log.info(f"Saved ground truth crop '{crop.id}' for '{name}'.")
+                else:
+                    with ThreadPoolExecutor() as pool:
+                        futures = {pool.submit(_fetch_and_write_label, name): name for name in crop_group_inventory}
+                        for future in as_completed(futures):
+                            label_name = future.result()
+                            log.info(f"Saved ground truth crop '{crop.id}' for '{label_name}'.")
 
         log.info(f"Saved crop '{crop.id}' to '{crop_path}'.")
         log = log.unbind("crop_id", "dataset")
