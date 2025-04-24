@@ -73,7 +73,7 @@ def get_arvidsson_data(
 
 def get_arvidsson_paths(
     path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False,
-) -> Tuple[List[int], List[int]]:
+) -> Tuple[List[str], List[str]]:
     """Get paths to the Arvidsson data.
 
     Args:
