@@ -9,13 +9,13 @@ sys.path.append("..")
 
 
 def check_betaseg():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_betaseg_loader(
         path=os.path.join(ROOT, "betaseg"),
         batch_size=2,
         patch_shape=(16, 512, 512),
+        label_choice="mitochondria",
         download=True,
     )
 
