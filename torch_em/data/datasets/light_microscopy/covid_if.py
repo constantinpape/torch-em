@@ -45,9 +45,7 @@ def get_covid_if_data(path: Union[os.PathLike, str], download: bool = False) -> 
 
 
 def get_covid_if_paths(
-    path: Union[os.PathLike, str],
-    sample_range: Optional[Tuple[int, int]] = None,
-    download: bool = False
+    path: Union[os.PathLike, str], sample_range: Optional[Tuple[int, int]] = None, download: bool = False,
 ) -> List[str]:
     """Get paths to the Covid-IF data.
 
