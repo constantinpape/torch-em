@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_pnas_arabidopsis():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_pnas_arabidopsis_loader(
         path=os.path.join(ROOT, "pnas_arabidopsis"),

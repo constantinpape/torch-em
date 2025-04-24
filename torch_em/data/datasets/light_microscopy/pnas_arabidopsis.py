@@ -46,17 +46,22 @@ def get_pnas_arabidopsis_data(path: Union[os.PathLike, str], download: bool = Fa
 
     zip_path = os.path.join(path, "PNAS.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
-    util.unzip(zip_path=zip_path, dst=path)
+    util.unzip(zip_path=zip_path, dst=data_dir)
 
     # Convert the data to h5 (It's hard to keep a track of filenames as they are not completely consistent)
     import h5py
 
-    raw_paths = natsorted(glob(os.path.join(data_dir, "plant*", "processed_tiffs", "*trim-acylYFP.tif")))
+    raw_paths = natsorted(glob(os.path.join(data_dir, "PNAS", "plant*", "processed_tiffs", "*trim-acylYFP.tif")))
     for rpath in tqdm(raw_paths, desc="Preprocessing images"):
         # Let's find the label.
         label_path = rpath.replace("processed_tiffs", "segmentation_tiffs")
         label_path = glob(label_path.replace(".tif", "*.tif"))
-        assert len(label_path) == 1, "It should not be possible to find more than one labels from the search above."
+
+        if len(label_path) != 1:
+            print(f"It seems like there are no matching labels for '{os.path.basename(rpath)}'.")
+            continue
+
+        label_path = label_path[0]
 
         raw = imageio.imread(rpath)
         labels = imageio.imread(label_path)
@@ -68,7 +73,7 @@ def get_pnas_arabidopsis_data(path: Union[os.PathLike, str], download: bool = Fa
             f.create_dataset("labels", data=labels, dtype=labels.dtype, compression="gzip")
 
     # Remove old data folder
-    shutil.rmtree(os.path.join(path, "PNAS"))
+    shutil.rmtree(os.path.join(path, "data", "PNAS"))
 
     return data_dir
 
@@ -84,7 +89,7 @@ def get_pnas_arabidopsis_paths(path: Union[os.PathLike, str], download: bool = F
         List of filepaths for the volumetric data.
     """
     data_dir = get_pnas_arabidopsis_data(path, download)
-    volume_paths = glob(os.path.join(data_dir, ".h5"))
+    volume_paths = glob(os.path.join(data_dir, "*.h5"))
     return volume_paths
 
 
