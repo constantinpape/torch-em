@@ -13,7 +13,7 @@ def check_sa_med2d():
     ROOT = "/mnt/vast-nhr/projects/cidas/cca/data"
 
     loader = get_sa_med2d_loader(
-        path=os.path.join(ROOT, "sa_med2d"),
+        path=os.path.join(ROOT, "sa-med2d"),
         patch_shape=(512, 512),
         split="train",
         batch_size=2,
