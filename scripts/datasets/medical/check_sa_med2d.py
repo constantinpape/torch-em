@@ -1,13 +1,19 @@
+import os
+import sys
+
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets.medical import get_sa_med2d_loader
 
 
-ROOT = "/scratch/share/cidas/cca/data/sa-med2d"
+sys.path.append("..")
 
 
 def check_sa_med2d():
+    # from util import ROOT
+    ROOT = "/mnt/vast-nhr/projects/cidas/cca/data"
+
     loader = get_sa_med2d_loader(
-        path=ROOT,
+        path=os.path.join(ROOT, "sa_med2d"),
         patch_shape=(512, 512),
         split="train",
         batch_size=2,
