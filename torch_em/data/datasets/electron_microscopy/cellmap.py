@@ -314,7 +314,7 @@ def get_cellmap_data(
     """Downloads the CellMap training data.
 
     Args:
-        path: Filepath to a folder where the data will be downloaded for further processing
+        path: Filepath to a folder where the data will be downloaded for further processing.
         organelles: The choice of organelles to download. By default, loads all types of labels available.
             For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
