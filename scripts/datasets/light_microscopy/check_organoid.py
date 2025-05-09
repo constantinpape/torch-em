@@ -9,15 +9,14 @@ sys.path.append("..")
 
 
 def check_organoid():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_organoid_loader(
         path=os.path.join(ROOT, "organoid"),
         batch_size=2,
-        patch_shape=(512, 512),
-        split="train",
-        source="mouse",
+        patch_shape=(8, 512, 512),
+        source="gemcitabine",
+        source_channels="bf",
         download=True,
     )
 
