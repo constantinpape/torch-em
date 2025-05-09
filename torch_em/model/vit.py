@@ -361,13 +361,15 @@ class ViT_ScaleMAE(VisionTransformer):
         return x, list_from_encoder
 
 
-def get_vision_transformer(backbone: str, model: str, img_size: int = 1024) -> nn.Module:
+def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kwargs) -> nn.Module:
     """Get vision transformer encoder.
 
     Args:
         backbone: The name of the vision transformer implementation. One of "sam" or "mae".
         model: The name of the model. One of "vit_b", "vit_l" or "vit_h".
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
+        kwargs: Additional kwargs which can be expected by the vision transformer,
+            e.g. 'base_resolution' for `ViT_ScaleMAE`.
 
     Returns:
         The vision transformer.
@@ -420,20 +422,25 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024) -> n
             raise ValueError(f"'{model}' is not supported by MAE. Currently, 'vit_b', 'vit_l', 'vit_h' are supported.")
 
     elif backbone == "scalemae":
+        base_resolution = kwargs.get("base_resolution", 2.5)
+
         if model == "vit_b":
             encoder = ViT_ScaleMAE(
                 img_size=img_size, patch_size=8, embed_dim=768, depth=12, num_heads=12,
-                mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)
+                mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
+                base_resolution=base_resolution,
             )
         elif model == "vit_l":
             encoder = ViT_ScaleMAE(
                 img_size=img_size, patch_size=8, embed_dim=1024, depth=24, num_heads=16,
-                mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)
+                mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
+                base_resolution=base_resolution,
             )
         elif model == "vit_h":
             encoder = ViT_ScaleMAE(
                 img_size=img_size, patch_size=8, embed_dim=1280, depth=32, num_heads=16,
-                mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)
+                mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
+                base_resolution=base_resolution,
             )
         else:
             raise ValueError(

@@ -101,6 +101,7 @@ class UNETR(nn.Module):
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = True,
+        **kwargs
     ) -> None:
         super().__init__()
 
@@ -111,7 +112,7 @@ class UNETR(nn.Module):
 
         if isinstance(encoder, str):  # "vit_b" / "vit_l" / "vit_h"
             print(f"Using {encoder} from {backbone.upper()}")
-            self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder)
+            self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder, **kwargs)
 
             if encoder_checkpoint is not None:
                 self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint)
