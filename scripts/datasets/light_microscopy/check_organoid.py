@@ -17,6 +17,7 @@ def check_organoid():
         batch_size=2,
         patch_shape=(512, 512),
         split="train",
+        source="mouse",
         download=True,
     )
 

@@ -42,7 +42,10 @@ def _store_files_as_h5(data_dir, image_dir, image_pattern, label_dir, label_patt
 
     for image_path, gt_path in zip(image_paths, gt_paths):
         image = imageio.imread(image_path)
-        gt = imageio.imread(gt_path)[..., 0]  # Choose one label channel as all are same.
+        gt = imageio.imread(gt_path)
+
+        if gt.ndim == 3:
+            gt = gt[..., 0]  # Choose one label channel as all are same.
 
         gt = connected_components(gt > 0).astype("uint16")  # Run connected components to get instances.
 
@@ -53,6 +56,9 @@ def _store_files_as_h5(data_dir, image_dir, image_pattern, label_dir, label_patt
             image = np.stack([image] * 3, axis=-1)
 
         assert image.ndim == 3 and image.shape[-1] == 3, image.shape
+
+        # Now, make channels first (to make this work with our dataset)
+        image = image.transpose(2, 0, 1)
 
         with h5py.File(os.path.join(data_dir, f"{Path(image_path).stem}.h5"), "w") as f:
             f.create_dataset(name="raw", data=image, compression="gzip")
