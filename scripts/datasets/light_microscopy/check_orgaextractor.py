@@ -9,14 +9,13 @@ sys.path.append("..")
 
 
 def check_orgaextractor():
-    # from util import ROOT
-    ROOT = "/media/anwai/ANWAI/data"
+    from util import ROOT
 
     loader = get_orgaextractor_loader(
         path=os.path.join(ROOT, "orgaextractor"),
         batch_size=2,
         patch_shape=(512, 512),
-        split="train",
+        split="test",
         download=True,
     )
 

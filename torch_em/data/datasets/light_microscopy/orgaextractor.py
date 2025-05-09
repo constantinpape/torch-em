@@ -35,7 +35,7 @@ URLS = {
 CHECKSUMS = {
     "train": "279bcfbcbd2fba23bbdea362b23eedacc53193034f4d23eb94ef570896da4f60",
     "val": "3d2288a7be39a692af2eb86bea520e7db332191cd372a8c970679b5bede61b7e",
-    "test": None,
+    "test": "8e110ad8543031ed61c61bee5e8b41492b746d0dc8c503b6f8d4869b29a308e6",
 }
 
 
@@ -48,7 +48,7 @@ def _preprocess_data(data_dir):
 
 
 def get_orgaextractor_data(
-    path: Union[os.PathLike, str], split: Literal["train", "val"] = None, download: bool = False,
+    path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False,
 ) -> str:
     """Download the OrgaExtractor dataset.
 
@@ -78,7 +78,7 @@ def get_orgaextractor_data(
 
 
 def get_orgaextractor_paths(
-    path: Union[os.PathLike, str], split: Literal["train", "val"] = None, download: bool = False,
+    path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the OrgaExtractor data.
 
@@ -104,7 +104,7 @@ def get_orgaextractor_paths(
 def get_orgaextractor_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    split: Literal["train", "val"] = None,
+    split: Literal["train", "test"],
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -138,7 +138,7 @@ def get_orgaextractor_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    split: Literal["train", "val"] = None,
+    split: Literal["train", "test"],
     download: bool = False,
     **kwargs
 ) -> DataLoader:
