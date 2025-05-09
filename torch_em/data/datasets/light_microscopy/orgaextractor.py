@@ -70,7 +70,7 @@ def get_orgaextractor_data(
     util.download_source_gdrive(
         path=zip_path, url=URLS[split], download=download, checksum=CHECKSUMS[split], download_type="zip",
     )
-    util.unzip(zip_path=zip_path, dst=data_dir, remove=False)
+    util.unzip(zip_path=zip_path, dst=data_dir)
 
     _preprocess_data(data_dir)
 
