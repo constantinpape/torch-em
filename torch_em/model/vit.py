@@ -274,13 +274,19 @@ class PatchEmbedUnSafe(PatchEmbed):
 
 class ViT_ScaleMAE(VisionTransformer):
     """Vision Transformer dervied from the Scale Masked Auto Encoder codebase (TODO: paper and github link).
+
+    NOTE: For downstream tasks, the "base_resoulution" parameter needs to be adjusted manually when using
+    the model on a different zoom factor dataset.
     """
 
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=1024, depth=12, **kwargs):
+    def __init__(
+        self, img_size=224, patch_size=16, in_chans=3, embed_dim=1024, depth=12, base_resolution=2.5, **kwargs
+    ):
         super().__init__(img_size=img_size, embed_dim=embed_dim, **kwargs)
         self.img_size = img_size
         self.in_chans = in_chans
         self.depth = depth
+        self.base_resolution = base_resolution
 
         self.patch_embed = PatchEmbedUnSafe(
             img_size=img_size,
@@ -293,9 +299,6 @@ class ViT_ScaleMAE(VisionTransformer):
         import kornia.augmentation as K
         from kornia.constants import Resample
 
-        # "base_resoulution" needs to be adjusted manually when using the model on a different zoom factor dataset.
-        base_resolution = 2.5
-
         self._transforms = CustomCompose(
             rescale_transform=K.RandomResizedCrop(
                 (448, 448),
@@ -307,7 +310,7 @@ class ViT_ScaleMAE(VisionTransformer):
             src_transform=K.Resize((224, 224)),
         )
         x, _, ratios, _, _ = self._transforms(x)
-        input_res = ratios * base_resolution
+        input_res = ratios * self.base_resolution
         return x, input_res
 
     def convert_to_expected_dim(self, x):
