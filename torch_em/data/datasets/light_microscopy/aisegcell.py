@@ -7,7 +7,9 @@ from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
 from typing import List, Union, Tuple, Literal
+from concurrent.futures import ProcessPoolExecutor
 
+import numpy as np
 import imageio.v3 as imageio
 from skimage.measure import label as connected_components
 
@@ -22,8 +24,48 @@ URL = "https://libdrive.ethz.ch/index.php/s/VoF2SYkbLY8izjh/download"
 CHECKSUM = "f9115ee6b71e7c4364b83f7d7f8b66dce5b778344070bddb6a8f0e5086ca5de9"
 
 
-def _preprocess_data(data_dir, base_dir):
+def _process_each_image(args):
     import h5py
+
+    bpath, npath, gpath, data_dir = args
+
+    bf = imageio.imread(bpath)
+    nuc = imageio.imread(npath)
+    gt = imageio.imread(gpath)
+
+    if bf.ndim == 3:
+        bf = bf.transpose(2, 0, 1)
+    else:
+        bf = np.stack([bf] * 3, axis=0)
+
+    if nuc.ndim == 3:
+        nuc = nuc.transpose(2, 0, 1)
+    else:
+        nuc = np.stack([nuc] * 3, axis=0)
+
+    assert nuc.ndim == bf.ndim == 3
+
+    if gt.ndim == 3:
+        gt = gt[..., 0]
+
+    gt = connected_components(gt).astype("uint16")
+
+    path_parents = Path(bpath).parents
+    split = path_parents[1].name.split("_")[-1]
+    dname = path_parents[2].name
+
+    neu_dir = os.path.join(data_dir, split, dname)
+    os.makedirs(neu_dir, exist_ok=True)
+
+    fpath = os.path.join(neu_dir, f"{Path(bpath).stem}.h5")
+
+    with h5py.File(fpath, "w") as f:
+        f.create_dataset("raw/brightfield", data=bf, compression="gzip")
+        f.create_dataset("raw/fluorescence", data=nuc, compression="gzip")
+        f.create_dataset("labels", data=gt, compression="gzip")
+
+
+def _preprocess_data(data_dir, base_dir):
 
     bf_paths = natsorted(glob(os.path.join(base_dir, "**", "brightfield", "*.png"), recursive=True))
     nucleus_paths = natsorted(glob(os.path.join(base_dir, "**", "nucleus", "*.png"), recursive=True))
@@ -31,28 +73,9 @@ def _preprocess_data(data_dir, base_dir):
 
     assert bf_paths and len(bf_paths) == len(nucleus_paths) == len(gt_paths)
 
-    for bpath, npath, gpath in tqdm(
-        zip(bf_paths, nucleus_paths, gt_paths), desc="Processing data", total=len(bf_paths)
-    ):
-        bf = imageio.imread(bpath)
-        nuc = imageio.imread(npath)
-        gt = imageio.imread(gpath)
-        gt = connected_components(gt).astype("uint16")
-
-        # Let's get the split info first.
-        path_parents = Path(bpath).parents
-        split = path_parents[1].name.split("_")[-1]
-        dname = path_parents[2].name
-
-        neu_dir = os.path.join(data_dir, split, dname)
-        os.makedirs(neu_dir, exist_ok=True)
-
-        fpath = os.path.join(neu_dir, f"{Path(bpath).stem}.h5")
-
-        with h5py.File(fpath, "w") as f:
-            f.create_dataset("raw/brightfield", data=bf, compression="gzip")
-            f.create_dataset("raw/fluorescence", data=nuc, compression="gzip")
-            f.create_dataset("labels", data=gt, compression="gzip")
+    tasks = [(b, n, g, data_dir) for b, n, g in zip(bf_paths, nucleus_paths, gt_paths)]
+    with ProcessPoolExecutor() as executor:
+        list(tqdm(executor.map(_process_each_image, tasks), total=len(tasks), desc="Processing data"))
 
 
 def get_aisegcell_data(path: Union[os.PathLike, str], download: bool = False) -> str:
@@ -72,9 +95,9 @@ def get_aisegcell_data(path: Union[os.PathLike, str], download: bool = False) ->
     )
     # util.unzip(zip_path=zip_path, dst=path, remove=False)
     # util.unzip_tarfile(tar_path=os.path.join(path, "679085", "aisegcell_supplement.tar"), dst=path)
-    util.unzip_tarfile(
-        tar_path=os.path.join(path, "679085", "aiSEGcell_supplement", "data_sets", "aiSEGcell_nucleus.tar"), dst=path,
-    )
+    # util.unzip_tarfile(
+    #     tar_path=os.path.join(path, "679085", "aiSEGcell_supplement", "data_sets", "aiSEGcell_nucleus.tar"), dst=path,
+    # )
 
     # Now that we have the core 'aiSEGcell_nucleus' folder on top-level directory, we can take it for processing data.
     _preprocess_data(data_dir=data_dir, base_dir=os.path.join(path, "aiSEGcell_nucleus"))
