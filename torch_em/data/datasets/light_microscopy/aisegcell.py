@@ -33,11 +33,13 @@ def _process_each_image(args):
     nuc = imageio.imread(npath)
     gt = imageio.imread(gpath)
 
+    # Ensure all bf images have 3 channels.
     if bf.ndim == 3:
         bf = bf.transpose(2, 0, 1)
     else:
         bf = np.stack([bf] * 3, axis=0)
 
+    # Ensure all fluo images have 3 channels.
     if nuc.ndim == 3:
         nuc = nuc.transpose(2, 0, 1)
     else:
@@ -45,6 +47,7 @@ def _process_each_image(args):
 
     assert nuc.ndim == bf.ndim == 3
 
+    # Labels have 3 channels. Keep only one.
     if gt.ndim == 3:
         gt = gt[..., 0]
 
