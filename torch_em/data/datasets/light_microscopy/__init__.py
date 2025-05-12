@@ -1,3 +1,4 @@
+from .aisegcell import get_aisegcell_loader, get_aisegcell_dataset
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bitdepth_nucseg import get_bitdepth_nucseg_loader, get_bitdepth_nucseg_dataset
 from .brifiseg import get_brifiseg_loader, get_brifiseg_dataset
