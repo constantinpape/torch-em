@@ -1,3 +1,6 @@
+"""
+"""
+
 import os
 import random
 from tqdm import tqdm
@@ -135,7 +138,7 @@ SMALL_DATASETS = [
 ]
 
 
-def get_sa_med2d_data(path, download):
+def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """This function describes the download functionality and ensures your data has been downloaded in expected format.
 
     The dataset is located at https://huggingface.co/datasets/OpenGVLab/SA-Med2D-20M.
@@ -168,6 +171,13 @@ def get_sa_med2d_data(path, download):
             - NOTE: deflates the entire dataset to ensemble into one zip, make sure you have ~1.5TB free space.
         - `unzip {full}.zip`
             - NOTE: there are >4M images paired with >19M ground-truth masks. unzipping takes a lot of inodes and time.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is already downloaded and unzipped.
     """
     if download:
         print("Download is not supported, as the data is huge and takes quite a while to download and extract.")
@@ -357,7 +367,7 @@ def get_sa_med2d_dataset(
     n_fraction_per_dataset: Optional[float] = None,
     download: bool = False,
     **kwargs
-):
+) -> Dataset:
     """Dataset for segmentation of various organs and structures in multiple medical imaging modalities.
 
     You should download the dataset yourself. See `get_sa_med2d_data` for details.
@@ -388,7 +398,7 @@ def get_sa_med2d_dataset(
 
     print("Creating the dataset for the SA-Med2D-20M dataset. This takes a bit of time.")
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
@@ -400,8 +410,6 @@ def get_sa_med2d_dataset(
         verify_paths=False,
         **kwargs
     )
-
-    return dataset
 
 
 def get_sa_med2d_loader(
@@ -415,7 +423,7 @@ def get_sa_med2d_loader(
     n_fraction_per_dataset: Optional[float] = None,
     download: bool = False,
     **kwargs
-):
+) -> DataLoader:
     """Dataloader for segmentation of various organs and structures in multiple medical imaging modalities.
     See `get_sa_med2d_dataset` for details.
     """
@@ -432,5 +440,4 @@ def get_sa_med2d_loader(
         **ds_kwargs
     )
     print("Creating the dataloader for the SA-Med2D-20M dataset. This takes a bit of time.")
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
