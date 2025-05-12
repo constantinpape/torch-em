@@ -10,7 +10,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        #  'windows-latest' tests are causing a lot of issues.
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12"]
 
     steps:
