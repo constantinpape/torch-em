@@ -370,7 +370,10 @@ def load_model(
         The model.
     """
     if model is None:  # load the model and its state from the checkpoint
-        model = get_trainer(checkpoint, name=name, device=device).model
+        trainer = get_trainer(checkpoint, name=name, device=device)
+        # We load the average model (result from EMA) if it is available.
+        # Otherwise we use the standard model.
+        model = getattr(trainer, "average_model", trainer.model)
 
     else:  # load the model state from the checkpoint
         if os.path.isdir(checkpoint):
