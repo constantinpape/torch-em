@@ -1,4 +1,9 @@
-"""
+"""The aiSEGcell dataset contains annotations for nucleus segmentation in
+paired brightfield and fluorescence images.
+
+The dataset collection is located at https://www.research-collection.ethz.ch/handle/20.500.11850/679085.
+This dataset is from the publication https://doi.org/10.1371/journal.pcbi.1012361.
+Please cite it if you use this dataset in your research.
 """
 
 import os
@@ -29,6 +34,17 @@ def _process_each_image(args):
 
     bpath, npath, gpath, data_dir = args
 
+    path_parents = Path(bpath).parents
+    split = path_parents[1].name.split("_")[-1]
+    dname = path_parents[2].name
+
+    neu_dir = os.path.join(data_dir, split, dname)
+    os.makedirs(neu_dir, exist_ok=True)
+
+    fpath = os.path.join(neu_dir, f"{Path(bpath).stem}.h5")
+    if os.path.exists(fpath):
+        return
+
     bf = imageio.imread(bpath)
     nuc = imageio.imread(npath)
     gt = imageio.imread(gpath)
@@ -53,15 +69,6 @@ def _process_each_image(args):
 
     gt = connected_components(gt).astype("uint16")
 
-    path_parents = Path(bpath).parents
-    split = path_parents[1].name.split("_")[-1]
-    dname = path_parents[2].name
-
-    neu_dir = os.path.join(data_dir, split, dname)
-    os.makedirs(neu_dir, exist_ok=True)
-
-    fpath = os.path.join(neu_dir, f"{Path(bpath).stem}.h5")
-
     with h5py.File(fpath, "w") as f:
         f.create_dataset("raw/brightfield", data=bf, compression="gzip")
         f.create_dataset("raw/fluorescence", data=nuc, compression="gzip")
@@ -82,25 +89,32 @@ def _preprocess_data(data_dir, base_dir):
 
 
 def get_aisegcell_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """
+    """Download the aiSEGcell dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the dataset is stored.
     """
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
         return data_dir
 
-    # zip_path = os.path.join(path, "data.zip")
-    # util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
+    zip_path = os.path.join(path, "data.zip")
+    util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
 
-    # # We need to do multiple unzip and untar to get the data out.
+    # We need to do multiple unzip and untar to get the data out.
     print(
         "'aiSEGcell' is a very large dataset (>60GB). It might take a couple of hours to download, "
         "unzip and preprocess the data. Please ensure that you have a stable internet connection."
     )
-    # util.unzip(zip_path=zip_path, dst=path, remove=False)
-    # util.unzip_tarfile(tar_path=os.path.join(path, "679085", "aisegcell_supplement.tar"), dst=path)
-    # util.unzip_tarfile(
-    #     tar_path=os.path.join(path, "679085", "aiSEGcell_supplement", "data_sets", "aiSEGcell_nucleus.tar"), dst=path,
-    # )
+    util.unzip(zip_path=zip_path, dst=path, remove=False)
+    util.unzip_tarfile(tar_path=os.path.join(path, "679085", "aisegcell_supplement.tar"), dst=path)
+    util.unzip_tarfile(
+        tar_path=os.path.join(path, "679085", "aiSEGcell_supplement", "data_sets", "aiSEGcell_nucleus.tar"), dst=path,
+    )
 
     # Now that we have the core 'aiSEGcell_nucleus' folder on top-level directory, we can take it for processing data.
     _preprocess_data(data_dir=data_dir, base_dir=os.path.join(path, "aiSEGcell_nucleus"))
@@ -111,10 +125,23 @@ def get_aisegcell_data(path: Union[os.PathLike, str], download: bool = False) ->
 def get_aisegcell_paths(
     path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False,
 ) -> List[str]:
-    """
+    """Get paths to the aiSEGcell dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the input data.
     """
     data_dir = get_aisegcell_data(path, download)
-    data_paths = glob(os.path.join(data_dir, split, "*.h5"))
+
+    if split not in ["train", "val", "test"]:
+        raise ValueError(f"'{split}' is not a valid split choice.")
+
+    data_paths = glob(os.path.join(data_dir, split, "**", "*.h5"), recursive=True)
+    assert len(data_paths) > 0
     return data_paths
 
 
@@ -126,7 +153,18 @@ def get_aisegcell_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """
+    """Get the aiSEGcell dataset for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        raw_channel: The input channel to use. Either 'brightfield' or 'fluorescence'.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
     """
     data_paths = get_aisegcell_paths(path, split, download)
 
@@ -138,6 +176,7 @@ def get_aisegcell_dataset(
         is_seg_dataset=True,
         patch_shape=patch_shape,
         ndim=2,
+        with_channels=True,
         **kwargs
     )
 
@@ -151,7 +190,19 @@ def get_aisegcell_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """
+    """Get the aiSEGcell dataloader for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        raw_channel: The input channel to use. Either 'brightfield' or 'fluorescence'.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_aisegcell_dataset(path, patch_shape, split, raw_channel, download, **ds_kwargs)
