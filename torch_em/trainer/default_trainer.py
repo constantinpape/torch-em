@@ -548,6 +548,8 @@ class DefaultTrainer:
             self.model = auto_compile(self.model, self.compile_model)
 
             self.model.to(self.device)
+            if self.ema:
+                self.average_model.to(self.device)
             self.loss.to(self.device)
 
             # this saves all the information that is necessary
