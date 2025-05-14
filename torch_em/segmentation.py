@@ -445,6 +445,7 @@ def default_segmentation_trainer(
     save_root: Optional[str] = None,
     compile_model: Optional[Union[bool, str]] = None,
     rank: Optional[int] = None,
+    ema: Optional[float] = None,
 ):
     """Get a trainer for a segmentation network.
 
@@ -494,6 +495,9 @@ def default_segmentation_trainer(
         save_root: The root folder for saving the checkpoint and logs.
         compile_model: Whether to compile the model before training.
         rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+        ema: Factor for exponential moving average of model weights.
+            If given, an average model is kept and used for validation. This model should then be used
+            rather than the 'raw' trained model; it usually performs better.
 
     Returns:
         The trainer.
@@ -532,4 +536,5 @@ def default_segmentation_trainer(
         save_root=save_root,
         compile_model=compile_model,
         rank=rank,
+        ema=ema,
     )
