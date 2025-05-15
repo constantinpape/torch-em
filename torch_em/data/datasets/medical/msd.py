@@ -162,6 +162,7 @@ def get_msd_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         task_names: The names for the 10 different segmentation tasks (see the challenge website for further details):
             1. tasks with 1 modality inputs are: heart, liver, hippocampus, lung, pancreas, hepaticvessel, spleen, colon

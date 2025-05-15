@@ -54,12 +54,12 @@ def get_panorama_data(path: Union[os.PathLike, str], download: bool = False):
         path: Filepath to a folder where the data is downloaded for further processing.
         download: Whether to download the data if it is not present.
     """
-    os.makedirs(path, exist_ok=True)
-
     data_path = os.path.join(path, "volumes")
     label_path = os.path.join(path, "labels")
     if os.path.exists(data_path) and os.path.exists(label_path):
         return
+
+    os.makedirs(path, exist_ok=True)
 
     print("PANORAMA is a large dataset. I might take a while to download the volumes and respective labels.")
 
@@ -130,6 +130,7 @@ def get_panorama_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     annotation_choice: Optional[Literal["manual", "automatic"]] = None,
+    resize_inputs: bool = False,
     download: bool = False, **kwargs
 ) -> Dataset:
     """Get the PANORAMA dataset for pancreatic lesion (and other structures) segmentation.
@@ -138,6 +139,7 @@ def get_panorama_dataset(
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         annotation_choice: The source of annotation.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -145,6 +147,12 @@ def get_panorama_dataset(
         The segmentation dataset.
     """
     raw_paths, label_paths = get_panorama_paths(path, annotation_choice, download)
+
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -162,7 +170,9 @@ def get_panorama_loader(
     batch_size: int,
     patch_shape: Tuple[int, ...],
     annotation_choice: Optional[Literal["manual", "automatic"]] = None,
-    download: bool = False, **kwargs
+    resize_inputs: bool = False,
+    download: bool = False,
+    **kwargs
 ) -> DataLoader:
     """Get the PANORAMA dataloader for pancreatic lesion (and other structures) segmentation.
 
@@ -171,6 +181,7 @@ def get_panorama_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         annotation_choice: The source of annotation.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -178,5 +189,5 @@ def get_panorama_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_panorama_dataset(path, patch_shape, annotation_choice, download, **ds_kwargs)
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_panorama_dataset(path, patch_shape, annotation_choice, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

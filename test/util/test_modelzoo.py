@@ -26,7 +26,6 @@ class ExpandChannels:
         return labels
 
 
-@unittest.skip("BioImage.IO libraries are broken.")
 class TestModelzoo(unittest.TestCase):
     checkpoint_folder = "./checkpoints"
     log_folder = "./logs"
@@ -90,10 +89,12 @@ class TestModelzoo(unittest.TestCase):
 
         return output_path
 
-    def test_export_single_channel(self):
+    # These tests are very unreliable. They work locally but fail in the CI.
+    # I am fully disabling them for now.
+    def _test_export_single_channel(self):
         self._test_export(1, "single-chan")
 
-    def test_export_multi_channel(self):
+    def _test_export_multi_channel(self):
         self._test_export(4, "multi-chan")
 
     @unittest.expectedFailure

@@ -144,7 +144,12 @@ def get_covid_qu_ex_dataset(
         )
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths, raw_key=None, label_paths=gt_paths, label_key=None, patch_shape=patch_shape, **kwargs
+        raw_paths=image_paths,
+        raw_key=None,
+        label_paths=gt_paths,
+        label_key=None,
+        patch_shape=patch_shape,
+        **kwargs
     )
 
 

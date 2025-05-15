@@ -9,10 +9,6 @@ You can use `conda` (or its faster alternative [mamba](https://mamba.readthedocs
 ```bash
 conda install -c conda-forge torch_em
 ```
-This command should work on Linux and Mac OS, on windows the installation is a bit more complex:
-```bash
-conda install -c pytorch -c nvidia -c conda-forge torch_em "nifty=1.2.1=*_4" "protobuf <5"
-```
 
 ## From source
 
@@ -24,9 +20,6 @@ conda env create -f environment.yaml
 conda activate torch-em-dev
 pip install -e .
 ```
-This should work on Linux and Mac OS. On windows you have to use a different environment file:
-`environment_cpu_win.yaml` for setting up an environment with a PyTorch version with CPU support or
-`environment_gpu_win.yaml` for a PyTorch version with GPU support.
 
 # Usage & Examples
 
@@ -81,3 +74,6 @@ Multiple research projects are built with `torch_em`:
 - [Segment Anything for Microscopy](https://doi.org/10.1101/2023.08.21.554208) | [Code Repository](https://github.com/computational-cell-analytics/micro-sam)
 - [ViM-UNet: Vision Mamba for Biomedical Segmentation](https://doi.org/10.48550/arXiv.2404.07705) | [Code Repository](https://github.com/constantinpape/torch-em/blob/main/vimunet.md)
 - [SynapseNet: Deep Learning for Automatic Synapse Reconstruction](https://doi.org/10.1101/2024.12.02.626387) | [Code Repository](https://github.com/computational-cell-analytics/synapse-net)
+- [MedicoSAM: Towards foundation models for medical image segmentation](https://arxiv.org/abs/2501.11734) | [Code Repository](https://github.com/computational-cell-analytics/medico-sam)
+- [Parameter Efficient Fine-Tuning of Segment Anything Model](https://arxiv.org/abs/2502.00418) | [Code Repository](https://github.com/computational-cell-analytics/peft-sam)
+- [Segment Anything for Histopathology](https://arxiv.org/abs/2502.00408) | [Code Repository](https://github.com/computational-cell-analytics/patho-sam)

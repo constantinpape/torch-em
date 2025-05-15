@@ -6,8 +6,9 @@ import inspect
 import warnings
 import contextlib
 from tqdm import tqdm
-from collections import OrderedDict
 from functools import partial
+from datetime import datetime
+from collections import OrderedDict
 from importlib import import_module
 from typing import Any, Callable, Dict, Optional, Union, Literal
 
@@ -278,7 +279,7 @@ class DefaultTrainer:
     def _get_save_dict(save_path, device):
         if not os.path.exists(save_path):
             raise ValueError(f"Cannot find checkpoint {save_path}")
-        return torch.load(save_path, map_location=device)
+        return torch.load(save_path, map_location=device, weights_only=False)
 
     @classmethod
     def from_checkpoint(
@@ -584,6 +585,7 @@ class DefaultTrainer:
             "optimizer_state": self.optimizer.state_dict(),
             "init": self.init_data | extra_init_dict,
             "train_time": train_time,
+            "timestamp": datetime.now().strftime("%d-%m-%Y (%H:%M:%S)"),
         }
         save_dict.update(**extra_save_dict)
         if self.scaler is not None:
@@ -603,7 +605,7 @@ class DefaultTrainer:
             if not os.path.exists(save_path):
                 warnings.warn(f"Cannot load checkpoint. {save_path} does not exist.")
                 return
-            save_dict = torch.load(save_path)
+            save_dict = torch.load(save_path, weights_only=False)
         elif isinstance(checkpoint, dict):
             save_dict = checkpoint
         else:
@@ -636,7 +638,7 @@ class DefaultTrainer:
 
     def _verify_if_training_completed(self, checkpoint="latest"):
         save_path = os.path.join(self.checkpoint_folder, f"{checkpoint}.pt")
-        save_dict = torch.load(save_path) if os.path.exists(save_path) else None
+        save_dict = torch.load(save_path, weights_only=False) if os.path.exists(save_path) else None
         if save_dict and self.max_iteration == save_dict.get("iteration"):
             return True
         return False

@@ -378,7 +378,7 @@ def load_model(
         else:
             ckpt = checkpoint
 
-        state = torch.load(ckpt, map_location=device)[state_key]
+        state = torch.load(ckpt, map_location=device, weights_only=False)[state_key]
         # to enable loading compiled models
         compiled_prefix = "_orig_mod."
         state = OrderedDict(
@@ -410,7 +410,9 @@ def get_random_colors(labels: np.ndarray) -> colors.ListedColormap:
     Returns:
         The color map.
     """
-    n_labels = len(np.unique(labels)) - 1
-    cmap = [[0, 0, 0]] + np.random.rand(n_labels, 3).tolist()
+    unique_labels = np.unique(labels)
+    have_zero = 0 in unique_labels
+    cmap = [[0, 0, 0]] if have_zero else []
+    cmap += np.random.rand(len(unique_labels), 3).tolist()
     cmap = colors.ListedColormap(cmap)
     return cmap

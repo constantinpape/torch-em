@@ -51,15 +51,15 @@ class UNETR(nn.Module):
                     encoder_state = model.image_encoder.state_dict()
                 except Exception:
                     # Try loading the encoder state directly from a checkpoint.
-                    encoder_state = torch.load(checkpoint)
+                    encoder_state = torch.load(checkpoint, weights_only=False)
 
             elif backbone == "mae":
                 # vit initialization hints from:
                 #     - https://github.com/facebookresearch/mae/blob/main/main_finetune.py#L233-L242
-                encoder_state = torch.load(checkpoint)["model"]
-                encoder_state = OrderedDict(
-                    {k: v for k, v in encoder_state.items() if (k != "mask_token" and not k.startswith("decoder"))}
-                )
+                encoder_state = torch.load(checkpoint, weights_only=False)["model"]
+                encoder_state = OrderedDict({
+                    k: v for k, v in encoder_state.items() if (k != "mask_token" and not k.startswith("decoder"))
+                })
                 # Let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
                 current_encoder_state = self.encoder.state_dict()
                 if ("head.weight" in current_encoder_state) and ("head.bias" in current_encoder_state):
