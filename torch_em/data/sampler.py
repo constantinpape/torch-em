@@ -46,7 +46,7 @@ class MinSemanticLabelForegroundSampler:
     """A sampler to reject samples with a low fraction of foreground pixels in the semantic labels.
 
     Args:
-        sematic_ids: The ids for semantic classes to take into account.
+        semantic_ids: The ids for semantic classes to take into account.
         min_fraction: The minimal fraction of foreground pixels for accepting a sample.
         min_fraction_per_id: Whether the minimal fraction is applied on a per label basis.
         p_reject: The probability for rejecting a sample that does not meet the criterion.
@@ -76,7 +76,7 @@ class MinSemanticLabelForegroundSampler:
         else:
             foreground_fraction = [np.sum(np.isin(y, self.semantic_ids))]
 
-        if all(foreground_fraction) > self.min_fraction:
+        if all(fraction > self.min_fraction for fraction in foreground_fraction):
             return True
         else:
             return np.random.rand() > self.p_reject
