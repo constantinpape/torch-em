@@ -1,17 +1,27 @@
-"""
+"""The SA-Med2D-20M dataset contains annotations for several organs and structures in biomedical
+images from several imaging modalities.
+
+NOTE: The current version contains 3.7M images and 15.8M masks.
+
+The dataset is located in HuggingFace at https://huggingface.co/datasets/OpenGVLab/SA-Med2D-20M.
+The dataset is from the publication: https://arxiv.org/abs/2311.11969.
+And the dataset is curated in alignment with the publication: https://doi.org/10.48550/arXiv.2308.16184.
+Please cite it if you use this dataset in your research.
 """
 
 import os
 import random
 from tqdm import tqdm
 from pathlib import Path
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple, Optional, Literal, List
 
 import json
 import numpy as np
 import imageio.v3 as imageio
 from skimage.segmentation import relabel_sequential
 from sklearn.model_selection import train_test_split
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -138,6 +148,10 @@ SMALL_DATASETS = [
 ]
 
 
+def _preprocess_data(data_dir):
+    ...
+
+
 def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """This function describes the download functionality and ensures your data has been downloaded in expected format.
 
@@ -196,6 +210,9 @@ def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> 
 
     json_file = "SAMed2D_v1_class_mapping_id.json"
     assert os.path.exists(os.path.join(data_dir, json_file)), f"The json file '{json_file}' is missing."
+
+    # And the final stage is preprocessing the images to be able to efficiently access the entire dataset.
+    _preprocess_data(data_dir)
 
     print("Looks like the dataset is ready to use.")
 
@@ -337,13 +354,37 @@ def _get_split_wise_paths(data_dir, json_file, split, exclude_dataset, exclude_m
     return image_paths, gt_paths
 
 
-def _get_sa_med2d_paths(path, split, exclude_dataset, exclude_modality, n_fraction_per_dataset, download):
+def get_sa_med2d_paths(
+    path: Union[os.PathLike, str],
+    split: Literal["train", "val"],
+    exclude_dataset: Optional[Union[str, list]] = None,
+    exclude_modality: Optional[Union[str, list]] = None,
+    n_fraction_per_dataset: Optional[float] = None,
+    download: bool = False,
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the SA-Med2D-20M data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
+        exclude_dataset: Optionally, whether to exclude a particular dataset.
+        exclude_modality: Optionally, whether to exclude a particular imaging modality.
+        n_fraction_per_dataset: Optionally, the fraction of data to obtain.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_sa_med2d_data(path=path, download=download)
 
     json_file = os.path.join(data_dir, "preprocessed_inputs.json")
     if not os.path.exists(json_file):
         skipped_files = _assort_sa_med2d_data(data_dir=data_dir)
         _create_splits_per_dataset(data_dir=data_dir, json_file=json_file, skipped_files=skipped_files)
+
+    if split not in ["train", "val"]:
+        raise ValueError(f"'{split}' is not a valid split choice.")
 
     image_paths, gt_paths = _get_split_wise_paths(
         data_dir=data_dir,
@@ -360,7 +401,7 @@ def _get_sa_med2d_paths(path, split, exclude_dataset, exclude_modality, n_fracti
 def get_sa_med2d_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    split: str,
+    split: Literal["train", "val"],
     resize_inputs: bool = False,
     exclude_dataset: Optional[Union[str, list]] = None,
     exclude_modality: Optional[Union[str, list]] = None,
@@ -368,16 +409,23 @@ def get_sa_med2d_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Dataset for segmentation of various organs and structures in multiple medical imaging modalities.
+    """Get the SA-Med2D-20M dataset for various medical image segmentation tasks.
 
-    You should download the dataset yourself. See `get_sa_med2d_data` for details.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        exclude_dataset: Optionally, whether to exclude a particular dataset.
+        exclude_modality: Optionally, whether to exclude a particular imaging modality.
+        n_fraction_per_dataset: Optionally, the fraction of data to obtain.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    The dataset is from Ye et al. - https://doi.org/10.48550/arXiv.2311.11969.
-    The dataset is curated in alignment with Cheng et al. - https://doi.org/10.48550/arXiv.2308.16184.
-
-    Please cite it if you use it in a publication.
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_sa_med2d_paths(
+    image_paths, gt_paths = get_sa_med2d_paths(
         path=path,
         split=split,
         exclude_dataset=exclude_dataset,
@@ -414,9 +462,9 @@ def get_sa_med2d_dataset(
 
 def get_sa_med2d_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
-    split: str,
+    patch_shape: Tuple[int, int],
+    split: Literal["train", "val"],
     resize_inputs: bool = False,
     exclude_dataset: Optional[Union[str, list]] = None,
     exclude_modality: Optional[Union[str, list]] = None,
@@ -424,8 +472,22 @@ def get_sa_med2d_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Dataloader for segmentation of various organs and structures in multiple medical imaging modalities.
-    See `get_sa_med2d_dataset` for details.
+    """Get the SA-Med2D-20M dataloader for various medical image segmentation tasks.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The choice of data split.
+        resize_inputs: Whether to resize the inputs to the patch shape.
+        exclude_dataset: Optionally, whether to exclude a particular dataset.
+        exclude_modality: Optionally, whether to exclude a particular imaging modality.
+        n_fraction_per_dataset: Optionally, the fraction of data to obtain.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_sa_med2d_dataset(
