@@ -128,7 +128,7 @@ def get_organoidnet_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the OrganoIDNet dataset for organoid segmentation in microscopy images.
+    """Get the OrganoIDNet dataloader for organoid segmentation in microscopy images.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.

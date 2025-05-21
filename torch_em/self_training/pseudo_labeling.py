@@ -13,20 +13,26 @@ class DefaultPseudoLabeler:
         threshold_from_both_sides: Whether to include both values bigger than the threshold
             and smaller than 1 - the thrhesold, or only values bigger than the threshold, in the mask.
             The former should be used for binary labels, the latter for for multiclass labels.
+        mask_channel: A specific channel to use for computing the confidence mask.
+            By default the confidence mask is computed across all channels independently.
+            This is useful, if only one of the channels encodes a probability.
     """
     def __init__(
         self,
         activation: Optional[torch.nn.Module] = None,
         confidence_threshold: Optional[float] = None,
         threshold_from_both_sides: bool = True,
+        mask_channel: Optional[int] = None,
     ):
         self.activation = activation
         self.confidence_threshold = confidence_threshold
         self.threshold_from_both_sides = threshold_from_both_sides
+        self.mask_channel = mask_channel
         # TODO serialize the class names and kwargs for activation instead
         self.init_kwargs = {
             "activation": None, "confidence_threshold": confidence_threshold,
-            "threshold_from_both_sides": threshold_from_both_sides
+            "threshold_from_both_sides": threshold_from_both_sides,
+            "mask_channel": mask_channel,
         }
 
     def _compute_label_mask_both_sides(self, pseudo_labels):
@@ -55,8 +61,13 @@ class DefaultPseudoLabeler:
         if self.confidence_threshold is None:
             label_mask = None
         else:
-            label_mask = self._compute_label_mask_both_sides(pseudo_labels) if self.threshold_from_both_sides\
-                else self._compute_label_mask_one_side(pseudo_labels)
+            mask_input = pseudo_labels if self.mask_channel is None\
+                else pseudo_labels[self.mask_channel:(self.mask_channel+1)]
+            label_mask = self._compute_label_mask_both_sides(mask_input) if self.threshold_from_both_sides\
+                else self._compute_label_mask_one_side(mask_input)
+            if self.mask_channel is not None:
+                size = (pseudo_labels.shape[0], pseudo_labels.shape[1], *([-1] * (pseudo_labels.ndim - 2)))
+                label_mask = label_mask.expand(*size)
         return pseudo_labels, label_mask
 
     def step(self, metric, epoch):
