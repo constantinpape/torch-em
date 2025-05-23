@@ -10,9 +10,13 @@ Please cite it if you use this dataset in your research.
 """
 
 import os
+import shutil
 import random
+import zipfile
+from glob import glob
 from tqdm import tqdm
 from pathlib import Path
+from natsort import natsorted
 from typing import Union, Tuple, Optional, Literal, List
 
 import json
@@ -24,6 +28,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
+from torch_em.transform.generic import ResizeLongestSideInputs
 
 from .. import util
 from ..light_microscopy.neurips_cell_seg import to_rgb
@@ -148,8 +153,105 @@ SMALL_DATASETS = [
 ]
 
 
-def _preprocess_data(data_dir):
-    ...
+def _preprocess_data(path):
+    import h5py
+
+    # We must ensure that the core zipfile (all small zipped splits merged into one) exists as expected.
+    zip_path = os.path.join(path, "data.zip")  # NOTE: The zipfile name is hard-coded to 'data.zip'.
+    if not os.path.exists(zip_path):
+        raise FileNotFoundError(
+            f"The combined zip file does not exist under the file name 'data.zip' at '{path}'. "
+            "Please see 'get_sa_med2d_data' for details."
+        )
+
+    data_dir = os.path.join(path, "data")
+    # if os.path.exists(data_dir):
+    #     return data_dir
+
+    os.makedirs(data_dir, exist_ok=True)
+
+    print("We will start pre-processing the dataset. This might take a while.")
+    with zipfile.ZipFile(zip_path, "r") as f:
+        all_members = f.namelist()
+
+        # First, we extract json files.
+        members = [curr_mem for curr_mem in all_members if "json" in curr_mem]
+        f.extractall(path=data_dir, members=members)
+
+        # Load the json file.
+        with open(os.path.join(data_dir, "SAMed2Dv1", "SAMed2D_v1.json")) as j:
+            data = json.load(j)
+
+        # Get image and label transforms to resize images to expected patch shape for training.
+        raw_transform = ResizeLongestSideInputs(target_shape=(512, 512), is_rgb=True)
+        label_transform = ResizeLongestSideInputs(target_shape=(512, 512), is_label=True)
+
+        # Get members per dataset and extract them one-by-one.
+        for dataset_name in tqdm(DATASET_NAMES, desc="Preprocessing data"):
+            # Extract only the images and labels matching the dataset name.
+            members = [curr_mem for curr_mem in all_members if dataset_name in curr_mem]
+            f.extractall(path=data_dir, members=members)
+
+            # Get all image and label paths.
+            image_paths = natsorted(glob(os.path.join(data_dir, "SAMed2Dv1", "images", "*")))
+
+            # We need to preprocess corresponding labels.
+            images, labels = [], []
+            for image_path in image_paths:
+                image = imageio.imread(image_path)
+                image = image.transpose(2, 0, 1)  # Make channels first for the transform to work.
+                shape = image.shape if image.ndim == 2 else image.shape[1:]
+
+                # Get the image filename.
+                image_fname = f"images/{os.path.basename(image_path)}"
+
+                # Merge all masks into one label image.
+                instances = np.zeros(shape, dtype="uint8")
+                for idx, gt_fname in enumerate(sorted(data[image_fname]), start=1):
+
+                    # HACK: (SKIP) We remove the segmentation of entire ventricular cavity in ACDC.
+                    if dataset_name == "ACDC":
+                        # Avoid whole ventricular rois.
+                        if gt_fname.find("0003_000") != -1 and len(data[image_fname]) > 1:
+                            continue
+
+                    curr_gt = imageio.imread(os.path.join(data_dir, "SAMed2Dv1", gt_fname))
+
+                    # HACK: Need to check if we can resize this input.
+                    if curr_gt.shape != shape:
+                        print("Skipping these images with mismatching ground-truth shapes.")
+                        continue
+
+                    # HACK: (UPDATE) The optic disk is mapped as 0, and background as 1
+                    if dataset_name == "ichallenge_adam_task2":
+                        curr_gt = (curr_gt == 0).astype("uint8")  # Simply reversing the binary optic disc masks.
+
+                    instances[curr_gt > 0] = idx
+
+                instances = relabel_sequential(instances)[0]
+                labels.append(label_transform(instances))
+                images.append(raw_transform(image))
+
+            # NOTE: Split big datasets into multipe chunks
+            # - AMOS2022,
+
+            # Stack up all images and labels.
+            images = np.stack(images, axis=1)
+            labels = np.stack(labels, axis=0)
+
+            # Store all images in one h5 file.
+            fpath = os.path.join(data_dir, f"{dataset_name}.h5")
+            with h5py.File(fpath, "w") as h:
+                h.create_dataset("raw", data=images, compression="lzf")
+                h.create_dataset("labels", data=labels, compression="lzf")
+
+            # And finally, remove all files for the current dataset at the end.
+            shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "images"))
+            shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "masks"))
+
+            breakpoint()
+
+    return data_dir
 
 
 def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> str:
@@ -181,9 +283,9 @@ def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> 
     Once you have downloaded the archives, you need to unzip the splitted-up zip files:
     - For Windows: decompress SA-Med2D-16M.zip to automatically extract the other volumes together.
     - For Linux:
-        - `zip SA-Med2D-16M.zip SA-Med2D-16M.z0* SA-Med2D-16M.z10 -s=0 --out {full}.zip`
+        - `zip SA-Med2D-16M.zip SA-Med2D-16M.z0* SA-Med2D-16M.z10 -s=0 --out data.zip`
             - NOTE: deflates the entire dataset to ensemble into one zip, make sure you have ~1.5TB free space.
-        - `unzip {full}.zip`
+        - `unzip data.zip`
             - NOTE: there are >4M images paired with >19M ground-truth masks. unzipping takes a lot of inodes and time.
 
     Args:
@@ -196,6 +298,12 @@ def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> 
     if download:
         print("Download is not supported, as the data is huge and takes quite a while to download and extract.")
 
+    # And the final stage is preprocessing the images to be able to efficiently access the entire dataset.
+    data_dir = _preprocess_data(path)
+
+    breakpoint()
+
+    # OUTDATED
     data_dir = os.path.join(path, "SAMed2Dv1")
 
     # the first part is to ensure if the data has been unzipped in the expected data directory
@@ -210,9 +318,6 @@ def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> 
 
     json_file = "SAMed2D_v1_class_mapping_id.json"
     assert os.path.exists(os.path.join(data_dir, json_file)), f"The json file '{json_file}' is missing."
-
-    # And the final stage is preprocessing the images to be able to efficiently access the entire dataset.
-    _preprocess_data(data_dir)
 
     print("Looks like the dataset is ready to use.")
 
