@@ -41,7 +41,7 @@ def get_sega_data(
     data_choice: Optional[Literal["KiTS", "Rider", "Dongyang"]] = None,
     download: bool = False
 ) -> str:
-    """Dwonload the SegA dataset.
+    """Download the SegA dataset.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
