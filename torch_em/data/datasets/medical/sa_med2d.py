@@ -11,19 +11,16 @@ Please cite it if you use this dataset in your research.
 
 import os
 import shutil
-import random
 import zipfile
 from glob import glob
 from tqdm import tqdm
-from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple, Optional, Literal, List
+from typing import Union, Tuple, Literal, List
 
 import json
 import numpy as np
 import imageio.v3 as imageio
 from skimage.segmentation import relabel_sequential
-from sklearn.model_selection import train_test_split
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -31,7 +28,6 @@ import torch_em
 from torch_em.transform.generic import ResizeLongestSideInputs
 
 from .. import util
-from ..light_microscopy.neurips_cell_seg import to_rgb
 
 
 DATASET_NAMES = [
@@ -200,20 +196,22 @@ def _preprocess_data(path):
             fpath = os.path.join(data_dir, f"{dataset_name}.h5")
             with h5py.File(fpath, "w") as h:
                 raw_ds = h.create_dataset(
-                    "raw", shape=(0, 3, 512, 512),
-                    maxshape=(None, 3, 512, 512),
-                    chunks=(1, 3, 512, 512),
+                    "raw",
+                    shape=(3, 0, 512, 512),
+                    maxshape=(3, None, 512, 512),
+                    chunks=(3, 1, 512, 512),
                     compression="lzf",
                 )
                 label_ds = h.create_dataset(
-                    "labels", shape=(0, 512, 512),
+                    "labels",
+                    shape=(0, 512, 512),
                     maxshape=(None, 512, 512),
                     chunks=(1, 512, 512),
                     compression="lzf"
                 )
 
                 # We need to preprocess images and corresponding labels, and store them.
-                for image_path in image_paths:
+                for image_path in tqdm(image_paths, desc="Processing each image"):
                     image = imageio.imread(image_path)
                     image = image.transpose(2, 0, 1)  # Make channels first for the transform to work.
                     shape = image.shape[1:]
@@ -250,8 +248,8 @@ def _preprocess_data(path):
                     transformed_image = raw_transform(image)
                     transformed_instances = label_transform(instances)
 
-                    raw_ds.resize(raw_ds.shape[0] + 1, axis=0)
-                    raw_ds[-1] = transformed_image
+                    raw_ds.resize(raw_ds.shape[1] + 1, axis=1)
+                    raw_ds[:, -1] = transformed_image
 
                     label_ds.resize(label_ds.shape[0] + 1, axis=0)
                     label_ds[-1] = transformed_instances
@@ -259,8 +257,6 @@ def _preprocess_data(path):
             # And finally, remove all files for the current dataset at the end.
             shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "images"))
             shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "masks"))
-
-            breakpoint()
 
     return data_dir
 
@@ -291,13 +287,11 @@ def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> 
         - `git clone https://huggingface.co/datasets/OpenGVLab/SA-Med2D-20M`
             - This step takes several hours, make sure you have a consistent internet and sufficient space.
 
-    Once you have downloaded the archives, you need to unzip the splitted-up zip files:
-    - For Windows: decompress SA-Med2D-16M.zip to automatically extract the other volumes together.
-    - For Linux:
-        - `zip SA-Med2D-16M.zip SA-Med2D-16M.z0* SA-Med2D-16M.z10 -s=0 --out data.zip`
-            - NOTE: deflates the entire dataset to ensemble into one zip, make sure you have ~1.5TB free space.
-        - `unzip data.zip`
-            - NOTE: there are >4M images paired with >19M ground-truth masks. unzipping takes a lot of inodes and time.
+    Once you have downloaded the archives, please run the following script to create one unified zipfile:
+    - zip SA-Med2D-16M.zip SA-Med2D-16M.z0* SA-Med2D-16M.z10 -s=0 --out data.zip`
+        - NOTE: deflates the entire dataset to ensemble into one zip, make sure you have ~1.5TB free space.
+
+    And the following preprocessing parts are taken care of by `get_sa_med2d_data` for you.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
@@ -311,217 +305,30 @@ def get_sa_med2d_data(path: Union[os.PathLike, str], download: bool = False) -> 
 
     # And the final stage is preprocessing the images to be able to efficiently access the entire dataset.
     data_dir = _preprocess_data(path)
-
-    breakpoint()
-
-    # OUTDATED
-    data_dir = os.path.join(path, "SAMed2Dv1")
-
-    # the first part is to ensure if the data has been unzipped in the expected data directory
-    msg = "The data directory is not found. "
-    msg += "Please ensure that you provide the path to the parent directory where the unzip operation took place. "
-    msg += "For example: `unzip <ZIPFILE> -d /path/to/dir/`. Hence, the argument 'path' expects '/path/to/dir/'."
-    assert os.path.exists(data_dir), msg
-
-    # next, let's investigate the presence of the json files
-    json_file = "SAMed2D_v1.json"
-    assert os.path.exists(os.path.join(data_dir, json_file)), f"The json file '{json_file}' is missing."
-
-    json_file = "SAMed2D_v1_class_mapping_id.json"
-    assert os.path.exists(os.path.join(data_dir, json_file)), f"The json file '{json_file}' is missing."
-
     print("Looks like the dataset is ready to use.")
-
     return data_dir
 
 
-def _assort_sa_med2d_data(data_dir):
-    with open(os.path.join(data_dir, "SAMed2D_v1.json")) as f:
-        data = json.load(f)
-
-    image_files = list(data.keys())
-
-    gt_instances_dir = os.path.join(data_dir, "preprocessed_instances")
-    os.makedirs(gt_instances_dir, exist_ok=True)
-
-    skipped_files = []
-    for ifile in tqdm(image_files):
-        image_path = os.path.join(data_dir, ifile)
-        image_id = Path(image_path).stem
-
-        gt_path = os.path.join(gt_instances_dir, f"{image_id}.tif")
-        if os.path.exists(gt_path):
-            continue
-
-        # let's split different components
-        splits = image_id.split("--")
-        dataset = splits[1]
-
-        # HACK: (SKIP) there are some known images which are pretty weird (binary brain masks as inputs)
-        if splits[2].find("brain-growth") != -1:
-            skipped_files.append(ifile)
-            continue
-
-        # let's get the shape of the image
-        image = imageio.imread(image_path)
-        shape = image.shape if image.ndim == 2 else image.shape[:-1]
-
-        # HACK: (SKIP) there are weird images which appear to be whole brain binary masks
-        if dataset == "Brain_PTM":
-            if len(np.unique(image)) == 2:  # easy check for binary values in the input image
-                skipped_files.append(ifile)
-                continue
-
-        # let's create an empty array and merge all segmentations into one
-        instances = np.zeros(shape, dtype="uint8")
-        for idx, gfile in enumerate(sorted(data[ifile]), start=1):
-            # HACK: (SKIP) we remove the segmentation of entire ventricular cavity in ACDC
-            if dataset == "ACDC":
-                if gfile.find("0003_000") != -1 and len(data[ifile]) > 1:  # to avoid whole ventricular rois
-                    continue
-
-            per_gt = imageio.imread(os.path.join(data_dir, gfile))
-
-            # HACK: need to see if we can resize this inputs
-            if per_gt.shape != shape:
-                print("Skipping these images with mismatching ground-truth shapes.")
-                continue
-
-            # HACK: (UPDATE) optic disk is mapped as 0, and background as 1
-            if dataset == "ichallenge_adam_task2":
-                per_gt = (per_gt == 0).astype("uint8")  # simply reversing the binary optic disc masks
-
-            instances[per_gt > 0] = idx
-
-        instances = relabel_sequential(instances)[0]
-        imageio.imwrite(gt_path, instances, compression="zlib")
-
-    return skipped_files
-
-
-def _create_splits_per_dataset(data_dir, json_file, skipped_files, val_fraction=0.1):
-    with open(os.path.join(data_dir, "SAMed2D_v1.json")) as f:
-        data = json.load(f)
-
-    image_files = list(data.keys())
-
-    # now, get's group them data-wise and make splits per dataset
-    data_dict = {}
-    for image_file in image_files:
-        if image_file in skipped_files:
-            print("Skipping this file:", image_file)
-            continue
-
-        _image_file = os.path.split(image_file)[-1]
-        splits = _image_file.split("--")
-        dataset = splits[1]
-
-        if dataset in data_dict:
-            data_dict[dataset].append(_image_file)
-        else:
-            data_dict[dataset] = [_image_file]
-
-    # next, let's make a train-val split out of the dataset and write them in a json file
-    train_dict, val_dict = {}, {}
-    for dataset, dfiles in data_dict.items():
-        tr_split, val_split = train_test_split(dfiles, test_size=val_fraction)
-        train_dict[dataset] = tr_split
-        val_dict[dataset] = val_split
-
-    fdict = {"train": train_dict, "val": val_dict}
-    with open(json_file, "w") as f:
-        json.dump(fdict, f)
-
-
-def _get_split_wise_paths(data_dir, json_file, split, exclude_dataset, exclude_modality, n_fraction_per_dataset):
-    with open(json_file, "r") as f:
-        data = json.load(f)
-
-    if exclude_dataset is not None and not isinstance(exclude_dataset, list):
-        exclude_dataset = [exclude_dataset]
-
-    if exclude_modality is not None and not isinstance(exclude_modality, list):
-        exclude_modality = [exclude_modality]
-
-    image_files = data[split]
-    image_paths, gt_paths = [], []
-    for dfiles in image_files.values():
-        splits = dfiles[0].split("--")
-        modality = splits[0]
-        dataset = splits[1]
-
-        if exclude_dataset is not None and dataset in exclude_dataset:
-            continue
-
-        if exclude_modality is not None and modality in exclude_modality:
-            continue
-
-        if n_fraction_per_dataset is not None and dataset not in SMALL_DATASETS:
-            dfiles = random.sample(dfiles, k=int(n_fraction_per_dataset * len(dfiles)))
-
-        per_dataset_ipaths = [os.path.join(data_dir, "images", fname) for fname in dfiles]
-        per_dataset_gpaths = [
-            os.path.join(data_dir, "preprocessed_instances", f"{Path(fname).stem}.tif") for fname in dfiles
-        ]
-
-        image_paths.extend(per_dataset_ipaths)
-        gt_paths.extend(per_dataset_gpaths)
-
-    return image_paths, gt_paths
-
-
-def get_sa_med2d_paths(
-    path: Union[os.PathLike, str],
-    split: Literal["train", "val"],
-    exclude_dataset: Optional[Union[str, list]] = None,
-    exclude_modality: Optional[Union[str, list]] = None,
-    n_fraction_per_dataset: Optional[float] = None,
-    download: bool = False,
-) -> Tuple[List[str], List[str]]:
+def get_sa_med2d_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
     """Get paths to the SA-Med2D-20M data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        split: The choice of data split.
-        exclude_dataset: Optionally, whether to exclude a particular dataset.
-        exclude_modality: Optionally, whether to exclude a particular imaging modality.
-        n_fraction_per_dataset: Optionally, the fraction of data to obtain.
         download: Whether to download the data if it is not present.
 
     Returns:
-        List of filepaths for the image data.
-        List of filepaths for the label data.
+        List of filepaths for the input data.
     """
-    data_dir = get_sa_med2d_data(path=path, download=download)
-
-    json_file = os.path.join(data_dir, "preprocessed_inputs.json")
-    if not os.path.exists(json_file):
-        skipped_files = _assort_sa_med2d_data(data_dir=data_dir)
-        _create_splits_per_dataset(data_dir=data_dir, json_file=json_file, skipped_files=skipped_files)
-
-    if split not in ["train", "val"]:
-        raise ValueError(f"'{split}' is not a valid split choice.")
-
-    image_paths, gt_paths = _get_split_wise_paths(
-        data_dir=data_dir,
-        json_file=json_file,
-        split=split,
-        exclude_dataset=exclude_dataset,
-        exclude_modality=exclude_modality,
-        n_fraction_per_dataset=n_fraction_per_dataset
-    )
-
-    return image_paths, gt_paths
+    data_dir = get_sa_med2d_data(path, download)
+    input_paths = natsorted(glob(os.path.join(data_dir, "*.h5")))
+    breakpoint()
+    return input_paths
 
 
 def get_sa_med2d_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     split: Literal["train", "val"],
-    resize_inputs: bool = False,
-    exclude_dataset: Optional[Union[str, list]] = None,
-    exclude_modality: Optional[Union[str, list]] = None,
-    n_fraction_per_dataset: Optional[float] = None,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -531,46 +338,23 @@ def get_sa_med2d_dataset(
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
-        resize_inputs: Whether to resize the inputs to the patch shape.
-        exclude_dataset: Optionally, whether to exclude a particular dataset.
-        exclude_modality: Optionally, whether to exclude a particular imaging modality.
-        n_fraction_per_dataset: Optionally, the fraction of data to obtain.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = get_sa_med2d_paths(
-        path=path,
-        split=split,
-        exclude_dataset=exclude_dataset,
-        exclude_modality=exclude_modality,
-        n_fraction_per_dataset=n_fraction_per_dataset,
-        download=download,
-    )
-
-    if resize_inputs:
-        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
-        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
-            kwargs=kwargs,
-            patch_shape=patch_shape,
-            resize_inputs=resize_inputs,
-            resize_kwargs=resize_kwargs,
-            ensure_rgb=to_rgb,
-        )
-
-    print("Creating the dataset for the SA-Med2D-20M dataset. This takes a bit of time.")
+    input_paths = get_sa_med2d_paths(path, download)
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths,
-        raw_key=None,
-        label_paths=gt_paths,
-        label_key=None,
+        raw_paths=input_paths,
+        raw_key="raw",
+        label_paths=input_paths,
+        label_key="labels",
         patch_shape=patch_shape,
         ndim=2,
         with_channels=True,
-        is_seg_dataset=False,
+        is_seg_dataset=True,
         verify_paths=False,
         **kwargs
     )
@@ -581,10 +365,6 @@ def get_sa_med2d_loader(
     batch_size: int,
     patch_shape: Tuple[int, int],
     split: Literal["train", "val"],
-    resize_inputs: bool = False,
-    exclude_dataset: Optional[Union[str, list]] = None,
-    exclude_modality: Optional[Union[str, list]] = None,
-    n_fraction_per_dataset: Optional[float] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -595,10 +375,6 @@ def get_sa_med2d_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
-        resize_inputs: Whether to resize the inputs to the patch shape.
-        exclude_dataset: Optionally, whether to exclude a particular dataset.
-        exclude_modality: Optionally, whether to exclude a particular imaging modality.
-        n_fraction_per_dataset: Optionally, the fraction of data to obtain.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -606,16 +382,5 @@ def get_sa_med2d_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_sa_med2d_dataset(
-        path=path,
-        patch_shape=patch_shape,
-        split=split,
-        resize_inputs=resize_inputs,
-        exclude_dataset=exclude_dataset,
-        exclude_modality=exclude_modality,
-        n_fraction_per_dataset=n_fraction_per_dataset,
-        download=download,
-        **ds_kwargs
-    )
-    print("Creating the dataloader for the SA-Med2D-20M dataset. This takes a bit of time.")
-    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
+    dataset = get_sa_med2d_dataset(path, patch_shape, split, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
