@@ -4,3 +4,8 @@ logs/
 *.pyc
 *.egg-info/
 *.n5/
+*.ipyng_checkpoints
+*.ipynb
+*.png
+*.out
+*.sh
