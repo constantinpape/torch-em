@@ -10,12 +10,13 @@ Please cite it if you use this dataset in your research.
 """
 
 import os
-import shutil
 import zipfile
 from glob import glob
+from math import ceil
 from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Tuple, Literal, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import json
 import numpy as np
@@ -148,6 +149,8 @@ SMALL_DATASETS = [
     "QUBIQ2020", "breast_ultrasound_images_dataset", "kvasircapsule_seg", "sz_cxr", "kvasir_seg"
 ]
 
+SHARD_SIZE = 200000   # maximum images per dataset container file.
+
 
 def _preprocess_data(path):
     import h5py
@@ -165,6 +168,39 @@ def _preprocess_data(path):
     #     return data_dir
 
     os.makedirs(data_dir, exist_ok=True)
+
+    # Function to preprocess each image.
+    def _process_each_image(image_path, data, dataset_name, data_dir, raw_transform, label_transform):
+        image = imageio.imread(image_path)
+        image = image.transpose(2, 0, 1)  # Make channels first for the transform to work.
+        shape = image.shape[1:]
+
+        # Get the image filename.
+        image_fname = f"images/{os.path.basename(image_path)}"
+        instances = np.zeros(shape, dtype="uint8")
+
+        # Merge all masks into one label image.
+        for idx, gt_fname in enumerate(sorted(data.get(image_fname, [])), start=1):
+            # HACK: (SKIP) We remove the segmentation of entire ventricular cavity in ACDC.
+            # Avoid whole ventricular rois specifically.
+            if dataset_name == "ACDC" and "0003_000" in gt_fname and len(data[image_fname]) > 1:
+                continue
+
+            gt_path = os.path.join(data_dir, "SAMed2Dv1", gt_fname)
+            gt_mask = imageio.imread(gt_path)
+
+            if gt_mask.shape != shape:
+                print("Skipping these images with mismatching ground-truth shapes.")
+                continue
+
+            # HACK: (UPDATE) The optic disk is mapped as 0, and background as 1
+            if dataset_name == "ichallenge_adam_task2":
+                gt_mask = (gt_mask == 0).astype("uint8")  # Simply reversing binary optic disc masks.
+
+            instances[gt_mask > 0] = idx
+
+        instances = relabel_sequential(instances)[0]
+        return raw_transform(image), label_transform(instances)
 
     print("We will start pre-processing the dataset. This might take a while.")
     with zipfile.ZipFile(zip_path, "r") as f:
@@ -191,72 +227,55 @@ def _preprocess_data(path):
             # Get all image and label paths.
             image_dir = os.path.join(data_dir, "SAMed2Dv1", "images")
             image_paths = natsorted(glob(os.path.join(image_dir, "*")))
+            num_images = len(image_paths)
 
-            # Store all images in one h5 file.
-            fpath = os.path.join(data_dir, f"{dataset_name}.h5")
-            with h5py.File(fpath, "w") as h:
-                raw_ds = h.create_dataset(
-                    "raw",
-                    shape=(3, 0, 512, 512),
-                    maxshape=(3, None, 512, 512),
-                    chunks=(3, 1, 512, 512),
-                    compression="lzf",
-                )
-                label_ds = h.create_dataset(
-                    "labels",
-                    shape=(0, 512, 512),
-                    maxshape=(None, 512, 512),
-                    chunks=(1, 512, 512),
-                    compression="lzf"
-                )
+            # Compute the total number of shards.
+            # The files blow up some strange buffer memory, so I just piece the datasets down a bit.
+            num_shards = ceil(num_images / SHARD_SIZE)
 
-                # We need to preprocess images and corresponding labels, and store them.
-                for image_path in tqdm(image_paths, desc="Processing each image"):
-                    image = imageio.imread(image_path)
-                    image = image.transpose(2, 0, 1)  # Make channels first for the transform to work.
-                    shape = image.shape[1:]
+            for shard_idx in range(num_shards):
+                start_idx = shard_idx * SHARD_SIZE
+                end_idx = min((shard_idx + 1) * SHARD_SIZE, num_images)
+                shard_image_paths = image_paths[start_idx:end_idx]
+                shard_size = len(shard_image_paths)
 
-                    # Get the image filename.
-                    image_fname = f"images/{os.path.basename(image_path)}"
+                # Store all images in current set inside one h5 file.
+                shard_fpath = os.path.join(data_dir, f"{dataset_name}_{shard_idx:02d}.h5")
+                if os.path.exists(shard_fpath):
+                    continue
 
-                    # Merge all masks into one label image.
-                    instances = np.zeros(shape, dtype="uint8")
-                    for idx, gt_fname in enumerate(sorted(data[image_fname]), start=1):
+                with h5py.File(shard_fpath, "w") as h:
+                    raw_ds = h.create_dataset(
+                        "raw", shape=(3, shard_size, 512, 512), chunks=(3, 1, 512, 512), compression="lzf",
+                    )
+                    label_ds = h.create_dataset(
+                        "labels", shape=(shard_size, 512, 512), chunks=(1, 512, 512), compression="lzf"
+                    )
 
-                        # HACK: (SKIP) We remove the segmentation of entire ventricular cavity in ACDC.
-                        if dataset_name == "ACDC":
-                            # Avoid whole ventricular rois.
-                            if gt_fname.find("0003_000") != -1 and len(data[image_fname]) > 1:
-                                continue
+                    # We need to preprocess images and corresponding labels, and store them.
+                    with ThreadPoolExecutor(max_workers=16) as executor:
+                        futures = [
+                            executor.submit(
+                                _process_each_image,
+                                image_path, data, dataset_name, data_dir, raw_transform, label_transform,
+                            ) for image_path in shard_image_paths
+                        ]
 
-                        curr_gt = imageio.imread(os.path.join(data_dir, "SAMed2Dv1", gt_fname))
+                        for i, future in enumerate(
+                            tqdm(
+                                as_completed(futures), total=len(futures),
+                                desc=f"Processing '{dataset_name}' images for shard '{shard_idx:02d}'")
+                        ):
+                            result = future.result()
+                            image_transformed, label_transformed = result
 
-                        # HACK: Need to check if we can resize this input.
-                        if curr_gt.shape != shape:
-                            print("Skipping these images with mismatching ground-truth shapes.")
-                            continue
-
-                        # HACK: (UPDATE) The optic disk is mapped as 0, and background as 1
-                        if dataset_name == "ichallenge_adam_task2":
-                            curr_gt = (curr_gt == 0).astype("uint8")  # Simply reversing the binary optic disc masks.
-
-                        instances[curr_gt > 0] = idx
-
-                    instances = relabel_sequential(instances)[0]
-
-                    # Let's resize and write the images and labels incrementally.
-                    transformed_image = raw_transform(image)
-                    transformed_instances = label_transform(instances)
-
-                    raw_ds.resize(raw_ds.shape[1] + 1, axis=1)
-                    raw_ds[:, -1] = transformed_image
-
-                    label_ds.resize(label_ds.shape[0] + 1, axis=0)
-                    label_ds[-1] = transformed_instances
+                            # Let's write the images and labels incrementally.
+                            raw_ds[:, i] = image_transformed
+                            label_ds[i] = label_transformed
 
             # And finally, remove all files for the current dataset at the end.
-            shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "images"))
-            shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "masks"))
+            os.system(f'rm -rf "{os.path.join(data_dir, "SAMed2Dv1", "images")}"')
+            os.system(f'rm -rf "{os.path.join(data_dir, "SAMed2Dv1", "masks")}"')
 
     return data_dir
 
