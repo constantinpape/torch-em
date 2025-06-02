@@ -10,6 +10,7 @@ Please cite it if you use this dataset in your research.
 """
 
 import os
+import shutil
 import zipfile
 from glob import glob
 from math import ceil
@@ -172,7 +173,13 @@ def _preprocess_data(path):
     # Function to preprocess each image.
     def _process_each_image(image_path, data, dataset_name, data_dir, raw_transform, label_transform):
         image = imageio.imread(image_path)
-        image = image.transpose(2, 0, 1)  # Make channels first for the transform to work.
+
+        if image.ndim == 3:
+            image = image.transpose(2, 0, 1)  # Make channels first for the transform to work.
+        else:
+            assert image.ndim == 2, image.ndim
+            image = np.stack([image] * 3, axis=0)
+
         shape = image.shape[1:]
 
         # Get the image filename.
@@ -220,6 +227,10 @@ def _preprocess_data(path):
 
         # Get members per dataset and extract them one-by-one.
         for dataset_name in tqdm(DATASET_NAMES, desc="Preprocessing data"):
+            # First, we check if this dataset has any related h5 files, otherwise proceed with extraction.
+            if len(glob(os.path.join(data_dir, f"{dataset_name}*.h5"))) > 0:
+                continue
+
             # Extract only the images and labels matching the dataset name.
             dataset_members = [m for m in all_members if dataset_name in m]
             f.extractall(path=data_dir, members=dataset_members)
@@ -253,7 +264,7 @@ def _preprocess_data(path):
                     )
 
                     # We need to preprocess images and corresponding labels, and store them.
-                    with ThreadPoolExecutor(max_workers=16) as executor:
+                    with ThreadPoolExecutor(max_workers=32) as executor:
                         futures = [
                             executor.submit(
                                 _process_each_image,
@@ -274,8 +285,8 @@ def _preprocess_data(path):
                             label_ds[i] = label_transformed
 
             # And finally, remove all files for the current dataset at the end.
-            os.system(f'rm -rf "{os.path.join(data_dir, "SAMed2Dv1", "images")}"')
-            os.system(f'rm -rf "{os.path.join(data_dir, "SAMed2Dv1", "masks")}"')
+            shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "images"))
+            shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "masks"))
 
     return data_dir
 
