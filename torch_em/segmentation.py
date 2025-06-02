@@ -242,6 +242,8 @@ def default_segmentation_loader(
             before applying augmentations via `transform`.
         label_transform2: Transformation applied to the label data of a sample,
             after applying augmentations via `transform`.
+        raw_transform: Transformation applied to the raw data of a sample,
+            before applying augmentations via `transform`.
         transform: Transformation applied to both the raw data and label data of a sample.
             This can be used to implement data augmentations.
         dtype: The return data type of the raw data.
@@ -327,6 +329,8 @@ def default_segmentation_dataset(
             before applying augmentations via `transform`.
         label_transform2: Transformation applied to the label data of a sample,
             after applying augmentations via `transform`.
+        raw_transform: Transformation applied to the raw data of a sample,
+            before applying augmentations via `transform`.
         transform: Transformation applied to both the raw data and label data of a sample.
             This can be used to implement data augmentations.
         dtype: The return data type of the raw data.
@@ -346,7 +350,7 @@ def default_segmentation_dataset(
         loader_kwargs: Keyword arguments for `torch.utils.data.DataLoder`.
 
     Returns:
-        The torch data set.
+        The torch dataset.
     """
     if verify_paths:
         check_paths(raw_paths, label_paths)
