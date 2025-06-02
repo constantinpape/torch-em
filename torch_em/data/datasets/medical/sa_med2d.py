@@ -16,7 +16,7 @@ from glob import glob
 from math import ceil
 from tqdm import tqdm
 from natsort import natsorted
-from typing import Union, Tuple, Literal, List
+from typing import Union, Tuple, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import json
@@ -156,6 +156,12 @@ SHARD_SIZE = 200000   # maximum images per dataset container file.
 def _preprocess_data(path):
     import h5py
 
+    data_dir = os.path.join(path, "data")
+    if os.path.exists(data_dir):
+        return data_dir
+
+    os.makedirs(data_dir, exist_ok=True)
+
     # We must ensure that the core zipfile (all small zipped splits merged into one) exists as expected.
     zip_path = os.path.join(path, "data.zip")  # NOTE: The zipfile name is hard-coded to 'data.zip'.
     if not os.path.exists(zip_path):
@@ -163,12 +169,6 @@ def _preprocess_data(path):
             f"The combined zip file does not exist under the file name 'data.zip' at '{path}'. "
             "Please see 'get_sa_med2d_data' for details."
         )
-
-    data_dir = os.path.join(path, "data")
-    # if os.path.exists(data_dir):
-    #     return data_dir
-
-    os.makedirs(data_dir, exist_ok=True)
 
     # Function to preprocess each image.
     def _process_each_image(image_path, data, dataset_name, data_dir, raw_transform, label_transform):
@@ -288,6 +288,9 @@ def _preprocess_data(path):
             shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "images"))
             shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "masks"))
 
+    # And remove the json files as well
+    shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1"))
+
     return data_dir
 
 
@@ -351,23 +354,17 @@ def get_sa_med2d_paths(path: Union[os.PathLike, str], download: bool = False) ->
     """
     data_dir = get_sa_med2d_data(path, download)
     input_paths = natsorted(glob(os.path.join(data_dir, "*.h5")))
-    breakpoint()
     return input_paths
 
 
 def get_sa_med2d_dataset(
-    path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
-    split: Literal["train", "val"],
-    download: bool = False,
-    **kwargs
+    path: Union[os.PathLike, str], patch_shape: Tuple[int, int], download: bool = False, **kwargs,
 ) -> Dataset:
     """Get the SA-Med2D-20M dataset for various medical image segmentation tasks.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
-        split: The choice of data split.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -391,12 +388,7 @@ def get_sa_med2d_dataset(
 
 
 def get_sa_med2d_loader(
-    path: Union[os.PathLike, str],
-    batch_size: int,
-    patch_shape: Tuple[int, int],
-    split: Literal["train", "val"],
-    download: bool = False,
-    **kwargs
+    path: Union[os.PathLike, str], batch_size: int, patch_shape: Tuple[int, int], download: bool = False, **kwargs,
 ) -> DataLoader:
     """Get the SA-Med2D-20M dataloader for various medical image segmentation tasks.
 
@@ -404,7 +396,6 @@ def get_sa_med2d_loader(
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
-        split: The choice of data split.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -412,5 +403,5 @@ def get_sa_med2d_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_sa_med2d_dataset(path, patch_shape, split, download, **ds_kwargs)
+    dataset = get_sa_med2d_dataset(path, patch_shape, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
