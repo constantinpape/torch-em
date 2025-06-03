@@ -157,8 +157,8 @@ def _preprocess_data(path):
     import h5py
 
     data_dir = os.path.join(path, "data")
-    if os.path.exists(data_dir):
-        return data_dir
+    # if os.path.exists(data_dir):
+    #     return data_dir
 
     os.makedirs(data_dir, exist_ok=True)
 
@@ -206,8 +206,13 @@ def _preprocess_data(path):
 
             instances[gt_mask > 0] = idx
 
-        instances = relabel_sequential(instances)[0]
-        return raw_transform(image), label_transform(instances)
+        # Check if the image and corresponding labels are valid.
+        if len(np.unique(instances)) > 1 and len(np.unique(image)) > 1:
+            # This checks if the label has atleast one foreground object and the raw data has some valid information.
+            instances = relabel_sequential(instances)[0]
+            return raw_transform(image), label_transform(instances)
+        else:
+            return None
 
     print("We will start pre-processing the dataset. This might take a while.")
     with zipfile.ZipFile(zip_path, "r") as f:
@@ -248,7 +253,6 @@ def _preprocess_data(path):
                 start_idx = shard_idx * SHARD_SIZE
                 end_idx = min((shard_idx + 1) * SHARD_SIZE, num_images)
                 shard_image_paths = image_paths[start_idx:end_idx]
-                shard_size = len(shard_image_paths)
 
                 # Store all images in current set inside one h5 file.
                 shard_fpath = os.path.join(data_dir, f"{dataset_name}_{shard_idx:02d}.h5")
@@ -257,13 +261,22 @@ def _preprocess_data(path):
 
                 with h5py.File(shard_fpath, "w") as h:
                     raw_ds = h.create_dataset(
-                        "raw", shape=(3, shard_size, 512, 512), chunks=(3, 1, 512, 512), compression="lzf",
+                        "raw",
+                        shape=(3, 0, 512, 512),
+                        maxshape=(3, None, 512, 512),
+                        chunks=(3, 1, 512, 512),
+                        compression="lzf",
                     )
                     label_ds = h.create_dataset(
-                        "labels", shape=(shard_size, 512, 512), chunks=(1, 512, 512), compression="lzf"
+                        "labels",
+                        shape=(0, 512, 512),
+                        maxshape=(None, 512, 512),
+                        chunks=(1, 512, 512),
+                        compression="lzf",
                     )
 
                     # We need to preprocess images and corresponding labels, and store them.
+                    curr_len = 0
                     with ThreadPoolExecutor(max_workers=32) as executor:
                         futures = [
                             executor.submit(
@@ -278,11 +291,22 @@ def _preprocess_data(path):
                                 desc=f"Processing '{dataset_name}' images for shard '{shard_idx:02d}'")
                         ):
                             result = future.result()
+
+                            if result is None:  # When the image or corresponding labels are not valid.
+                                print(f"Skipping invalid image and labels: {shard_image_paths[i]}")
+                                continue
+
                             image_transformed, label_transformed = result
 
+                            # We resize the dataset object to incrementally add new samples.
+                            raw_ds.resize((3, curr_len + 1, 512, 512))
+                            label_ds.resize((curr_len + 1, 512, 512))
+
                             # Let's write the images and labels incrementally.
-                            raw_ds[:, i] = image_transformed
-                            label_ds[i] = label_transformed
+                            raw_ds[:, curr_len] = image_transformed
+                            label_ds[curr_len] = label_transformed
+
+                            curr_len += 1
 
             # And finally, remove all files for the current dataset at the end.
             shutil.rmtree(os.path.join(data_dir, "SAMed2Dv1", "images"))
