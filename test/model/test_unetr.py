@@ -45,6 +45,13 @@ class TestUnetr(unittest.TestCase):
         model = UNETR(encoder_checkpoint=checkpoint)
         self._test_net(model, (1, 3, 512, 512))
 
+    def test_unetr_with_conv_transpose_decoder(self):
+        "NOTE: Checking for this exclusively as `use_conv_transpose`, by default, is set to `False`."
+        from torch_em.model import UNETR
+
+        model = UNETR(use_conv_transpose=True)
+        self._test_net(model, (1, 3, 512, 512))
+
 
 if __name__ == "__main__":
     unittest.main()

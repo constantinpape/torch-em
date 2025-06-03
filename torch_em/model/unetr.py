@@ -31,12 +31,14 @@ class UNETR(nn.Module):
         use_sam_stats: Whether to normalize the input data with the statistics of the pretrained SAM model.
         use_mae_stats: Whether to normalize the input data with the statistics of the pretrained MAE model.
         resize_input: Whether to resize the input images to match `img_size`.
+            By default, it resizes the inputs to match the `img_size`.
         encoder_checkpoint: Checkpoint for initializing the vision transformer.
             Can either be a filepath or an already loaded checkpoint.
         final_activation: The activation to apply to the UNETR output.
-        use_skip_connection: Whether to use skip connections.
+        use_skip_connection: Whether to use skip connections. By default, it uses skip connections.
         embed_dim: The embedding dimensionality, corresponding to the output dimension of the vision transformer.
         use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
+            By default, it uses resampling for upsampling.
     """
     def _load_encoder_from_checkpoint(self, backbone, encoder, checkpoint):
         """Function to load pretrained weights to the image encoder.
@@ -84,7 +86,7 @@ class UNETR(nn.Module):
         final_activation: Optional[Union[str, nn.Module]] = None,
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
-        use_conv_transpose: bool = True,
+        use_conv_transpose: bool = False,
     ) -> None:
         super().__init__()
 
