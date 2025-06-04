@@ -157,8 +157,8 @@ def _preprocess_data(path):
     import h5py
 
     data_dir = os.path.join(path, "data")
-    # if os.path.exists(data_dir):
-    #     return data_dir
+    if os.path.exists(data_dir):
+        return data_dir
 
     os.makedirs(data_dir, exist_ok=True)
 
