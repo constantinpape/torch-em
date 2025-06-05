@@ -112,7 +112,7 @@ def get_tnbc_data(path: Union[os.PathLike, str], download: bool = False) -> str:
 
 def get_tnbc_paths(
     path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
-) -> List[int]:
+) -> List[str]:
     """Get paths to the TNBC data.
 
     Args:
