@@ -97,9 +97,16 @@ def _create_split_csv(path, split):
 def _preprocess_inputs(path, annotations, split):
     import ast
     import h5py
-    import geopandas as gpd
-    from rasterio.features import rasterize
-    from rasterio.transform import from_bounds
+    try:
+        import geopandas as gpd
+    except ModuleNotFoundError:
+        raise RuntimeError("Please install 'geopandas': 'conda install -c conda-forge geopandas'.")
+
+    try:
+        from rasterio.features import rasterize
+        from rasterio.transform import from_bounds
+    except ModuleNotFoundError:
+        raise RuntimeError("Please install 'rasterio': 'conda install -c conda-forge rasterio'.")
 
     annotation_paths = glob(os.path.join(path, "annotations", annotations, "*.geojson"))
     roi_dir = os.path.join(path, "data")
@@ -233,7 +240,7 @@ def get_puma_dataset(
     patch_shape: Tuple[int, int],
     split: Literal["train", "val", "test"],
     annotations: Literal['nuclei', 'tissue'] = "nuclei",
-    label_choice: Literal["instance", "semantic"] = "instance",
+    label_choice: Literal["instances", "semantic"] = "instances",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
