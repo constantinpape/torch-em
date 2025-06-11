@@ -14,11 +14,10 @@ from natsort import natsorted
 from typing import Union, Tuple, List, Optional, Literal
 
 import json
-import pandas as pd
-from sklearn.model_selection import train_test_split
-
 import numpy as np
+import pandas as pd
 import imageio.v3 as imageio
+from sklearn.model_selection import train_test_split
 
 import torch_em
 
@@ -32,7 +31,9 @@ CHECKSUM = "14b9b5a9c39cb41afc7f31de5a995cefff0947c215e14ab9c7a463f32fbbf4b6"
 
 
 def _create_split_csv(path, data_dir, split, choice):
-    csv_path = os.path.join(path, f'lynsec_{choice}_split.csv')
+    assert split in ["train", "val", "test"], "Please choose a valid split."
+
+    csv_path = os.path.join(path, f"lynsec_{choice}_split.csv")
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
         df[split] = df[split].apply(lambda x: json.loads(x.replace("'", '"')))  # ensures all items from column in list.
@@ -51,7 +52,6 @@ def _create_split_csv(path, data_dir, split, choice):
 
         df = pd.DataFrame.from_dict([split_ids])
         df.to_csv(csv_path, index=False)
-
         split_list = split_ids[split]
 
     return split_list
@@ -111,13 +111,16 @@ def get_lynsec_data(path: Union[os.PathLike, str], download: bool = False) -> st
 
 
 def get_lynsec_paths(
-    path: Union[os.PathLike, str], split: Literal["train", "val", "test"] = None,
-    choice: Optional[Literal['ihc', 'h&e']] = None, download: bool = False
+    path: Union[os.PathLike, str],
+    split: Optional[Literal["train", "val", "test"]] = None,
+    choice: Optional[Literal['ihc', 'h&e']] = None,
+    download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the LyNSec data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data split.
         choice: The choice of dataset.
         download: Whether to download the data if it is not present.
 
@@ -130,15 +133,19 @@ def get_lynsec_paths(
     if choice is None:
         choice = "*"
 
+    raw_paths = natsorted(glob(os.path.join(data_dir, choice, "images", "*.tif")))
+    label_paths = natsorted(glob(os.path.join(data_dir, choice, "labels", "*.tif")))
+
     if split is not None:
-        split_list = _create_split_csv(path, data_dir, split, choice)
-        raw_paths = natsorted(img_path for img_path in glob(os.path.join(data_dir, choice, "images", "*.tif"))
-                              if os.path.basename(img_path).split(".")[0] in split_list)
-        label_paths = natsorted(label_path for label_path in glob(os.path.join(data_dir, choice, "labels", "*.tif"))
-                                if os.path.basename(label_path).split(".")[0] in split_list)
-    else:
-        raw_paths = natsorted(glob(os.path.join(data_dir, choice, "images", "*.tif")))
-        label_paths = natsorted(glob(os.path.join(data_dir, choice, "labels", "*.tif")))
+        if choice == "*":  # If user did not choose a split, we make splits for both datasets.
+            split_list = _create_split_csv(path, data_dir, split, "h&e")
+            split_list.extend(_create_split_csv(path, data_dir, split, "ihc"))
+        else:
+            split_list = _create_split_csv(path, data_dir, split, choice)
+
+        # Filter paths which are valid for the chosen split.
+        raw_paths = [p for p in raw_paths if os.path.basename(p).split(".")[0] in split_list]
+        label_paths = [p for p in label_paths if os.path.basename(p).split(".")[0] in split_list]
 
     return raw_paths, label_paths
 
@@ -146,7 +153,7 @@ def get_lynsec_paths(
 def get_lynsec_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    split: Literal["train", "val", "test"] = None,
+    split: Optional[Literal["train", "val", "test"]] = None,
     choice: Optional[Literal['ihc', 'h&e']] = None,
     resize_inputs: bool = False,
     download: bool = False,
@@ -157,6 +164,7 @@ def get_lynsec_dataset(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         choice: The choice of dataset.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
@@ -188,7 +196,7 @@ def get_lynsec_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    split: Literal["train", "val", "test"] = None,
+    split: Optional[Literal["train", "val", "test"]] = None,
     choice: Optional[Literal['ihc', 'h&e']] = None,
     resize_inputs: bool = False,
     download: bool = False,
@@ -200,6 +208,7 @@ def get_lynsec_loader(
         path: Filepath to a folder where the downloaded data will be saved.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split.
         choice: The choice of dataset.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.

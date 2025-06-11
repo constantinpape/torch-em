@@ -14,11 +14,12 @@ def check_lynsec():
         path=os.path.join(ROOT, "lynsec"),
         batch_size=1,
         patch_shape=(512, 512),
-        choice="h&e",
+        # choice="h&e",
+        split="train",
         download=True,
     )
 
-    check_loader(loader, 8, instance_labels=True)
+    check_loader(loader, 8, instance_labels=True, rgb=True)
 
 
 if __name__ == "__main__":
