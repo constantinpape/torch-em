@@ -13,6 +13,10 @@ from pathlib import Path
 from natsort import natsorted
 from typing import Union, Tuple, List, Optional, Literal
 
+import json
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
 import numpy as np
 import imageio.v3 as imageio
 
@@ -25,6 +29,32 @@ from .. import util
 
 URL = "https://zenodo.org/records/8065174/files/lynsec.zip"
 CHECKSUM = "14b9b5a9c39cb41afc7f31de5a995cefff0947c215e14ab9c7a463f32fbbf4b6"
+
+
+def _create_split_csv(path, data_dir, split, choice):
+    csv_path = os.path.join(path, f'lynsec_{choice}_split.csv')
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df[split] = df[split].apply(lambda x: json.loads(x.replace("'", '"')))  # ensures all items from column in list.
+        split_list = df.iloc[0][split]
+
+    else:
+        print(f"Creating a new split file at '{csv_path}'.")
+        image_names = [
+            os.path.basename(image).split(".")[0] for image in glob(os.path.join(data_dir, choice, 'images', '*.tif'))
+        ]
+
+        # Create random splits per dataset.
+        train_ids, test_ids = train_test_split(image_names, test_size=0.2)  # 20% for test split.
+        train_ids, val_ids = train_test_split(train_ids, test_size=0.15)  # 15% for val split.
+        split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
+
+        df = pd.DataFrame.from_dict([split_ids])
+        df.to_csv(csv_path, index=False)
+
+        split_list = split_ids[split]
+
+    return split_list
 
 
 def _preprocess_dataset(data_dir):
@@ -81,7 +111,8 @@ def get_lynsec_data(path: Union[os.PathLike, str], download: bool = False) -> st
 
 
 def get_lynsec_paths(
-    path: Union[os.PathLike, str], choice: Optional[Literal['ihc', 'h&e']] = None, download: bool = False
+    path: Union[os.PathLike, str], split: Literal["train", "val", "test"] = None,
+    choice: Optional[Literal['ihc', 'h&e']] = None, download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the LyNSec data.
 
@@ -99,8 +130,15 @@ def get_lynsec_paths(
     if choice is None:
         choice = "*"
 
-    raw_paths = natsorted(glob(os.path.join(data_dir, choice, "images", "*.tif")))
-    label_paths = natsorted(glob(os.path.join(data_dir, choice, "labels", "*.tif")))
+    if split is not None:
+        split_list = _create_split_csv(path, data_dir, split, choice)
+        raw_paths = natsorted(img_path for img_path in glob(os.path.join(data_dir, choice, "images", "*.tif"))
+                              if os.path.basename(img_path).split(".")[0] in split_list)
+        label_paths = natsorted(label_path for label_path in glob(os.path.join(data_dir, choice, "labels", "*.tif"))
+                                if os.path.basename(label_path).split(".")[0] in split_list)
+    else:
+        raw_paths = natsorted(glob(os.path.join(data_dir, choice, "images", "*.tif")))
+        label_paths = natsorted(glob(os.path.join(data_dir, choice, "labels", "*.tif")))
 
     return raw_paths, label_paths
 
@@ -108,6 +146,7 @@ def get_lynsec_paths(
 def get_lynsec_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"] = None,
     choice: Optional[Literal['ihc', 'h&e']] = None,
     resize_inputs: bool = False,
     download: bool = False,
@@ -126,7 +165,7 @@ def get_lynsec_dataset(
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_lynsec_paths(path, choice, download)
+    raw_paths, label_paths = get_lynsec_paths(path, split, choice, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -149,6 +188,7 @@ def get_lynsec_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
+    split: Literal["train", "val", "test"] = None,
     choice: Optional[Literal['ihc', 'h&e']] = None,
     resize_inputs: bool = False,
     download: bool = False,
@@ -169,5 +209,5 @@ def get_lynsec_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_lynsec_dataset(path, patch_shape, choice, resize_inputs, download, **ds_kwargs)
+    dataset = get_lynsec_dataset(path, patch_shape, split, choice, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
