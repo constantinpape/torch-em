@@ -1,7 +1,9 @@
 import os
 import warnings
-import numpy as np
 from typing import List, Union, Tuple, Optional, Any, Callable
+
+import numpy as np
+from math import ceil
 
 import torch
 
@@ -54,7 +56,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         if patch_shape is None:
             return 1
         else:
-            n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
+            n_samples = ceil(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
             return n_samples
 
     def __init__(
