@@ -150,7 +150,7 @@ SMALL_DATASETS = [
     "QUBIQ2020", "breast_ultrasound_images_dataset", "kvasircapsule_seg", "sz_cxr", "kvasir_seg"
 ]
 
-SHARD_SIZE = 200000   # maximum images per dataset container file.
+SHARD_SIZE = 50000   # maximum images per dataset container file.
 
 
 def _preprocess_data(path):
