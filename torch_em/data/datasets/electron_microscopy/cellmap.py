@@ -24,6 +24,8 @@ from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
+from elf.io import open_file
+
 from .. import util
 
 
@@ -423,12 +425,28 @@ def get_cellmap_paths(
     # Get all crops.
     volume_paths = [os.path.join(data_path, f"crop_{c}.h5") for c in crops]
 
+    # Check for valid organelles list.
+    if organelles is None:
+        organelles = "all"
+
+    if isinstance(organelles, str):
+        organelles = [organelles]
+
+    new_volume_paths = []
+    for organelle in organelles:
+        for vpath in volume_paths:
+            if f"label_crop/{organelle}" in open_file(vpath) and vpath not in new_volume_paths:
+                new_volume_paths.append(vpath)
+
+    if len(new_volume_paths) == 0:
+        raise ValueError(f"'{organelles}' are not valid organelle(s) found in the crops: '{crops}'.")
+
     # Check whether all volume paths exist.
-    for volume_path in volume_paths:
+    for volume_path in new_volume_paths:
         if not os.path.exists(volume_path):
             raise FileNotFoundError(f"The volume '{volume_path}' could not be found.")
 
-    return volume_paths
+    return new_volume_paths
 
 
 def get_cellmap_dataset(
