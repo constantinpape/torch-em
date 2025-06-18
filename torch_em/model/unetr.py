@@ -31,12 +31,14 @@ class UNETR(nn.Module):
         use_sam_stats: Whether to normalize the input data with the statistics of the pretrained SAM model.
         use_mae_stats: Whether to normalize the input data with the statistics of the pretrained MAE model.
         resize_input: Whether to resize the input images to match `img_size`.
+            By default, it resizes the inputs to match the `img_size`.
         encoder_checkpoint: Checkpoint for initializing the vision transformer.
             Can either be a filepath or an already loaded checkpoint.
         final_activation: The activation to apply to the UNETR output.
-        use_skip_connection: Whether to use skip connections.
+        use_skip_connection: Whether to use skip connections. By default, it uses skip connections.
         embed_dim: The embedding dimensionality, corresponding to the output dimension of the vision transformer.
         use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
+            By default, it uses resampling for upsampling.
     """
     def _load_encoder_from_checkpoint(self, backbone, encoder, checkpoint):
         """Function to load pretrained weights to the image encoder.
@@ -100,7 +102,7 @@ class UNETR(nn.Module):
         final_activation: Optional[Union[str, nn.Module]] = None,
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
-        use_conv_transpose: bool = True,
+        use_conv_transpose: bool = False,
         **kwargs
     ) -> None:
         super().__init__()
@@ -162,22 +164,62 @@ class UNETR(nn.Module):
             self.decoder = decoder
 
         if use_skip_connection:
-            self.deconv1 = Deconv2DBlock(embed_dim, features_decoder[0])
+            self.deconv1 = Deconv2DBlock(
+                in_channels=embed_dim,
+                out_channels=features_decoder[0],
+                use_conv_transpose=use_conv_transpose,
+            )
             self.deconv2 = nn.Sequential(
-                Deconv2DBlock(embed_dim, features_decoder[0]),
-                Deconv2DBlock(features_decoder[0], features_decoder[1])
+                Deconv2DBlock(
+                    in_channels=embed_dim,
+                    out_channels=features_decoder[0],
+                    use_conv_transpose=use_conv_transpose,
+                ),
+                Deconv2DBlock(
+                    in_channels=features_decoder[0],
+                    out_channels=features_decoder[1],
+                    use_conv_transpose=use_conv_transpose,
+                )
             )
             self.deconv3 = nn.Sequential(
-                Deconv2DBlock(embed_dim, features_decoder[0]),
-                Deconv2DBlock(features_decoder[0], features_decoder[1]),
-                Deconv2DBlock(features_decoder[1], features_decoder[2])
+                Deconv2DBlock(
+                    in_channels=embed_dim,
+                    out_channels=features_decoder[0],
+                    use_conv_transpose=use_conv_transpose,
+                ),
+                Deconv2DBlock(
+                    in_channels=features_decoder[0],
+                    out_channels=features_decoder[1],
+                    use_conv_transpose=use_conv_transpose,
+                ),
+                Deconv2DBlock(
+                    in_channels=features_decoder[1],
+                    out_channels=features_decoder[2],
+                    use_conv_transpose=use_conv_transpose,
+                )
             )
             self.deconv4 = ConvBlock2d(in_chans, features_decoder[-1])
         else:
-            self.deconv1 = Deconv2DBlock(embed_dim, features_decoder[0])
-            self.deconv2 = Deconv2DBlock(features_decoder[0], features_decoder[1])
-            self.deconv3 = Deconv2DBlock(features_decoder[1], features_decoder[2])
-            self.deconv4 = Deconv2DBlock(features_decoder[2], features_decoder[3])
+            self.deconv1 = Deconv2DBlock(
+                in_channels=embed_dim,
+                out_channels=features_decoder[0],
+                use_conv_transpose=use_conv_transpose,
+            )
+            self.deconv2 = Deconv2DBlock(
+                in_channels=features_decoder[0],
+                out_channels=features_decoder[1],
+                use_conv_transpose=use_conv_transpose,
+            )
+            self.deconv3 = Deconv2DBlock(
+                in_channels=features_decoder[1],
+                out_channels=features_decoder[2],
+                use_conv_transpose=use_conv_transpose,
+            )
+            self.deconv4 = Deconv2DBlock(
+                in_channels=features_decoder[2],
+                out_channels=features_decoder[3],
+                use_conv_transpose=use_conv_transpose,
+            )
 
         self.base = ConvBlock2d(embed_dim, features_decoder[0])
         self.out_conv = nn.Conv2d(features_decoder[-1], out_channels, 1)
@@ -197,6 +239,7 @@ class UNETR(nn.Module):
             return_activation = getattr(nn, activation, None)
         if return_activation is None:
             raise ValueError(f"Invalid activation: {activation}")
+
         return return_activation()
 
     @staticmethod
@@ -261,10 +304,7 @@ class UNETR(nn.Module):
         return x, input_shape
 
     def postprocess_masks(
-        self,
-        masks: torch.Tensor,
-        input_size: Tuple[int, ...],
-        original_size: Tuple[int, ...],
+        self, masks: torch.Tensor, input_size: Tuple[int, ...], original_size: Tuple[int, ...],
     ) -> torch.Tensor:
         """@private
         """
