@@ -18,7 +18,7 @@ def check_cellmap():
         patch_shape=(1, 512, 512),
         ndim=2,
         download=True,
-        sampler=MinSemanticLabelForegroundSampler(semantic_ids=[3, 4, 5, 50], min_fraction=0.01),  # fetches mito slices.
+        sampler=MinSemanticLabelForegroundSampler(semantic_ids=[3, 4, 5, 50], min_fraction=0.01),
         crops=["234"],
     )
     check_loader(loader, 8, instance_labels=True)
