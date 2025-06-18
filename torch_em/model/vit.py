@@ -448,6 +448,6 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             )
 
     else:
-        raise ValueError("The 'UNETR' supported backbones are `sam`, `mae` or 'scalemae. Please choose one of them.")
+        raise ValueError("The 'UNETR' supported backbones are 'sam', 'mae' or 'scalemae'. Please choose one of them.")
 
     return encoder
