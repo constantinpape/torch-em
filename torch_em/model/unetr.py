@@ -15,7 +15,7 @@ except ImportError:
 
 
 #
-# UNETR IMPLEMENTATION [Vision Transformer (ViT from MAE / ViT from SAM) + UNet Decoder from `torch_em`]
+# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / MAE / ScaleMAE) + UNet Decoder from `torch_em`]
 #
 
 
@@ -67,6 +67,22 @@ class UNETR(nn.Module):
                 if ("head.weight" in current_encoder_state) and ("head.bias" in current_encoder_state):
                     del self.encoder.head
 
+            elif backbone == "scalemae":
+                # Load the encoder state directly from a checkpoint.
+                encoder_state = torch.load(checkpoint)["model"]
+                encoder_state = OrderedDict({
+                    k: v for k, v in encoder_state.items()
+                    if not k.startswith(("mask_token", "decoder", "fcn", "fpn", "pos_embed"))
+                })
+
+                # Let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
+                current_encoder_state = self.encoder.state_dict()
+                if ("head.weight" in current_encoder_state) and ("head.bias" in current_encoder_state):
+                    del self.encoder.head
+
+                if "pos_embed" in current_encoder_state:  # NOTE: ScaleMAE uses 'pos. embeddings' in a diff. format.
+                    del self.encoder.pos_embed
+
         else:
             encoder_state = checkpoint
 
@@ -87,6 +103,7 @@ class UNETR(nn.Module):
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
+        **kwargs
     ) -> None:
         super().__init__()
 
@@ -97,7 +114,8 @@ class UNETR(nn.Module):
 
         if isinstance(encoder, str):  # "vit_b" / "vit_l" / "vit_h"
             print(f"Using {encoder} from {backbone.upper()}")
-            self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder)
+            self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder, **kwargs)
+
             if encoder_checkpoint is not None:
                 self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint)
 
@@ -268,7 +286,7 @@ class UNETR(nn.Module):
             pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(1, -1, 1, 1).to(device)
             pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(1, -1, 1, 1).to(device)
         elif self.use_mae_stats:
-            # TODO: add mean std from mae experiments (or open up arguments for this)
+            # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
             raise NotImplementedError
         else:
             pixel_mean = torch.Tensor([0.0, 0.0, 0.0]).view(1, -1, 1, 1).to(device)
