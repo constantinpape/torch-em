@@ -365,7 +365,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
     """Get vision transformer encoder.
 
     Args:
-        backbone: The name of the vision transformer implementation. One of "sam" or "mae".
+        backbone: The name of the vision transformer implementation. One of "sam" / "mae" / "scalemae".
         model: The name of the model. One of "vit_b", "vit_l" or "vit_h".
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
         kwargs: Additional kwargs which can be expected by the vision transformer,
@@ -448,7 +448,6 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             )
 
     else:
-        raise ValueError("The 'UNETR' supported backbones are `sam`, `mae` or 'scalemae. Please choose one of them.")
-        raise ValueError("The UNETR supported backbones are `sam` or `mae`. Please choose either of the two.")
+        raise ValueError("The 'UNETR' supported backbones are 'sam', 'mae' or 'scalemae'. Please choose one of them.")
 
     return encoder
