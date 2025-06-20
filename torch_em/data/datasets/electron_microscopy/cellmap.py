@@ -443,7 +443,7 @@ def get_cellmap_paths(
 
         if organelle != "all":
             warnings.warn(
-                "You have chosen a different organelle annotations other than 'all'. Please keep in mind "
+                "You have chosen a different organelle annotations than 'all'. Please keep in mind "
                 f"that it is not guaranteed to provide you the correct masks for '{organelle}'. "
                 "We suggest sticking to 'all' labels and use the corresponding label ids."
             )
