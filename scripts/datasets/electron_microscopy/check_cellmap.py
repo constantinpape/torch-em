@@ -20,6 +20,7 @@ def check_cellmap():
         download=True,
         sampler=MinSemanticLabelForegroundSampler(semantic_ids=[3, 4, 5, 50], min_fraction=0.01),
         crops=["234"],
+        voxel_size=[2.0, 2.0, 1.0],
     )
     check_loader(loader, 8, instance_labels=True)
 
