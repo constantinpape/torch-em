@@ -10,6 +10,7 @@ Please cite them if you use this data for your research.
 
 import os
 import time
+import warnings
 from pathlib import Path
 from threading import Lock
 from typing import Union, Optional, Tuple, List, Sequence
@@ -439,6 +440,14 @@ def get_cellmap_paths(
 
     other_volume_paths = []
     for organelle in organelles:
+
+        if organelle != "all":
+            warnings.warn(
+                "You have chosen a different organelle annotations other than 'all'. Please keep in mind "
+                f"that it is not guaranteed to provide you the correct masks for '{organelle}'. "
+                "We suggest sticking to 'all' labels and use the corresponding label ids."
+            )
+
         for vpath in volume_paths:
             if f"label_crop/{organelle}" in open_file(vpath) and vpath not in other_volume_paths:
                 other_volume_paths.append(vpath)
