@@ -18,7 +18,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import h5py
 import numpy as np
-import pandas as pd
 from xarray import DataArray
 
 from torch.utils.data import Dataset, DataLoader
@@ -347,13 +346,6 @@ def get_cellmap_data(
         padding=padding,
         download=download,
     )
-
-    # Get the organelle-crop mapping.
-    from cellmap_segmentation_challenge import utils
-
-    # There is a file named 'train_crop_manifest' in the 'utils' sub-module. We need to get that first
-    train_metadata_file = os.path.join(str(Path(utils.__file__).parent / "train_crop_manifest.csv"))
-    train_metadata = pd.read_csv(train_metadata_file)
 
     if _data_path is None or len(_data_path) == 0:
         raise RuntimeError("Something went wrong. Please read the information logged above.")
