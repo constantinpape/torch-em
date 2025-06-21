@@ -308,7 +308,6 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
 
 def get_cellmap_data(
     path: Union[os.PathLike, str],
-    organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
     padding: int = 64,
@@ -318,8 +317,6 @@ def get_cellmap_data(
 
     Args:
         path: Filepath to a folder where the data will be downloaded for further processing.
-        organelles: The choice of organelles to download. By default, loads all types of labels available.
-            For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
         resolution: The choice of resolution in the original volumes.
@@ -357,27 +354,6 @@ def get_cellmap_data(
     # There is a file named 'train_crop_manifest' in the 'utils' sub-module. We need to get that first
     train_metadata_file = os.path.join(str(Path(utils.__file__).parent / "train_crop_manifest.csv"))
     train_metadata = pd.read_csv(train_metadata_file)
-
-    # Let's get the label to crop mapping from the manifest file.
-    organelle_to_crops = train_metadata.groupby('class_label')['crop_name'].apply(list).to_dict()
-
-    # By default, 'organelles' set to 'None' will give you 'all' organelle types.
-    if organelles is not None:  # The assumption here is that the user wants specific organelle(s).
-        # Validate whether the organelle exists in the desired crops at all.
-        if isinstance(organelles, str):
-            organelles = [organelles]
-
-        # Next, we check whether they match the crops.
-        for curr_organelle in organelles:
-            if curr_organelle not in organelle_to_crops:  # Check whether the organelle is valid or not.
-                raise ValueError(f"The chosen organelle: '{curr_organelle}' seems to be an invalid choice.")
-
-            # Lastly, we check whether the final crops have the organelle(s) or not.
-            # Otherwise, we throw a warning and go ahead with the true valid choices.
-            # NOTE: The priority below is higher for organelles than crops.
-            for curr_crop in final_crops:
-                if curr_crop not in organelle_to_crops.get(curr_organelle):
-                    raise ValueError(f"The crop '{curr_crop}' does not have the chosen organelle '{curr_organelle}'.")
 
     if _data_path is None or len(_data_path) == 0:
         raise RuntimeError("Something went wrong. Please read the information logged above.")
@@ -425,7 +401,7 @@ def get_cellmap_paths(
 
     # Get the CellMap data crops.
     data_path, crops = get_cellmap_data(
-        path=path, organelles=organelles, crops=crops, resolution=resolution, padding=padding, download=download
+        path=path, crops=crops, resolution=resolution, padding=padding, download=download,
     )
 
     # Get all crops.
