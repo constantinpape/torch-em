@@ -210,8 +210,9 @@ def watershed_from_center_and_boundary_distances(
     Returns:
         The instance segmentation.
     """
-    center_distances = vigra.filters.gaussianSmoothing(center_distances, distance_smoothing)
-    boundary_distances = vigra.filters.gaussianSmoothing(boundary_distances, distance_smoothing)
+    if distance_smoothing > 0:
+        center_distances = vigra.filters.gaussianSmoothing(center_distances, distance_smoothing)
+        boundary_distances = vigra.filters.gaussianSmoothing(boundary_distances, distance_smoothing)
 
     fg_mask = foreground_map > foreground_threshold
 
