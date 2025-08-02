@@ -1,16 +1,21 @@
 """The Fundus AVSeg dataset contains annotations for artery-vein segmentation in
 fundus images.
 
+For the class labels: red represents arteries, blue represents veins, green represents artery-vein crossings,
+and white represents vessels of uncertain classification.
+
 This dataset is from the publication https://doi.org/10.1038/s41597-025-05381-2.
 Please cite it if you use this dataset for your research.
 """
 
 import os
 from glob import glob
-from natsort import natsorted
+from pathlib import Path
 from typing import Union, Tuple, Literal, List
 
+import numpy as np
 import pandas as pd
+import imageio.v3 as imageio
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -21,6 +26,25 @@ from .. import util
 
 URL = "https://figshare.com/ndownloader/files/54093641"
 CHECKSUM = "6db5ff43c4e9c25aa93093aa295c67b10fa0c089ac650df6665c7a6bbae9539f"
+
+
+def _process_labels(data_dir):
+    label_paths = glob(os.path.join(data_dir, "annotation", "*.png"))
+    for label_path in label_paths:
+        labels = imageio.imread(label_path)
+
+        # New empty label.
+        neu_labels = np.zeros(labels.shape[:2])
+
+        # Map labels to specific ids.
+        neu_labels[np.all(labels == (255, 0, 0), axis=-1)] = 1   # red are arteries.
+        neu_labels[np.all(labels == (0, 0, 255), axis=-1)] = 2   # blue are veins.
+        neu_labels[np.all(labels == (0, 255,   0), axis=-1)] = 3   # green are overlaps.
+        neu_labels[np.all(labels == (255, 255, 255), axis=-1)] = 4   # white are unknown.
+
+        imageio.imwrite(Path(label_path).with_suffix(".tif"), neu_labels, compression="zlib")
+
+        os.remove(label_path)
 
 
 def get_fundus_avseg_data(path: Union[os.PathLike, str], download: bool = False) -> str:
@@ -43,6 +67,8 @@ def get_fundus_avseg_data(path: Union[os.PathLike, str], download: bool = False)
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
     util.unzip(zip_path=zip_path, dst=path)
 
+    _process_labels(data_dir)
+
     return data_dir
 
 
@@ -64,10 +90,24 @@ def get_fundus_avseg_paths(
     """
     data_dir = get_fundus_avseg_data(path, download)
 
-    breakpoint()
+    if split == "test":
+        df = pd.read_csv(os.path.join(data_dir, "testing.txt"))
+    elif split in ["train", "val"]:
+        df = pd.read_csv(os.path.join(data_dir, "training.txt"))
+    else:
+        raise ValueError(f"'{split}' is not a valid split choice.")
 
-    raw_paths = ...
-    label_paths = ...
+    fnames = df.iloc[:, 0].tolist()
+
+    if split == "train":
+        fnames = fnames[:-15]
+    elif split == "val":  # Select last 15 images for validation.
+        fnames = fnames[-15:]
+
+    raw_paths = [os.path.join(data_dir, "images", fname) for fname in fnames]
+    label_paths = [
+        str(Path(os.path.join(data_dir, "annotation", fname)).with_suffix(".tif")) for fname in fnames
+    ]
 
     return raw_paths, label_paths
 

@@ -19,7 +19,7 @@ def check_fundus_avseg():
         split="train",
         download=True,
     )
-    check_loader(loader, 8)
+    check_loader(loader, 8, rgb=True, instance_labels=True)
 
 
 if __name__ == "__main__":
