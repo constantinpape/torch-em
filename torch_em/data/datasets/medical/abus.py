@@ -79,6 +79,13 @@ def get_abus_paths(
 
     assert len(image_paths) and len(image_paths) == len(gt_paths)
 
+    if split == "train":
+        image_paths, gt_paths = image_paths[:125], gt_paths[:125]
+    elif split == "val":
+        image_paths, gt_paths = image_paths[125:150], gt_paths[125:150]
+    else:
+        image_paths, gt_paths = image_paths[150:], gt_paths[150:]
+
     return image_paths, gt_paths
 
 
