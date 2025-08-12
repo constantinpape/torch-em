@@ -138,7 +138,7 @@ def get_abus_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the ABUS dataset for breast cancer segmentation.
+    """Get the ABUS dataloader for breast cancer segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
