@@ -252,6 +252,6 @@ def predict_with_halo(
     else:
         iteration_ids = np.array(iter_list)
     with futures.ThreadPoolExecutor(n_workers) as tp:
-        list(tqdm(tp.map(predict_block, iteration_ids), total=n_blocks, disable=disable_tqdm, desc=tqdm_desc))
+        list(tqdm(tp.map(predict_block, iteration_ids), total=len(iteration_ids), disable=disable_tqdm, desc=tqdm_desc))
 
     return output
