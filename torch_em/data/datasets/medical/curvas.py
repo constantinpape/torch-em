@@ -2,7 +2,8 @@
 in abdominal CT scans.
 
 This dataset is from the challenge: https://curvas.grand-challenge.org.
-The dataset is located at: https://zenodo.org/records/12687192.
+The dataset is located at: https://zenodo.org/records/12687192,
+and is from the publication https://doi.org/10.48550/arXiv.2505.08685
 Please cite tem if you use this dataset for your research.
 """
 
