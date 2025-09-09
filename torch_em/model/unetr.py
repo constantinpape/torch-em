@@ -13,6 +13,11 @@ try:
 except ImportError:
     get_sam_model = None
 
+try:
+    from micro_sam2.util import get_sam2_model
+except ImportError:
+    get_sam2_model = None
+
 
 #
 # UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / MAE / ScaleMAE) + UNet Decoder from `torch_em`]
@@ -50,6 +55,17 @@ class UNETR(nn.Module):
                 # from the checkpoint
                 try:
                     _, model = get_sam_model(model_type=encoder, checkpoint_path=checkpoint, return_sam=True)
+                    encoder_state = model.image_encoder.state_dict()
+                except Exception:
+                    # Try loading the encoder state directly from a checkpoint.
+                    encoder_state = torch.load(checkpoint, weights_only=False)
+
+            elif backbone == "sam2" and isinstance(encoder, str):
+                # If we have a SAM2 encoder, then we first try to load the full SAM2 Model.
+                # (using micro_sam2) and otherwise fall back on directly loading the encoder state
+                # from the checkpoint
+                try:
+                    model = get_sam2_model(model_type=encoder, checkpoint_path=checkpoint)
                     encoder_state = model.image_encoder.state_dict()
                 except Exception:
                     # Try loading the encoder state directly from a checkpoint.
@@ -119,7 +135,11 @@ class UNETR(nn.Module):
             if encoder_checkpoint is not None:
                 self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint)
 
-            in_chans = self.encoder.in_chans
+            if backbone == "sam2":
+                in_chans = self.encoder.trunk.patch_embed.proj.in_channels
+            else:
+                in_chans = self.encoder.in_chans
+
             if embed_dim is None:
                 embed_dim = self.encoder.embed_dim
 
