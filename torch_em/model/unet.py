@@ -215,11 +215,11 @@ class Upsampler(nn.Module):
     """@private"""
 
     mode: Final[InterpolationMode]
-    scale_factor: Final[float]
+    scale_factor: Final[Union[float, List[float]]]
 
     def __init__(
         self,
-        scale_factor: float,
+        scale_factor: Union[float, List[float]],
         in_channels: int,
         out_channels: int,
         dim: Literal[2, 3],
@@ -227,7 +227,11 @@ class Upsampler(nn.Module):
     ):
         super().__init__()
         self.mode = mode
-        self.scale_factor = float(scale_factor)
+        self.scale_factor = (
+            [float(sf) for sf in scale_factor]
+            if isinstance(scale_factor, (list, tuple))
+            else float(scale_factor)
+        )
         self.in_channels = in_channels
         self.out_channels = out_channels
 
@@ -251,7 +255,7 @@ class Upsampler2d(Upsampler):
 
     def __init__(
         self,
-        scale_factor: float,
+        scale_factor: Union[float, List[float]],
         in_channels: int,
         out_channels: int,
         mode: InterpolationMode = "bilinear",
@@ -264,7 +268,7 @@ class Upsampler3d(Upsampler):
 
     def __init__(
         self,
-        scale_factor: float,
+        scale_factor: Union[float, List[float]],
         in_channels: int,
         out_channels: int,
         mode: InterpolationMode = "trilinear",
