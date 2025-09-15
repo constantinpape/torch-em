@@ -35,6 +35,7 @@ try:
     from dinov3.models.vision_transformer import DinoVisionTransformer
     _dinov3_import_success = True
 except ImportError:
+    DinoVisionTransformer = object
     _dinov3_import_success = False
 
 

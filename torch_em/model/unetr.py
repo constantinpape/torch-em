@@ -34,6 +34,7 @@ class UNETR(nn.Module):
         decoder: The convolutional decoder.
         out_channels: The number of output channels of the UNETR.
         use_sam_stats: Whether to normalize the input data with the statistics of the pretrained SAM model.
+        use_dino_stats: Whether to normalize the input data with the statistics of the pretrained DINOv3 model.
         use_mae_stats: Whether to normalize the input data with the statistics of the pretrained MAE model.
         resize_input: Whether to resize the input images to match `img_size`.
             By default, it resizes the inputs to match the `img_size`.
