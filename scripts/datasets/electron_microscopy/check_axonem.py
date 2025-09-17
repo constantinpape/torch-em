@@ -10,8 +10,7 @@ sys.path.append("..")
 
 
 def check_axonem():
-    # from util import ROOT
-    ROOT = "/mnt/vast-nhr/projects/cidas/cca/data"
+    from util import ROOT
 
     loader = get_axonem_loader(
         path=os.path.join(ROOT, "axonem"),
