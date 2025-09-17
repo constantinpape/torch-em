@@ -12,8 +12,8 @@ from shutil import rmtree
 from concurrent import futures
 from typing import List, Optional, Sequence, Tuple, Union
 
-import imageio
 import numpy as np
+import imageio.v3 as imageio
 
 import torch_em
 
@@ -32,6 +32,7 @@ URLS = {
         "rat": "https://huggingface.co/datasets/pytc/MitoEM/resolve/main/EM30-R-mito-train-val-v2.zip"
     }
 }
+
 CHECKSUMS = {
     "raw": {
         "human": "98fe259f36a7d8d43f99981b7a0ef8cdeba2ce2615ff91595f428ae57207a041",
@@ -50,7 +51,7 @@ def _check_data(path, sample):
     return all(os.path.exists(pp) for pp in expected_paths)
 
 
-def get_slices(folder):
+def _get_slices(folder):
     files = os.listdir(folder)
     files.sort()
     files = [os.path.splitext(ff)[0] for ff in files]
@@ -84,11 +85,11 @@ def _create_volume(out_path, im_folder, label_folder=None, z_start=None):
 
     if label_folder is None:
         assert z_start is not None
-        n_slices = len(get_slices(im_folder))
+        n_slices = len(_get_slices(im_folder))
         slices = list(range(z_start, n_slices))
     else:
         assert z_start is None
-        slices = get_slices(label_folder)
+        slices = _get_slices(label_folder)
 
     n_threads = min(16, multiprocessing.cpu_count())
     raw = _load_vol(os.path.join(im_folder, "im%04i.png"), slices, "load raw", n_threads)
