@@ -1,4 +1,4 @@
-from typing import Callable, List, Optional, Sequence, Union
+from typing import Callable, List, Optional, Sequence, Union, Tuple
 
 import numpy as np
 import skimage.measure
@@ -463,6 +463,8 @@ class PerObjectDistanceTransform:
         correct_centers: Whether to correct centers that are not in the objects.
         min_size: Minimal size of objects for distance calculdation.
         distance_fill_value: Fill value for the distances outside of objects.
+        sampling: The spacing of the distance transform. This is especially relevant for anisotropic data;
+            for which it is recommended to use a sampling of (ANISOTROPY_FACTOR, 1, 1).
     """
     eps = 1e-7
 
@@ -477,6 +479,7 @@ class PerObjectDistanceTransform:
         correct_centers: bool = True,
         min_size: int = 0,
         distance_fill_value: float = 1.0,
+        sampling: Optional[Tuple[float, ...]] = None
     ):
         if sum([distances, directed_distances, boundary_distances]) == 0:
             raise ValueError("At least one of distances or directed distances has to be passed.")
@@ -490,6 +493,7 @@ class PerObjectDistanceTransform:
         self.correct_centers = correct_centers
         self.min_size = min_size
         self.distance_fill_value = distance_fill_value
+        self.sampling = sampling
 
     def compute_normalized_object_distances(self, mask, boundaries, bb, center, distances):
         """@private
@@ -508,7 +512,7 @@ class PerObjectDistanceTransform:
         if correct_center or self.boundary_distances:
             # Crop the boundary mask and compute the boundary distances.
             cropped_boundary_mask = boundaries[bb]
-            boundary_distances = vigra.filters.distanceTransform(cropped_boundary_mask)
+            boundary_distances = vigra.filters.distanceTransform(cropped_boundary_mask, pixel_pitch=self.sampling)
             boundary_distances[~cropped_mask] = 0
             max_dist_point = np.unravel_index(np.argmax(boundary_distances), boundary_distances.shape)
 
@@ -522,7 +526,7 @@ class PerObjectDistanceTransform:
 
         # Compute the directed distances,
         if self.distances or self.directed_distances:
-            this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask)
+            this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask, pixel_pitch=self.sampling)
         else:
             this_distances = None
 

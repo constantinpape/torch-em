@@ -1,5 +1,5 @@
-from typing import Tuple
 from functools import partial
+from typing import Tuple, List
 
 import torch
 import torch.nn as nn
@@ -20,6 +20,15 @@ except ImportError:
     VisionTransformer = object
     PatchEmbed = object
     _timm_import_success = False
+
+try:
+    from sam2.modeling.backbones.hieradet import Hiera
+    from sam2.modeling.position_encoding import PositionEmbeddingSine
+    from sam2.modeling.backbones.image_encoder import ImageEncoder, FpnNeck
+    _sam2_import_success = True
+except ImportError:
+    ImageEncoder = object
+    _sam2_import_success = False
 
 
 class ViT_Sam(ImageEncoderViT):
@@ -43,8 +52,8 @@ class ViT_Sam(ImageEncoderViT):
     ) -> None:
         if not _sam_import_success:
             raise RuntimeError(
-                "The vision transformer backend can only be initialized if segment anything is installed."
-                "Please install segment anything from https://github.com/facebookresearch/segment-anything."
+                "The vision transformer backend can only be initialized if segment anything is installed. "
+                "Please install segment anything from https://github.com/facebookresearch/segment-anything "
                 "and then rerun your code."
             )
 
@@ -98,8 +107,8 @@ class ViT_MAE(VisionTransformer):
     ):
         if not _timm_import_success:
             raise RuntimeError(
-                "The vision transformer backend can only be initialized if timm is installed."
-                "Please install timm (using conda/mamba) for using https://github.com/facebookresearch/mae/."
+                "The vision transformer backend can only be initialized if timm is installed. "
+                "Please install timm (using conda/mamba) for using https://github.com/facebookresearch/mae/ "
                 "and then rerun your code"
             )
         super().__init__(img_size=img_size, depth=depth, **kwargs)
@@ -154,6 +163,69 @@ class ViT_MAE(VisionTransformer):
         """
         x, list_from_encoder = self.forward_features(x)
         return x, list_from_encoder
+
+
+class ViT_Sam2(ImageEncoder):
+    """Vision Transformer derived from the Segment Anything 2 Codebase (https://arxiv.org/abs/2408.00714).
+
+    Based on https://github.com/facebookresearch/sam2/blob/main/sam2/modeling/backbones/image_encoder.py.
+
+    Args:
+        backbone_channel_list: The channels throughout the entire backbone.
+        embed_dim: The initial embedding dimension.
+        num_heads: The initial number of heads.
+        stages: The number of blocks per stage.
+        global_att_blocks: The parameter to decide which blocks have global attention.
+        window_pos_embed_bkg_spatial_size: The spatial size of windowed positional embedding.
+        window_spec: The window size per stage, when not using global attention.
+        scalp: The count of lowest resolution features to discard.
+    """
+    def __init__(
+        self,
+        backbone_channel_list: List[int],
+        embed_dim: int = 96,
+        num_heads: int = 1,
+        stages: Tuple[int, ...] = (2, 3, 16, 3),
+        global_att_blocks: Tuple[int, ...] = (12, 16, 20),
+        window_pos_embed_bkg_spatial_size: Tuple[int, int] = (14, 14),
+        window_spec: Tuple[int, ...] = (8, 4, 14, 7),
+        scalp: int = 1,
+    ):
+        if not _sam2_import_success:
+            raise RuntimeError(
+                "The vision transformer backend can only be initialized if segment anything 2 is installed. "
+                "Please install segment anything 2 from https://github.com/facebookresearch/sam2 "
+                "and then rerun your code"
+            )
+
+        trunk = Hiera(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            stages=stages,
+            global_att_blocks=global_att_blocks,
+            window_pos_embed_bkg_spatial_size=window_pos_embed_bkg_spatial_size,
+            window_spec=window_spec,
+        )
+        neck = FpnNeck(
+            position_encoding=PositionEmbeddingSine(num_pos_feats=256),
+            d_model=256,
+            backbone_channel_list=backbone_channel_list,
+            fpn_top_down_levels=[2, 3],
+            fpn_interp_model="nearest",
+        )
+
+        super().__init__(trunk=trunk, neck=neck, scalp=scalp)
+        self.scalp = scalp
+        self.embed_dim = embed_dim
+        self.img_size = 1024  # NOTE: Hard-coded atm, declared in the configuration file.
+
+    def forward(self, x: torch.Tensor):
+        # The forward pass throught the backbone.
+        features, pos = self.neck(self.trunk(x))
+        if self.scalp > 0:  # This discard the "n" lowest resolution features.
+            features, pos = features[:-self.scalp], pos[:-self.scalp]
+
+        return features[-1], features
 
 
 #
@@ -389,7 +461,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
                 norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
                 num_heads=16, patch_size=16, qkv_bias=True, use_rel_pos=True,
                 global_attn_indexes=[5, 11, 17, 23],
-                window_size=14,  out_chans=256
+                window_size=14, out_chans=256,
             )
         elif model == "vit_h":
             encoder = ViT_Sam(
@@ -397,10 +469,35 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
                 norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
                 num_heads=16, patch_size=16, qkv_bias=True, use_rel_pos=True,
                 global_attn_indexes=[7, 15, 23, 31],
-                window_size=14, out_chans=256
+                window_size=14, out_chans=256,
             )
         else:
             raise ValueError(f"'{model}' is not supported by SAM. Currently, 'vit_b', 'vit_l', 'vit_h' are supported.")
+
+    elif backbone == "sam2":
+        if model == "hvit_t":
+            encoder = ViT_Sam2(
+                embed_dim=96, num_heads=1, stages=[1, 2, 7, 2], global_att_blocks=[5, 7, 9],
+                window_pos_embed_bkg_spatial_size=[7, 7], backbone_channel_list=[768, 384, 192, 96],
+            )
+        elif model == "hvit_s":
+            encoder = ViT_Sam2(
+                embed_dim=96, num_heads=1, stages=[1, 2, 11, 2], global_att_blocks=[7, 10, 13],
+                window_pos_embed_bkg_spatial_size=[7, 7], backbone_channel_list=[768, 384, 192, 96],
+            )
+        elif model == "hvit_b":
+            encoder = ViT_Sam2(
+                embed_dim=112, num_heads=2, backbone_channel_list=[896, 448, 224, 112],
+            )
+        elif model == "hvit_l":
+            encoder = ViT_Sam2(
+                embed_dim=144, num_heads=2, stages=[2, 6, 36, 4], global_att_blocks=[23, 33, 43],
+                window_spec=[8, 4, 16, 8], backbone_channel_list=[1152, 576, 288, 144],
+            )
+        else:
+            raise ValueError(
+                f"'{model}' is not supported by SAM2. Currently, 'hvit_t', 'hvit_s', 'hvit_b', 'hvit_l' are supported."
+            )
 
     elif backbone == "mae":
         if model == "vit_b":
@@ -448,6 +545,8 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             )
 
     else:
-        raise ValueError("The 'UNETR' supported backbones are 'sam', 'mae' or 'scalemae'. Please choose one of them.")
+        raise ValueError(
+            "The 'UNETR' supported backbones are 'sam', 'sam2', 'mae' or 'scalemae'. Please choose one of them."
+        )
 
     return encoder

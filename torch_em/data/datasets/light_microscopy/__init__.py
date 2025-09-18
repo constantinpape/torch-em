@@ -1,5 +1,6 @@
 from .aisegcell import get_aisegcell_loader, get_aisegcell_dataset
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
+from .bac_mother import get_bac_mother_loader, get_bac_mother_dataset
 from .bitdepth_nucseg import get_bitdepth_nucseg_loader, get_bitdepth_nucseg_dataset
 from .brifiseg import get_brifiseg_loader, get_brifiseg_dataset
 from .blastospim import get_blastospim_loader, get_blastospim_dataset

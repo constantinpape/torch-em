@@ -21,7 +21,7 @@ The data itself can be downloaded from EMPIAR via aspera.
       and <PATH> where you want to download the data.
 - After this you can use the functions in this file if you use <PATH> as location for the data.
 
-Note that we have implemented automatic download, but this leads to dependency
+NOTE: We have implemented automatic download, but this leads to dependency
 issues, so we recommend to download the data manually and then run the loaders with the correct path.
 """
 
