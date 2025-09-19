@@ -34,6 +34,7 @@ class UNETR(nn.Module):
         decoder: The convolutional decoder.
         out_channels: The number of output channels of the UNETR.
         use_sam_stats: Whether to normalize the input data with the statistics of the pretrained SAM model.
+        use_dino_stats: Whether to normalize the input data with the statistics of the pretrained DINOv3 model.
         use_mae_stats: Whether to normalize the input data with the statistics of the pretrained MAE model.
         resize_input: Whether to resize the input images to match `img_size`.
             By default, it resizes the inputs to match the `img_size`.
@@ -99,6 +100,14 @@ class UNETR(nn.Module):
                 if "pos_embed" in current_encoder_state:  # NOTE: ScaleMAE uses 'pos. embeddings' in a diff. format.
                     del self.encoder.pos_embed
 
+            elif backbone == "dinov3":  # Load the encoder state directly from a checkpoint.
+                encoder_state = torch.load(checkpoint)
+
+            else:
+                raise ValueError(
+                    f"We don't support either the '{backbone}' backbone or the '{encoder}' model combination (or both)."
+                )
+
         else:
             encoder_state = checkpoint
 
@@ -113,6 +122,7 @@ class UNETR(nn.Module):
         out_channels: int = 1,
         use_sam_stats: bool = False,
         use_mae_stats: bool = False,
+        use_dino_stats: bool = False,
         resize_input: bool = True,
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
@@ -125,15 +135,16 @@ class UNETR(nn.Module):
 
         self.use_sam_stats = use_sam_stats
         self.use_mae_stats = use_mae_stats
+        self.use_dino_stats = use_dino_stats
         self.use_skip_connection = use_skip_connection
         self.resize_input = resize_input
 
-        if isinstance(encoder, str):  # "vit_b" / "vit_l" / "vit_h"
+        if isinstance(encoder, str):  # e.g. "vit_b" / "vit_l" / "vit_h"
             print(f"Using {encoder} from {backbone.upper()}")
             self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder, **kwargs)
 
             if encoder_checkpoint is not None:
-                self._load_encoder_from_checkpoint(backbone, encoder, encoder_checkpoint)
+                self._load_encoder_from_checkpoint(backbone=backbone, encoder=encoder, checkpoint=encoder_checkpoint)
 
             if backbone == "sam2":
                 in_chans = self.encoder.trunk.patch_embed.proj.in_channels
@@ -159,7 +170,7 @@ class UNETR(nn.Module):
 
             try:
                 in_chans = self.encoder.patch_embed.proj.in_channels
-            except AttributeError:  # for getting the input channels while using vit_t from MobileSam
+            except AttributeError:  # for getting the input channels while using 'vit_t' from MobileSam
                 in_chans = self.encoder.patch_embed.seq[0].c.in_channels
 
         # parameters for the decoder network
@@ -305,9 +316,11 @@ class UNETR(nn.Module):
         if self.use_sam_stats:
             pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(1, -1, 1, 1).to(device)
             pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(1, -1, 1, 1).to(device)
-        elif self.use_mae_stats:
-            # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
+        elif self.use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
             raise NotImplementedError
+        elif self.use_dino_stats:
+            pixel_mean = torch.Tensor([0.485, 0.456, 0.406]).view(1, -1, 1, 1).to(device)
+            pixel_std = torch.Tensor([0.229, 0.224, 0.225]).view(1, -1, 1, 1).to(device)
         else:
             pixel_mean = torch.Tensor([0.0, 0.0, 0.0]).view(1, -1, 1, 1).to(device)
             pixel_std = torch.Tensor([1.0, 1.0, 1.0]).view(1, -1, 1, 1).to(device)
