@@ -12,7 +12,7 @@ import os
 import shutil
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Literal, Optional
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -46,17 +46,25 @@ def get_nis3d_data(path: Union[os.PathLike, str], download: bool = False) -> str
     util.unzip(zip_path, path)
 
     # NOTE: For "MusMusculus_2", the ground truth labels are named oddly. We need to fix it manually.
-    gt_path = os.path.join(data_dir, "NIS3D", "MusMusculus_2", "gt.tif")
-    shutil.move(src=gt_path, dst=gt_path.replace("gt", "GroundTruth"))
+    gt_paths = glob(os.path.join(data_dir, "**", "MusMusculus_2", "gt.tif"), recursive=True)
+    assert gt_paths, "Such mismatching paths should exist!"
+    [shutil.move(src=p, dst=p.replace("gt", "GroundTruth")) for p in gt_paths]
 
     return data_dir
 
 
-def get_nis3d_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[str], List[str]]:
+def get_nis3d_paths(
+    path: Union[os.PathLike, str],
+    split: Optional[Literal["train", "test"]] = None,
+    split_type: Optional[Literal["cross-image", "in-image"]] = None,
+    download: bool = False,
+) -> Tuple[List[str], List[str]]:
     """Get paths to the NIS3D data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        split: The choice of data split. By default, all volumes are returned.
+        split_type: The choice of the type of data split. By default, we get all the volumes as is.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -65,8 +73,21 @@ def get_nis3d_paths(path: Union[os.PathLike, str], download: bool = False) -> Tu
     """
     data_dir = get_nis3d_data(path, download)
 
-    raw_paths = natsorted(glob(os.path.join(data_dir, "NIS3D", "*", "data.tif")))
-    label_paths = natsorted(glob(os.path.join(data_dir, "NIS3D", "*", "GroundTruth.tif")))
+    # First, let's set the 'split_type' analogy
+    if split_type is None:  # We expect original volumes as is with no splitting pattern.
+        assert split is None, "Please choose a 'split_type' before making a choice on the 'split'."
+        split_type = "NIS3D"
+    else:
+        split_type = r"suggestive splitting/" + split_type
+
+    # Next, let's decide on the particular 'split' to be chosen.
+    if split is None:
+        split = "**"
+    else:
+        split += "/*"
+
+    raw_paths = natsorted(glob(os.path.join(data_dir, split_type, split, "data.tif"), recursive=True))
+    label_paths = natsorted(glob(os.path.join(data_dir, split_type, split, "GroundTruth.tif"), recursive=True))
 
     assert len(raw_paths) and len(raw_paths) == len(label_paths)
 
@@ -74,13 +95,20 @@ def get_nis3d_paths(path: Union[os.PathLike, str], download: bool = False) -> Tu
 
 
 def get_nis3d_dataset(
-    path: Union[os.PathLike, str], patch_shape: Tuple[int, ...], download: bool = False, **kwargs,
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    split: Optional[Literal["train", "test"]] = None,
+    split_type: Optional[Literal["cross-image", "in-image"]] = None,
+    download: bool = False,
+    **kwargs
 ) -> Dataset:
     """Get the NIS3D dataset for nucleus segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split. By default, all volumes are returned.
+        split_type: The choice of the type of data split. By default, we get all the volumes as is.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -88,7 +116,7 @@ def get_nis3d_dataset(
         The segmentation dataset.
     """
 
-    raw_paths, label_paths = get_nis3d_paths(path, download)
+    raw_paths, label_paths = get_nis3d_paths(path, split, split_type, download)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -102,7 +130,12 @@ def get_nis3d_dataset(
 
 
 def get_nis3d_loader(
-    path: Union[os.PathLike, str], batch_size: int, patch_shape: Tuple[int, ...], download: bool = False, **kwargs,
+    path: Union[os.PathLike, str],
+    batch_size: int,
+    patch_shape: Tuple[int, ...],
+    split: Optional[Literal["train", "test"]] = None,
+    split_type: Optional[Literal["cross-image", "in-image"]] = None,
+    download: bool = False, **kwargs,
 ) -> DataLoader:
     """Get the NIS3D dataloader for nucleus segmentation.
 
@@ -110,6 +143,8 @@ def get_nis3d_loader(
         path: Filepath to a folder where the downloaded data will be saved.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: The choice of data split. By default, all volumes are returned.
+        split_type: The choice of the type of data split. By default, we get all the volumes as is.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -117,5 +152,5 @@ def get_nis3d_loader(
         The DataLoader
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_nis3d_dataset(path, patch_shape, download, **ds_kwargs)
+    dataset = get_nis3d_dataset(path, patch_shape, split, split_type, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
