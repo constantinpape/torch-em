@@ -129,17 +129,15 @@ class MinInstanceSampler:
         min_num_instances: int = 2,
         p_reject: float = 1.0,
         min_size: Optional[int] = None,
-        reject_ids: Optional[List[float]] = None,
+        reject_ids: Optional[List[int]] = None,
     ):
         self.min_num_instances = min_num_instances
         self.p_reject = p_reject
         self.min_size = min_size
+        self.reject_ids = reject_ids
 
-        if reject_ids is None:
-            self.reject_ids = reject_ids
-        else:
-            assert isinstance(reject_ids, list)
-            self.reject_ids = [float(idx) for idx in reject_ids]
+        if self.reject_ids is not None:
+            assert isinstance(self.reject_ids, list)
 
     def __call__(self, x: np.ndarray, y: np.ndarray) -> bool:
         """Check the sample.
