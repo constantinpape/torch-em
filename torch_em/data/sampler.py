@@ -122,11 +122,24 @@ class MinInstanceSampler:
         min_num_instances: The minimum number of instances for accepting a sample.
         p_reject: The probability for rejecting a sample that does not meet the criterion.
         min_size: The minimal size for instances to be taken into account.
+        reject_ids: The ids to reject (i.e. not consider) for sampling a valid input.
     """
-    def __init__(self, min_num_instances: int = 2, p_reject: float = 1.0, min_size: Optional[int] = None):
+    def __init__(
+        self,
+        min_num_instances: int = 2,
+        p_reject: float = 1.0,
+        min_size: Optional[int] = None,
+        reject_ids: Optional[List[float]] = None,
+    ):
         self.min_num_instances = min_num_instances
         self.p_reject = p_reject
         self.min_size = min_size
+
+        if reject_ids is None:
+            self.reject_ids = reject_ids
+        else:
+            assert isinstance(reject_ids, list)
+            self.reject_ids = [float(idx) for idx in reject_ids]
 
     def __call__(self, x: np.ndarray, y: np.ndarray) -> bool:
         """Check the sample.
@@ -139,9 +152,13 @@ class MinInstanceSampler:
             Whether to accept this sample.
         """
         uniques, sizes = np.unique(y, return_counts=True)
+
         if self.min_size is not None:
             filter_ids = uniques[sizes >= self.min_size]
             uniques = filter_ids
+
+        if self.reject_ids is not None:
+            uniques = [idx for idx in uniques if idx not in self.reject_ids]
 
         if len(uniques) >= self.min_num_instances:
             return True
