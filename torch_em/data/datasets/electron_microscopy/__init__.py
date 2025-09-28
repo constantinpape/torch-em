@@ -1,12 +1,14 @@
 from .aimseg import get_aimseg_loader, get_aimseg_dataset
 from .asem import get_asem_loader, get_asem_dataset
 from .axondeepseg import get_axondeepseg_loader, get_axondeepseg_dataset
+from .axonem import get_axonem_loader, get_axonem_dataset
 from .betaseg import get_betaseg_loader, get_betaseg_dataset
 from .cellmap import get_cellmap_loader, get_cellmap_dataset
 from .cem import get_mitolab_loader
 from .cremi import get_cremi_loader, get_cremi_dataset
 from .deepict import get_deepict_actin_loader, get_deepict_actin_dataset
 from .emneuron import get_emneuron_loader, get_emneuron_dataset
+from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
