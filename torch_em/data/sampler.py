@@ -165,12 +165,12 @@ class MinInstanceSampler:
 
 
 class MinTwoInstanceSampler:
-    """A sampler to  samples with less than two instances in the label data.
+    """A sampler to reject samples with less than two instances in the label data.
 
     This is ca. 10x faster than `MinInstanceSampler(min_num_instances=2)` that which uses np.unique, which is slow.
 
     Args:
-        p_: The probability for ing a sample that does not meet the criterion.
+        p_reject: The probability for rejecting a sample that does not meet the criterion.
     """
     def __init__(self, p_reject: float = 1.0):
         self.p_reject = p_reject
