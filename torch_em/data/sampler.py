@@ -122,22 +122,22 @@ class MinInstanceSampler:
         min_num_instances: The minimum number of instances for accepting a sample.
         p_reject: The probability for rejecting a sample that does not meet the criterion.
         min_size: The minimal size for instances to be taken into account.
-        reject_ids: The ids to reject (i.e. not consider) for sampling a valid input.
+        exclude_ids: The ids to exclude (i.e. not consider) for sampling a valid input.
     """
     def __init__(
         self,
         min_num_instances: int = 2,
         p_reject: float = 1.0,
         min_size: Optional[int] = None,
-        reject_ids: Optional[List[int]] = None,
+        exclude_ids: Optional[List[int]] = None,
     ):
         self.min_num_instances = min_num_instances
         self.p_reject = p_reject
         self.min_size = min_size
-        self.reject_ids = reject_ids
+        self.exclude_ids = exclude_ids
 
-        if self.reject_ids is not None:
-            assert isinstance(self.reject_ids, list)
+        if self.exclude_ids is not None:
+            assert isinstance(self.exclude_ids, list)
 
     def __call__(self, x: np.ndarray, y: np.ndarray) -> bool:
         """Check the sample.
@@ -155,8 +155,8 @@ class MinInstanceSampler:
             filter_ids = uniques[sizes >= self.min_size]
             uniques = filter_ids
 
-        if self.reject_ids is not None:
-            uniques = [idx for idx in uniques if idx not in self.reject_ids]
+        if self.exclude_ids is not None:
+            uniques = [idx for idx in uniques if idx not in self.exclude_ids]
 
         if len(uniques) >= self.min_num_instances:
             return True
@@ -165,12 +165,12 @@ class MinInstanceSampler:
 
 
 class MinTwoInstanceSampler:
-    """A sampler to reject samples with less than two instances in the label data.
+    """A sampler to  samples with less than two instances in the label data.
 
     This is ca. 10x faster than `MinInstanceSampler(min_num_instances=2)` that which uses np.unique, which is slow.
 
     Args:
-        p_reject: The probability for rejecting a sample that does not meet the criterion.
+        p_: The probability for ing a sample that does not meet the criterion.
     """
     def __init__(self, p_reject: float = 1.0):
         self.p_reject = p_reject
