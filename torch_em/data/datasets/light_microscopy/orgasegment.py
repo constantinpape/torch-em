@@ -83,7 +83,7 @@ def get_orgasegment_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the OrgaSegment dataset for organoid segmentation
+    """Get the OrgaSegment dataset for organoid segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
