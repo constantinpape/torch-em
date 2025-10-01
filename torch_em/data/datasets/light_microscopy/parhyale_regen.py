@@ -1,5 +1,6 @@
 """The Parhyale Regen dataset contains nucleus annotations for parhyale images from confocal microscope.
 
+The dataset is located at https://zenodo.org/records/8252039.
 This dataset is from the publication https://doi.org/10.7554/eLife.19766.012.
 Please cite it if you use this dataset for your research.
 """
