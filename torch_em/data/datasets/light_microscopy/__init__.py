@@ -6,6 +6,7 @@ from .brifiseg import get_brifiseg_loader, get_brifiseg_dataset
 from .blastospim import get_blastospim_loader, get_blastospim_dataset
 from .brain_organoids import get_brain_organoids_loader, get_brain_organoids_dataset
 from .cartocell import get_cartocell_loader, get_cartocell_dataset
+from .celegans_atlas import get_celegans_atlas_loader, get_celegans_atlas_dataset
 from .cellbindb import get_cellbindb_loader, get_cellbindb_dataset
 from .cellpose import get_cellpose_loader, get_cellpose_dataset
 from .cellseg_3d import get_cellseg_3d_loader, get_cellseg_3d_dataset
@@ -33,6 +34,7 @@ from .orgaextractor import get_orgaextractor_loader, get_orgaextractor_dataset
 from .orgasegment import get_orgasegment_loader, get_orgasegment_dataset
 from .organoid import get_organoid_loader, get_organoid_dataset
 from .organoidnet import get_organoidnet_loader, get_organoidnet_dataset
+from .parhyale_regen import get_parhyale_regen_loader, get_parhyale_regen_dataset
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .pnas_arabidopsis import get_pnas_arabidopsis_loader, get_pnas_arabidopsis_dataset
 from .segpc import get_segpc_loader, get_segpc_dataset
