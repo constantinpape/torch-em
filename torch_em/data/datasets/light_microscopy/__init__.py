@@ -13,7 +13,6 @@ from .cellseg_3d import get_cellseg_3d_loader, get_cellseg_3d_dataset
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .ctc import get_ctc_segmentation_loader, get_ctc_segmentation_dataset
 from .cvz_fluo import get_cvz_fluo_loader, get_cvz_fluo_dataset
-from .cytodark0 import get_cytodark0_loader, get_cytodark0_dataset
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
 from .deepseas import get_deepseas_loader, get_deepseas_dataset
 from .dic_hepg2 import get_dic_hepg2_loader, get_dic_hepg2_dataset

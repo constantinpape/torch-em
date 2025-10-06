@@ -53,6 +53,9 @@ def _preprocess_images(path, data_dir):
             instances = imageio.imread(os.path.join(base_dir, "label", f"{image_name}.tiff"))
             semantics = imageio.imread(os.path.join(base_dir, "graymask4", f"{image_name}.png"))
 
+            assert image.ndim == 3 and image.shape[-1] == 3, image.shape
+            image = image.transpose(2, 0, 1)
+
             with h5py.File(os.path.join(preprocessed_dir, f"{image_name}.h5"), "w") as f:
                 f.create_dataset("raw", data=image, compression="gzip")
                 f.create_dataset("labels/instances", data=instances, compression="gzip")
@@ -134,7 +137,9 @@ def get_cytodark0_paths(
     data_dir = get_cytodark0_data(path, download)
 
     assert split in ["train", "val", "test"], split
-    if magnification:
+    if magnification is None:
+        magnification = "*"
+    else:
         assert magnification in ["20x", "40x"], magnification
 
     input_paths = glob(os.path.join(data_dir, magnification, split, "*.h5"))
@@ -172,6 +177,8 @@ def get_cytodark0_dataset(
         label_key="labels/instances",
         patch_shape=patch_shape,
         ndim=2,
+        is_seg_dataset=False,
+        with_channels=True,
         **kwargs
     )
 
