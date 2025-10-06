@@ -177,7 +177,6 @@ def get_cytodark0_dataset(
         label_key="labels/instances",
         patch_shape=patch_shape,
         ndim=2,
-        is_seg_dataset=False,
         with_channels=True,
         **kwargs
     )

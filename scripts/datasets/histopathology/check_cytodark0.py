@@ -10,8 +10,7 @@ sys.path.append("..")
 
 
 def check_cytodark0():
-    # from util import ROOT
-    ROOT = "/home/anwai/data"
+    from util import ROOT
 
     loader = get_cytodark0_loader(
         path=os.path.join(ROOT, "cytodark0"),
