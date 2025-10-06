@@ -6,7 +6,6 @@ Please cite it if you use this dataset for your research.
 """
 
 import os
-import requests
 from glob import glob
 from natsort import natsorted
 from typing import Union, Tuple, List
@@ -22,6 +21,7 @@ from .. import util
 
 def _preprocess_data(root, path):
     import h5py
+    import requests
 
     raw_path = os.path.join(path, "Parhyale_H2B-EGFP_images_tp01-50.tif")
     assert os.path.exists(raw_path)
