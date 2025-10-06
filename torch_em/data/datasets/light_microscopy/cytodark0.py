@@ -1,4 +1,12 @@
-"""
+"""The cytoDArk0 dataset contains cell annotations for Nissl-stained histological images of mammalian brain.
+
+NOTE: The dataset contains instance segmentation annotations of all types of neuron and glia cells.
+In addition, it contains semantic segmentation annotations for foreground (cells) vs background vs boundary between
+touching and closely positioned cells (four-classes in total).
+
+The original dataset is located at https://zenodo.org/records/13694738.
+The dataset is from the publication https://www.sciencedirect.com/science/article/pii/S0010482525013708.
+Please cite it if you use this dataset for your research.
 """
 
 import os
