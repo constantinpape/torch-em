@@ -21,7 +21,6 @@ from .. import util
 
 def _preprocess_data(root, path):
     import h5py
-    import requests
 
     raw_path = os.path.join(path, "Parhyale_H2B-EGFP_images_tp01-50.tif")
     assert os.path.exists(raw_path)
@@ -55,6 +54,8 @@ def get_parhyale_regen_data(path: Union[os.PathLike, str], download: bool = Fals
     Returns:
         Filepath where the training data is stored.
     """
+    import requests
+
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
         return path
