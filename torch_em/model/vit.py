@@ -31,6 +31,14 @@ except ImportError:
     _sam2_import_success = False
 
 
+try:
+    from dinov3.models.vision_transformer import DinoVisionTransformer
+    _dinov3_import_success = True
+except ImportError:
+    DinoVisionTransformer = object
+    _dinov3_import_success = False
+
+
 class ViT_Sam(ImageEncoderViT):
     """Vision Transformer derived from the Segment Anything Codebase (https://arxiv.org/abs/2304.02643).
 
@@ -47,7 +55,7 @@ class ViT_Sam(ImageEncoderViT):
         self,
         in_chans: int = 3,
         embed_dim: int = 768,
-        global_attn_indexes: Tuple[int, ...] = ...,
+        global_attn_indexes: Tuple[int, ...] = [2, 5, 8, 11],
         **kwargs,
     ) -> None:
         if not _sam_import_success:
@@ -183,6 +191,7 @@ class ViT_Sam2(ImageEncoder):
     def __init__(
         self,
         backbone_channel_list: List[int],
+        img_size: int = 1024,
         embed_dim: int = 96,
         num_heads: int = 1,
         stages: Tuple[int, ...] = (2, 3, 16, 3),
@@ -217,7 +226,7 @@ class ViT_Sam2(ImageEncoder):
         super().__init__(trunk=trunk, neck=neck, scalp=scalp)
         self.scalp = scalp
         self.embed_dim = embed_dim
-        self.img_size = 1024  # NOTE: Hard-coded atm, declared in the configuration file.
+        self.img_size = img_size
 
     def forward(self, x: torch.Tensor):
         # The forward pass throught the backbone.
@@ -433,6 +442,85 @@ class ViT_ScaleMAE(VisionTransformer):
         return x, list_from_encoder
 
 
+class ViT_DINOv3(DinoVisionTransformer):
+    """Vision Transformer derived from the DINOv3 Codebase (https://arxiv.org/abs/2508.10104).
+
+    Based on:
+    https://github.com/facebookresearch/dinov3/blob/main/dinov3/models/vision_transformer.py.
+
+    Args:
+        img_size: The input image size.
+        patch_size: The patch size.
+        embed_dim: The embedding dimension.
+        depth: The depth of the network.
+        num_heads: The number of heads.
+        ffn_ratio: The FFN rato.
+        n_storage_tokens: The number of storage (class) tokens to remove.
+        kwargs: Keyword arguments for the image encoder base class.
+    """
+    def __init__(
+        self,
+        in_chans: int = 3,
+        img_size: int = 224,
+        patch_size: int = 16,
+        embed_dim: int = 768,
+        depth: int = 12,
+        num_heads: int = 12,
+        ffn_ratio: float = 4.0,
+        n_storage_tokens: int = 0,
+        **kwargs
+    ):
+        if not _dinov3_import_success:
+            raise RuntimeError(
+                "The vision transformer backend can only be initialized if DINOv3 is installed. "
+                "Please install DINOv3 from https://github.com/facebookresearch/dinov3 "
+                "and then rerun your code."
+            )
+
+        super().__init__(
+            in_chans=in_chans,
+            img_size=img_size,
+            patch_size=patch_size,
+            embed_dim=embed_dim,
+            depth=depth,
+            num_heads=num_heads,
+            ffn_ratio=ffn_ratio,
+            n_storage_tokens=n_storage_tokens,
+            **kwargs
+        )
+
+        self.in_chans = in_chans
+        self.img_size = img_size
+        self.n_storage_tokens = n_storage_tokens
+        self.attn_outs = [i for i in range(depth) if i % 3 == 2]
+
+    def forward(self, x) -> torch.Tensor:
+
+        B = x.shape[0]
+
+        x, hw_tuple = self.prepare_tokens_with_masks(x)
+
+        list_of_encoder = []
+        for i, blk in enumerate(self.blocks):
+            rope_sincos = self.rope_embed(H=hw_tuple[0], W=hw_tuple[1])
+            x = blk(x, rope_sincos)
+            if i in self.attn_outs:
+                list_of_encoder.append(x)
+
+        x = self.norm(x)
+        x = x[:, self.n_storage_tokens + 1:].reshape(
+            B, self.img_size // self.patch_size, self.img_size // self.patch_size, -1
+        ).permute(0, 3, 1, 2).contiguous()
+
+        list_of_encoder = [
+            o[:, self.n_storage_tokens + 1:].reshape(
+                B, self.img_size // self.patch_size, self.img_size // self.patch_size, -1
+            ).permute(0, 3, 1, 2).contiguous() for o in list_of_encoder
+        ]
+
+        return x, list_of_encoder[:3]
+
+
 def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kwargs) -> nn.Module:
     """Get vision transformer encoder.
 
@@ -449,7 +537,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
     if backbone == "sam":
         if model == "vit_b":
             encoder = ViT_Sam(
-                depth=12, embed_dim=768, img_size=1024, mlp_ratio=4,
+                depth=12, embed_dim=768, img_size=img_size, mlp_ratio=4,
                 norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
                 num_heads=12, patch_size=16, qkv_bias=True, use_rel_pos=True,
                 global_attn_indexes=[2, 5, 8, 11],
@@ -457,7 +545,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             )
         elif model == "vit_l":
             encoder = ViT_Sam(
-                depth=24, embed_dim=1024, img_size=1024, mlp_ratio=4,
+                depth=24, embed_dim=1024, img_size=img_size, mlp_ratio=4,
                 norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
                 num_heads=16, patch_size=16, qkv_bias=True, use_rel_pos=True,
                 global_attn_indexes=[5, 11, 17, 23],
@@ -465,7 +553,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             )
         elif model == "vit_h":
             encoder = ViT_Sam(
-                depth=32, embed_dim=1280, img_size=1024, mlp_ratio=4,
+                depth=32, embed_dim=1280, img_size=img_size, mlp_ratio=4,
                 norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
                 num_heads=16, patch_size=16, qkv_bias=True, use_rel_pos=True,
                 global_attn_indexes=[7, 15, 23, 31],
@@ -477,21 +565,21 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
     elif backbone == "sam2":
         if model == "hvit_t":
             encoder = ViT_Sam2(
-                embed_dim=96, num_heads=1, stages=[1, 2, 7, 2], global_att_blocks=[5, 7, 9],
+                img_size=img_size, embed_dim=96, num_heads=1, stages=[1, 2, 7, 2], global_att_blocks=[5, 7, 9],
                 window_pos_embed_bkg_spatial_size=[7, 7], backbone_channel_list=[768, 384, 192, 96],
             )
         elif model == "hvit_s":
             encoder = ViT_Sam2(
-                embed_dim=96, num_heads=1, stages=[1, 2, 11, 2], global_att_blocks=[7, 10, 13],
+                img_size=img_size, embed_dim=96, num_heads=1, stages=[1, 2, 11, 2], global_att_blocks=[7, 10, 13],
                 window_pos_embed_bkg_spatial_size=[7, 7], backbone_channel_list=[768, 384, 192, 96],
             )
         elif model == "hvit_b":
             encoder = ViT_Sam2(
-                embed_dim=112, num_heads=2, backbone_channel_list=[896, 448, 224, 112],
+                img_size=img_size, embed_dim=112, num_heads=2, backbone_channel_list=[896, 448, 224, 112],
             )
         elif model == "hvit_l":
             encoder = ViT_Sam2(
-                embed_dim=144, num_heads=2, stages=[2, 6, 36, 4], global_att_blocks=[23, 33, 43],
+                img_size=img_size, embed_dim=144, num_heads=2, stages=[2, 6, 36, 4], global_att_blocks=[23, 33, 43],
                 window_spec=[8, 4, 16, 8], backbone_channel_list=[1152, 576, 288, 144],
             )
         else:
@@ -544,9 +632,60 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
                 f"'{model}' is not supported by ScaleMAE. Currently, 'vit_b', 'vit_l' and 'vit_h' are supported."
             )
 
+    elif backbone == "dinov3":
+
+        if model == "vit_s":
+            encoder = ViT_DINOv3(
+                img_size=img_size, pos_embed_rope_rescale_coords=2, pos_embed_rope_dtype="fp32", embed_dim=384,
+                num_heads=6, layerscale_init=1.0e-05, norm_layer="layernormbf16", n_storage_tokens=4, mask_k_bias=True,
+            )
+        elif model == "vit_s+":
+            encoder = ViT_DINOv3(
+                img_size=img_size, pos_embed_rope_rescale_coords=2, pos_embed_rope_dtype="fp32", embed_dim=384,
+                num_heads=6, ffn_ratio=6, layerscale_init=1.0e-05, norm_layer="layernormbf16",
+                ffn_layer="swiglu", n_storage_tokens=4, mask_k_bias=True,
+            )
+
+        elif model == "vit_b":
+            encoder = ViT_DINOv3(
+                img_size=img_size, pos_embed_rope_rescale_coords=2, pos_embed_rope_dtype="fp32",
+                layerscale_init=1.0e-05, norm_layer="layernormbf16", n_storage_tokens=4, mask_k_bias=True,
+            )
+        elif model == "vit_l":
+            encoder = ViT_DINOv3(
+                img_size=img_size, pos_embed_rope_rescale_coords=2, pos_embed_rope_dtype="fp32", embed_dim=1024,
+                depth=24, num_heads=16, layerscale_init=1.0e-05, norm_layer="layernormbf16",
+                n_storage_tokens=4, mask_k_bias=True,
+            )
+        elif model == "vit_l+":
+            encoder = ViT_DINOv3(
+                img_size=img_size, pos_embed_rope_rescale_coords=2, pos_embed_rope_dtype="fp32", embed_dim=1024,
+                depth=24, num_heads=16, ffn_ratio=6.0, layerscale_init=1.0e-05, norm_layer="layernormbf16",
+                ffn_layer="swiglu", n_storage_tokens=4, mask_k_bias=True,
+            )
+        elif model == "vit_h+":
+            encoder = ViT_DINOv3(
+                img_size=img_size, pos_embed_rope_rescale_coords=2, pos_embed_rope_dtype="fp32", embed_dim=1280,
+                depth=32, num_heads=20, ffn_ratio=6.0, layerscale_init=1.0e-05, norm_layer="layernormbf16",
+                ffn_layer="swiglu", n_storage_tokens=4, mask_k_bias=True,
+            )
+        elif model == "vit_7b":
+            encoder = ViT_DINOv3(
+                img_size=img_size, pos_embed_rope_rescale_coords=2, pos_embed_rope_dtype="fp32", embed_dim=4096,
+                depth=40, num_heads=32, ffn_ratio=3, qkv_bias=False, drop_path_rate=0.0, layerscale_init=1.0e-05,
+                norm_layer="layernormbf16", ffn_layer="swiglu64", n_storage_tokens=4, mask_k_bias=True,
+                untie_global_and_local_cls_norm=True,
+            )
+        else:
+            raise ValueError(
+                f"'{model}' is not supported by DINOv3. Currently, "
+                " 'vit_s', 'vit_s+', 'vit_b', 'vit_l', 'vit_l+', 'vit_h+'. 'vit_7b' are supported."
+            )
+
     else:
         raise ValueError(
-            "The 'UNETR' supported backbones are 'sam', 'sam2', 'mae' or 'scalemae'. Please choose one of them."
+            "The 'UNETR' supported backbones are 'sam', 'sam2', 'mae', 'scalemae' or 'dinov3'. "
+            "Please choose one of them."
         )
 
     return encoder
