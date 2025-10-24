@@ -550,7 +550,7 @@ class DefaultTrainer:
                 save_root = getattr(self, "save_root", None)
                 try:
                     self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
-                except PermissionError:
+                except (PermissionError, RuntimeError):
                     warnings.warn(
                         f"The checkpoint folder at {self.checkpoint_folder} could not be created."
                         "The most likely reason for this is that you copied the checkpoint somewhere else,"
