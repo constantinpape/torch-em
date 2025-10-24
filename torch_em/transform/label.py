@@ -459,6 +459,7 @@ class PerObjectDistanceTransform:
         boundary_distances: Whether to compute the distances to the object boundaries.
         directed_distances: Whether to compute the directed distances (vector distances).
         foreground: Whether to return a foreground channel.
+        instances: Whether to append the original labels as an extra channel to the target.
         apply_label: Whether to apply connected components to the labels before computing distances.
         correct_centers: Whether to correct centers that are not in the objects.
         min_size: Minimal size of objects for distance calculdation.
@@ -532,7 +533,7 @@ class PerObjectDistanceTransform:
 
         # Keep only the specified distances:
         if self.distances and self.directed_distances:  # all distances
-            # Compute the undirected ditacnes from directed distances and concatenate,
+            # Compute the undirected distances from directed distances and concatenate,
             undir = np.linalg.norm(this_distances, axis=-1, keepdims=True)
             this_distances = np.concatenate([undir, this_distances], axis=-1)
 
