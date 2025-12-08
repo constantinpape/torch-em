@@ -42,7 +42,7 @@ def _process_masks(path):
         assert curr_mask.ndim == 3 and curr_mask.shape[-1] == 4  # Making the obvious assumption here.
 
         # Choose the first channel and run cc.
-        curr_mask = connected_components(curr_mask[:, :, 0]).astype("uint16")
+        curr_mask = connected_components(curr_mask[:, :, 0])
 
         # Store labels as tif now.
         imageio.imwrite(os.path.join(label_dir, f"{Path(p).stem}.tif"), curr_mask, compression="zlib")
