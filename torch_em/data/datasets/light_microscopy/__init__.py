@@ -40,6 +40,7 @@ from .pnas_arabidopsis import get_pnas_arabidopsis_loader, get_pnas_arabidopsis_
 from .segpc import get_segpc_loader, get_segpc_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .toiam import get_toiam_loader, get_toiam_dataset
+from .u20s import get_u20s_loader, get_u20s_dataset
 from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
 from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
 from .vicar import get_vicar_loader, get_vicar_dataset
