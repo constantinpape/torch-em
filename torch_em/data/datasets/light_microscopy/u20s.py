@@ -12,9 +12,12 @@ from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
+from typing import List, Union, Tuple
 
 import imageio.v3 as imageio
 from skimage.measure import label as connected_components
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -52,8 +55,15 @@ def _process_masks(path):
     shutil.rmtree(os.path.join(path, "__MACOSX"))
 
 
-def get_u20s_data(path, download=False):
-    """
+def get_u20s_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Download the U20S dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The path where the dataset is downloaded for further processing.
     """
     label_dir = os.path.join(path, "labels")
     if os.path.exists(label_dir):
@@ -73,19 +83,43 @@ def get_u20s_data(path, download=False):
     return path
 
 
-def get_u20s_paths(path, download=False):
-    """
+def get_u20s_paths(
+    path: Union[os.PathLike, str], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the Usiigaci data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
     data_dir = get_u20s_data(path, download)
 
     image_paths = natsorted(glob(os.path.join(data_dir, "images", "*.tif")))
-    label_paths = natsorted(glob(os.path.join(data_dir, "images", "*.tif")))
+    label_paths = natsorted(glob(os.path.join(data_dir, "labels", "*.tif")))
 
     return image_paths, label_paths
 
 
-def get_u20s_dataset(path, patch_shape, download=False, **kwargs):
-    """
+def get_u20s_dataset(
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, int],
+    download: bool = False,
+    **kwargs
+) -> Dataset:
+    """Get the U20S dataset for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     image_paths, label_paths = get_u20s_paths(path, download)
 
@@ -101,8 +135,24 @@ def get_u20s_dataset(path, patch_shape, download=False, **kwargs):
     )
 
 
-def get_u20s_loader(path, batch_size, patch_shape, download=False, **kwargs):
-    """
+def get_u20s_loader(
+    path: Union[os.PathLike, str],
+    batch_size: int,
+    patch_shape: Tuple[int, int],
+    download: bool = False,
+    **kwargs
+) -> DataLoader:
+    """Get the U20S dataloader for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_u20s_dataset(path, patch_shape, download, **ds_kwargs)
