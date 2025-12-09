@@ -82,7 +82,7 @@ def get_cellbindb_paths(
         raw_paths.extend(natsorted(glob(os.path.join(data_dir, dchoice, "*", "*-img.tif"))))
         label_paths.extend(natsorted(glob(os.path.join(data_dir, dchoice, "*", "*-instancemask.tif"))))
 
-    # NOTE: Some files are corrupted from source. Since it's just 4 of them, let's bump them out.
+    # NOTE: Some files are corrupted from source. Since it's just a few of them, let's bump them out.
     valid_paired_images = [
         (rp, lp) for rp, lp in zip(raw_paths, label_paths) if _is_valid_image(rp) and _is_valid_image(lp)
     ]
@@ -96,14 +96,9 @@ def get_cellbindb_paths(
 
 def _is_valid_image(im_path):
     import tifffile
-    import imageio.v3 as imageio
 
     try:
-        if im_path.lower().endswith((".tif", ".tiff")):
-            with tifffile.TiffFile(im_path) as tif:
-                _ = tif.pages[0].shape  # touch literally anything to force parsing.
-        else:
-            _ = imageio.imread(im_path)
+        _ = tifffile.imread(im_path)
         return True
     except Exception as e:
         print(f"'{im_path}' throwing '{type(e).__name__}': '{e}'")
