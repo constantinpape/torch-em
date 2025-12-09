@@ -102,6 +102,7 @@ def get_aisegcell_data(path: Union[os.PathLike, str], download: bool = False) ->
     if os.path.exists(data_dir):
         return data_dir
 
+    os.makedirs(path, exist_ok=True)
     zip_path = os.path.join(path, "data.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
 
@@ -113,7 +114,7 @@ def get_aisegcell_data(path: Union[os.PathLike, str], download: bool = False) ->
     util.unzip(zip_path=zip_path, dst=path, remove=False)
     util.unzip_tarfile(tar_path=os.path.join(path, "679085", "aisegcell_supplement.tar"), dst=path)
     util.unzip_tarfile(
-        tar_path=os.path.join(path, "679085", "aiSEGcell_supplement", "data_sets", "aiSEGcell_nucleus.tar"), dst=path,
+        tar_path=os.path.join(path, "aiSEGcell_supplement", "data_sets", "aiSEGcell_nucleus.tar"), dst=path,
     )
 
     # Now that we have the core 'aiSEGcell_nucleus' folder on top-level directory, we can take it for processing data.
