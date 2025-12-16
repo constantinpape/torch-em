@@ -1,12 +1,14 @@
+import os
+from functools import partial
 from collections import OrderedDict
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Literal
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from .vit import get_vision_transformer
-from .unet import Decoder, ConvBlock2d, Upsampler2d
+from .unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d, _update_conv_kwargs
 
 try:
     from micro_sam.util import get_sam_model
@@ -25,7 +27,7 @@ except ImportError:
 
 
 class UNETR(nn.Module):
-    """A U-Net Transformer using a vision transformer as encoder and a convolutional decoder.
+    """A (2d-only) UNet Transformer using a vision transformer as encoder and a convolutional decoder.
 
     Args:
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
@@ -408,9 +410,335 @@ class UNETR(nn.Module):
         return x
 
 
+class UNETR2D(UNETR):
+    """A two-dimensional UNet Transformer using a vision transformer as encoder and a convolutional decoder.
+    """
+    pass
+
+
+class UNETR3D(nn.Module):
+    """A three dimensional UNet Transformer using a vision transformer as encoder and a convolutional decoder.
+    """
+    def __init__(
+        self,
+        model_type: str,
+        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov3"] = "sam2",
+        out_channels: int = 3,
+        img_size: int = 1024,
+        final_activation: Optional[Union[str, nn.Module]] = None,
+        checkpoint_path: Optional[Union[str, os.PathLike]] = None,
+        use_strip_pooling: bool = True,
+    ):
+        super().__init__()
+
+        self.img_size = img_size
+
+        # Step 1: the image encoder backbone.
+        image_encoder = get_vision_transformer(backbone=backbone, model=model_type, img_size=img_size)
+
+        # Load the pretrained image encoder weights
+        if checkpoint_path is not None:
+            state = torch.load(checkpoint_path, map_location="cpu")["model"]
+            model_state = OrderedDict(
+                [(k[len("image_encoder."):], v) for k, v in state.items() if k.startswith("image_encoder")]
+            )
+            image_encoder.load_state_dict(model_state, strict=True)
+
+        self.image_encoder = image_encoder
+
+        # Step 2: the 3d convolutional decoder.
+        # First, get the important parameters for the decoder.
+        embed_dim = 256
+        depth = 3
+        initial_features = 64
+        gain = 2
+        features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
+        scale_factors = [1, 2, 2]
+        self.out_channels = out_channels
+
+        # The mapping blocks.
+        self.deconv1 = Deconv3DBlock(
+            in_channels=embed_dim,
+            out_channels=features_decoder[0],
+            scale_factor=scale_factors,
+            use_strip_pooling=use_strip_pooling,
+        )
+        self.deconv2 = Deconv3DBlock(
+            in_channels=features_decoder[0],
+            out_channels=features_decoder[1],
+            scale_factor=scale_factors,
+            use_strip_pooling=use_strip_pooling,
+        )
+        self.deconv3 = Deconv3DBlock(
+            in_channels=features_decoder[1],
+            out_channels=features_decoder[2],
+            scale_factor=scale_factors,
+            use_strip_pooling=use_strip_pooling,
+        )
+        self.deconv4 = Deconv3DBlock(
+            in_channels=features_decoder[2],
+            out_channels=features_decoder[3],
+            scale_factor=scale_factors,
+            use_strip_pooling=use_strip_pooling,
+        )
+
+        # The core decoder block.
+        self.decoder = Decoder(
+            features=features_decoder,
+            scale_factors=[scale_factors] * depth,
+            conv_block_impl=partial(ConvBlock3dWithStrip, use_strip_pooling=use_strip_pooling),
+            sampler_impl=Upsampler3d,
+        )
+
+        # And the final upsampler to match the expected dimensions.
+        self.end_up = Deconv3DBlock(
+            in_channels=features_decoder[-1],
+            out_channels=features_decoder[-1],
+            scale_factor=scale_factors,
+            use_strip_pooling=use_strip_pooling,
+        )
+
+        # Additional conjunction blocks.
+        self.base = ConvBlock3dWithStrip(
+            in_channels=embed_dim,
+            out_channels=features_decoder[0],
+            use_strip_pooling=use_strip_pooling,
+        )
+
+        # And the output layers.
+        self.decoder_head = ConvBlock3dWithStrip(
+            in_channels=2 * features_decoder[-1],
+            out_channels=features_decoder[-1],
+            use_strip_pooling=use_strip_pooling,
+        )
+        self.out_conv = nn.Conv3d(features_decoder[-1], out_channels, 1)
+        self.final_activation = self._get_activation(final_activation)
+
+    def _get_activation(self, activation):
+        return_activation = None
+
+        if activation is None:
+            return None
+        if isinstance(activation, nn.Module):
+            return activation
+        if isinstance(activation, str):
+            return_activation = getattr(nn, activation, None)
+
+        if return_activation is None:
+            raise ValueError(f"Invalid activation: {activation}")
+
+        return return_activation()
+
+    @staticmethod
+    def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int) -> Tuple[int, int]:
+        """Compute the output size given input size and target long side length.
+
+        Args:
+            oldh: The input image height.
+            oldw: The input image width.
+            long_side_length: The longest side length for resizing.
+
+        Returns:
+            The new image height.
+            The new image width.
+        """
+        scale = long_side_length * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        neww = int(neww + 0.5)
+        newh = int(newh + 0.5)
+        return (newh, neww)
+
+    def resize_longest_side(self, image: torch.Tensor) -> torch.Tensor:
+        """Resize the image so that the longest side has the correct length.
+
+        Expects batched images with shape BxCxDXHxW and float format.
+
+        Args:
+            image: The input image.
+
+        Returns:
+            The resized image.
+        """
+        B, C, Z, H, W = image.shape
+        target_size = self.get_preprocess_shape(H, W, self.img_size)
+        return F.interpolate(image, (Z, *target_size), mode="trilinear", align_corners=False)
+
+    def preprocess(self, x: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int, int]]:
+        """@private
+        """
+        device = x.device
+
+        # Using ImageNet statistics (ref: https://github.com/facebookresearch/sam2/blob/main/sam2/utils/transforms.py#L15)  # noqa
+        # NOTE: Generalize this for other methods?
+        pixel_mean = torch.Tensor((0.485, 0.456, 0.406)).view(1, 3, 1, 1, 1).to(device)
+        pixel_std = torch.Tensor((0.229, 0.224, 0.225)).view(1, 3, 1, 1, 1).to(device)
+
+        x = self.resize_longest_side(x)
+        input_shape = x.shape[-3:]
+
+        x = (x - pixel_mean) / pixel_std
+        h, w = x.shape[-2:]
+        padh = self.img_size - h
+        padw = self.img_size - w
+        x = F.pad(x, (0, padw, 0, padh, 0, 0))
+        return x, input_shape
+
+    def postprocess_masks(
+        self, masks: torch.Tensor, input_size: Tuple[int, ...], original_size: Tuple[int, ...]
+    ) -> torch.Tensor:
+        """@private
+        """
+        masks = F.interpolate(
+            masks, (input_size[0], self.img_size, self.img_size), mode="trilinear", align_corners=False,
+        )
+        masks = masks[..., :input_size[0], :input_size[1], :input_size[2]]
+        masks = F.interpolate(masks, original_size, mode="trilinear", align_corners=False)
+        return masks
+
+    def forward(self, x: torch.Tensor):
+        """Forward pass of the UniSAM2 model.
+
+        Args:
+            x: Inputs of expected shape (B, C, Z, Y, X), where Z considers flexible inputs.
+
+        Returns:
+            The UNETR output.
+        """
+        B, C, Z, H, W = x.shape
+        original_shape = (Z, H, W)
+
+        # Preprocessing step
+        x, input_shape = self.preprocess(x)
+
+        # Run the image encoder.
+        curr_features = torch.stack([self.image_encoder(x[:, :, i])[0] for i in range(Z)], dim=2)
+
+        # Prepare the counterparts for the decoder.
+        # NOTE: The section below is sequential, there's no skip connections atm.
+        z9 = self.deconv1(curr_features)
+        z6 = self.deconv2(z9)
+        z3 = self.deconv3(z6)
+        z0 = self.deconv4(z3)
+
+        # Align the features through the base block.
+        x = self.base(curr_features)
+
+        # Run the decoder.
+        updated_from_encoder = [z9, z6, z3]
+        x = self.decoder(x, encoder_inputs=updated_from_encoder)
+        x = self.end_up(x)
+
+        # And the final output head.
+        x = torch.cat([x, z0], dim=1)
+        x = self.decoder_head(x)
+        x = self.out_conv(x)
+        if self.final_activation is not None:
+            x = self.final_activation(x)
+
+        # Postprocess the output back to original size.
+        x = self.postprocess_masks(x, input_shape, original_shape)
+        return x
+
 #
 #  ADDITIONAL FUNCTIONALITIES
 #
+
+
+def _strip_pooling_layers(enabled, channels) -> nn.Module:
+    return DepthStripPooling(channels) if enabled else nn.Identity()
+
+
+class DepthStripPooling(nn.Module):
+    """@private
+    """
+    def __init__(self, channels: int, reduction: int = 4):
+        """Block for strip pooling along the depth dimension (only).
+
+        eg. for 3D (Z > 1) - it aggregates global context across depth by adaptive avg pooling
+        to Z=1, and then passes through a small 1x1x1 MLP, then broadcasts it back to Z to
+        modulate the original features (using a gated residual).
+
+        For 2D (Z == 1 or Z == 3): returns input unchanged (no-op).
+
+        Args:
+            channels: The output channels.
+            reduction: The reduction of the hidden layers.
+        """
+        super().__init__()
+        hidden = max(1, channels // reduction)
+        self.conv1 = nn.Conv3d(channels, hidden, kernel_size=1)
+        self.bn1 = nn.BatchNorm3d(hidden)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv3d(hidden, channels, kernel_size=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() != 5:
+            raise ValueError(f"DepthStripPooling expects 5D tensors as input, got '{x.shape}'.")
+
+        B, C, Z, H, W = x.shape
+        if Z == 1 or Z == 3:  # i.e. 2d-as-1-slice or RGB_2d-as-1-slice.
+            return x  # We simply do nothing there.
+
+        # We pool only along the depth dimension: i.e. target shape (B, C, 1, H, W)
+        feat = F.adaptive_avg_pool3d(x, output_size=(1, H, W))
+        feat = self.conv1(feat)
+        feat = self.bn1(feat)
+        feat = self.relu(feat)
+        feat = self.conv2(feat)
+        gate = torch.sigmoid(feat).expand(B, C, Z, H, W)  # Broadcast the collapsed depth context back to all slices
+
+        # Gated residual fusion
+        return x * gate + x
+
+
+class Deconv3DBlock(nn.Module):
+    """@private
+    """
+    def __init__(
+        self,
+        scale_factor,
+        in_channels,
+        out_channels,
+        kernel_size=3,
+        anisotropic_kernel=True,
+        use_strip_pooling=True,
+    ):
+        super().__init__()
+        conv_block_kwargs = {
+            "in_channels": out_channels,
+            "out_channels": out_channels,
+            "kernel_size": kernel_size,
+            "padding": ((kernel_size - 1) // 2),
+        }
+        if anisotropic_kernel:
+            conv_block_kwargs = _update_conv_kwargs(conv_block_kwargs, scale_factor)
+
+        self.block = nn.Sequential(
+            Upsampler3d(scale_factor, in_channels, out_channels),
+            nn.Conv3d(**conv_block_kwargs),
+            nn.BatchNorm3d(out_channels),
+            nn.ReLU(True),
+            _strip_pooling_layers(enabled=use_strip_pooling, channels=out_channels),
+        )
+
+    def forward(self, x):
+        return self.block(x)
+
+
+class ConvBlock3dWithStrip(nn.Module):
+    """@private
+    """
+    def __init__(
+        self, in_channels: int, out_channels: int, use_strip_pooling: bool = True, **kwargs
+    ):
+        super().__init__()
+        self.block = nn.Sequential(
+            ConvBlock3d(in_channels, out_channels, **kwargs),
+            _strip_pooling_layers(enabled=use_strip_pooling, channels=out_channels),
+        )
+
+    def forward(self, x):
+        return self.block(x)
 
 
 class SingleDeconv2DBlock(nn.Module):
