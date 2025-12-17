@@ -26,7 +26,7 @@ jobs:
 
       - name: Install segment-anything
         shell: bash -l {0}
-        run: mamba install -c conda-forge segment-anything
+        run: micromamba install -c conda-forge segment-anything
 
       - name: Install package
         shell: bash -l {0}
