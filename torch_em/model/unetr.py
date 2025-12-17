@@ -509,7 +509,7 @@ class UNETR3D(UNETRBase):
         resize_input: bool = True,
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
-        use_skip_connection: bool = True,
+        use_skip_connection: bool = False,
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
         use_strip_pooling: bool = True,

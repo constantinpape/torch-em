@@ -52,6 +52,13 @@ class TestUnetr(unittest.TestCase):
         model = UNETR(use_conv_transpose=True)
         self._test_net(model, (1, 3, 512, 512))
 
+    def test_unetr3d(self):
+        from torch_em.model.unetr import UNETR3D
+
+        # Too memory hungry to run without a GPU so just a dummy test.
+        model = UNETR3D(backbone="sam", encoder="vit_b")
+        self.assertEqual(model.out_channels, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

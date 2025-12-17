@@ -24,6 +24,10 @@ jobs:
           create-args: >-
             python=${{ matrix.python-version }}
 
+      - name: Install segment-anything
+        shell: bash -l {0}
+        run: mamba install -c conda-forge segment-anything
+
       - name: Install package
         shell: bash -l {0}
         run: pip install --no-deps -e .
