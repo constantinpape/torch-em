@@ -1,4 +1,3 @@
-import os
 from functools import partial
 from collections import OrderedDict
 from typing import Optional, Tuple, Union, Literal
@@ -26,8 +25,8 @@ except ImportError:
 #
 
 
-class UNETR(nn.Module):
-    """A (2d-only) UNet Transformer using a vision transformer as encoder and a convolutional decoder.
+class UNETRBase(nn.Module):
+    """Base class for implementing a UNETR.
 
     Args:
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
@@ -48,6 +47,62 @@ class UNETR(nn.Module):
         use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
             By default, it uses resampling for upsampling.
     """
+    def __init__(
+        self,
+        img_size: int = 1024,
+        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov3"] = "sam2",
+        encoder: Optional[Union[nn.Module, str]] = "vit_b",
+        decoder: Optional[nn.Module] = None,
+        out_channels: int = 1,
+        use_sam_stats: bool = False,
+        use_mae_stats: bool = False,
+        use_dino_stats: bool = False,
+        resize_input: bool = True,
+        encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
+        final_activation: Optional[Union[str, nn.Module]] = None,
+        use_skip_connection: bool = True,
+        embed_dim: Optional[int] = None,
+        use_conv_transpose: bool = False,
+        **kwargs
+    ) -> None:
+        super().__init__()
+
+        self.img_size = img_size
+        self.use_sam_stats = use_sam_stats
+        self.use_mae_stats = use_mae_stats
+        self.use_dino_stats = use_dino_stats
+        self.use_skip_connection = use_skip_connection
+        self.resize_input = resize_input
+        self.use_conv_transpose = use_conv_transpose
+        self.backbone = backbone
+
+        if isinstance(encoder, str):  # e.g. "vit_b" / "hvit_b"
+            print(f"Using {encoder} from {backbone.upper()}")
+            self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder, **kwargs)
+
+            if encoder_checkpoint is not None:
+                self._load_encoder_from_checkpoint(backbone=backbone, encoder=encoder, checkpoint=encoder_checkpoint)
+
+            if embed_dim is None:
+                embed_dim = self.encoder.embed_dim
+
+        else:  # `nn.Module` ViT backbone
+            self.encoder = encoder
+
+            have_neck = False
+            for name, _ in self.encoder.named_parameters():
+                if name.startswith("neck"):
+                    have_neck = True
+
+            if embed_dim is None:
+                if have_neck:
+                    embed_dim = self.encoder.neck[2].out_channels  # the value is 256
+                else:
+                    embed_dim = self.encoder.patch_embed.proj.out_channels
+
+        self.embed_dim = embed_dim
+        self.final_activation = self._get_activation(final_activation)
+
     def _load_encoder_from_checkpoint(self, backbone, encoder, checkpoint):
         """Function to load pretrained weights to the image encoder.
         """
@@ -115,153 +170,6 @@ class UNETR(nn.Module):
 
         self.encoder.load_state_dict(encoder_state)
 
-    def __init__(
-        self,
-        img_size: int = 1024,
-        backbone: str = "sam",
-        encoder: Optional[Union[nn.Module, str]] = "vit_b",
-        decoder: Optional[nn.Module] = None,
-        out_channels: int = 1,
-        use_sam_stats: bool = False,
-        use_mae_stats: bool = False,
-        use_dino_stats: bool = False,
-        resize_input: bool = True,
-        encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
-        final_activation: Optional[Union[str, nn.Module]] = None,
-        use_skip_connection: bool = True,
-        embed_dim: Optional[int] = None,
-        use_conv_transpose: bool = False,
-        **kwargs
-    ) -> None:
-        super().__init__()
-
-        self.use_sam_stats = use_sam_stats
-        self.use_mae_stats = use_mae_stats
-        self.use_dino_stats = use_dino_stats
-        self.use_skip_connection = use_skip_connection
-        self.resize_input = resize_input
-
-        if isinstance(encoder, str):  # e.g. "vit_b" / "vit_l" / "vit_h"
-            print(f"Using {encoder} from {backbone.upper()}")
-            self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder, **kwargs)
-
-            if encoder_checkpoint is not None:
-                self._load_encoder_from_checkpoint(backbone=backbone, encoder=encoder, checkpoint=encoder_checkpoint)
-
-            if backbone == "sam2":
-                in_chans = self.encoder.trunk.patch_embed.proj.in_channels
-            else:
-                in_chans = self.encoder.in_chans
-
-            if embed_dim is None:
-                embed_dim = self.encoder.embed_dim
-
-        else:  # `nn.Module` ViT backbone
-            self.encoder = encoder
-
-            have_neck = False
-            for name, _ in self.encoder.named_parameters():
-                if name.startswith("neck"):
-                    have_neck = True
-
-            if embed_dim is None:
-                if have_neck:
-                    embed_dim = self.encoder.neck[2].out_channels  # the value is 256
-                else:
-                    embed_dim = self.encoder.patch_embed.proj.out_channels
-
-            try:
-                in_chans = self.encoder.patch_embed.proj.in_channels
-            except AttributeError:  # for getting the input channels while using 'vit_t' from MobileSam
-                in_chans = self.encoder.patch_embed.seq[0].c.in_channels
-
-        # parameters for the decoder network
-        depth = 3
-        initial_features = 64
-        gain = 2
-        features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
-        scale_factors = depth * [2]
-        self.out_channels = out_channels
-
-        # choice of upsampler - to use (bilinear interpolation + conv) or conv transpose
-        _upsampler = SingleDeconv2DBlock if use_conv_transpose else Upsampler2d
-
-        if decoder is None:
-            self.decoder = Decoder(
-                features=features_decoder,
-                scale_factors=scale_factors[::-1],
-                conv_block_impl=ConvBlock2d,
-                sampler_impl=_upsampler,
-            )
-        else:
-            self.decoder = decoder
-
-        if use_skip_connection:
-            self.deconv1 = Deconv2DBlock(
-                in_channels=embed_dim,
-                out_channels=features_decoder[0],
-                use_conv_transpose=use_conv_transpose,
-            )
-            self.deconv2 = nn.Sequential(
-                Deconv2DBlock(
-                    in_channels=embed_dim,
-                    out_channels=features_decoder[0],
-                    use_conv_transpose=use_conv_transpose,
-                ),
-                Deconv2DBlock(
-                    in_channels=features_decoder[0],
-                    out_channels=features_decoder[1],
-                    use_conv_transpose=use_conv_transpose,
-                )
-            )
-            self.deconv3 = nn.Sequential(
-                Deconv2DBlock(
-                    in_channels=embed_dim,
-                    out_channels=features_decoder[0],
-                    use_conv_transpose=use_conv_transpose,
-                ),
-                Deconv2DBlock(
-                    in_channels=features_decoder[0],
-                    out_channels=features_decoder[1],
-                    use_conv_transpose=use_conv_transpose,
-                ),
-                Deconv2DBlock(
-                    in_channels=features_decoder[1],
-                    out_channels=features_decoder[2],
-                    use_conv_transpose=use_conv_transpose,
-                )
-            )
-            self.deconv4 = ConvBlock2d(in_chans, features_decoder[-1])
-        else:
-            self.deconv1 = Deconv2DBlock(
-                in_channels=embed_dim,
-                out_channels=features_decoder[0],
-                use_conv_transpose=use_conv_transpose,
-            )
-            self.deconv2 = Deconv2DBlock(
-                in_channels=features_decoder[0],
-                out_channels=features_decoder[1],
-                use_conv_transpose=use_conv_transpose,
-            )
-            self.deconv3 = Deconv2DBlock(
-                in_channels=features_decoder[1],
-                out_channels=features_decoder[2],
-                use_conv_transpose=use_conv_transpose,
-            )
-            self.deconv4 = Deconv2DBlock(
-                in_channels=features_decoder[2],
-                out_channels=features_decoder[3],
-                use_conv_transpose=use_conv_transpose,
-            )
-
-        self.base = ConvBlock2d(embed_dim, features_decoder[0])
-        self.out_conv = nn.Conv2d(features_decoder[-1], out_channels, 1)
-        self.deconv_out = _upsampler(
-            scale_factor=2, in_channels=features_decoder[-1], out_channels=features_decoder[-1]
-        )
-        self.decoder_head = ConvBlock2d(2 * features_decoder[-1], features_decoder[-1])
-        self.final_activation = self._get_activation(final_activation)
-
     def _get_activation(self, activation):
         return_activation = None
         if activation is None:
@@ -297,7 +205,7 @@ class UNETR(nn.Module):
     def resize_longest_side(self, image: torch.Tensor) -> torch.Tensor:
         """Resize the image so that the longest side has the correct length.
 
-        Expects batched images with shape BxCxHxW and float format.
+        Expects batched images with shape BxCxHxW OR BxCxDxHxW and float format.
 
         Args:
             image: The input image.
@@ -305,37 +213,57 @@ class UNETR(nn.Module):
         Returns:
             The resized image.
         """
-        target_size = self.get_preprocess_shape(image.shape[2], image.shape[3], self.encoder.img_size)
-        return F.interpolate(
-            image, target_size, mode="bilinear", align_corners=False, antialias=True
-        )
+        if image.ndim == 4:  # i.e. 2d image
+            target_size = self.get_preprocess_shape(image.shape[2], image.shape[3], self.encoder.img_size)
+            return F.interpolate(image, target_size, mode="bilinear", align_corners=False, antialias=True)
+        elif image.ndim == 5:  # i.e. 3d volume
+            B, C, Z, H, W = image.shape
+            target_size = self.get_preprocess_shape(H, W, self.img_size)
+            return F.interpolate(image, (Z, *target_size), mode="trilinear", align_corners=False)
+        else:
+            raise ValueError("Expected 4d or 5d inputs, got", image.shape)
+
+    def _as_stats(self, mean, std, device, dtype, is_3d: bool):
+        """@private
+        """
+        # Either 2d batch: (1, C, 1, 1) or 3d batch: (1, C, 1, 1, 1).
+        view_shape = (1, -1, 1, 1, 1) if is_3d else (1, -1, 1, 1)
+        pixel_mean = torch.tensor(mean, device=device, dtype=dtype).view(*view_shape)
+        pixel_std = torch.tensor(std, device=device, dtype=dtype).view(*view_shape)
+        return pixel_mean, pixel_std
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         """@private
         """
         device = x.device
+        is_3d = (x.ndim == 5)
+        device, dtype = x.device, x.dtype
 
         if self.use_sam_stats:
-            pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(1, -1, 1, 1).to(device)
-            pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(1, -1, 1, 1).to(device)
+            mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
         elif self.use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
             raise NotImplementedError
-        elif self.use_dino_stats:
-            pixel_mean = torch.Tensor([0.485, 0.456, 0.406]).view(1, -1, 1, 1).to(device)
-            pixel_std = torch.Tensor([0.229, 0.224, 0.225]).view(1, -1, 1, 1).to(device)
+        elif self.use_dino_stats or (self.use_sam_stats and self.backbone == "sam2"):
+            mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
         else:
-            pixel_mean = torch.Tensor([0.0, 0.0, 0.0]).view(1, -1, 1, 1).to(device)
-            pixel_std = torch.Tensor([1.0, 1.0, 1.0]).view(1, -1, 1, 1).to(device)
+            mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+
+        pixel_mean, pixel_std = self._as_stats(mean, std, device=device, dtype=dtype, is_3d=is_3d)
 
         if self.resize_input:
             x = self.resize_longest_side(x)
-        input_shape = x.shape[-2:]
+        input_shape = x.shape[-3:] if is_3d else x.shape[-2:]
 
         x = (x - pixel_mean) / pixel_std
         h, w = x.shape[-2:]
         padh = self.encoder.img_size - h
         padw = self.encoder.img_size - w
-        x = F.pad(x, (0, padw, 0, padh))
+
+        if is_3d:
+            x = F.pad(x, (0, padw, 0, padh, 0, 0))
+        else:
+            x = F.pad(x, (0, padw, 0, padh))
+
         return x, input_shape
 
     def postprocess_masks(
@@ -343,15 +271,166 @@ class UNETR(nn.Module):
     ) -> torch.Tensor:
         """@private
         """
-        masks = F.interpolate(
-            masks,
-            (self.encoder.img_size, self.encoder.img_size),
-            mode="bilinear",
-            align_corners=False,
-        )
-        masks = masks[..., : input_size[0], : input_size[1]]
-        masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
+        if masks.ndim == 4:  # i.e. 2d labels
+            masks = F.interpolate(
+                masks,
+                (self.encoder.img_size, self.encoder.img_size),
+                mode="bilinear",
+                align_corners=False,
+            )
+            masks = masks[..., : input_size[0], : input_size[1]]
+            masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
+
+        elif masks.ndim == 5:  # i.e. 3d volumetric labels
+            masks = F.interpolate(
+                masks,
+                (input_size[0], self.img_size, self.img_size),
+                mode="trilinear",
+                align_corners=False,
+            )
+            masks = masks[..., :input_size[0], :input_size[1], :input_size[2]]
+            masks = F.interpolate(masks, original_size, mode="trilinear", align_corners=False)
+
+        else:
+            raise ValueError("Expected 4d or 5d labels, got", masks.shape)
+
         return masks
+
+
+class UNETR(UNETRBase):
+    """A (2d-only) UNet Transformer using a vision transformer as encoder and a convolutional decoder.
+    """
+    def __init__(
+        self,
+        img_size: int = 1024,
+        backbone: str = "sam",
+        encoder: Optional[Union[nn.Module, str]] = "vit_b",
+        decoder: Optional[nn.Module] = None,
+        out_channels: int = 1,
+        use_sam_stats: bool = False,
+        use_mae_stats: bool = False,
+        use_dino_stats: bool = False,
+        resize_input: bool = True,
+        encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
+        final_activation: Optional[Union[str, nn.Module]] = None,
+        use_skip_connection: bool = True,
+        embed_dim: Optional[int] = None,
+        use_conv_transpose: bool = False,
+        **kwargs
+    ) -> None:
+
+        super().__init__(
+            img_size=img_size,
+            backbone=backbone,
+            encoder=encoder,
+            decoder=decoder,
+            out_channels=out_channels,
+            use_sam_stats=use_sam_stats,
+            use_mae_stats=use_mae_stats,
+            use_dino_stats=use_dino_stats,
+            resize_input=resize_input,
+            encoder_checkpoint=encoder_checkpoint,
+            final_activation=final_activation,
+            use_skip_connection=use_skip_connection,
+            embed_dim=embed_dim,
+            use_conv_transpose=use_conv_transpose,
+            **kwargs,
+        )
+
+        encoder = self.encoder
+
+        if backbone == "sam2" and hasattr(encoder, "trunk"):
+            in_chans = encoder.trunk.patch_embed.proj.in_channels
+        elif hasattr(encoder, "in_chans"):
+            in_chans = encoder.in_chans
+        else:  # `nn.Module` ViT backbone.
+            try:
+                in_chans = encoder.patch_embed.proj.in_channels
+            except AttributeError:  # for getting the input channels while using 'vit_t' from MobileSam
+                in_chans = encoder.patch_embed.seq[0].c.in_channels
+
+        # parameters for the decoder network
+        depth = 3
+        initial_features = 64
+        gain = 2
+        features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
+        scale_factors = depth * [2]
+        self.out_channels = out_channels
+
+        # choice of upsampler - to use (bilinear interpolation + conv) or conv transpose
+        _upsampler = SingleDeconv2DBlock if use_conv_transpose else Upsampler2d
+
+        self.decoder = decoder or Decoder(
+            features=features_decoder,
+            scale_factors=scale_factors[::-1],
+            conv_block_impl=ConvBlock2d,
+            sampler_impl=_upsampler,
+        )
+
+        if use_skip_connection:
+            self.deconv1 = Deconv2DBlock(
+                in_channels=self.embed_dim,
+                out_channels=features_decoder[0],
+                use_conv_transpose=use_conv_transpose,
+            )
+            self.deconv2 = nn.Sequential(
+                Deconv2DBlock(
+                    in_channels=self.embed_dim,
+                    out_channels=features_decoder[0],
+                    use_conv_transpose=use_conv_transpose,
+                ),
+                Deconv2DBlock(
+                    in_channels=features_decoder[0],
+                    out_channels=features_decoder[1],
+                    use_conv_transpose=use_conv_transpose,
+                )
+            )
+            self.deconv3 = nn.Sequential(
+                Deconv2DBlock(
+                    in_channels=self.embed_dim,
+                    out_channels=features_decoder[0],
+                    use_conv_transpose=use_conv_transpose,
+                ),
+                Deconv2DBlock(
+                    in_channels=features_decoder[0],
+                    out_channels=features_decoder[1],
+                    use_conv_transpose=use_conv_transpose,
+                ),
+                Deconv2DBlock(
+                    in_channels=features_decoder[1],
+                    out_channels=features_decoder[2],
+                    use_conv_transpose=use_conv_transpose,
+                )
+            )
+            self.deconv4 = ConvBlock2d(in_chans, features_decoder[-1])
+        else:
+            self.deconv1 = Deconv2DBlock(
+                in_channels=self.embed_dim,
+                out_channels=features_decoder[0],
+                use_conv_transpose=use_conv_transpose,
+            )
+            self.deconv2 = Deconv2DBlock(
+                in_channels=features_decoder[0],
+                out_channels=features_decoder[1],
+                use_conv_transpose=use_conv_transpose,
+            )
+            self.deconv3 = Deconv2DBlock(
+                in_channels=features_decoder[1],
+                out_channels=features_decoder[2],
+                use_conv_transpose=use_conv_transpose,
+            )
+            self.deconv4 = Deconv2DBlock(
+                in_channels=features_decoder[2],
+                out_channels=features_decoder[3],
+                use_conv_transpose=use_conv_transpose,
+            )
+
+        self.base = ConvBlock2d(self.embed_dim, features_decoder[0])
+        self.out_conv = nn.Conv2d(features_decoder[-1], out_channels, 1)
+        self.deconv_out = _upsampler(
+            scale_factor=2, in_channels=features_decoder[-1], out_channels=features_decoder[-1]
+        )
+        self.decoder_head = ConvBlock2d(2 * features_decoder[-1], features_decoder[-1])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply the UNETR to the input data.
@@ -368,8 +447,6 @@ class UNETR(nn.Module):
         # and normalize the inputs if normalization is part of the model.
         x, input_shape = self.preprocess(x)
 
-        use_skip_connection = getattr(self, "use_skip_connection", True)
-
         encoder_outputs = self.encoder(x)
 
         if isinstance(encoder_outputs[-1], list):
@@ -380,7 +457,7 @@ class UNETR(nn.Module):
         else:
             z12 = encoder_outputs
 
-        if use_skip_connection:
+        if self.use_skip_connection:
             from_encoder = from_encoder[::-1]
             z9 = self.deconv1(from_encoder[0])
             z6 = self.deconv2(from_encoder[1])
@@ -416,35 +493,53 @@ class UNETR2D(UNETR):
     pass
 
 
-class UNETR3D(nn.Module):
+class UNETR3D(UNETRBase):
     """A three dimensional UNet Transformer using a vision transformer as encoder and a convolutional decoder.
     """
     def __init__(
         self,
-        model_type: str,
-        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov3"] = "sam2",
-        out_channels: int = 3,
         img_size: int = 1024,
+        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov3"] = "sam2",
+        encoder: Optional[Union[nn.Module, str]] = "hvit_b",
+        decoder: Optional[nn.Module] = None,
+        out_channels: int = 1,
+        use_sam_stats: bool = False,
+        use_mae_stats: bool = False,
+        use_dino_stats: bool = False,
+        resize_input: bool = True,
+        encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
-        checkpoint_path: Optional[Union[str, os.PathLike]] = None,
+        use_skip_connection: bool = True,
+        embed_dim: Optional[int] = None,
+        use_conv_transpose: bool = False,
         use_strip_pooling: bool = True,
+        **kwargs
     ):
-        super().__init__()
+        if use_skip_connection:
+            raise NotImplementedError("The framework cannot handle skip connections atm.")
+        if use_conv_transpose:
+            raise NotImplementedError("It's not enabled to switch between interpolation and transposed convolutions.")
 
-        self.img_size = img_size
-
-        # Step 1: the image encoder backbone.
-        image_encoder = get_vision_transformer(backbone=backbone, model=model_type, img_size=img_size)
+        super().__init__(
+            img_size=img_size,
+            backbone=backbone,
+            encoder=encoder,
+            decoder=decoder,
+            out_channels=out_channels,
+            use_sam_stats=use_sam_stats,
+            use_mae_stats=use_mae_stats,
+            use_dino_stats=use_dino_stats,
+            resize_input=resize_input,
+            encoder_checkpoint=encoder_checkpoint,
+            final_activation=final_activation,
+            use_skip_connection=use_skip_connection,
+            embed_dim=embed_dim,
+            use_conv_transpose=use_conv_transpose,
+            **kwargs,
+        )
 
         # Load the pretrained image encoder weights
-        if checkpoint_path is not None:
-            state = torch.load(checkpoint_path, map_location="cpu")["model"]
-            model_state = OrderedDict(
-                [(k[len("image_encoder."):], v) for k, v in state.items() if k.startswith("image_encoder")]
-            )
-            image_encoder.load_state_dict(model_state, strict=True)
-
-        self.image_encoder = image_encoder
+        self.image_encoder = self.encoder
 
         # Step 2: the 3d convolutional decoder.
         # First, get the important parameters for the decoder.
@@ -483,7 +578,7 @@ class UNETR3D(nn.Module):
         )
 
         # The core decoder block.
-        self.decoder = Decoder(
+        self.decoder = decoder or Decoder(
             features=features_decoder,
             scale_factors=[scale_factors] * depth,
             conv_block_impl=partial(ConvBlock3dWithStrip, use_strip_pooling=use_strip_pooling),
@@ -512,91 +607,9 @@ class UNETR3D(nn.Module):
             use_strip_pooling=use_strip_pooling,
         )
         self.out_conv = nn.Conv3d(features_decoder[-1], out_channels, 1)
-        self.final_activation = self._get_activation(final_activation)
-
-    def _get_activation(self, activation):
-        return_activation = None
-
-        if activation is None:
-            return None
-        if isinstance(activation, nn.Module):
-            return activation
-        if isinstance(activation, str):
-            return_activation = getattr(nn, activation, None)
-
-        if return_activation is None:
-            raise ValueError(f"Invalid activation: {activation}")
-
-        return return_activation()
-
-    @staticmethod
-    def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int) -> Tuple[int, int]:
-        """Compute the output size given input size and target long side length.
-
-        Args:
-            oldh: The input image height.
-            oldw: The input image width.
-            long_side_length: The longest side length for resizing.
-
-        Returns:
-            The new image height.
-            The new image width.
-        """
-        scale = long_side_length * 1.0 / max(oldh, oldw)
-        newh, neww = oldh * scale, oldw * scale
-        neww = int(neww + 0.5)
-        newh = int(newh + 0.5)
-        return (newh, neww)
-
-    def resize_longest_side(self, image: torch.Tensor) -> torch.Tensor:
-        """Resize the image so that the longest side has the correct length.
-
-        Expects batched images with shape BxCxDXHxW and float format.
-
-        Args:
-            image: The input image.
-
-        Returns:
-            The resized image.
-        """
-        B, C, Z, H, W = image.shape
-        target_size = self.get_preprocess_shape(H, W, self.img_size)
-        return F.interpolate(image, (Z, *target_size), mode="trilinear", align_corners=False)
-
-    def preprocess(self, x: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int, int]]:
-        """@private
-        """
-        device = x.device
-
-        # Using ImageNet statistics (ref: https://github.com/facebookresearch/sam2/blob/main/sam2/utils/transforms.py#L15)  # noqa
-        # NOTE: Generalize this for other methods?
-        pixel_mean = torch.Tensor((0.485, 0.456, 0.406)).view(1, 3, 1, 1, 1).to(device)
-        pixel_std = torch.Tensor((0.229, 0.224, 0.225)).view(1, 3, 1, 1, 1).to(device)
-
-        x = self.resize_longest_side(x)
-        input_shape = x.shape[-3:]
-
-        x = (x - pixel_mean) / pixel_std
-        h, w = x.shape[-2:]
-        padh = self.img_size - h
-        padw = self.img_size - w
-        x = F.pad(x, (0, padw, 0, padh, 0, 0))
-        return x, input_shape
-
-    def postprocess_masks(
-        self, masks: torch.Tensor, input_size: Tuple[int, ...], original_size: Tuple[int, ...]
-    ) -> torch.Tensor:
-        """@private
-        """
-        masks = F.interpolate(
-            masks, (input_size[0], self.img_size, self.img_size), mode="trilinear", align_corners=False,
-        )
-        masks = masks[..., :input_size[0], :input_size[1], :input_size[2]]
-        masks = F.interpolate(masks, original_size, mode="trilinear", align_corners=False)
-        return masks
 
     def forward(self, x: torch.Tensor):
-        """Forward pass of the UniSAM2 model.
+        """Forward pass of the UNETR-3D model.
 
         Args:
             x: Inputs of expected shape (B, C, Z, Y, X), where Z considers flexible inputs.
