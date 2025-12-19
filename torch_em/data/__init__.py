@@ -15,3 +15,4 @@ from .sampler import (
     MinTwoInstanceSampler,
     MinSemanticLabelForegroundSampler,
 )
+from .tensor_dataset import TensorDataset

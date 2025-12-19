@@ -2,6 +2,7 @@ import os
 from glob import glob
 from typing import Any, Dict, Optional, Union, Tuple, List, Callable
 
+import numpy as np
 import torch
 import torch.utils.data
 from torch.utils.data import DataLoader
@@ -11,7 +12,7 @@ from .util import load_data
 from .trainer import DefaultTrainer
 from .trainer.tensorboard_logger import TensorboardLogger
 from .transform import get_augmentations, get_raw_transform
-from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
+from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset, TensorDataset
 
 
 # TODO add a heuristic to estimate this from the number of epochs
@@ -47,6 +48,10 @@ def check_paths(raw_paths, label_paths):
     if not isinstance(raw_paths, type(label_paths)):
         raise ValueError(f"Expect raw and label paths of same type, got {type(raw_paths)}, {type(label_paths)}")
 
+    # This is a tensor dataset and we don't need to verify the paths.
+    if isinstance(raw_paths, list) and isinstance(raw_paths[0], (torch.Tensor, np.ndarray)):
+        return
+
     def _check_path(path):
         if isinstance(path, str):
             if not os.path.exists(path):
@@ -72,6 +77,13 @@ def check_paths(raw_paths, label_paths):
 def is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key):
     """@private
     """
+    if isinstance(raw_paths, list) and isinstance(raw_paths[0], (np.ndarray, torch.Tensor)):
+        if not all(isinstance(rp, (np.ndarray, torch.Tensor)) for rp in raw_paths):
+            raise ValueError("Inconsistent raw data")
+        if not all(isinstance(lp, (np.ndarray, torch.Tensor)) for lp in label_paths):
+            raise ValueError("Inconsistent label data")
+        return False
+
     def _can_open(path, key):
         try:
             load_data(path, key)
@@ -128,7 +140,12 @@ def _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key, **kwa
     return ds
 
 
-def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, roi, **kwargs):
+def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, roi, with_channels, **kwargs):
+    if isinstance(raw_paths[0], (torch.Tensor, np.ndarray)):
+        assert raw_key is None and label_key is None
+        assert roi is None
+        return TensorDataset(raw_paths, label_paths, with_channels=with_channels, **kwargs)
+
     def _get_paths(rpath, rkey, lpath, lkey, this_roi):
         rpath = glob(os.path.join(rpath, rkey))
         rpath.sort()
@@ -233,9 +250,13 @@ def default_segmentation_loader(
 
     Args:
         raw_paths: The file path(s) to the raw data. Can either be a single path or multiple file paths.
-        raw_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+            This argument also accepts a list of numpy arrays or torch tensors.
+        raw_key: The name of the internal dataset containing the raw data.
+            Set to None for regular image files, numpy arrays, or torch tensors.
         label_paths: The file path(s) to the label data. Can either be a single path or multiple file paths.
-        label_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+            This argument also accepts a list of numpy arrays or torch tensors.
+        label_key: The name of the internal dataset containing the raw data.
+            Set to None for regular image files, numpy arrays, or torch tensors.
         batch_size: The batch size for the data loader.
         patch_shape: The patch shape for the training samples.
         label_transform: Transformation applied to the label data of a sample,
@@ -321,9 +342,13 @@ def default_segmentation_dataset(
 
     Args:
         raw_paths: The file path(s) to the raw data. Can either be a single path or multiple file paths.
-        raw_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+            This argument also accepts a list of numpy arrays or torch tensors.
+        raw_key: The name of the internal dataset containing the raw data.
+            Set to None for regular image files, numpy arrays, or torch tensors.
         label_paths: The file path(s) to the label data. Can either be a single path or multiple file paths.
-        label_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+            This argument also accepts a list of numpy arrays or torch tensors.
+        label_key: The name of the internal dataset containing the raw data.
+            Set to None for regular image files, numpy arrays, or torch tensors.
         patch_shape: The patch shape for the training samples.
         label_transform: Transformation applied to the label data of a sample,
             before applying augmentations via `transform`.
@@ -408,6 +433,7 @@ def default_segmentation_dataset(
             dtype=dtype,
             label_dtype=label_dtype,
             with_padding=with_padding,
+            with_channels=with_channels,
         )
 
     return ds
