@@ -30,8 +30,8 @@ class TensorDataset(ImageCollectionDataset):
     """
     def __init__(
         self,
-        images: List[Union[np.ndarray, torch.tensor]],
-        labels: List[Union[np.ndarray, torch.tensor]],
+        images: List[Union[np.ndarray, torch.Tensor]],
+        labels: List[Union[np.ndarray, torch.Tensor]],
         patch_shape: Tuple[int, ...],
         raw_transform: Optional[Callable] = None,
         label_transform: Optional[Callable] = None,
