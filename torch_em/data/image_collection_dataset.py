@@ -96,7 +96,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         sampler: Optional[Callable] = None,
         full_check: bool = False,
         with_padding: bool = True,
-    ):
+    ) -> None:
         self._check_inputs(raw_image_paths, label_image_paths, full_check=full_check)
         self.raw_images = raw_image_paths
         self.label_images = label_image_paths
@@ -144,11 +144,14 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
 
     def _load_data(self, raw_path, label_path):
-        raw = load_image(raw_path, memmap=False)
-        label = load_image(label_path, memmap=False)
+        if getattr(self, "have_tensor_data", False):
+            raw, label = raw_path, label_path
+        else:
+            raw = load_image(raw_path, memmap=False)
+            label = load_image(label_path, memmap=False)
 
-        have_raw_channels = raw.ndim == 3
-        have_label_channels = label.ndim == 3
+        have_raw_channels = getattr(self, "with_channels", raw.ndim == 3)
+        have_label_channels = getattr(self, "with_label_channels", label.ndim == 3)
         if have_label_channels:
             raise NotImplementedError("Multi-channel labels are not supported.")
 
