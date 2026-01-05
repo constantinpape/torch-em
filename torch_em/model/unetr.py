@@ -30,7 +30,7 @@ class UNETRBase(nn.Module):
 
     Args:
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
-        backbone: The name of the vision transformer implementation. One of "sam" or "mae".
+        backbone: The name of the vision transformer implementation. One of "sam", "dino" or "mae".
         encoder: The vision transformer. Can either be a name, such as "vit_b" or a torch module.
         decoder: The convolutional decoder.
         out_channels: The number of output channels of the UNETR.
@@ -50,7 +50,7 @@ class UNETRBase(nn.Module):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov3"] = "sam2",
+        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -157,7 +157,7 @@ class UNETRBase(nn.Module):
                 if "pos_embed" in current_encoder_state:  # NOTE: ScaleMAE uses 'pos. embeddings' in a diff. format.
                     del self.encoder.pos_embed
 
-            elif backbone == "dinov3":  # Load the encoder state directly from a checkpoint.
+            elif backbone in ["dinov2", "dinov3"]:  # Load the encoder state directly from a checkpoint.
                 encoder_state = torch.load(checkpoint)
 
             else:
@@ -303,7 +303,7 @@ class UNETR(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: str = "sam",
+        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -499,7 +499,7 @@ class UNETR3D(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov3"] = "sam2",
+        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "hvit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,

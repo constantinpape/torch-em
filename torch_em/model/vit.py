@@ -30,12 +30,19 @@ except ImportError:
     ImageEncoder = object
     _sam2_import_success = False
 
+try:
+    from dinov2.models.vision_transformer import DinoVisionTransformer as DinoV2VisionTransformer
+    from dinov2.layers import MemEffAttention, NestedTensorBlock as Block
+    _dinov2_import_success = True
+except ImportError:
+    DinoV2VisionTransformer = object
+    _dinov2_import_success = False
 
 try:
-    from dinov3.models.vision_transformer import DinoVisionTransformer
+    from dinov3.models.vision_transformer import DinoVisionTransformer as DinoV3VisionTransformer
     _dinov3_import_success = True
 except ImportError:
-    DinoVisionTransformer = object
+    DinoV3VisionTransformer = object
     _dinov3_import_success = False
 
 
@@ -442,7 +449,42 @@ class ViT_ScaleMAE(VisionTransformer):
         return x, list_from_encoder
 
 
-class ViT_DINOv3(DinoVisionTransformer):
+class ViT_DINOv2(DinoV2VisionTransformer):
+    """Vision Transformer derived from the DINOv2 Codebase (https://arxiv.org/abs/2304.07193).
+
+    Based on:
+    https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py.
+    """
+    def __init__(self, img_size=224, depth=12, **kwargs):
+        if not _dinov2_import_success:
+            raise RuntimeError(
+                "The vision transformer backend can only be initialized if DINOv2 is installed. "
+                "Please install DINOv2 from https://github.com/facebookresearch/dinov2 "
+                "and then rerun your code."
+            )
+
+        super().__init__(img_size=img_size, depth=depth, **kwargs)
+        self.img_size = img_size
+        self.attn_outs = [i for i in range(depth) if i % 3 == 2]
+
+    def forward(self, x, masks=None) -> torch.Tensor:
+
+        x = self.prepare_tokens_with_masks(x)
+
+        list_of_encoder = []
+        for i, blk in enumerate(self.blocks):
+            x = blk(x)
+            if i in self.attn_outs:
+                list_of_encoder.append(x)
+
+        x = self.norm(x)
+
+        breakpoint()
+
+        return x, list_of_encoder[:3]
+
+
+class ViT_DINOv3(DinoV3VisionTransformer):
     """Vision Transformer derived from the DINOv3 Codebase (https://arxiv.org/abs/2508.10104).
 
     Based on:
@@ -630,6 +672,40 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
         else:
             raise ValueError(
                 f"'{model}' is not supported by ScaleMAE. Currently, 'vit_b', 'vit_l' and 'vit_h' are supported."
+            )
+
+    elif backbone == "dinov2":
+        block_fn = partial(Block, attn_class=MemEffAttention)
+        msg = "The model name should be either 'vit_<X>' or 'vit_<X>_reg<Y>."
+
+        if model.startswith("vit_s"):
+            assert model in ["vit_s", "vit_s_reg4"], msg
+            encoder = ViT_DINOv2(
+                img_size=img_size, patch_size=14, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
+                block_fn=block_fn, num_register_tokens=4, in_chans=3, channel_adaptive=False,
+                init_values=1e-5, block_chunks=0,
+            )
+        elif model.startswith("vit_b"):
+            assert model in ["vit_b", "vit_b_reg4"], msg
+            encoder = ViT_DINOv2(
+                img_size=img_size, patch_size=14, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
+                block_fn=block_fn, num_register_tokens=0, in_chans=3, channel_adaptive=False,
+            )
+        elif model.startswith("vit_l"):
+            assert model in ["vit_l", "vit_l_reg4"], msg
+            encoder = ViT_DINOv2(
+                img_size=img_size, patch_size=14, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4,
+                block_fn=block_fn, num_register_tokens=0, in_chans=3, channel_adaptive=False,
+            )
+        elif model.startswith("vit_g"):
+            assert model in ["vit_g", "vit_g_reg4"], msg
+            encoder = ViT_DINOv2(
+                img_size=img_size, patch_size=14, embed_dim=1536, depth=40, num_heads=24, mlp_ratio=4,
+                block_fn=block_fn, num_register_tokens=0, in_chans=3, channel_adaptive=False,
+            )
+        else:
+            raise ValueError(
+                f"'{model}' is not supported by DINOv2. Currently, 'vit_s', 'vit_b', 'vit_l' and 'vit_g' are supported."
             )
 
     elif backbone == "dinov3":
