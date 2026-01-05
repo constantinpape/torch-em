@@ -455,7 +455,14 @@ class ViT_DINOv2(DinoV2VisionTransformer):
     Based on:
     https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py.
     """
-    def __init__(self, img_size=224, depth=12, **kwargs):
+    def __init__(
+        self,
+        img_size: int = 224,
+        patch_size: int = 16,
+        depth: int = 12,
+        num_register_tokens: int = 0,
+        **kwargs
+    ):
         if not _dinov2_import_success:
             raise RuntimeError(
                 "The vision transformer backend can only be initialized if DINOv2 is installed. "
@@ -463,11 +470,22 @@ class ViT_DINOv2(DinoV2VisionTransformer):
                 "and then rerun your code."
             )
 
-        super().__init__(img_size=img_size, depth=depth, **kwargs)
+        super().__init__(
+            img_size=img_size,
+            depth=depth,
+            patch_size=patch_size,
+            num_register_tokens=num_register_tokens,
+            **kwargs
+        )
+
         self.img_size = img_size
+        self.num_register_tokens = num_register_tokens
+        self.patch_size = patch_size
         self.attn_outs = [i for i in range(depth) if i % 3 == 2]
 
     def forward(self, x, masks=None) -> torch.Tensor:
+
+        B = x.shape[0]
 
         x = self.prepare_tokens_with_masks(x)
 
@@ -478,8 +496,15 @@ class ViT_DINOv2(DinoV2VisionTransformer):
                 list_of_encoder.append(x)
 
         x = self.norm(x)
+        x = x[:, self.num_register_tokens + 1:].reshape(
+            B, self.img_size // self.patch_size, self.img_size // self.patch_size, -1
+        ).permute(0, 3, 1, 2).contiguous()
 
-        breakpoint()
+        list_of_encoder = [
+            o[:, self.num_register_tokens + 1:].reshape(
+                B, self.img_size // self.patch_size, self.img_size // self.patch_size, -1
+            ).permute(0, 3, 1, 2).contiguous() for o in list_of_encoder
+        ]
 
         return x, list_of_encoder[:3]
 
@@ -682,26 +707,29 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             assert model in ["vit_s", "vit_s_reg4"], msg
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
-                block_fn=block_fn, num_register_tokens=4, in_chans=3, channel_adaptive=False,
-                init_values=1e-5, block_chunks=0,
+                block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
+                num_register_tokens=4 if model.endswith("_reg4") else 0,
             )
         elif model.startswith("vit_b"):
             assert model in ["vit_b", "vit_b_reg4"], msg
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
-                block_fn=block_fn, num_register_tokens=0, in_chans=3, channel_adaptive=False,
+                block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
+                num_register_tokens=4 if model.endswith("_reg4") else 0,
             )
         elif model.startswith("vit_l"):
             assert model in ["vit_l", "vit_l_reg4"], msg
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4,
-                block_fn=block_fn, num_register_tokens=0, in_chans=3, channel_adaptive=False,
+                block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
+                num_register_tokens=4 if model.endswith("_reg4") else 0,
             )
         elif model.startswith("vit_g"):
             assert model in ["vit_g", "vit_g_reg4"], msg
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=1536, depth=40, num_heads=24, mlp_ratio=4,
-                block_fn=block_fn, num_register_tokens=0, in_chans=3, channel_adaptive=False,
+                block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
+                num_register_tokens=4 if model.endswith("_reg4") else 0,
             )
         else:
             raise ValueError(
