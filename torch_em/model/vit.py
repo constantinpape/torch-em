@@ -729,7 +729,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=1536, depth=40, num_heads=24, mlp_ratio=4,
                 block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
-                num_register_tokens=4 if model.endswith("_reg4") else 0,
+                num_register_tokens=4 if model.endswith("_reg4") else 0, ffn_layer="swiglu",
             )
         else:
             raise ValueError(

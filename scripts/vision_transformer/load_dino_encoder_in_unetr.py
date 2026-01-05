@@ -4,11 +4,25 @@ from torch_em.model import UNETR
 
 
 def main():
-    checkpoint_path = "./dinov2_vits14_pretrain.pth"
-    model_type = "vit_s"
-
+    # checkpoint_path = "./dinov2_vits14_pretrain.pth"
+    # model_type = "vit_s"
     # checkpoint_path = "./dinov2_vits14_reg4_pretrain.pth"
     # model_type = "vit_s_reg4"
+
+    # checkpoint_path = "./dinov2_vitb14_pretrain.pth"
+    # model_type = "vit_b"
+    # checkpoint_path = "./dinov2_vitb14_reg4_pretrain.pth"
+    # model_type = "vit_b_reg4"
+
+    # checkpoint_path = "./dinov2_vitl14_pretrain.pth"
+    # model_type = "vit_l"
+    # checkpoint_path = "./dinov2_vitl14_reg4_pretrain.pth"
+    # model_type = "vit_l_reg4"
+
+    # checkpoint_path = "./dinov2_vitg14_pretrain.pth"
+    # model_type = "vit_g"
+    checkpoint_path = "./dinov2_vitg14_reg4_pretrain.pth"
+    model_type = "vit_g_reg4"
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
