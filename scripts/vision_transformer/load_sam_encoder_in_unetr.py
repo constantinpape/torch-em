@@ -27,6 +27,7 @@ def main():
 
     x = torch.ones((1, 1, 512, 512)).to(device)
     y = model(x)
+    print(x.shape, y.shape)
 
     print("UNETR Model successfully created and encoder initialized from", checkpoint)
 
