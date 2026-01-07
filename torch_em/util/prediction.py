@@ -140,7 +140,7 @@ def predict_with_halo(
     block_shape: Tuple[int, ...],
     halo: Tuple[int, ...],
     output: Optional[Union[ArrayLike, List[Tuple[ArrayLike, slice]]]] = None,
-    preprocess: Callable[[Union[torch.Tensor, np.ndarray]], Union[torch.Tensor, np.ndarray]] = None,
+    preprocess: Callable[[Union[torch.Tensor, np.ndarray]], Union[torch.Tensor, np.ndarray]] = standardize,
     postprocess: Callable[[np.ndarray], np.ndarray] = None,
     with_channels: bool = False,
     skip_block: Callable[[Any], bool] = None,
