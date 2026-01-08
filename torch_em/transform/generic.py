@@ -1,7 +1,7 @@
 """@private
 """
 from math import ceil, floor
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Dict, Tuple, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -108,7 +108,13 @@ class ResizeInputs:
 
 
 class ResizeLongestSideInputs:
-    def __init__(self, target_shape, is_label=False, is_rgb=False, padding_mode="constant"):
+    def __init__(
+        self,
+        target_shape: Tuple[int, int],
+        is_label: bool = False,
+        is_rgb: bool = False,
+        padding_mode: str = "constant"
+    ):
         self.target_shape = target_shape
         self.is_label = is_label
         self.is_rgb = is_rgb
