@@ -9,3 +9,5 @@ logs/
 *.png
 *.out
 *.sh
+*.pth
+*.pt
