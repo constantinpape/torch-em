@@ -589,7 +589,7 @@ class UNETR3D(UNETRBase):
         )
 
         # And the final upsampler to match the expected dimensions.
-        self.end_up = Deconv3DBlock(
+        self.deconv_out = Deconv3DBlock(  # NOTE: changed `end_up` to `deconv_out`
             in_channels=features_decoder[-1],
             out_channels=features_decoder[-1],
             scale_factor=scale_factors,
@@ -636,13 +636,13 @@ class UNETR3D(UNETRBase):
         z3 = self.deconv3(z6)
         z0 = self.deconv4(z3)
 
+        updated_from_encoder = [z9, z6, z3]
+
         # Align the features through the base block.
         x = self.base(curr_features)
-
-        # Run the decoder.
-        updated_from_encoder = [z9, z6, z3]
+        # Run the decoder
         x = self.decoder(x, encoder_inputs=updated_from_encoder)
-        x = self.end_up(x)
+        x = self.deconv_out(x)  # NOTE before `end_up`
 
         # And the final output head.
         x = torch.cat([x, z0], dim=1)
