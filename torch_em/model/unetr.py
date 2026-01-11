@@ -30,7 +30,8 @@ class UNETRBase(nn.Module):
 
     Args:
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
-        backbone: The name of the vision transformer implementation. One of "sam", "sam2", "mae", "scalemae", "dinov2", "dinov3".
+        backbone: The name of the vision transformer implementation.
+            One of "sam", "sam2", "mae", "scalemae", "dinov2", "dinov3".
         encoder: The vision transformer. Can either be a name, such as "vit_b" or a torch module.
         decoder: The convolutional decoder.
         out_channels: The number of output channels of the UNETR.
@@ -520,6 +521,9 @@ class UNETR3D(UNETRBase):
         if use_conv_transpose:
             raise NotImplementedError("It's not enabled to switch between interpolation and transposed convolutions.")
 
+        # Sort the `embed_dim` out
+        embed_dim = 256 if embed_dim is None else embed_dim
+
         super().__init__(
             img_size=img_size,
             backbone=backbone,
@@ -543,7 +547,6 @@ class UNETR3D(UNETRBase):
 
         # Step 2: the 3d convolutional decoder.
         # First, get the important parameters for the decoder.
-        embed_dim = 256
         depth = 3
         initial_features = 64
         gain = 2
