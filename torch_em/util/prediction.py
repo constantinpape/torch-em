@@ -100,13 +100,16 @@ def _load_block(input_, offset, block_shape, halo, padding_mode="reflect", with_
     starts = [off - ha for off, ha in zip(offset, halo)]
     stops = [off + bs + ha for off, bs, ha in zip(offset, block_shape, halo)]
 
+    # we pad the input volume if necessary
     pad_left = None
     pad_right = None
 
+    # check for padding to the left
     if any(start < 0 for start in starts):
         pad_left = tuple(abs(start) if start < 0 else 0 for start in starts)
         starts = [max(0, start) for start in starts]
 
+    # check for padding to the right
     if any(stop > shape[i] for i, stop in enumerate(stops)):
         pad_right = tuple(stop - shape[i] if stop > shape[i] else 0 for i, stop in enumerate(stops))
         stops = [min(shape[i], stop) for i, stop in enumerate(stops)]
@@ -118,6 +121,7 @@ def _load_block(input_, offset, block_shape, halo, padding_mode="reflect", with_
         data = input_[bb]
 
     ndim = len(shape)
+    # pad if necessary
     if pad_left is not None or pad_right is not None:
         pad_left = (0,) * ndim if pad_left is None else pad_left
         pad_right = (0,) * ndim if pad_right is None else pad_right
@@ -126,10 +130,12 @@ def _load_block(input_, offset, block_shape, halo, padding_mode="reflect", with_
             pad_width = ((0, 0),) + pad_width
         data = np.pad(data, pad_width, mode=padding_mode)
 
+        # extend the bounding box for downstream
         bb = tuple(
             slice(b.start - pl, b.stop + pr)
             for b, pl, pr in zip(bb, pad_left, pad_right)
         )
+
     return data, bb
 
 
@@ -209,8 +215,7 @@ def predict_with_halo(
                                               constant_values=0)
     else:
         pad_left = (0,) * ndim
-        input_eff = input_
-        mask_eff = mask
+
     # shapes after shift-padding
     shape_eff = input_eff.shape
     shape_spatial_eff = shape_eff[1:] if with_channels else shape_eff
