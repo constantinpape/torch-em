@@ -542,10 +542,7 @@ class UNETR3D(UNETRBase):
             **kwargs,
         )
 
-        # Load the pretrained image encoder weights
-        self.image_encoder = self.encoder
-
-        # Step 2: the 3d convolutional decoder.
+        # The 3d convolutional decoder.
         # First, get the important parameters for the decoder.
         depth = 3
         initial_features = 64
@@ -627,7 +624,7 @@ class UNETR3D(UNETRBase):
         x, input_shape = self.preprocess(x)
 
         # Run the image encoder.
-        curr_features = torch.stack([self.image_encoder(x[:, :, i])[0] for i in range(Z)], dim=2)
+        curr_features = torch.stack([self.encoder(x[:, :, i])[0] for i in range(Z)], dim=2)
 
         # Prepare the counterparts for the decoder.
         # NOTE: The section below is sequential, there's no skip connections atm.
