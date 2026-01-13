@@ -264,11 +264,13 @@ def predict_with_halo(
             if preprocess is not None:
                 inp = preprocess(inp)
 
+            # add (channel) and batch axis
             expand_dims = np.s_[None] if with_channels else np.s_[None, None]
             inp = torch.from_numpy(inp[expand_dims]).to(device)
 
             prediction = net(inp) if prediction_function is None else prediction_function(net, inp)
 
+            # allow for list of tensors
             try:
                 prediction = prediction.cpu().numpy().squeeze(0)
             except AttributeError:
@@ -289,15 +291,14 @@ def predict_with_halo(
                     mb = np.broadcast_to(mask_block[None], prediction.shape)
                 else:
                     mb = mask_block
-                prediction = prediction.copy()
                 prediction[~mb] = 0
 
             bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
-            if isinstance(output, list):
+            if isinstance(output, list):  # we have multiple outputs and split the prediction channels
                 for out, channel_slice in output:
                     this_bb = bb if out.ndim == ndim else (slice(None),) + bb
                     out[this_bb] = prediction[channel_slice]
-            else:
+            else:  # we only have a single output array
                 if output.ndim == ndim + 1:
                     bb = (slice(None),) + bb
                 output[bb] = prediction
