@@ -542,10 +542,7 @@ class UNETR3D(UNETRBase):
             **kwargs,
         )
 
-        # Load the pretrained image encoder weights
-        self.encoder = self.encoder
-
-        # Step 2: the 3d convolutional decoder.
+        # The 3d convolutional decoder.
         # First, get the important parameters for the decoder.
         depth = 3
         initial_features = 64
