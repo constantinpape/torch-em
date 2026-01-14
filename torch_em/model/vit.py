@@ -550,6 +550,13 @@ class ViT_DINOv2(DinoV2VisionTransformer):
 
     Based on:
     https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py.
+
+    Args:
+        img_size: The input image size.
+        patch_size: The patch size.
+        depth: The depth of the network.
+        num_register_tokens: The number of registers added (in addition to the class tokens).
+            It's important to know for ViTs trained with registers, to remove them at the end.
     """
     def __init__(
         self,
