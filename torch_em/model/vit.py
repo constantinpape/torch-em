@@ -51,7 +51,7 @@ try:
     from sam3.model.vitdet import ViT as SAM3ViT, get_abs_pos
     _sam3_import_success = True
 except ImportError:
-    SAM3ViT = None
+    SAM3ViT = object
     _sam3_import_success = False
 
 
@@ -260,14 +260,11 @@ class ViT_Sam3(SAM3ViT):
     Based on https://github.com/facebookresearch/sam3/blob/main/sam3/model/vitdet.py.
 
     Args:
-        ...
+        img_size: The input image size.
+        embed_dim: The embedding dimension, corresponding to the number of output channels of the vision transformer.
+        kwargs: Keyword arguments for the image encoder base class.
     """
-    def __init__(
-        self,
-        img_size: int = 1024,
-        embed_dim: int = 768,
-        **kwargs
-    ):
+    def __init__(self, img_size: int = 1024, embed_dim: int = 768, **kwargs):
         if not _sam3_import_success:
             raise RuntimeError(
                 "The vision transformer backend can only be initialized if segment anything 3 is installed. "
@@ -901,7 +898,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
 
     else:
         raise ValueError(
-            "The 'UNETR' supported backbones are 'sam', 'sam2', 'mae', 'scalemae' or 'dinov3'. "
+            "The 'UNETR' supported backbones are 'sam', 'sam2', 'sam3', 'mae', 'scalemae', 'dinov2' or 'dinov3'. "
             "Please choose one of them."
         )
 
