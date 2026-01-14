@@ -55,7 +55,7 @@ class UNETRBase(nn.Module):
         use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
             By default, it uses resampling for upsampling.
 
-        NOTE: The currently supported combinations of 'backbone' x 'encoder' (in same order) combinations as following
+        NOTE: The currently supported combinations of 'backbone' x 'encoder' are the following:
 
         SAM_family_models:
             - 'sam' x 'vit_b'
