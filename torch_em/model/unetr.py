@@ -19,9 +19,14 @@ try:
 except ImportError:
     get_sam2_model = None
 
+try:
+    from micro_sam3.util import get_sam3_model
+except ImportError:
+    get_sam3_model = None
+
 
 #
-# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / MAE / ScaleMAE) + UNet Decoder from `torch_em`]
+# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / SAM2 / SAM3 / DINOv2 / DINOv3 / MAE / ScaleMAE) + UNet Decoder from `torch_em`]  # noqa
 #
 
 
@@ -31,12 +36,14 @@ class UNETRBase(nn.Module):
     Args:
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
         backbone: The name of the vision transformer implementation.
-            One of "sam", "sam2", "mae", "scalemae", "dinov2", "dinov3".
-        encoder: The vision transformer. Can either be a name, such as "vit_b" or a torch module.
+            One of "sam", "sam2", "sam3, "mae", "scalemae", "dinov2", "dinov3" (see all combinations below)
+        encoder: The vision transformer. Can either be a name, such as "vit_b" (see all combinations for this below) or a torch module.
         decoder: The convolutional decoder.
         out_channels: The number of output channels of the UNETR.
-        use_sam_stats: Whether to normalize the input data with the statistics of the pretrained SAM model.
-        use_dino_stats: Whether to normalize the input data with the statistics of the pretrained DINOv3 model.
+        use_sam_stats: Whether to normalize the input data with the statistics of the
+            pretrained SAM / SAM2 / SAM3 model.
+        use_dino_stats: Whether to normalize the input data with the statistics of the
+            pretrained DINOv2 / DINOv3 model.
         use_mae_stats: Whether to normalize the input data with the statistics of the pretrained MAE model.
         resize_input: Whether to resize the input images to match `img_size`.
             By default, it resizes the inputs to match the `img_size`.
@@ -47,11 +54,48 @@ class UNETRBase(nn.Module):
         embed_dim: The embedding dimensionality, corresponding to the output dimension of the vision transformer.
         use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
             By default, it uses resampling for upsampling.
+
+        NOTE: The currently supported combinations of 'backbone' x 'encoder' are the following:
+
+        SAM_family_models:
+            - 'sam' x 'vit_b'
+            - 'sam' x 'vit_l'
+            - 'sam' x 'vit_h'
+            - 'sam2' x 'hvit_t'
+            - 'sam2' x 'hvit_s'
+            - 'sam2' x 'hvit_b'
+            - 'sam2' x 'hvit_l'
+            - 'sam3' x 'vit_pe'
+
+        DINO_family_models:
+            - 'dinov2' x 'vit_s'
+            - 'dinov2' x 'vit_b'
+            - 'dinov2' x 'vit_l'
+            - 'dinov2' x 'vit_g'
+            - 'dinov2' x 'vit_s_reg4'
+            - 'dinov2' x 'vit_b_reg4'
+            - 'dinov2' x 'vit_l_reg4'
+            - 'dinov2' x 'vit_g_reg4'
+            - 'dinov3' x 'vit_s'
+            - 'dinov3' x 'vit_s+'
+            - 'dinov3' x 'vit_b'
+            - 'dinov3' x 'vit_l'
+            - 'dinov3' x 'vit_l+'
+            - 'dinov3' x 'vit_h+'
+            - 'dinov3' x 'vit_7b'
+
+        MAE_family_models:
+            - 'mae' x 'vit_b'
+            - 'mae' x 'vit_l'
+            - 'mae' x 'vit_h'
+            - 'scalemae' x 'vit_b'
+            - 'scalemae' x 'vit_l'
+            - 'scalemae' x 'vit_h'
     """
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -77,7 +121,7 @@ class UNETRBase(nn.Module):
         self.use_conv_transpose = use_conv_transpose
         self.backbone = backbone
 
-        if isinstance(encoder, str):  # e.g. "vit_b" / "hvit_b"
+        if isinstance(encoder, str):  # e.g. "vit_b" / "hvit_b" / "vit_pe"
             print(f"Using {encoder} from {backbone.upper()}")
             self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder, **kwargs)
 
@@ -126,6 +170,26 @@ class UNETRBase(nn.Module):
                 try:
                     model = get_sam2_model(model_type=encoder, checkpoint_path=checkpoint)
                     encoder_state = model.image_encoder.state_dict()
+                except Exception:
+                    # Try loading the encoder state directly from a checkpoint.
+                    encoder_state = torch.load(checkpoint, weights_only=False)
+
+            elif backbone == "sam3" and isinstance(encoder, str):
+                # If we have a SAM3 encoder, then we first try to load the full SAM3 Model.
+                # (using micro_sam3) and otherwise fall back on directly loading the encoder state
+                # from the checkpoint
+                try:
+                    model = get_sam3_model(checkpoint_path=checkpoint)
+                    encoder_state = model.backbone.vision_backbone.state_dict()
+                    # Let's align loading the encoder weights with expected parameter names
+                    encoder_state = {
+                        k[len("trunk."):] if k.startswith("trunk.") else k: v for k, v in encoder_state.items()
+                    }
+                    # And drop the 'convs' and 'sam2_convs' - these seem like some upsampling blocks.
+                    encoder_state = {
+                        k: v for k, v in encoder_state.items()
+                        if not (k.startswith("convs.") or k.startswith("sam2_convs."))
+                    }
                 except Exception:
                     # Try loading the encoder state directly from a checkpoint.
                     encoder_state = torch.load(checkpoint, weights_only=False)
@@ -246,6 +310,8 @@ class UNETRBase(nn.Module):
             raise NotImplementedError
         elif self.use_dino_stats or (self.use_sam_stats and self.backbone == "sam2"):
             mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+        elif self.use_sam_stats and self.backbone == "sam3":
+            mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
         else:
             mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
 
@@ -304,7 +370,7 @@ class UNETR(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -500,7 +566,7 @@ class UNETR3D(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "hvit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
