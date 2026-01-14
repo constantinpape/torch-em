@@ -58,9 +58,36 @@ def load_sam2():
     print("UNETR Model successfully created and encoder initialized from", checkpoint)
 
 
+def load_sam3():
+    from micro_sam3.util import _get_checkpoint
+
+    model_type = "vit_pe"
+    checkpoint = _get_checkpoint()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model = UNETR(
+        backbone="sam3",
+        encoder=model_type,
+        encoder_checkpoint=checkpoint,
+        out_channels=3,
+        use_sam_stats=True,
+        final_activation="Sigmoid",
+        use_skip_connection=False,
+    )
+    model.to(device)
+
+    x = torch.ones((1, 1, 512, 512)).to(device)
+    y = model(x)
+    print(x.shape, y.shape)
+
+    checkpoint = None  # HACK
+    print("UNETR Model successfully created and encoder initialized from", checkpoint)
+
+
 def main():
     # load_sam1()
-    load_sam2()
+    # load_sam2()
+    load_sam3()
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import math
 from functools import partial
 from typing import Tuple, List
 
@@ -44,6 +45,14 @@ try:
 except ImportError:
     DinoV3VisionTransformer = object
     _dinov3_import_success = False
+
+
+try:
+    from sam3.model.vitdet import ViT as SAM3ViT, get_abs_pos
+    _sam3_import_success = True
+except ImportError:
+    SAM3ViT = None
+    _sam3_import_success = False
 
 
 class ViT_Sam(ImageEncoderViT):
@@ -206,6 +215,7 @@ class ViT_Sam2(ImageEncoder):
         window_pos_embed_bkg_spatial_size: Tuple[int, int] = (14, 14),
         window_spec: Tuple[int, ...] = (8, 4, 14, 7),
         scalp: int = 1,
+        **kwargs
     ):
         if not _sam2_import_success:
             raise RuntimeError(
@@ -230,7 +240,7 @@ class ViT_Sam2(ImageEncoder):
             fpn_interp_model="nearest",
         )
 
-        super().__init__(trunk=trunk, neck=neck, scalp=scalp)
+        super().__init__(trunk=trunk, neck=neck, scalp=scalp, **kwargs)
         self.scalp = scalp
         self.embed_dim = embed_dim
         self.img_size = img_size
@@ -243,6 +253,95 @@ class ViT_Sam2(ImageEncoder):
 
         return features[-1], features
 
+
+class ViT_Sam3(SAM3ViT):
+    """Vision Transformer derived from the Segment Anything 3 Codebase (https://arxiv.org/abs/2511.16719).
+
+    Based on https://github.com/facebookresearch/sam3/blob/main/sam3/model/vitdet.py.
+
+    Args:
+        ...
+    """
+    def __init__(
+        self,
+        img_size: int = 1024,
+        embed_dim: int = 768,
+        **kwargs
+    ):
+        if not _sam3_import_success:
+            raise RuntimeError(
+                "The vision transformer backend can only be initialized if segment anything 3 is installed. "
+                "Please install segment anything 3 from https://github.com/facebookresearch/sam3 "
+                "and then rerun your code"
+            )
+
+        super().__init__(img_size=img_size, embed_dim=embed_dim, **kwargs)
+        self.img_size = img_size
+        self.embed_dim = embed_dim
+
+    def forward_features(self, x):
+        """@private
+        """
+        x = self.patch_embed(x)
+        h, w = x.shape[1], x.shape[2]
+
+        s = 0
+        if self.retain_cls_token:
+            # If the 'cls_token' is retained, we don't maintain the spatial shape.
+            x = torch.cat([self.class_embedding, x.flatten(1, 2)], dim=1)
+            s = 1
+
+        if self.pos_embed is not None:
+            x = x + get_abs_pos(
+                self.pos_embed, self.pretrain_use_cls_token, (h, w), self.retain_cls_token, tiling=self.tile_abs_pos,
+            )
+
+        x = self.ln_pre(x)
+
+        list_from_encoder = []
+        for i, blk in enumerate(self.blocks):
+            if self.use_act_checkpoint and self.training:
+                x = torch.utils.checkpoint.checkpoint(blk, x, use_reentrant=False)
+            else:
+                x = blk(x)
+
+            x = self._convert_to_expected_dim(x, i, s)
+
+            if i in self.full_attn_ids:
+                list_from_encoder.append(x)
+
+        return x, list_from_encoder
+
+    def _convert_to_expected_dim(self, x, i, s):
+        if (i == self.full_attn_ids[-1]) or (
+            self.return_interm_layers and i in self.full_attn_ids
+        ):
+            if i == self.full_attn_ids[-1]:
+                x = self.ln_post(x)
+
+            feats = x[:, s:]
+            if feats.ndim == 4:
+                feats = feats.permute(0, 3, 1, 2)
+            else:
+                assert feats.ndim == 3
+                h = w = math.sqrt(feats.shape[1])
+                feats = feats.reshape(feats.shape[0], h, w, feats.shape[-1]).permute(0, 3, 1, 2)
+            return feats
+
+        else:
+            return x
+
+    def forward(self, x: torch.Tensor):
+        """Apply the vision transformer to input data.
+
+        Args:
+            x: The input data.
+
+        Returns:
+            The vision transformer output.
+        """
+        x, list_from_encoder = self.forward_features(x)
+        return x, list_from_encoder
 
 #
 # Utilities for ScaleMAE's ViT
@@ -653,6 +752,20 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             raise ValueError(
                 f"'{model}' is not supported by SAM2. Currently, 'hvit_t', 'hvit_s', 'hvit_b', 'hvit_l' are supported."
             )
+
+    elif backbone == "sam3":
+        if model != "vit_pe":
+            raise ValueError(
+                "'sam3' does not have multiple model configurations. Please use 'vit_pe' as the model configuration."
+            )
+
+        encoder = ViT_Sam3(
+            img_size=1008, pretrain_img_size=336, patch_size=14, embed_dim=1024, depth=32, num_heads=16,
+            mlp_ratio=4.625, norm_layer="LayerNorm", drop_path_rate=0.1, qkv_bias=True, use_abs_pos=True,
+            tile_abs_pos=True, global_att_blocks=(7, 15, 23, 31), rel_pos_blocks=(), use_rope=True,
+            use_interp_rope=True, window_size=24, pretrain_use_cls_token=True, retain_cls_token=False, ln_pre=True,
+            ln_post=False, return_interm_layers=False, bias_patch_embed=False, compile_mode=None,
+        )
 
     elif backbone == "mae":
         if model == "vit_b":
