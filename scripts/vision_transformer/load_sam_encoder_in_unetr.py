@@ -79,8 +79,6 @@ def load_sam3():
     x = torch.ones((1, 1, 512, 512)).to(device)
     y = model(x)
     print(x.shape, y.shape)
-
-    checkpoint = None  # HACK
     print("UNETR Model successfully created and encoder initialized from", checkpoint)
 
 
