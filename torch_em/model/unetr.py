@@ -54,6 +54,43 @@ class UNETRBase(nn.Module):
         embed_dim: The embedding dimensionality, corresponding to the output dimension of the vision transformer.
         use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
             By default, it uses resampling for upsampling.
+
+        NOTE: The currently supported combinations of 'backbone' x 'encoder' (in same order) combinations as following
+
+        SAM_family_models:
+            - 'sam' x 'vit_b'
+            - 'sam' x 'vit_l'
+            - 'sam' x 'vit_h'
+            - 'sam2' x 'hvit_t'
+            - 'sam2' x 'hvit_s'
+            - 'sam2' x 'hvit_b'
+            - 'sam2' x 'hvit_l'
+            - 'sam3' x 'vit_pe'
+
+        DINO_family_models:
+            - 'dinov2' x 'vit_s'
+            - 'dinov2' x 'vit_b'
+            - 'dinov2' x 'vit_l'
+            - 'dinov2' x 'vit_g'
+            - 'dinov2' x 'vit_s_reg4'
+            - 'dinov2' x 'vit_b_reg4'
+            - 'dinov2' x 'vit_l_reg4'
+            - 'dinov2' x 'vit_g_reg4'
+            - 'dinov3' x 'vit_s'
+            - 'dinov3' x 'vit_s+'
+            - 'dinov3' x 'vit_b'
+            - 'dinov3' x 'vit_l'
+            - 'dinov3' x 'vit_l+'
+            - 'dinov3' x 'vit_h+'
+            - 'dinov3' x 'vit_7b'
+
+        MAE_family_models:
+            - 'mae' x 'vit_b'
+            - 'mae' x 'vit_l'
+            - 'mae' x 'vit_h'
+            - 'scalemae' x 'vit_b'
+            - 'scalemae' x 'vit_l'
+            - 'scalemae' x 'vit_h'
     """
     def __init__(
         self,
