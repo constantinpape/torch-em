@@ -87,6 +87,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         momentum: float = 0.999,
         reinit_teacher: Optional[bool] = None,
         sampler: Optional[Callable] = None,
+        augmenter: torch.nn.Module,
         **kwargs,
     ):
         self.sampler = sampler
@@ -158,7 +159,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                         layer.reset_parameters()
             for param in self.teacher.parameters():
                 param.requires_grad = False
-
+        
+        self.augmenter = augmenter
         self._kwargs = kwargs
 
     def _momentum_update(self):
@@ -222,14 +224,18 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         t_per_iter = time.time()
 
         # Sample from both the supervised and unsupervised loader.
-        for xu1, xu2 in self.unsupervised_train_loader:
-            xu1, xu2 = xu1.to(self.device, non_blocking=True), xu2.to(self.device, non_blocking=True)
+        for xu in self.unsupervised_train_loader:
+            xu = xu.to(self.device, non_blocking=True)
+
+            xu1, xu2 = self.augmenter.teacher.transform(xu), self.augmenter.student.transform(xu)
 
             teacher_input, model_input = xu1, xu2
 
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
+                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
 
             # If we have a sampler then check if the current batch matches the condition for inclusion in training.
             if self.sampler is not None:
@@ -240,7 +246,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             self.optimizer.zero_grad()
             # Perform unsupervised training
             with forward_context():
-                loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
+                loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)  # FIXME
             backprop(loss)
 
             if self.logger is not None:
@@ -262,6 +268,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             if self._iteration >= self.max_iteration:
                 break
             progress.update(1)
+
+            self.augmenter.reset_all()
 
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
