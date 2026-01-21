@@ -103,6 +103,30 @@ class TestDefaultTrainer(unittest.TestCase):
         trainer2.fit(10)
         self.assertEqual(trainer2.iteration, 20)
 
+    def test_ema(self):
+        from torch_em.trainer import DefaultTrainer
+        from torch_em.util import get_trainer
+
+        kwargs = self._get_kwargs()
+        kwargs["ema"] = 0.95
+        trainer = DefaultTrainer(**kwargs)
+        trainer.fit(10)
+        avg_model = trainer.average_model
+        self.assertFalse(torch_em.util.model_is_equal(avg_model, trainer.model))
+
+        trainer2 = DefaultTrainer.from_checkpoint(
+            os.path.join(self.checkpoint_folder, self.name),
+            name="latest"
+        )
+        self.assertTrue(torch_em.util.model_is_equal(avg_model, trainer2.average_model))
+
+        trainer2.fit(10)
+        self.assertEqual(trainer2.iteration, 20)
+        self.assertFalse(torch_em.util.model_is_equal(avg_model, trainer2.average_model))
+
+        trainer3 = get_trainer(os.path.join(self.checkpoint_folder, self.name), name="latest")
+        self.assertTrue(hasattr(trainer3, "average_model"))
+
     @unittest.skipIf(sys.version_info.minor > 10, "Not supported for python > 3.10")
     def test_compiled_model(self):
         from torch_em.trainer import DefaultTrainer
