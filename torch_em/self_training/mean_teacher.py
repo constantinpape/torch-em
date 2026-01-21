@@ -159,7 +159,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                         layer.reset_parameters()
             for param in self.teacher.parameters():
                 param.requires_grad = False
-        
+
         self.augmenter = augmenter
         self._kwargs = kwargs
 
@@ -228,7 +228,6 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             xu = xu.to(self.device, non_blocking=True)
 
             xu1, xu2 = self.augmenter.teacher.transform(xu), self.augmenter.student.transform(xu)
-
             teacher_input, model_input = xu1, xu2
 
             with forward_context(), torch.no_grad():

@@ -68,6 +68,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         unsupervised_train_loader: torch.utils.data.DataLoader,
         unsupervised_loss: torch.utils.data.DataLoader,
         pseudo_labeler: Callable,
+        augmenter: torch.nn.Module,
         supervised_train_loader: Optional[torch.utils.data.DataLoader] = None,
         unsupervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
         supervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
@@ -128,6 +129,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         self.supervised_loss = supervised_loss
 
         self.pseudo_labeler = pseudo_labeler
+        self.augmenter = augmenter
 
         if source_distribution is None:
             self.source_distribution = None
@@ -190,14 +192,17 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         t_per_iter = time.time()
 
         # Sample from both the supervised and unsupervised loader.
-        for xu1, xu2 in self.unsupervised_train_loader:
-            xu1, xu2 = xu1.to(self.device, non_blocking=True), xu2.to(self.device, non_blocking=True)
+        for xu in self.unsupervised_train_loader:
+            xu = xu.to(self.device, non_blocking=True)
 
+            xu1, xu2 = self.augmenter.teacher.transform(xu), self.augmenter.student.transform(xu)
             teacher_input, model_input = xu1, xu2
 
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
+                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
 
             pseudo_labels = pseudo_labels.detach()
             if label_filter is not None:
@@ -209,13 +214,15 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
             self.optimizer.zero_grad()
             # Perform unsupervised training
             with forward_context():
-                loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
+                pred = self.model(model_input)
+                pred_inv = self.augmenter.student.reverse_transform(pred)
+                loss = self.unsupervised_loss(pred_inv, pseudo_labels_inv, label_filter_inv)
 
             backprop(loss)
 
             if self.logger is not None:
                 with torch.no_grad(), forward_context():
-                    pred = self.model(model_input) if self._iteration % self.log_image_interval == 0 else None
+                    pred = pred if self._iteration % self.log_image_interval == 0 else None
                 self.logger.log_train_unsupervised(
                     self._iteration, loss, xu1, xu2, pred, pseudo_labels, label_filter
                 )
@@ -228,6 +235,8 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 break
             progress.update(1)
 
+            self.augmenter.reset_all()
+
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -238,22 +247,26 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         t_per_iter = time.time()
 
         # Sample from both the supervised and unsupervised loader.
-        for (xs, ys), (xu1, xu2) in zip(self.supervised_train_loader, self.unsupervised_train_loader):
+        for (xs, ys), xu in zip(self.supervised_train_loader, self.unsupervised_train_loader):
             xs, ys = xs.to(self.device, non_blocking=True), ys.to(self.device, non_blocking=True)
-            xu1, xu2 = xu1.to(self.device, non_blocking=True), xu2.to(self.device, non_blocking=True)
+            xu = xu.to(self.device, non_blocking=True)
+
+            xu1, xu2 = self.augmenter.teacher.transform(xu), self.augmenter.student.transform(xu)
+            teacher_input, model_input = xu1, xu2
 
             # Perform supervised training.
             self.optimizer.zero_grad()
             with forward_context():
                 # We pass the model, the input and the labels to the supervised loss function,
                 # so that how the loss is calculated stays flexible, e.g. to enable ELBO for PUNet.
-                supervised_loss = self.supervised_loss(self.model, xs, ys)
-
-            teacher_input, model_input = xu1, xu2
+                supervised_pred = self.model(xs)
+                supervised_loss = self.supervised_loss(supervised_pred, ys)
 
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
+                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
 
             pseudo_labels = pseudo_labels.detach()
             if label_filter is not None:
@@ -264,15 +277,17 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
 
             # Perform unsupervised training
             with forward_context():
-                unsupervised_loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
+                unsup_pred = self.model(model_input)
+                unsup_pred_inv = self.augmenter.student.reverse_transform(unsup_pred)
+                unsupervised_loss = self.unsupervised_loss(unsup_pred_inv, pseudo_labels_inv, label_filter_inv)
 
             loss = (supervised_loss + unsupervised_loss) / 2
             backprop(loss)
 
             if self.logger is not None:
                 with torch.no_grad(), forward_context():
-                    unsup_pred = self.model(model_input) if self._iteration % self.log_image_interval == 0 else None
-                    supervised_pred = self.model(xs) if self._iteration % self.log_image_interval == 0 else None
+                    unsup_pred = unsup_pred if self._iteration % self.log_image_interval == 0 else None
+                    supervised_pred = supervised_pred if self._iteration % self.log_image_interval == 0 else None
 
                 self.logger.log_train_supervised(self._iteration, supervised_loss, xs, ys, supervised_pred)
                 self.logger.log_train_unsupervised(
@@ -289,6 +304,8 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 break
             progress.update(1)
 
+            self.augmenter.reset_all()
+
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -299,7 +316,8 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         for x, y in self.supervised_val_loader:
             x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
             with forward_context():
-                loss, metric = self.supervised_loss_and_metric(self.model, x, y)
+                pred = self.model(x)
+                loss, metric = self.supervised_loss_and_metric(pred, y)
             loss_val += loss.item()
             metric_val += metric.item()
 
@@ -307,8 +325,6 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         loss_val /= len(self.supervised_val_loader)
 
         if self.logger is not None:
-            with forward_context():
-                pred = self.model(x)
             self.logger.log_validation_supervised(self._iteration, metric_val, loss_val, x, y, pred)
 
         return metric_val
@@ -317,12 +333,20 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         metric_val = 0.0
         loss_val = 0.0
 
-        for x1, x2 in self.unsupervised_val_loader:
-            x1, x2 = x1.to(self.device, non_blocking=True), x2.to(self.device, non_blocking=True)
+        for x in self.unsupervised_val_loader:
+            x = x.to(self.device, non_blocking=True)
+
+            x1, x2 = self.augmenter.teacher.transform(x), self.augmenter.student.transform(x)
             teacher_input, model_input = x1, x2
+
             with forward_context():
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
-                loss, metric = self.unsupervised_loss_and_metric(self.model, model_input, pseudo_labels, label_filter)
+                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
+
+                pred = self.model(model_input)
+                pred_inv = self.augmenter.student.reverse_transform(pred)
+                loss, metric = self.unsupervised_loss_and_metric(pred_inv, pseudo_labels_inv, label_filter_inv)
             loss_val += loss.item()
             metric_val += metric.item()
 
@@ -330,11 +354,11 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         loss_val /= len(self.unsupervised_val_loader)
 
         if self.logger is not None:
-            with forward_context():
-                pred = self.model(model_input)
             self.logger.log_validation_unsupervised(
                 self._iteration, metric_val, loss_val, x1, x2, pred, pseudo_labels, label_filter
             )
+
+        self.augmenter.reset_all()
 
         return metric_val
 
