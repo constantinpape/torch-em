@@ -26,7 +26,10 @@ class DefaultSelfTrainingLoss(nn.Module):
         self.init_kwargs = {}
 
     def __call__(
-        self, model: nn.Module, input_: torch.Tensor, labels: torch.Tensor, label_filter: Optional[torch.Tensor] = None
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Compute the loss for self-training.
 
@@ -39,7 +42,7 @@ class DefaultSelfTrainingLoss(nn.Module):
         Returns:
             The loss value.
         """
-        prediction = model(input_)
+
         if self.activation is not None:
             prediction = self.activation(prediction)
         if label_filter is None:
@@ -73,8 +76,12 @@ class DefaultSelfTrainingLossAndMetric(nn.Module):
         # TODO serialize the class names and dicts instead
         self.init_kwargs = {}
 
-    def __call__(self, model, input_, labels, label_filter=None):
-        prediction = model(input_)
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+    ):
         if self.activation is not None:
             prediction = self.activation(prediction)
         if label_filter is None:
