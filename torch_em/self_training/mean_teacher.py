@@ -321,10 +321,15 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 self.logger.log_train_unsupervised(
                     self._iteration, unsupervised_loss, xu1, xu2, unsup_pred, pseudo_labels, label_filter
                 )
+                self.logger.log_train_inverse_augmentations(
+                    self._iteration, xu, pseudo_labels_inv, unsup_pred_inv,
+                )
 
                 self.logger.log_combined_loss(self._iteration, loss)
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
                 self.logger.log_lr(self._iteration, lr)
+                if self.pseudo_labeler.confidence_threshold is not None:
+                    self.logger.log_ct(self._iteration, self.pseudo_labeler.confidence_threshold)
 
             with torch.no_grad():
                 self._momentum_update()
@@ -386,8 +391,11 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             self.logger.log_validation_unsupervised(
                 self._iteration, metric_val, loss_val, x1, x2, pred, pseudo_labels, label_filter
             )
+            self.logger.log_validation_inverse_augmentations(
+                self._iteration, x, pseudo_labels_inv, pred_inv,
+            )
 
-        self.pseudo_labeler.step(metric_val, self._epoch) # NOTE: scheduler added in validation step
+        self.pseudo_labeler.step(metric_val, self._epoch)
 
         self.augmenter.reset_all()
 

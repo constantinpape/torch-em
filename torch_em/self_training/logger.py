@@ -105,4 +105,53 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
             
     def log_ct(self, step, ct):
         self.tb.add_scalar(tag="train/confidence_threshold", scalar_value=ct, global_step=step)
-    
+
+# LOG AUGMENTATIONS FOR DEBUGGING ###
+    def _add_augmented_images(
+        self, step, name, x_u, pseudo_labels_inv, pred_inv
+    ):
+        if x_u.ndim == 5:
+            assert (
+                pseudo_labels_inv.ndim
+                == pred_inv.ndim
+                == 5
+            )
+            zindex = x_u.shape[2] // 2
+            x_u = x_u[:, :, zindex]
+            pred_inv = pred_inv[:, :, zindex]
+            pseudo_labels_inv = pseudo_labels_inv[:, :, zindex]
+
+        images = [
+            torch_em.transform.raw.normalize(x_u[0]),
+            pseudo_labels_inv[0, 0:1],
+            pred_inv[0, 0:1],
+        ]
+        im_name = (
+            f"{name}/unsupervised/x_u-pseudolabels_inv-pred_inv"
+        )
+        grid = make_grid(images, nrow=3, padding=8)
+        self.tb.add_image(tag=im_name, img_tensor=grid, global_step=step)
+
+    def log_train_inverse_augmentations(
+        self, step, x_u, pseudo_labels_inv, pred_inv
+    ):
+        if step % self.log_image_interval == 0:
+            self._add_augmented_images(
+                step,
+                "train_augmentations",
+                x_u,
+                pseudo_labels_inv,
+                pred_inv,
+            )
+
+    def log_validation_inverse_augmentations(
+        self, step, x_u, pseudo_labels_inv, pred_inv
+    ):
+        if step % self.log_image_interval == 0:
+            self._add_augmented_images(
+                step,
+                "validation_augmentations",
+                x_u,
+                pseudo_labels_inv,
+                pred_inv,
+            )
