@@ -37,7 +37,8 @@ class UNETRBase(nn.Module):
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
         backbone: The name of the vision transformer implementation.
             One of "sam", "sam2", "sam3, "mae", "scalemae", "dinov2", "dinov3" (see all combinations below)
-        encoder: The vision transformer. Can either be a name, such as "vit_b" (see all combinations for this below) or a torch module.
+        encoder: The vision transformer. Can either be a name, such as "vit_b"
+            (see all combinations for this below) or a torch module.
         decoder: The convolutional decoder.
         out_channels: The number of output channels of the UNETR.
         use_sam_stats: Whether to normalize the input data with the statistics of the
