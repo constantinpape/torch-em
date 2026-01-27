@@ -210,7 +210,7 @@ class PadIfNecessary:
         else:
             dim_diff = data.ndim - len(self.shape)
             pad_shape = data.shape[:dim_diff] + self.shape
-            assert len(pad_shape) == data.ndim
+            assert len(pad_shape) == data.ndim, f"{pad_shape}, {data.shape}"
 
         data_shape = data.shape
         if all(dsh == sh for dsh, sh in zip(data_shape, pad_shape)):
