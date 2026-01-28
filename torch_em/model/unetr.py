@@ -15,7 +15,7 @@ except ImportError:
     get_sam_model = None
 
 try:
-    from micro_sam2.util import get_sam2_model
+    from micro_sam.v2.util import get_sam2_model
 except ImportError:
     get_sam2_model = None
 
