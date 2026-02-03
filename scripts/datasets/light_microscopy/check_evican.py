@@ -14,8 +14,7 @@ def check_evican():
     loader = get_evican_loader(
         path=os.path.join(ROOT, "evican"),
         batch_size=1,
-        # patch_shape=(1024, 1024),
-        patch_shape=None,
+        patch_shape=(1024, 1024),
         split="train",
         annotation_type="evican60",
         segmentation_type="nucleus",
