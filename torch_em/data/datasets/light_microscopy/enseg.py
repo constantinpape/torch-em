@@ -1,5 +1,4 @@
-"""The ENSeg dataset contains expert-annotated enteric neuron cells
-for instance segmentation in microscopy images.
+"""The ENSeg dataset contains annotations for enteric neuron cells in microscopy images.
 
 The dataset is located at https://www.kaggle.com/datasets/gustavozanonifelipe/enseg-dataset.
 This dataset is from the publication https://doi.org/10.3390/app15031046.
