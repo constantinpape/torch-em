@@ -19,6 +19,7 @@ from .dic_hepg2 import get_dic_hepg2_loader, get_dic_hepg2_dataset
 from .dsb import get_dsb_loader, get_dsb_dataset
 from .dynamicnuclearnet import get_dynamicnuclearnet_loader, get_dynamicnuclearnet_dataset
 from .embedseg_data import get_embedseg_loader, get_embedseg_dataset
+from .enseg import get_enseg_loader, get_enseg_dataset
 from .evican import get_evican_loader, get_evican_dataset
 from .gonuclear import get_gonuclear_loader, get_gonuclear_dataset
 from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
