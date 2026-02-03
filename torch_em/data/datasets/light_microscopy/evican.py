@@ -1,6 +1,8 @@
 """The EVICAN dataset contains phase contrast and brightfield microscopy images
 with cell and nucleus segmentations.
 
+NOTE: The data is sparsely annotated.
+
 The dataset is located at https://edmond.mpg.de/dataset.xhtml?persistentId=doi:10.17617/3.AJBV1S.
 This dataset is from the publication https://doi.org/10.1093/bioinformatics/btaa225.
 Please cite it if you use this dataset in your research.
