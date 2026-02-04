@@ -50,4 +50,5 @@ from .u20s import get_u20s_loader, get_u20s_dataset
 from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
 from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
 from .vicar import get_vicar_loader, get_vicar_dataset
+from .wing_disc import get_wing_disc_loader, get_wing_disc_dataset
 from .yeaz import get_yeaz_loader, get_yeaz_dataset
