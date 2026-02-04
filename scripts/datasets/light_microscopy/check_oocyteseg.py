@@ -14,8 +14,7 @@ def check_oocyteseg():
     loader = get_oocyteseg_loader(
         path=os.path.join(ROOT, "oocyte"),
         batch_size=1,
-        # patch_shape=(256, 256),
-        patch_shape=None,
+        patch_shape=(256, 256),
         split="train",
         species="mouse",
         download=True,
