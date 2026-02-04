@@ -27,6 +27,7 @@ from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
 from .ifnuclei import get_ifnuclei_loader, get_ifnuclei_dataset
 from .livecell import get_livecell_loader, get_livecell_dataset
 from .lsm_mouse_embryo import get_lsm_mouse_embryo_loader, get_lsm_mouse_embryo_dataset
+from .microbeseg import get_microbeseg_loader, get_microbeseg_dataset
 from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
 from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,
