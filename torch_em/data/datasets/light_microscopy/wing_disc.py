@@ -2,6 +2,7 @@
 in confocal microscopy images of Drosophila wing discs.
 
 The dataset is located at https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD843.
+This dataset is from the publication https://www.nature.com/articles/s44303-025-00099-7.
 Please cite it if you use this dataset in your research.
 """
 
