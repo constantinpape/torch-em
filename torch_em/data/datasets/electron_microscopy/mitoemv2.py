@@ -4,7 +4,8 @@ It contains eight challenging datasets with expert-verified labels, covering bio
 scenarios such as dense mitochondrial packing, hyperfused networks, thin-necked morphologies,
 and ultrastructurally ambiguous boundaries.
 
-The dataset is from the publication https://doi.org/10.5281/zenodo.17635006.
+The data is located at https://doi.org/10.5281/zenodo.17635006.
+The dataset is from the publication https://doi.org/10.1101/2025.11.12.687478.
 Please cite it if you use this dataset in your research.
 """
 
