@@ -3,6 +3,7 @@ from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bac_mother import get_bac_mother_loader, get_bac_mother_dataset
 from .balf import get_balf_loader, get_balf_dataset
 from .bccd import get_bccd_loader, get_bccd_dataset
+from .bmgd import get_bmgd_loader, get_bmgd_dataset
 from .bitdepth_nucseg import get_bitdepth_nucseg_loader, get_bitdepth_nucseg_dataset
 from .brifiseg import get_brifiseg_loader, get_brifiseg_dataset
 from .blastospim import get_blastospim_loader, get_blastospim_dataset
