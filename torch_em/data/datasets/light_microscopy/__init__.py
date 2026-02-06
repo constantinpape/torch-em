@@ -50,6 +50,7 @@ from .phmamm import get_phmamm_loader, get_phmamm_dataset
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .pnas_arabidopsis import get_pnas_arabidopsis_loader, get_pnas_arabidopsis_dataset
 from .segpc import get_segpc_loader, get_segpc_dataset
+from .slimia import get_slimia_loader, get_slimia_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .toiam import get_toiam_loader, get_toiam_dataset
 from .u20s import get_u20s_loader, get_u20s_dataset
