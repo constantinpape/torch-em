@@ -8,6 +8,7 @@ Available datasets:
 - HL60 Cell Line: Synthetic 3D images of HL60 cells with instance segmentation labels
 - Granulocytes: Synthetic 3D images of granulocytes with instance segmentation labels
 - Vasculogenesis: Time-lapse 2D images of living cells with semantic segmentation labels
+- MDA231: 3D fluorescence images of MDA231 cells with full instance segmentation annotations
 
 The datasets are from CBIA (Centre for Biomedical Image Analysis) at Masaryk University.
 
@@ -16,6 +17,7 @@ The data is located at https://cbia.fi.muni.cz/datasets/.
 - HL60 Cell Line: https://doi.org/10.1002/cyto.a.20811
 - Granulocytes: https://doi.org/10.1002/cyto.a.20811
 - Vasculogenesis: https://doi.org/10.1109/ICIP.2016.7532871
+- MDA231: Cell Tracking Challenge (Fluo-C3DL-MDA231) with ISBI 2025 full annotations
 Please cite the relevant publication if you use this dataset in your research.
 """
 
@@ -57,6 +59,12 @@ URLS = {
             "labels": "https://datasets.gryf.fi.muni.cz/icip2016/vasculogenesis-labels.zip",
         },
     },
+    "mda231": {
+        "default": {
+            "images": "https://data.celltrackingchallenge.net/training-datasets/Fluo-C3DL-MDA231.zip",
+            "labels": "https://datasets.gryf.fi.muni.cz/isbi2025/Fluo-C3DL-MDA231_Full_Annotations.zip",
+        },
+    },
 }
 
 CELL_LINES = list(URLS.keys())
@@ -70,7 +78,10 @@ def _get_variants(cell_line):
 _SEMANTIC_LABEL_CELL_LINES = ["colon_tissue", "vasculogenesis"]
 
 # Cell lines with separate image/label zip files
-_SEPARATE_ZIPS_CELL_LINES = ["vasculogenesis"]
+_SEPARATE_ZIPS_CELL_LINES = ["vasculogenesis", "mda231"]
+
+# Cell lines that are 2D (others are 3D)
+_2D_CELL_LINES = ["vasculogenesis"]
 
 
 def _create_mucic_h5(path, cell_line, variant):
@@ -170,7 +181,7 @@ def _create_vasculogenesis_h5(path, variant):
     raw_files = sorted(glob(os.path.join(images_dir, "*.png")))
 
     for raw_path in tqdm(raw_files, desc=f"Processing vasculogenesis {variant} data"):
-        # Find corresponding label file (image_XXXX.png -> mask_XXXX.png)
+        # Find corresponding label file (pairs of image_XXXX.png and mask_XXXX.png)
         fname = os.path.basename(raw_path)
         label_fname = fname.replace("image_", "mask_")
         label_path = os.path.join(labels_dir, label_fname)
@@ -200,6 +211,64 @@ def _create_vasculogenesis_h5(path, variant):
     return h5_out_dir
 
 
+def _create_mda231_h5(path, variant):
+    """Create processed h5 files for MDA231 from CTC data with full annotations."""
+    import h5py
+    import tifffile
+    from tqdm import tqdm
+
+    data_dir = os.path.join(path, "mda231", variant)
+    h5_out_dir = os.path.join(path, "mda231", "processed", variant)
+    os.makedirs(h5_out_dir, exist_ok=True)
+
+    # Directory structure after unzip:
+    # images/ -> Fluo-C3DL-MDA231/01/, Fluo-C3DL-MDA231/02/
+    # labels/ -> Fluo-C3DL-MDA231_Full_Annotations/S01_FA_MV/S01_FA_A1/, S02_FA_A1/
+    images_base = os.path.join(data_dir, "images", "Fluo-C3DL-MDA231")
+    labels_base = os.path.join(data_dir, "labels", "Fluo-C3DL-MDA231_Full_Annotations")
+
+    # Map sequences to their annotation directories
+    seq_to_labels = {
+        "01": os.path.join(labels_base, "S01_FA_MV", "S01_FA_A1"),
+        "02": os.path.join(labels_base, "S02_FA_A1"),
+    }
+
+    for seq_id, labels_dir in seq_to_labels.items():
+        images_dir = os.path.join(images_base, seq_id)
+
+        if not os.path.exists(images_dir) or not os.path.exists(labels_dir):
+            continue
+
+        # Find all raw TIFF files (t000.tif, t001.tif, ...)
+        raw_files = sorted(glob(os.path.join(images_dir, "t*.tif")))
+
+        for raw_path in tqdm(raw_files, desc=f"Processing MDA231 seq {seq_id}"):
+            # Map t000.tif -> man_seg_full000.tif
+            fname = os.path.basename(raw_path)
+            time_id = fname.replace(".tif", "").replace("t", "")
+            label_fname = f"man_seg_full{time_id}.tif"
+            label_path = os.path.join(labels_dir, label_fname)
+
+            if not os.path.exists(label_path):
+                continue
+
+            out_fname = f"mda231_{seq_id}_{time_id}.h5"
+            out_path = os.path.join(h5_out_dir, out_fname)
+
+            if os.path.exists(out_path):
+                continue
+
+            raw = tifffile.imread(raw_path)
+            labels = tifffile.imread(label_path).astype("int64")
+
+            with h5py.File(out_path, "w") as f:
+                f.create_dataset("raw", data=raw, compression="gzip")
+                f.create_dataset("labels/instances", data=labels, compression="gzip")
+                f.create_dataset("labels/semantic", data=(labels > 0).astype("uint8"), compression="gzip")
+
+    return h5_out_dir
+
+
 def get_mucic_data(
     path: Union[os.PathLike, str],
     cell_line: str,
@@ -210,7 +279,7 @@ def get_mucic_data(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        cell_line: The cell line to use. One of 'colon_tissue', 'hl60', 'granulocytes', or 'vasculogenesis'.
+        cell_line: The cell line to use. One of 'colon_tissue', 'hl60', 'granulocytes', 'vasculogenesis', or 'mda231'.
         variant: The dataset variant(s).
             For 'colon_tissue' and 'granulocytes': 'low' or 'high' (noise levels).
             For 'hl60': combination of noise ('low', 'high') and clustering ('c00', 'c25', 'c50', 'c75'),
@@ -234,7 +303,16 @@ def get_mucic_data(
         assert v in valid_variants, f"'{v}' is not valid for '{cell_line}'. Choose from {valid_variants}."
 
         data_dir = os.path.join(path, cell_line, v)
-        if os.path.exists(data_dir) and len(glob(os.path.join(data_dir, "**", "*.h5"), recursive=True)) > 0:
+
+        # Check if data already exists - different file types for different datasets
+        if cell_line == "mda231":
+            file_pattern = "*.tif"
+        elif cell_line == "vasculogenesis":
+            file_pattern = "*.png"
+        else:
+            file_pattern = "*.h5"
+
+        if os.path.exists(data_dir) and len(glob(os.path.join(data_dir, "**", file_pattern), recursive=True)) > 0:
             continue
 
         os.makedirs(data_dir, exist_ok=True)
@@ -268,7 +346,7 @@ def get_mucic_paths(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        cell_line: The cell line to use. One of 'colon_tissue', 'hl60', 'granulocytes', or 'vasculogenesis'.
+        cell_line: The cell line to use. One of 'colon_tissue', 'hl60', 'granulocytes', 'vasculogenesis', or 'mda231'.
         variant: The dataset variant(s). If None, uses all variants.
         download: Whether to download the data if it is not present.
 
@@ -295,6 +373,8 @@ def get_mucic_paths(
         if not os.path.exists(h5_out_dir) or len(glob(os.path.join(h5_out_dir, "*.h5"))) == 0:
             if cell_line == "vasculogenesis":
                 _create_vasculogenesis_h5(path, v)
+            elif cell_line == "mda231":
+                _create_mda231_h5(path, v)
             else:
                 _create_mucic_h5(path, cell_line, v)
 
@@ -315,17 +395,17 @@ def get_mucic_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the MUCIC dataset for 3D cell segmentation.
+    """Get the MUCIC dataset for cell segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
-        cell_line: The cell line to use. One of 'colon_tissue', 'hl60', 'granulocytes', or 'vasculogenesis'.
+        cell_line: The cell line to use. One of 'colon_tissue', 'hl60', 'granulocytes', 'vasculogenesis', or 'mda231'.
         variant: The dataset variant(s).
             For 'colon_tissue' and 'granulocytes': 'low' or 'high' (noise levels).
             For 'hl60': combination of noise ('low', 'high') and clustering ('c00', 'c25', 'c50', 'c75'),
             e.g. 'low_c00'.
-            For 'vasculogenesis': 'default'.
+            For 'vasculogenesis' and 'mda231': 'default'.
             If None, uses all variants for the selected cell line.
         segmentation_type: The type of segmentation labels to use.
             One of 'instances' or 'semantic' (binary mask).
@@ -346,8 +426,8 @@ def get_mucic_dataset(
         kwargs, add_binary_target=True, label_dtype=np.int64,
     )
 
-    # Vasculogenesis is 2D data, others are 3D
-    ndim = 2 if cell_line == "vasculogenesis" else 3
+    # Determine dimensionality based on cell line
+    ndim = 2 if cell_line in _2D_CELL_LINES else 3
 
     return torch_em.default_segmentation_dataset(
         raw_paths=h5_paths,
@@ -370,18 +450,18 @@ def get_mucic_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the MUCIC dataloader for 3D cell segmentation.
+    """Get the MUCIC dataloader for cell segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
-        cell_line: The cell line to use. One of 'colon_tissue', 'hl60', 'granulocytes', or 'vasculogenesis'.
+        cell_line: The cell line to use. One of 'colon_tissue', 'hl60', 'granulocytes', 'vasculogenesis', or 'mda231'.
         variant: The dataset variant(s).
             For 'colon_tissue' and 'granulocytes': 'low' or 'high' (noise levels).
             For 'hl60': combination of noise ('low', 'high') and clustering ('c00', 'c25', 'c50', 'c75'),
             e.g. 'low_c00'.
-            For 'vasculogenesis': 'default'.
+            For 'vasculogenesis' and 'mda231': 'default'.
             If None, uses all variants for the selected cell line.
         segmentation_type: The type of segmentation labels to use.
             One of 'instances' or 'semantic' (binary mask).

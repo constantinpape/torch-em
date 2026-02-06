@@ -68,8 +68,24 @@ def check_mucic_vasculogenesis():
     check_loader(loader, 8, instance_labels=True)
 
 
+def check_mucic_mda231():
+    from util import ROOT
+
+    loader = get_mucic_loader(
+        path=os.path.join(ROOT, "mucic"),
+        batch_size=1,
+        patch_shape=(16, 256, 256),
+        cell_line="mda231",
+        variant="default",
+        download=True,
+    )
+
+    check_loader(loader, 8, instance_labels=True)
+
+
 if __name__ == "__main__":
     # check_mucic_colon_tissue()
     # check_mucic_hl60()
     # check_mucic_granulocytes()
-    check_mucic_vasculogenesis()
+    # check_mucic_vasculogenesis()
+    check_mucic_mda231()
