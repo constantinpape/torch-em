@@ -102,6 +102,12 @@ def _create_h5_data(path, split):
         raw = imageio.imread(raw_path)
         seg = imageio.imread(seg_path)
 
+        # Crop to the minimum shape along each axis to handle off-by-one mismatches
+        # (weird one-pixel interpolation shifts across one axis)
+        min_shape = tuple(min(r, s) for r, s in zip(raw.shape, seg.shape))
+        raw = raw[:min_shape[0], :min_shape[1], :min_shape[2]]
+        seg = seg[:min_shape[0], :min_shape[1], :min_shape[2]]
+
         with h5py.File(h5_path, "w") as f:
             f.create_dataset("raw", data=raw, compression="gzip")
             f.create_dataset("labels", data=seg.astype("int64"), compression="gzip")

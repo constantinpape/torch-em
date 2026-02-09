@@ -14,7 +14,8 @@ def check_nuc_morph():
     loader = get_nuc_morph_loader(
         path=os.path.join(ROOT, "nuc_morph"),
         batch_size=1,
-        patch_shape=(32, 128, 128),
+        # patch_shape=(32, 128, 128),
+        patch_shape=None,
         split="test",
         download=True,
     )
