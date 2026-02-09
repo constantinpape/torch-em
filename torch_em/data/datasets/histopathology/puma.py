@@ -95,7 +95,6 @@ def _create_split_csv(path, split):
 
 
 def _preprocess_inputs(path, annotations, split):
-    import ast
     import h5py
     try:
         import geopandas as gpd
@@ -131,9 +130,7 @@ def _preprocess_inputs(path, annotations, split):
         transform = from_bounds(minx, miny, maxx, maxy, width, height)
 
         # Extract class ids mapped to each class name.
-        class_ids = [
-            CLASS_DICT[nuc_class["name"]] for nuc_class in gdf["classification"].apply(lambda x: ast.literal_eval(x))
-        ]
+        class_ids = [CLASS_DICT[nuc_class["name"]] for nuc_class in gdf["classification"]]
         semantic_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, class_ids))
         semantic_mask = rasterize(
             semantic_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.uint8
