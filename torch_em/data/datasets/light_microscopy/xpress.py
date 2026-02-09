@@ -26,68 +26,46 @@ def _default_chunks(shape):
     return tuple(min(64, int(s)) for s in shape)
 
 
-def _copy_chunked(src, dst, chunks):
-    shape = src.shape
-    if len(shape) < 3:
-        raise ValueError(f"Expected at least 3D data, got shape={shape}.")
-
-    z_chunk = chunks[0]
-    for z in range(0, shape[0], z_chunk):
-        z_slice = slice(z, min(z + z_chunk, shape[0]))
-        dst[(z_slice, *[slice(None)] * (len(shape) - 1))] = src[(z_slice, *[slice(None)] * (len(shape) - 1))]
-
 
 def _merge_to_single_h5(raw_path: Union[os.PathLike, str], label_path: Union[os.PathLike, str], out_path: str):
     if os.path.exists(out_path):
         return out_path
 
     import h5py
-    from skimage.transform import resize
+    import numpy as np
 
     with h5py.File(raw_path, "r") as fr, h5py.File(label_path, "r") as fl, h5py.File(out_path, "w") as fo:
-        raw = fr["volumes/raw"]
-        labels = fl["volumes/labels"]
+        raw_ds_in = fr["volumes/raw"]
+        labels_ds_in = fl["volumes/labels"]
 
-        raw_chunks = raw.chunks if raw.chunks is not None else _default_chunks(raw.shape)
+        raw_resolution = np.array(raw_ds_in.attrs.get("resolution", [1, 1, 1]))
+        label_offset = np.array(labels_ds_in.attrs.get("offset", [0, 0, 0]))
 
-        if labels.shape != raw.shape:
-            # Nearest-neighbor upsampling for labels to match raw shape.
-            labels_arr = resize(
-                labels[...],
-                raw.shape,
-                order=0,
-                preserve_range=True,
-                anti_aliasing=False,
-            ).astype(labels.dtype, copy=False)
-            label_shape = labels_arr.shape
-        else:
-            labels_arr = None
-            label_shape = labels.shape
+        # Convert the label offset from world coordinates to voxel coordinates in the raw volume.
+        voxel_offset = (label_offset / raw_resolution).astype(int)
+        labels_arr = labels_ds_in[...]
 
-        label_chunks = labels.chunks if labels.chunks is not None else _default_chunks(label_shape)
+        # Crop the raw with extra context (128 px padding per side) around the labeled region.
+        context_pad = 128
+        raw_shape = np.array(raw_ds_in.shape)
+        starts = np.clip(voxel_offset - context_pad, 0, raw_shape)
+        ends = np.clip(voxel_offset + np.array(labels_arr.shape) + context_pad, 0, raw_shape)
 
-        raw_ds = fo.create_dataset(
-            "raw",
-            shape=raw.shape,
-            dtype=raw.dtype,
-            chunks=raw_chunks,
-            compression="gzip",
-            compression_opts=4,
+        raw_slices = tuple(slice(int(s), int(e)) for s, e in zip(starts, ends))
+        raw_arr = raw_ds_in[raw_slices]
+
+        # Place labels inside a zero-padded volume matching the (padded) raw crop.
+        label_insert_offset = voxel_offset - starts
+        padded_labels = np.zeros(raw_arr.shape, dtype="int64")
+        label_slices = tuple(
+            slice(int(o), int(o) + s) for o, s in zip(label_insert_offset, labels_arr.shape)
         )
-        label_ds = fo.create_dataset(
-            "labels",
-            shape=label_shape,
-            dtype=labels.dtype,
-            chunks=label_chunks,
-            compression="gzip",
-            compression_opts=4,
-        )
+        padded_labels[label_slices] = labels_arr
 
-        _copy_chunked(raw, raw_ds, raw_chunks)
-        if labels_arr is None:
-            _copy_chunked(labels, label_ds, label_chunks)
-        else:
-            label_ds[...] = labels_arr
+        chunks = _default_chunks(raw_arr.shape)
+
+        fo.create_dataset("raw", data=raw_arr, chunks=chunks, compression="gzip", compression_opts=4)
+        fo.create_dataset("labels", data=padded_labels, chunks=chunks, compression="gzip", compression_opts=4)
 
     return out_path
 

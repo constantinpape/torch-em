@@ -1,6 +1,7 @@
 import os
 import sys
 
+from torch_em.data import MinInstanceSampler
 from torch_em.util.debug import check_loader
 from torch_em.data.datasets import get_xpress_loader
 
@@ -16,6 +17,7 @@ def check_xpress():
         batch_size=1,
         patch_shape=(256, 256, 256),
         download=True,
+        sampler=MinInstanceSampler(),
     )
 
     check_loader(loader, 4, instance_labels=True)
