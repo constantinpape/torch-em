@@ -29,18 +29,18 @@ from .. import util
 
 
 URL = {
-    "data": "https://zenodo.org/records/13859989/files/01_training_dataset_tif_ROIs.zip",
+    "data": "https://zenodo.org/records/15050523/files/01_training_dataset_tif_ROIs.zip",
     "annotations": {
-        "nuclei": "https://zenodo.org/records/13859989/files/01_training_dataset_geojson_nuclei.zip",
-        "tissue": "https://zenodo.org/records/13859989/files/01_training_dataset_geojson_tissue.zip",
+        "nuclei": "https://zenodo.org/records/15050523/files/01_training_dataset_geojson_nuclei.zip",
+        "tissue": "https://zenodo.org/records/15050523/files/01_training_dataset_geojson_tissue.zip",
     }
 }
 
 CHECKSUM = {
-    "data": "a69fd0d8443da29233df103ece5674fb50e8f0cc4b448dc60508cfe883881993",
+    "data": "af48b879f8ff7e74b84a7114924881606f13f108aa0f9bcc21d3593b717ee022",
     "annotations": {
-        "nuclei": "17f77ca83fb8fccd918ce723a7b3e5cb5a1730b342ad486628f8885d14a1acbd",
-        "tissue": "3b7d6697dd728e3481df0b779ad1e76962f36fc8c871c50edd9aa56ec44c4cc9",
+        "nuclei": "eda271225900d6de0759e0281f3731a570e09f2adab58bd36425b9d2dfad91a0",
+        "tissue": "a",
     }
 }
 
@@ -58,7 +58,7 @@ CLASS_DICT = {
 }
 
 
-def _create_split_csv(path, split):
+def _create_split_csv(path, annotations, split):
     "This creates a split saved to a .csv file in the dataset directory"
     csv_path = os.path.join(path, "puma_split.csv")
 
@@ -69,10 +69,12 @@ def _create_split_csv(path, split):
     else:
         print(f"Creating a new split file at '{csv_path}'.")
         metastatic_ids = [
-            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*metastatic*"))
+            os.path.basename(image).split(".")[0]
+            for image in glob(os.path.join(path, "data", f"01_training_dataset_geojson_{annotations}", "*metastatic*"))
         ]
         primary_ids = [
-            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*primary*"))
+            os.path.basename(image).split(".")[0]
+            for image in glob(os.path.join(path, "data", f"01_training_dataset_geojson_{annotations}", "*primary*"))
         ]
 
         # Create random splits per dataset.
@@ -108,12 +110,14 @@ def _preprocess_inputs(path, annotations, split):
     except ModuleNotFoundError:
         raise RuntimeError("Please install 'rasterio': 'conda install -c conda-forge rasterio'.")
 
-    annotation_paths = glob(os.path.join(path, "annotations", annotations, "*.geojson"))
-    roi_dir = os.path.join(path, "data")
+    annotation_paths = glob(
+        os.path.join(path, "annotations", annotations, f"01_training_dataset_geojson_{annotations}", "*.geojson")
+    )
+    roi_dir = os.path.join(path, "data", f"01_training_dataset_geojson_{annotations}")
     preprocessed_dir = os.path.join(path, split, "preprocessed")
     os.makedirs(preprocessed_dir, exist_ok=True)
 
-    split_list = _create_split_csv(path, split)
+    split_list = _create_split_csv(path, annotations, split)
     print(f"The data split '{split}' has '{len(split_list)}' samples!")
 
     for ann_path in tqdm(annotation_paths, desc=f"Preprocessing '{annotations}'"):
@@ -122,6 +126,8 @@ def _preprocess_inputs(path, annotations, split):
 
         if os.path.basename(image_path).split(".")[0] not in split_list:
             continue
+
+        assert os.path.exists(image_path)
 
         volume_path = os.path.join(preprocessed_dir, Path(fname).with_suffix(".h5"))
         gdf = gpd.read_file(ann_path)
