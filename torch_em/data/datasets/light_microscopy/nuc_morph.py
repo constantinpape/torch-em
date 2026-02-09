@@ -1,6 +1,9 @@
 """The NucMorph dataset contains 3D fluorescence microscopy images of hiPSC nuclei
 with instance segmentation annotations.
 
+NOTE: The annotations are super strange and bad. Only the high-resolution regions
+around the middle slice are marked well. Otherwise, the annotations are like bad.
+
 The dataset provides 410 paired 100x 3D images and watershed-based nuclear instance
 segmentation masks from human induced pluripotent stem cells (hiPSCs). It includes
 train (372), validation (20), and test (18) splits.
