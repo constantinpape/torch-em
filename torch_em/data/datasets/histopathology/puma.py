@@ -44,7 +44,7 @@ CHECKSUM = {
     }
 }
 
-CLASS_DICT = {
+NUCLEI_CLASS_DICT = {
     "nuclei_stroma": 1,
     "nuclei_tumor": 2,
     "nuclei_plasma_cell": 3,
@@ -55,6 +55,20 @@ CLASS_DICT = {
     "nuclei_endothelium": 8,
     "nuclei_epithelium": 9,
     "nuclei_apoptosis": 10,
+}
+
+TISSUE_CLASS_DICT = {
+    "tissue_stroma": 1,
+    "tissue_tumor": 2,
+    "tissue_epidermis": 3,
+    "tissue_blood_vessel": 4,
+    "tissue_necrosis": 5,
+    "tissue_white_background": 6,
+}
+
+CLASS_DICT = {
+    "nuclei": NUCLEI_CLASS_DICT,
+    "tissue": TISSUE_CLASS_DICT,
 }
 
 
@@ -97,7 +111,6 @@ def _create_split_csv(path, annotations, split):
 
 
 def _preprocess_inputs(path, annotations, split):
-    import ast
     import h5py
     try:
         import geopandas as gpd
@@ -137,9 +150,8 @@ def _preprocess_inputs(path, annotations, split):
         transform = from_bounds(minx, miny, maxx, maxy, width, height)
 
         # Extract class ids mapped to each class name.
-        class_ids = [
-            CLASS_DICT[nuc_class["name"]] for nuc_class in gdf["classification"].apply(lambda x: ast.literal_eval(x))
-        ]
+        class_dict = CLASS_DICT[annotations]
+        class_ids = [class_dict[cls_entry["name"]] for cls_entry in gdf["classification"]]
         semantic_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, class_ids))
         semantic_mask = rasterize(
             semantic_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.uint8
@@ -172,6 +184,13 @@ def _preprocess_inputs(path, annotations, split):
                 f.create_dataset(f"labels/semantic/{annotations}", data=semantic_mask, compression="gzip")
 
 
+def _annotations_are_stored(data_dir, annotations):
+    import h5py
+    volume_path = glob(os.path.join(data_dir, "preprocessed", "*.h5"))[0]
+    f = h5py.File(volume_path, "r")
+    return f"labels/instances/{annotations}" in f.keys()
+
+
 def get_puma_data(
     path: Union[os.PathLike, str],
     split: Literal["train", "val", "test"],
@@ -193,7 +212,7 @@ def get_puma_data(
         raise ValueError(f"'{annotations}' is not a valid annotation for the data.")
 
     data_dir = os.path.join(path, split)
-    if os.path.exists(data_dir):
+    if os.path.exists(data_dir) and _annotations_are_stored(data_dir, annotations):
         return data_dir
 
     os.makedirs(path, exist_ok=True)
