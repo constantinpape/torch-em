@@ -40,6 +40,7 @@ from .neurips_cell_seg import (
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
 )
 from .nis3d import get_nis3d_loader, get_nis3d_dataset
+from .nuc_morph import get_nuc_morph_loader, get_nuc_morph_dataset
 from .oocyteseg import get_oocyteseg_loader, get_oocyteseg_dataset
 from .omnipose import get_omnipose_loader, get_omnipose_dataset
 from .orgaextractor import get_orgaextractor_loader, get_orgaextractor_dataset
