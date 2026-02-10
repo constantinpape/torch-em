@@ -43,14 +43,19 @@ def get_cvz_fluo_data(path: Union[os.PathLike, str], download: bool = False):
 
 
 def _preprocess_labels(label_paths):
-    neu_label_paths = []
-    for lpath in tqdm(label_paths, desc="Preprocessing labels"):
+    neu_label_paths, to_process = [], []
+
+    # First, make simple checks to avoid redundant progress bar runs.
+    for lpath in label_paths:
         neu_lpath = lpath.replace(".png", ".tif")
         neu_label_paths.append(neu_lpath)
-        if os.path.exists(neu_lpath):
-            continue
 
-        if not os.path.exists(lpath):  # HACK: some paths have weird spacing nomenclature.
+        if not os.path.exists(neu_lpath):
+            to_process.append((lpath, neu_lpath))
+
+    # Next, process valid inputs.
+    for lpath, neu_lpath in tqdm(to_process, desc="Preprocessing labels"):
+        if not os.path.exists(lpath):  # HACK: Some paths have weird spacing nomenclature.
             lpath = Path(lpath).parent / rf" {os.path.basename(lpath)}"
 
         label = imageio.imread(lpath)
