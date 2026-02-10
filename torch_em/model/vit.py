@@ -110,6 +110,44 @@ class ViT_Sam(ImageEncoderViT):
         return x, list_from_encoder[:3]
 
 
+class ViT_CellposeSAM(ViT_Sam):
+    """Vision Transformer derived from the CellposeSAM Codebase (https://doi.org/10.1038/s41592-025-02595-x).
+
+    CellposeSAM is built on SAM's ViT architecture with modifications:
+    - Smaller patch size (default 8 instead of 16) for finer spatial resolution.
+    - All transformer blocks use global attention (no windowed attention).
+
+    Based on: https://github.com/MouseLand/cellpose/blob/main/cellpose/vit_sam.py
+
+    Args:
+        in_chans: The number of input channels.
+        embed_dim: The embedding dimension, corresponding to the number of output channels of the vision transformer.
+        chunks_for_projection: Indices at which to extract intermediate features for skip connections.
+        kwargs: Keyword arguments for the image encoder base class.
+    """
+    def __init__(
+        self,
+        in_chans: int = 3,
+        embed_dim: int = 768,
+        chunks_for_projection: Tuple[int, ...] = (2, 5, 8, 11),
+        **kwargs,
+    ) -> None:
+        depth = kwargs.get("depth", 12)
+
+        # CellposeSAM uses global attention in ALL transformer blocks.
+        global_attn_indexes = list(range(depth))
+
+        super().__init__(
+            in_chans=in_chans,
+            embed_dim=embed_dim,
+            global_attn_indexes=global_attn_indexes,
+            **kwargs,
+        )
+
+        # Override: extract features at specific evenly-spaced points, not at all blocks.
+        self.chunks_for_projection = list(chunks_for_projection)
+
+
 class ViT_MAE(VisionTransformer):
     """Vision Transformer derived from the Masked Auto Encoder Codebase (https://arxiv.org/abs/2111.06377).
 
@@ -695,7 +733,8 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
     """Get vision transformer encoder.
 
     Args:
-        backbone: The name of the vision transformer implementation. One of "sam" / "mae" / "scalemae".
+        backbone: The name of the vision transformer implementation.
+            One of "sam" / "cellpose_sam" / "sam2" / "sam3" / "mae" / "scalemae" / "dinov2" / "dinov3".
         model: The name of the model. One of "vit_b", "vit_l" or "vit_h".
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
         kwargs: Additional kwargs which can be expected by the vision transformer,
@@ -731,6 +770,36 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             )
         else:
             raise ValueError(f"'{model}' is not supported by SAM. Currently, 'vit_b', 'vit_l', 'vit_h' are supported.")
+
+    elif backbone == "cellpose_sam":
+        if model == "vit_b":
+            encoder = ViT_CellposeSAM(
+                depth=12, embed_dim=768, img_size=img_size, mlp_ratio=4,
+                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+                num_heads=12, patch_size=8, qkv_bias=True, use_rel_pos=True,
+                chunks_for_projection=[2, 5, 8, 11],
+                window_size=0, out_chans=256,
+            )
+        elif model == "vit_l":
+            encoder = ViT_CellposeSAM(
+                depth=24, embed_dim=1024, img_size=img_size, mlp_ratio=4,
+                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+                num_heads=16, patch_size=8, qkv_bias=True, use_rel_pos=True,
+                chunks_for_projection=[5, 11, 17, 23],
+                window_size=0, out_chans=256,
+            )
+        elif model == "vit_h":
+            encoder = ViT_CellposeSAM(
+                depth=32, embed_dim=1280, img_size=img_size, mlp_ratio=4,
+                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+                num_heads=16, patch_size=8, qkv_bias=True, use_rel_pos=True,
+                chunks_for_projection=[7, 15, 23, 31],
+                window_size=0, out_chans=256,
+            )
+        else:
+            raise ValueError(
+                f"'{model}' is not supported by CellposeSAM. Currently, 'vit_b', 'vit_l', 'vit_h' are supported."
+            )
 
     elif backbone == "sam2":
         if model == "hvit_t":
@@ -905,8 +974,8 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
 
     else:
         raise ValueError(
-            "The 'UNETR' supported backbones are 'sam', 'sam2', 'sam3', 'mae', 'scalemae', 'dinov2' or 'dinov3'. "
-            "Please choose one of them."
+            "The 'UNETR' supported backbones are 'sam', 'cellpose_sam', 'sam2', 'sam3', "
+            "'mae', 'scalemae', 'dinov2' or 'dinov3'. Please choose one of them."
         )
 
     return encoder

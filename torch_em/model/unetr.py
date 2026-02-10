@@ -26,7 +26,7 @@ except ImportError:
 
 
 #
-# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / SAM2 / SAM3 / DINOv2 / DINOv3 / MAE / ScaleMAE) + UNet Decoder from `torch_em`]  # noqa
+# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / CellposeSAM / SAM2 / SAM3 / DINOv2 / DINOv3 / MAE / ScaleMAE) + UNet Decoder from `torch_em`]  # noqa
 #
 
 
@@ -36,7 +36,7 @@ class UNETRBase(nn.Module):
     Args:
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
         backbone: The name of the vision transformer implementation.
-            One of "sam", "sam2", "sam3, "mae", "scalemae", "dinov2", "dinov3" (see all combinations below)
+            One of "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3" (see all combinations below)
         encoder: The vision transformer. Can either be a name, such as "vit_b"
             (see all combinations for this below) or a torch module.
         decoder: The convolutional decoder.
@@ -67,6 +67,9 @@ class UNETRBase(nn.Module):
             - 'sam2' x 'hvit_b'
             - 'sam2' x 'hvit_l'
             - 'sam3' x 'vit_pe'
+            - 'cellpose_sam' x 'vit_b'
+            - 'cellpose_sam' x 'vit_l'
+            - 'cellpose_sam' x 'vit_h'
 
         DINO_family_models:
             - 'dinov2' x 'vit_s'
@@ -96,7 +99,7 @@ class UNETRBase(nn.Module):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -163,6 +166,40 @@ class UNETRBase(nn.Module):
                 except Exception:
                     # Try loading the encoder state directly from a checkpoint.
                     encoder_state = torch.load(checkpoint, weights_only=False)
+
+            elif backbone == "cellpose_sam" and isinstance(encoder, str):
+                encoder_state = torch.load(checkpoint, map_location="cpu", weights_only=False)
+                # Handle DataParallel/DistributedDataParallel prefix.
+                if any(k.startswith("module.") for k in encoder_state.keys()):
+                    encoder_state = OrderedDict(
+                        {k[len("module."):]: v for k, v in encoder_state.items()}
+                    )
+                # Extract encoder weights from CellposeSAM checkpoint format (strip 'encoder.' prefix).
+                if any(k.startswith("encoder.") for k in encoder_state.keys()):
+                    encoder_state = OrderedDict(
+                        {k[len("encoder."):]: v for k, v in encoder_state.items() if k.startswith("encoder.")}
+                    )
+                # Resize mismatched parameters (e.g. relative position biases, position embeddings)
+                # to match the encoder's expected sizes.
+                current_state = self.encoder.state_dict()
+                for k in list(encoder_state.keys()):
+                    if k not in current_state:
+                        continue
+                    if encoder_state[k].shape != current_state[k].shape:
+                        if "rel_pos" in k:
+                            encoder_state[k] = F.interpolate(
+                                encoder_state[k].float().unsqueeze(0).permute(0, 2, 1),
+                                size=current_state[k].shape[0],
+                                mode="linear",
+                                align_corners=False,
+                            ).permute(0, 2, 1).squeeze(0)
+                        elif "pos_embed" in k:
+                            encoder_state[k] = F.interpolate(
+                                encoder_state[k].float().permute(0, 3, 1, 2),
+                                size=(current_state[k].shape[1], current_state[k].shape[2]),
+                                mode="bicubic",
+                                align_corners=False,
+                            ).permute(0, 2, 3, 1)
 
             elif backbone == "sam2" and isinstance(encoder, str):
                 # If we have a SAM2 encoder, then we first try to load the full SAM2 Model.
@@ -371,7 +408,7 @@ class UNETR(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -567,7 +604,7 @@ class UNETR3D(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "hvit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
