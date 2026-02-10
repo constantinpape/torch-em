@@ -53,13 +53,13 @@ def _preprocess_labels(label_paths):
         if not os.path.exists(neu_lpath):
             to_process.append((lpath, neu_lpath))
 
-    # Next, process valid inputs.
-    for lpath, neu_lpath in tqdm(to_process, desc="Preprocessing labels"):
-        if not os.path.exists(lpath):  # HACK: Some paths have weird spacing nomenclature.
-            lpath = Path(lpath).parent / rf" {os.path.basename(lpath)}"
+    if to_process:  # Next, process valid inputs.
+        for lpath, neu_lpath in tqdm(to_process, desc="Preprocessing labels"):
+            if not os.path.exists(lpath):  # HACK: Some paths have weird spacing nomenclature.
+                lpath = Path(lpath).parent / rf" {os.path.basename(lpath)}"
 
-        label = imageio.imread(lpath)
-        imageio.imwrite(neu_lpath, connected_components(label).astype(label.dtype), compression="zlib")
+            label = imageio.imread(lpath)
+            imageio.imwrite(neu_lpath, connected_components(label).astype(label.dtype), compression="zlib")
 
     return neu_label_paths
 
