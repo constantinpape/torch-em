@@ -45,6 +45,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
         with_label_channels: Whether the label data has channels.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
         z_ext: Extra bounding box for loading the data across z.
+        pre_label_transform: Transformed applied to the label data of a chosen random sample,
+            before applying the sample validity via the `sampler`.
     """
     max_sampling_attempts = 500
     """The maximal number of sampling attempts, for loading a sample via `__getitem__`.
@@ -80,6 +82,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         with_label_channels: bool = False,
         with_padding: bool = True,
         z_ext: Optional[int] = None,
+        pre_label_transform: Optional[Callable] = None,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -121,6 +124,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.transform = transform
         self.sampler = sampler
         self.with_padding = with_padding
+        self.pre_label_transform = pre_label_transform
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -172,6 +176,12 @@ class SegmentationDataset(torch.utils.data.Dataset):
         bb_raw = (slice(None),) + bb if self._with_channels else bb
         bb_labels = (slice(None),) + bb if self._with_label_channels else bb
         raw, labels = self.raw[bb_raw], self.labels[bb_labels]
+
+        # Additional label transform on top to make sampler consider expected labels
+        # (eg. run connected components on disconnected semantic labels)
+        if self.pre_label_transform is not None:
+            labels = self.pre_label_transform(labels)
+
         return raw, labels
 
     def _get_sample(self, index):

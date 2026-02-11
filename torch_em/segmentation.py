@@ -241,6 +241,7 @@ def default_segmentation_loader(
     verify_paths: bool = True,
     with_padding: bool = True,
     z_ext: Optional[int] = None,
+    pre_label_transform: Optional[Callable] = None,
     **loader_kwargs,
 ) -> torch.utils.data.DataLoader:
     """Get data loader for training a segmentation network.
@@ -281,6 +282,8 @@ def default_segmentation_loader(
         verify_paths: Whether to verify all paths before creating the dataset.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
         z_ext: Extra bounding box for loading the data across z.
+        pre_label_transform: Transformed applied to the label data of a chosen random sample,
+            before applying the sample validity via the `sampler`.
         loader_kwargs: Keyword arguments for `torch.utils.data.DataLoder`.
 
     Returns:
@@ -308,6 +311,7 @@ def default_segmentation_loader(
         with_padding=with_padding,
         z_ext=z_ext,
         verify_paths=verify_paths,
+        pre_label_transform=pre_label_transform,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -334,6 +338,7 @@ def default_segmentation_dataset(
     verify_paths: bool = True,
     with_padding: bool = True,
     z_ext: Optional[int] = None,
+    pre_label_transform: Optional[Callable] = None,
 ) -> torch.utils.data.Dataset:
     """Get data set for training a segmentation network.
 
@@ -372,7 +377,8 @@ def default_segmentation_dataset(
         verify_paths: Whether to verify all paths before creating the dataset.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
         z_ext: Extra bounding box for loading the data across z.
-        loader_kwargs: Keyword arguments for `torch.utils.data.DataLoder`.
+        pre_label_transform: Transformed applied to the label data of a chosen random sample,
+            before applying the sample validity via the `sampler`.
 
     Returns:
         The torch dataset.
@@ -414,6 +420,7 @@ def default_segmentation_dataset(
             with_label_channels=with_label_channels,
             with_padding=with_padding,
             z_ext=z_ext,
+            pre_label_transform=pre_label_transform,
         )
 
     else:
@@ -434,6 +441,7 @@ def default_segmentation_dataset(
             label_dtype=label_dtype,
             with_padding=with_padding,
             with_channels=with_channels,
+            pre_label_transform=pre_label_transform,
         )
 
     return ds
