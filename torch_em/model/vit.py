@@ -110,42 +110,90 @@ class ViT_Sam(ImageEncoderViT):
         return x, list_from_encoder[:3]
 
 
-class ViT_CellposeSAM(ViT_Sam):
+class ViT_CellposeSAM(nn.Module):
     """Vision Transformer derived from the CellposeSAM Codebase (https://doi.org/10.1038/s41592-025-02595-x).
 
-    CellposeSAM is built on SAM's ViT architecture with modifications:
-    - Smaller patch size (default 8 instead of 16) for finer spatial resolution.
-    - All transformer blocks use global attention (no windowed attention).
+    This replicates CellposeSAM's actual initialization: instantiate SAM's ``ImageEncoderViT`` via
+    ``sam_model_registry``, then modify the patch embedding, position embeddings, and set global attention.
+    This preserves SAM's original relative position bias sizes, enabling direct checkpoint loading
+    without any interpolation.
 
     Based on: https://github.com/MouseLand/cellpose/blob/main/cellpose/vit_sam.py
 
+    NOTE: The pretrained CellposeSAM model uses ``vit_l`` exclusively.
+
     Args:
-        in_chans: The number of input channels.
-        embed_dim: The embedding dimension, corresponding to the number of output channels of the vision transformer.
-        chunks_for_projection: Indices at which to extract intermediate features for skip connections.
-        kwargs: Keyword arguments for the image encoder base class.
+        ps: The patch size (default for CellposeSAM is 8).
+        bsize: The input image size (default for CellposeSAM is 256).
     """
-    def __init__(
-        self,
-        in_chans: int = 3,
-        embed_dim: int = 768,
-        chunks_for_projection: Tuple[int, ...] = (2, 5, 8, 11),
-        **kwargs,
-    ) -> None:
-        depth = kwargs.get("depth", 12)
+    def __init__(self, ps: int = 8, bsize: int = 256) -> None:
+        super().__init__()
 
-        # CellposeSAM uses global attention in ALL transformer blocks.
-        global_attn_indexes = list(range(depth))
+        if not _sam_import_success:
+            raise RuntimeError(
+                "The vision transformer backend can only be initialized if segment anything is installed. "
+                "Please install segment anything from https://github.com/facebookresearch/segment-anything "
+                "and then rerun your code."
+            )
 
-        super().__init__(
-            in_chans=in_chans,
-            embed_dim=embed_dim,
-            global_attn_indexes=global_attn_indexes,
-            **kwargs,
-        )
+        from segment_anything import sam_model_registry
 
-        # Override: extract features at specific evenly-spaced points, not at all blocks.
-        self.chunks_for_projection = list(chunks_for_projection)
+        # Creates the SAM vit_l encoder and applies CellposeSAM's modifications (same as cellpose.vit_sam.Transformer).
+        encoder = sam_model_registry["vit_l"](None).image_encoder
+
+        w = encoder.patch_embed.proj.weight.detach()
+        nchan = w.shape[0]
+
+        # CellPoseSAM changes the patch size from 16 to 'ps'.
+        encoder.patch_embed.proj = nn.Conv2d(3, nchan, stride=ps, kernel_size=ps)
+        encoder.patch_embed.proj.weight.data = w[:, :, ::16 // ps, ::16 // ps]
+
+        # Next, they subsample position embeddings for the new patch size and input resolution.
+        ds = (1024 // 16) // (bsize // ps)
+        encoder.pos_embed = nn.Parameter(encoder.pos_embed[:, ::ds, ::ds], requires_grad=True)
+
+        # Finally, they set all blocks to global attention.
+        for blk in encoder.blocks:
+            blk.window_size = 0
+
+        # Store encoder submodules directly ('state_dict' keys match CellposeSAM after prefix stripping).
+        self.patch_embed = encoder.patch_embed
+        self.pos_embed = encoder.pos_embed
+        self.blocks = encoder.blocks
+        self.neck = encoder.neck
+
+        # Additional attributes expected by UNETR.
+        self.embed_dim = nchan
+        self.img_size = bsize
+        self.in_chans = 3
+
+        # Feature extraction at evenly-spaced depths.
+        depth = len(self.blocks)
+        _chunks = depth // 4
+        self.chunks_for_projection = [_chunks - 1, 2 * _chunks - 1, 3 * _chunks - 1, 4 * _chunks - 1]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the vision transformer to input data.
+
+        Args:
+            x: The input data.
+
+        Returns:
+            The vision transformer output.
+        """
+        x = self.patch_embed(x)
+        if self.pos_embed is not None:
+            x = x + self.pos_embed
+
+        list_from_encoder = []
+        for i, blk in enumerate(self.blocks):
+            x = blk(x)
+            if i in self.chunks_for_projection:
+                list_from_encoder.append(x)
+
+        x = x.permute(0, 3, 1, 2)
+        list_from_encoder = [e.permute(0, 3, 1, 2) for e in list_from_encoder]
+        return x, list_from_encoder[:3]
 
 
 class ViT_MAE(VisionTransformer):
@@ -772,34 +820,9 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             raise ValueError(f"'{model}' is not supported by SAM. Currently, 'vit_b', 'vit_l', 'vit_h' are supported.")
 
     elif backbone == "cellpose_sam":
-        if model == "vit_b":
-            encoder = ViT_CellposeSAM(
-                depth=12, embed_dim=768, img_size=img_size, mlp_ratio=4,
-                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
-                num_heads=12, patch_size=8, qkv_bias=True, use_rel_pos=True,
-                chunks_for_projection=[2, 5, 8, 11],
-                window_size=0, out_chans=256,
-            )
-        elif model == "vit_l":
-            encoder = ViT_CellposeSAM(
-                depth=24, embed_dim=1024, img_size=img_size, mlp_ratio=4,
-                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
-                num_heads=16, patch_size=8, qkv_bias=True, use_rel_pos=True,
-                chunks_for_projection=[5, 11, 17, 23],
-                window_size=0, out_chans=256,
-            )
-        elif model == "vit_h":
-            encoder = ViT_CellposeSAM(
-                depth=32, embed_dim=1280, img_size=img_size, mlp_ratio=4,
-                norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
-                num_heads=16, patch_size=8, qkv_bias=True, use_rel_pos=True,
-                chunks_for_projection=[7, 15, 23, 31],
-                window_size=0, out_chans=256,
-            )
-        else:
-            raise ValueError(
-                f"'{model}' is not supported by CellposeSAM. Currently, 'vit_b', 'vit_l', 'vit_h' are supported."
-            )
+        if model != "vit_l":
+            raise ValueError(f"'{model}' is not supported by CellposeSAM. Only 'vit_l' is supported.")
+        encoder = ViT_CellposeSAM(ps=8, bsize=img_size)
 
     elif backbone == "sam2":
         if model == "hvit_t":
