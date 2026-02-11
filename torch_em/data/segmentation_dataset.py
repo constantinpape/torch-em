@@ -179,8 +179,9 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         # Additional label transform on top to make sampler consider expected labels
         # (eg. run connected components on disconnected semantic labels)
-        if self.pre_label_transform is not None:
-            labels = self.pre_label_transform(labels)
+        pre_label_transform = getattr(self, "pre_label_transform", None)
+        if pre_label_transform is not None:
+            labels = pre_label_transform(labels)
 
         return raw, labels
 
