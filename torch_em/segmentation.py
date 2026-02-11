@@ -144,6 +144,7 @@ def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, r
     if isinstance(raw_paths[0], (torch.Tensor, np.ndarray)):
         assert raw_key is None and label_key is None
         assert roi is None
+        kwargs.pop("pre_label_transform")  # NOTE: The 'TensorDataset' currently does not support samplers.
         return TensorDataset(raw_paths, label_paths, with_channels=with_channels, **kwargs)
 
     def _get_paths(rpath, rkey, lpath, lkey, this_roi):
