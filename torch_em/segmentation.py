@@ -283,7 +283,7 @@ def default_segmentation_loader(
         verify_paths: Whether to verify all paths before creating the dataset.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
         z_ext: Extra bounding box for loading the data across z.
-        pre_label_transform: Transformed applied to the label data of a chosen random sample,
+        pre_label_transform: Transformation applied to the label data of a chosen random sample,
             before applying the sample validity via the `sampler`.
         loader_kwargs: Keyword arguments for `torch.utils.data.DataLoder`.
 
