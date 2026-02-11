@@ -35,7 +35,7 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         full_check: Whether to check that the input data is valid for all image paths.
             This will ensure that the data is valid, but will take longer for creating the dataset.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
-        pre_label_transform: Transformed applied to the label data of a chosen random sample,
+        pre_label_transform: Transformation applied to the label data of a chosen random sample,
             before applying the sample validity via the `sampler`.
     """
     max_sampling_attempts = 500
