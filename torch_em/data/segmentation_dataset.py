@@ -45,7 +45,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         with_label_channels: Whether the label data has channels.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
         z_ext: Extra bounding box for loading the data across z.
-        pre_label_transform: Transformed applied to the label data of a chosen random sample,
+        pre_label_transform: Transformation applied to the label data of a chosen random sample,
             before applying the sample validity via the `sampler`.
     """
     max_sampling_attempts = 500
