@@ -6,6 +6,7 @@ from .betaseg import get_betaseg_loader, get_betaseg_dataset
 from .cellmap import get_cellmap_loader, get_cellmap_dataset
 from .cem import get_mitolab_loader
 from .cremi import get_cremi_loader, get_cremi_dataset
+from .densecell import get_densecell_loader, get_densecell_dataset
 from .deepict import get_deepict_actin_loader, get_deepict_actin_dataset
 from .emneuron import get_emneuron_loader, get_emneuron_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
