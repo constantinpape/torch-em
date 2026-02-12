@@ -266,7 +266,7 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
                     return np.pad(
                         array=array.astype(np.int16),
                         pad_width=[
-                            (orig.start - padded.start, padded.stop - orig.stop)
+                            (max(0, orig.start - padded.start), max(0, padded.stop - orig.stop))
                             for orig, padded in zip(slices, slices_padded)
                         ],
                         mode="constant",
