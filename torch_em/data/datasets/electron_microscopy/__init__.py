@@ -26,3 +26,4 @@ from .snemi import get_snemi_loader, get_snemi_dataset
 from .sponge_em import get_sponge_em_loader, get_sponge_em_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
 from .vnc import get_vnc_mito_loader, get_vnc_mito_dataset
+from .waenet import get_waenet_loader, get_waenet_dataset
