@@ -249,7 +249,6 @@ def get_waenet_dataset(
     if label_type not in valid_types:
         raise ValueError(f"Invalid label_type '{label_type}' for dataset {dataset_id}. Choose from {valid_types}.")
 
-    kwargs.pop("label_key", None)
     return torch_em.default_segmentation_dataset(
         raw_paths=all_paths,
         raw_key="raw",

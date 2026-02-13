@@ -16,7 +16,7 @@ def check_waenet():
         dataset_id=1,
         patch_shape=(512, 512),
         batch_size=1,
-        label_key="labels/cytoplasm",
+        label_type="nucleus",
         split="train",
         download=True,
     )
