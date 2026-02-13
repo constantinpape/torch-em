@@ -1,9 +1,6 @@
 """The DenseCell dataset contains annotations for semantic segmentation of densely-packed cellular organelles
 in serial block-face scanning electron microscopy (SBF-SEM) images of platelet tissue.
 
-NOTE: The dataset is inherently with semantic labels, and the instance segmentation
-has been derived on top of it.
-
 The dataset was published in https://doi.org/10.1038/s41598-021-81590-0.
 Please cite this publication if you use the dataset in your research.
 """
@@ -33,42 +30,11 @@ ORGANELLES = {
     6: "dense_core",
 }
 
-EXPECTED_KEY = "labels/instances/dense_core"
-
 SPLIT_FILES = {
     "train": {"images": "train-images.tif", "labels": "train-labels.tif"},
     "val": {"images": "eval-images.tif", "labels": "eval-labels.tif"},
     "test": {"images": "test-images.tif", "labels": "test-labels.tif"},
 }
-
-
-def _compute_instances(binary_mask, core_threshold=0.5):
-    """Compute instance segmentation from a binary mask via distance-transform watershed.
-
-    Seeds are obtained by thresholding the distance transform at a fraction of its
-    maximum and taking connected components of the resulting core regions. This gives
-    one seed per object while correctly splitting touching objects at their necks.
-
-    Args:
-        binary_mask: Binary mask of an organelle.
-        core_threshold: Fraction of the local distance maximum used to threshold
-            the distance map for finding seed regions.
-    """
-    from scipy.ndimage import distance_transform_edt
-    from skimage.measure import label
-    from skimage.segmentation import watershed
-
-    if binary_mask.sum() == 0:
-        return np.zeros_like(binary_mask, dtype=np.int64)
-
-    distance = distance_transform_edt(binary_mask)
-    seeds = label(distance > core_threshold * distance.max())
-
-    if seeds.max() == 0:
-        return np.zeros_like(binary_mask, dtype=np.int64)
-
-    instances = watershed(-distance, markers=seeds, mask=binary_mask)
-    return instances
 
 
 def get_densecell_data(
@@ -90,7 +56,7 @@ def get_densecell_data(
     data_path = os.path.join(path, f"densecell_{split}.h5")
     if os.path.exists(data_path):
         with h5py.File(data_path, "r") as f:
-            if EXPECTED_KEY in f:
+            if "labels/original" in f:
                 return data_path
 
         # Remove old file with outdated structure.
@@ -111,7 +77,7 @@ def get_densecell_data(
         out_path = os.path.join(path, f"densecell_{_split}.h5")
         if os.path.exists(out_path):
             with h5py.File(out_path, "r") as f:
-                if EXPECTED_KEY in f:
+                if "labels/original" in f:
                     continue
 
             os.remove(out_path)
@@ -131,10 +97,7 @@ def get_densecell_data(
                 else:
                     binary_mask = (labels == label_id).astype(np.uint8)
 
-                f.create_dataset(f"labels/semantic/{name}", data=binary_mask, compression="gzip")
-
-                instances = _compute_instances(binary_mask)
-                f.create_dataset(f"labels/instances/{name}", data=instances, compression="gzip")
+                f.create_dataset(f"labels/{name}", data=binary_mask, compression="gzip")
 
     rmtree(platelet_dir)
 
@@ -165,7 +128,6 @@ def get_densecell_dataset(
     split: Literal["train", "val", "test"],
     patch_shape: Tuple[int, int, int],
     label_choice: Optional[str] = None,
-    label_type: Literal["semantic", "instances"] = "semantic",
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -178,9 +140,6 @@ def get_densecell_dataset(
         label_choice: The organelle to segment. Available choices are:
             'cell', 'mitochondrion', 'alpha_granule', 'canalicular_vessel', 'dense_granule', 'dense_core'.
             If None, uses 'original' which contains all semantic labels (0-6).
-        label_type: The type of labels to use. Either 'semantic' for binary masks
-            or 'instances' for watershed-based instance segmentation.
-            Only used when `label_choice` is not None.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -194,8 +153,7 @@ def get_densecell_dataset(
     else:
         valid_choices = list(ORGANELLES.values())
         assert label_choice in valid_choices, f"'{label_choice}' is not valid. Choose from {valid_choices}."
-        assert label_type in ("semantic", "instances")
-        label_key = f"labels/{label_type}/{label_choice}"
+        label_key = f"labels/{label_choice}"
 
     data_path = get_densecell_paths(path, split, download)
 
@@ -215,7 +173,6 @@ def get_densecell_loader(
     patch_shape: Tuple[int, int, int],
     batch_size: int,
     label_choice: Optional[str] = None,
-    label_type: Literal["semantic", "instances"] = "semantic",
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -229,9 +186,6 @@ def get_densecell_loader(
         label_choice: The organelle to segment. Available choices are:
             'cell', 'mitochondrion', 'alpha_granule', 'canalicular_vessel', 'dense_granule', 'dense_core'.
             If None, uses 'original' which contains all semantic labels (0-6).
-        label_type: The type of labels to use. Either 'semantic' for binary masks
-            or 'instances' for watershed-based instance segmentation.
-            Only used when `label_choice` is not None.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -239,7 +193,5 @@ def get_densecell_loader(
         The PyTorch DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_densecell_dataset(
-        path, split, patch_shape, label_choice=label_choice, label_type=label_type, download=download, **ds_kwargs
-    )
+    dataset = get_densecell_dataset(path, split, patch_shape, label_choice=label_choice, download=download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -13,14 +13,12 @@ def check_densecell():
     loader = get_densecell_loader(
         path=os.path.join(ROOT, "densecell"),
         split="train",
-        # patch_shape=(8, 512, 512),
-        patch_shape=None,
+        patch_shape=(8, 512, 512),
         batch_size=1,
         label_choice="cell",
-        label_type="instances",
         download=True,
     )
-    check_loader(loader, 8, instance_labels=True)
+    check_loader(loader, 8)
 
 
 if __name__ == "__main__":
