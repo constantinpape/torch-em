@@ -2,9 +2,8 @@
 in melanoma H&E stained histopathology images.
 
 This dataset is located at https://zenodo.org/records/13859989.
-This is part of the PUMA Grand Challenge: https://puma.grand-challenge.org/
-- Preprint with details about the data: https://doi.org/10.1101/2024.10.07.24315039
-
+This is part of the PUMA Grand Challenge: https://puma.grand-challenge.org/.
+The dataset is from the publication https://doi.org/10.1093/gigascience/giaf011.
 Please cite them if you use this dataset for your research.
 """
 
@@ -29,22 +28,22 @@ from .. import util
 
 
 URL = {
-    "data": "https://zenodo.org/records/13859989/files/01_training_dataset_tif_ROIs.zip",
+    "data": "https://zenodo.org/records/15050523/files/01_training_dataset_tif_ROIs.zip",
     "annotations": {
-        "nuclei": "https://zenodo.org/records/13859989/files/01_training_dataset_geojson_nuclei.zip",
-        "tissue": "https://zenodo.org/records/13859989/files/01_training_dataset_geojson_tissue.zip",
+        "nuclei": "https://zenodo.org/records/15050523/files/01_training_dataset_geojson_nuclei.zip",
+        "tissue": "https://zenodo.org/records/15050523/files/01_training_dataset_geojson_tissue.zip",
     }
 }
 
 CHECKSUM = {
-    "data": "a69fd0d8443da29233df103ece5674fb50e8f0cc4b448dc60508cfe883881993",
+    "data": "af48b879f8ff7e74b84a7114924881606f13f108aa0f9bcc21d3593b717ee022",
     "annotations": {
-        "nuclei": "17f77ca83fb8fccd918ce723a7b3e5cb5a1730b342ad486628f8885d14a1acbd",
-        "tissue": "3b7d6697dd728e3481df0b779ad1e76962f36fc8c871c50edd9aa56ec44c4cc9",
+        "nuclei": "eda271225900d6de0759e0281f3731a570e09f2adab58bd36425b9d2dfad91a0",
+        "tissue": "fc2835135cc28324f52eac131327f0f12c554c0b1f334a108bf4b65e0f18c42b",
     }
 }
 
-CLASS_DICT = {
+NUCLEI_CLASS_DICT = {
     "nuclei_stroma": 1,
     "nuclei_tumor": 2,
     "nuclei_plasma_cell": 3,
@@ -57,8 +56,22 @@ CLASS_DICT = {
     "nuclei_apoptosis": 10,
 }
 
+TISSUE_CLASS_DICT = {
+    "tissue_stroma": 1,
+    "tissue_tumor": 2,
+    "tissue_epidermis": 3,
+    "tissue_blood_vessel": 4,
+    "tissue_necrosis": 5,
+    "tissue_white_background": 6,
+}
 
-def _create_split_csv(path, split):
+CLASS_DICT = {
+    "nuclei": NUCLEI_CLASS_DICT,
+    "tissue": TISSUE_CLASS_DICT,
+}
+
+
+def _create_split_csv(path, annotations, split):
     "This creates a split saved to a .csv file in the dataset directory"
     csv_path = os.path.join(path, "puma_split.csv")
 
@@ -69,10 +82,12 @@ def _create_split_csv(path, split):
     else:
         print(f"Creating a new split file at '{csv_path}'.")
         metastatic_ids = [
-            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*metastatic*"))
+            os.path.basename(image).split(".")[0]
+            for image in glob(os.path.join(path, "data", "01_training_dataset_tif_ROIs", "*metastatic*"))
         ]
         primary_ids = [
-            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*primary*"))
+            os.path.basename(image).split(".")[0]
+            for image in glob(os.path.join(path, "data", "01_training_dataset_tif_ROIs", "*primary*"))
         ]
 
         # Create random splits per dataset.
@@ -95,7 +110,6 @@ def _create_split_csv(path, split):
 
 
 def _preprocess_inputs(path, annotations, split):
-    import ast
     import h5py
     try:
         import geopandas as gpd
@@ -108,20 +122,28 @@ def _preprocess_inputs(path, annotations, split):
     except ModuleNotFoundError:
         raise RuntimeError("Please install 'rasterio': 'conda install -c conda-forge rasterio'.")
 
-    annotation_paths = glob(os.path.join(path, "annotations", annotations, "*.geojson"))
-    roi_dir = os.path.join(path, "data")
+    annotation_paths = glob(
+        os.path.join(path, "annotations", annotations, f"01_training_dataset_geojson_{annotations}", "*.geojson")
+    )
+    roi_dir = os.path.join(path, "data", "01_training_dataset_tif_ROIs")
     preprocessed_dir = os.path.join(path, split, "preprocessed")
     os.makedirs(preprocessed_dir, exist_ok=True)
 
-    split_list = _create_split_csv(path, split)
+    split_list = _create_split_csv(path, annotations, split)
     print(f"The data split '{split}' has '{len(split_list)}' samples!")
 
     for ann_path in tqdm(annotation_paths, desc=f"Preprocessing '{annotations}'"):
         fname = os.path.basename(ann_path).replace(f"_{annotations}.geojson", ".tif")
         image_path = os.path.join(roi_dir, fname)
 
+        # Handle inconsistent extension for sample 103 (.tiff instead of .tif).
+        if not os.path.exists(image_path):
+            image_path = image_path + "f"  # Retrying with .tiff
+
         if os.path.basename(image_path).split(".")[0] not in split_list:
             continue
+
+        assert os.path.exists(image_path), image_path
 
         volume_path = os.path.join(preprocessed_dir, Path(fname).with_suffix(".h5"))
         gdf = gpd.read_file(ann_path)
@@ -131,9 +153,8 @@ def _preprocess_inputs(path, annotations, split):
         transform = from_bounds(minx, miny, maxx, maxy, width, height)
 
         # Extract class ids mapped to each class name.
-        class_ids = [
-            CLASS_DICT[nuc_class["name"]] for nuc_class in gdf["classification"].apply(lambda x: ast.literal_eval(x))
-        ]
+        class_dict = CLASS_DICT[annotations]
+        class_ids = [class_dict[cls_entry["name"]] for cls_entry in gdf["classification"]]
         semantic_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, class_ids))
         semantic_mask = rasterize(
             semantic_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.uint8
@@ -166,6 +187,15 @@ def _preprocess_inputs(path, annotations, split):
                 f.create_dataset(f"labels/semantic/{annotations}", data=semantic_mask, compression="gzip")
 
 
+def _annotations_are_stored(data_dir, annotations):
+    import h5py
+    volume_paths = glob(os.path.join(data_dir, "preprocessed", "*.h5"))
+    if not volume_paths:
+        return
+    f = h5py.File(volume_paths[0], "r")
+    return f"labels/instances/{annotations}" in f.keys()
+
+
 def get_puma_data(
     path: Union[os.PathLike, str],
     split: Literal["train", "val", "test"],
@@ -187,7 +217,7 @@ def get_puma_data(
         raise ValueError(f"'{annotations}' is not a valid annotation for the data.")
 
     data_dir = os.path.join(path, split)
-    if os.path.exists(data_dir):
+    if os.path.exists(data_dir) and _annotations_are_stored(data_dir, annotations):
         return data_dir
 
     os.makedirs(path, exist_ok=True)

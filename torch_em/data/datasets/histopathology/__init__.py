@@ -13,6 +13,7 @@ from .monusac import get_monusac_loader, get_monusac_dataset
 from .nuclick import get_nuclick_loader, get_nuclick_dataset
 from .nuinsseg import get_nuinsseg_loader, get_nuinsseg_dataset
 from .pannuke import get_pannuke_loader, get_pannuke_dataset
+from .panoptils import get_panoptils_loader, get_panoptils_dataset
 from .puma import get_puma_loader, get_puma_dataset
 from .srsanet import get_srsanet_loader, get_srsanet_dataset
 from .tnbc import get_tnbc_loader, get_tnbc_dataset
