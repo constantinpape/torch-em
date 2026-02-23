@@ -62,14 +62,13 @@ class Rescale:
         return np.concatenate(out, axis=0)
 
     def __call__(self, *inputs):
-        
-        if self.with_channels is None:
 
-            if self.is_label:  # kwargs needed for int data
+        if self.is_label:  # kwargs needed for int data
                 kwargs = {"order": 0,  "anti_aliasing": False}
-            else:  # we use the default settings for float data
-                kwargs = {}
+        else:  # we use the default settings for float data
+            kwargs = {}
 
+        if self.with_channels is None:
             outputs = tuple(rescale(inp, scale=self.scale, preserve_range=True, **kwargs) for inp in inputs)
         else:
             if isinstance(self.with_channels, (tuple, list)):
@@ -78,8 +77,8 @@ class Rescale:
             else:
                 with_channels = [self.with_channels] * len(inputs)
             outputs = tuple(
-                self._rescale_with_channels(inp, scale=self.scale, preserve_range=True) if wc else
-                rescale(inp, scale=self.scale, preserve_range=True)
+                self._rescale_with_channels(inp, scale=self.scale, preserve_range=True, **kwargs) if wc else
+                rescale(inp, scale=self.scale, preserve_range=True, **kwargs)
                 for inp, wc in zip(inputs, with_channels)
             )
         if len(outputs) == 1:
