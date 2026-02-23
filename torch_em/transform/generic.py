@@ -78,8 +78,8 @@ class Rescale:
             else:
                 with_channels = [self.with_channels] * len(inputs)
             outputs = tuple(
-                self._rescale_with_channels(inp, scale=self.scale, preserve_range=True, **kwargs) if wc else
-                rescale(inp, scale=self.scale, preserve_range=True, **kwargs)
+                self._rescale_with_channels(inp, scale=self.scale, preserve_range=True) if wc else
+                rescale(inp, scale=self.scale, preserve_range=True)
                 for inp, wc in zip(inputs, with_channels)
             )
         if len(outputs) == 1:
