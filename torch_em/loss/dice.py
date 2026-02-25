@@ -38,8 +38,9 @@ def dice_score(
     channelwise: bool = True,
     reduce_channel: Optional[str] = "sum",
     eps: float = 1e-7,
+    valid: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    """Compute the dice score between input and target.
+    """Compute (optionally masked) dice score between input and target.
 
     Args:
         input_: The input tensor.
@@ -48,49 +49,76 @@ def dice_score(
         channelwise: Whether to return the dice score independently per channel.
         reduce_channel: How to return the dice score over the channel axis.
         eps: The epsilon value added to the denominator for numerical stability.
+        valid: Optional mask indicating voxels to include (True/1 = keep, False/0 = ignore).
+               Shape [B,1,...] (broadcasted over C) or [B,C,...].
 
     Returns:
-        The dice score.
+        Dice score (or dice error if invert=True).
     """
     if input_.shape != target.shape:
         raise ValueError(f"Expect input and target of same shape, got: {input_.shape}, {target.shape}.")
+    if reduce_channel not in ("sum", "mean", "max", "min", None):
+        raise ValueError(f"Unsupported channel reduction {reduce_channel}")
+
+    # Convert valid mask once; keep it broadcastable ([B,1,...] is fine).
+    valid_f = None
+    if valid is not None:
+        if valid.shape[0] != input_.shape[0] or valid.shape[2:] != input_.shape[2:]:
+            raise ValueError(
+                f"valid must have shape [B,1,...] or [B,C,...] matching input spatial dims. "
+                f"Got valid={valid.shape}, input={input_.shape}."
+            )
+        if valid.dtype == torch.bool:
+            valid_f = valid.to(dtype=input_.dtype)
+        else:
+            valid_f = valid.to(dtype=input_.dtype)
 
     if channelwise:
-        # Flatten input and target to have the shape (C, N),
-        # where N is the number of samples
-        input_ = flatten_samples(input_)
-        target = flatten_samples(target)
-        # Compute numerator and denominator (by summing over samples and
-        # leaving the channels intact)
-        numerator = (input_ * target).sum(-1)
-        denominator = (input_ * input_).sum(-1) + (target * target).sum(-1)
-        channelwise_score = 2 * (numerator / denominator.clamp(min=eps))
-        if invert:
-            channelwise_score = 1. - channelwise_score
+        # Reduce over spatial dims only -> results per batch and channel: [B,C]
+        dims = tuple(range(2, input_.dim()))
 
-        # Reduce the dice score over the channels to compute the overall dice score.
-        # (default is to use the sum)
-        if reduce_channel is None:
-            score = channelwise_score
-        elif reduce_channel == "sum":
-            score = channelwise_score.sum()
-        elif reduce_channel == "mean":
-            score = channelwise_score.mean()
-        elif reduce_channel == "max":
-            score = channelwise_score.max()
-        elif reduce_channel == "min":
-            score = channelwise_score.min()
+        if valid_f is None:
+            numerator = (input_ * target).sum(dims)
+            den1 = (input_ * input_).sum(dims)
+            den2 = (target * target).sum(dims)
         else:
-            raise ValueError(f"Unsupported channel reduction {reduce_channel}")
+            numerator = (input_ * target * valid_f).sum(dims)
+            den1 = (input_ * input_ * valid_f).sum(dims)
+            den2 = (target * target * valid_f).sum(dims)
+
+        dice = 2.0 * numerator / (den1 + den2).clamp_min(eps)  # [B,C]
+        dice = dice.mean(dim=0)  # average over batch -> [C]
+
+        if invert:
+            dice = 1.0 - dice
+
+        if reduce_channel is None:
+            return dice
+        if reduce_channel == "sum":
+            return dice.sum()
+        if reduce_channel == "mean":
+            return dice.mean()
+        if reduce_channel == "max":
+            return dice.max()
+        if reduce_channel == "min":
+            return dice.min()
 
     else:
-        numerator = (input_ * target).sum()
-        denominator = (input_ * input_).sum() + (target * target).sum()
-        score = 2. * (numerator / denominator.clamp(min=eps))
-        if invert:
-            score = 1. - score
+        # Reduce over all dims -> scalar
+        dims = tuple(range(0, input_.dim()))
 
-    return score
+        if valid_f is None:
+            numerator = (input_ * target).sum(dims)
+            den = (input_ * input_).sum(dims) + (target * target).sum(dims)
+        else:
+            numerator = (input_ * target * valid_f).sum(dims)
+            den = (input_ * input_ * valid_f).sum(dims) + (target * target * valid_f).sum(dims)
+
+        dice = 2.0 * numerator / den.clamp_min(eps)
+        return (1.0 - dice) if invert else dice
+
+    # unreachable due to checks above, but keeps mypy happy
+    raise RuntimeError("Unexpected control flow in dice_score")
 
 
 class DiceLoss(nn.Module):
@@ -100,8 +128,19 @@ class DiceLoss(nn.Module):
         channelwise: Whether to return the dice score independently per channel.
         eps: The epsilon value added to the denominator for numerical stability.
         reduce_channel: How to return the dice score over the channel axis.
+        ignore_label: Ignore label ID in target for the loss computation.
+        ignore_state_value: Ignore state value ID in state_channel for the loss computation.
+        state_channel: Channel to use for state in input.
     """
-    def __init__(self, channelwise: bool = True, eps: float = 1e-7, reduce_channel: Optional[str] = "sum"):
+    def __init__(
+        self,
+        channelwise: bool = True,
+        eps: float = 1e-7,
+        reduce_channel: Optional[str] = "sum",
+        ignore_label: Optional[int] = None,
+        ignore_state_value: Optional[int] = None,
+        state_channel: Optional[int] = None,
+    ):
         if reduce_channel not in ("sum", "mean", "max", "min", None):
             raise ValueError(f"Unsupported channel reduction {reduce_channel}")
 
@@ -109,11 +148,17 @@ class DiceLoss(nn.Module):
         self.channelwise = channelwise
         self.eps = eps
         self.reduce_channel = reduce_channel
+        self.ignore_label = ignore_label
+        self.ignore_state_value = ignore_state_value
+        self.state_channel = state_channel
 
         # all torch_em classes should store init kwargs to easily recreate the init call
-        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps, "reduce_channel": self.reduce_channel}
+        self.init_kwargs = {"channelwise": channelwise, "eps": self.eps, "reduce_channel": self.reduce_channel,
+                            "ignore_label": ignore_label, "ignore_state_value": ignore_state_value,
+                            "state_channel": state_channel
+                            }
 
-    def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, input_: torch.Tensor, target: torch.Tensor, state: Optional[torch.Tensor]) -> torch.Tensor:
         """Compute the loss.
 
         Args:
@@ -123,13 +168,19 @@ class DiceLoss(nn.Module):
         Returns:
             The dice loss.
         """
+        valid = None
+        if state is not None and self.ignore_state_value is not None:
+            state_ch = state[:, self.state_channel:self.state_channel + 1]
+            valid = (state_ch != self.ignore_state_value)
+
         return dice_score(
             input_=input_,
             target=target,
             invert=True,
             channelwise=self.channelwise,
             eps=self.eps,
-            reduce_channel=self.reduce_channel
+            reduce_channel=self.reduce_channel,
+            valid=valid
         )
 
 
