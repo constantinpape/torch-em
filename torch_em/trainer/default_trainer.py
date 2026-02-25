@@ -793,7 +793,7 @@ class DefaultTrainer:
             if pred.requires_grad:
                 pred.retain_grad()
 
-        loss = self.loss(pred, y)
+        loss = self.loss(pred, y, state=x)
         return pred, loss
 
     def _train_epoch_impl(self, progress, forward_context, backprop: Callable[[torch.Tensor], None]):
@@ -843,7 +843,7 @@ class DefaultTrainer:
                 x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
                 with forward_context():
                     pred, loss = self._forward_and_loss(x, y)
-                    metric = self.metric(pred, y)
+                    metric = self.metric(pred, y, x)
 
                 loss_val += loss.item()
                 metric_val += metric.item()
