@@ -137,7 +137,6 @@ class DiceLoss(nn.Module):
         channelwise: bool = True,
         eps: float = 1e-7,
         reduce_channel: Optional[str] = "sum",
-        ignore_label: Optional[int] = None,
         ignore_state_value: Optional[int] = None,
         state_channel: Optional[int] = None,
     ):
@@ -148,14 +147,12 @@ class DiceLoss(nn.Module):
         self.channelwise = channelwise
         self.eps = eps
         self.reduce_channel = reduce_channel
-        self.ignore_label = ignore_label
         self.ignore_state_value = ignore_state_value
         self.state_channel = state_channel
 
         # all torch_em classes should store init kwargs to easily recreate the init call
         self.init_kwargs = {"channelwise": channelwise, "eps": self.eps, "reduce_channel": self.reduce_channel,
-                            "ignore_label": ignore_label, "ignore_state_value": ignore_state_value,
-                            "state_channel": state_channel
+                            "ignore_state_value": ignore_state_value, "state_channel": state_channel
                             }
 
     def forward(self, input_: torch.Tensor, target: torch.Tensor, state: Optional[torch.Tensor]) -> torch.Tensor:
