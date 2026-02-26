@@ -167,6 +167,8 @@ class DiceLoss(nn.Module):
         """
         valid = None
         if state is not None and self.ignore_state_value is not None:
+            if self.state_channel is None:
+                raise ValueError("state_channel must be set when using ignore_state_value.")
             state_ch = state[:, self.state_channel:self.state_channel + 1]
             valid = (state_ch != self.ignore_state_value)
 
