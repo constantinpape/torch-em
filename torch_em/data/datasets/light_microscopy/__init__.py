@@ -1,11 +1,15 @@
 from .aisegcell import get_aisegcell_loader, get_aisegcell_dataset
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bac_mother import get_bac_mother_loader, get_bac_mother_dataset
+from .balf import get_balf_loader, get_balf_dataset
+from .bccd import get_bccd_loader, get_bccd_dataset
+from .bmgd import get_bmgd_loader, get_bmgd_dataset
 from .bitdepth_nucseg import get_bitdepth_nucseg_loader, get_bitdepth_nucseg_dataset
 from .brifiseg import get_brifiseg_loader, get_brifiseg_dataset
 from .blastospim import get_blastospim_loader, get_blastospim_dataset
 from .brain_organoids import get_brain_organoids_loader, get_brain_organoids_dataset
 from .cartocell import get_cartocell_loader, get_cartocell_dataset
+from .mucic import get_mucic_loader, get_mucic_dataset
 from .celegans_atlas import get_celegans_atlas_loader, get_celegans_atlas_dataset
 from .cellbindb import get_cellbindb_loader, get_cellbindb_dataset
 from .cellpose import get_cellpose_loader, get_cellpose_dataset
@@ -19,29 +23,46 @@ from .dic_hepg2 import get_dic_hepg2_loader, get_dic_hepg2_dataset
 from .dsb import get_dsb_loader, get_dsb_dataset
 from .dynamicnuclearnet import get_dynamicnuclearnet_loader, get_dynamicnuclearnet_dataset
 from .embedseg_data import get_embedseg_loader, get_embedseg_dataset
+from .enseg import get_enseg_loader, get_enseg_dataset
+from .evican import get_evican_loader, get_evican_dataset
+from .medussa import get_medussa_loader, get_medussa_dataset
 from .gonuclear import get_gonuclear_loader, get_gonuclear_dataset
 from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
 from .ifnuclei import get_ifnuclei_loader, get_ifnuclei_dataset
 from .livecell import get_livecell_loader, get_livecell_dataset
+from .lpc_nucseg import get_lpc_nucseg_loader, get_lpc_nucseg_dataset
+from .lsm_mouse_embryo import get_lsm_mouse_embryo_loader, get_lsm_mouse_embryo_dataset
+from .microbeseg import get_microbeseg_loader, get_microbeseg_dataset
+from .morphonet import get_morphonet_loader, get_morphonet_dataset
 from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
 from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
 )
 from .nis3d import get_nis3d_loader, get_nis3d_dataset
+from .nuc_morph import get_nuc_morph_loader, get_nuc_morph_dataset
+from .oocyteseg import get_oocyteseg_loader, get_oocyteseg_dataset
 from .omnipose import get_omnipose_loader, get_omnipose_dataset
 from .orgaextractor import get_orgaextractor_loader, get_orgaextractor_dataset
 from .orgasegment import get_orgasegment_loader, get_orgasegment_dataset
 from .organoid import get_organoid_loader, get_organoid_dataset
 from .organoidnet import get_organoidnet_loader, get_organoidnet_dataset
 from .parhyale_regen import get_parhyale_regen_loader, get_parhyale_regen_dataset
+from .phmamm import get_phmamm_loader, get_phmamm_dataset
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .pnas_arabidopsis import get_pnas_arabidopsis_loader, get_pnas_arabidopsis_dataset
 from .segpc import get_segpc_loader, get_segpc_dataset
+from .slimia import get_slimia_loader, get_slimia_dataset
+from .synthmt import get_synthmt_loader, get_synthmt_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .toiam import get_toiam_loader, get_toiam_dataset
 from .u20s import get_u20s_loader, get_u20s_dataset
 from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
 from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
 from .vicar import get_vicar_loader, get_vicar_dataset
+from .wing_disc import get_wing_disc_loader, get_wing_disc_dataset
+from .xpress import get_xpress_loader, get_xpress_dataset
+from .yeastcellseg import get_yeastcellseg_loader, get_yeastcellseg_dataset
+from .yeastms import get_yeastms_loader, get_yeastms_dataset
+from .yeastsam import get_yeastsam_loader, get_yeastsam_dataset
 from .yeaz import get_yeaz_loader, get_yeaz_dataset

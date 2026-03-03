@@ -350,44 +350,53 @@ def load_model(
     checkpoint: str,
     model: Optional[torch.nn.Module] = None,
     name: str = "best",
-    state_key: str = "model_state",
+    state_key: Optional[str] = "model_state",
     device: Optional[str] = None,
 ) -> torch.nn.Module:
-    """Load model from a trainer checkpoint.
+    """Load a model from a trainer checkpoint or a serialized torch model.
 
-    This function can either load the model directly from the trainer (model is not passed),
-    or deserialize the model state from the trainer and load the model state (model is passed).
+    This function can either load the model directly (`model` is not passed),
+    or deserialize the model state and then load it (`model` is passed).
+
+    The `checkpoint` argument must either point to the checkpoint directory of a torch_em trainer
+    or to a serialized torch model.
 
     Args:
-        checkpoint: The path to the checkpoint folder.
+        checkpoint: The path to the checkpoint folder or serialized torch model.
         model: The model for which the state should be loaded.
             If it is not passed, the model class and parameters will also be loaded from the trainer.
         name: The name of the checkpoint.
-        state_key: The name of the model state to load.
+        state_key: The name of the model state to load. Set to None if the model state is stored top-level.
         device: The device on which to load the model.
 
     Returns:
         The model.
     """
-    if model is None:  # load the model and its state from the checkpoint
+    if model is None and os.path.isdir(checkpoint):  # Load the model and its state from a torch_em checkpoint.
         model = get_trainer(checkpoint, name=name, device=device).model
 
-    else:  # load the model state from the checkpoint
-        if os.path.isdir(checkpoint):
+    elif model is None:  # Load the model from a serialized model.
+        model = torch.load(checkpoint, map_location=device, weights_only=False)
+
+    else:  # Load the model state from a checkpoint.
+        if os.path.isdir(checkpoint):  # From a torch_em checkpoint.
             ckpt = os.path.join(checkpoint, f"{name}.pt")
-        else:
+        else:  # From a serialized path.
             ckpt = checkpoint
 
-        state = torch.load(ckpt, map_location=device, weights_only=False)[state_key]
-        # to enable loading compiled models
+        state = torch.load(ckpt, map_location=device, weights_only=False)
+        if state_key is not None:
+            state = state[state_key]
+
+        # To enable loading compiled models.
         compiled_prefix = "_orig_mod."
         state = OrderedDict(
             [(k[len(compiled_prefix):] if k.startswith(compiled_prefix) else k, v) for k, v in state.items()]
         )
+
         model.load_state_dict(state)
         if device is not None:
             model.to(device)
-        model.load_state_dict(state)
 
     return model
 

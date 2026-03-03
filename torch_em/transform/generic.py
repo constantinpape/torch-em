@@ -52,17 +52,24 @@ class Compose:
 
 
 class Rescale:
-    def __init__(self, scale, with_channels=None):
+    def __init__(self, scale, with_channels=None, is_label=False):
         self.scale = scale
         self.with_channels = with_channels
+        self.is_label = is_label
 
     def _rescale_with_channels(self, input_, **kwargs):
         out = [rescale(inp, **kwargs)[None] for inp in input_]
         return np.concatenate(out, axis=0)
 
     def __call__(self, *inputs):
+
+        if self.is_label:  # kwargs needed for int data
+                kwargs = {"order": 0,  "anti_aliasing": False}
+        else:  # we use the default settings for float data
+            kwargs = {}
+
         if self.with_channels is None:
-            outputs = tuple(rescale(inp, scale=self.scale, preserve_range=True) for inp in inputs)
+            outputs = tuple(rescale(inp, scale=self.scale, preserve_range=True, **kwargs) for inp in inputs)
         else:
             if isinstance(self.with_channels, (tuple, list)):
                 assert len(self.with_channels) == len(inputs)
@@ -70,8 +77,8 @@ class Rescale:
             else:
                 with_channels = [self.with_channels] * len(inputs)
             outputs = tuple(
-                self._rescale_with_channels(inp, scale=self.scale, preserve_range=True) if wc else
-                rescale(inp, scale=self.scale, preserve_range=True)
+                self._rescale_with_channels(inp, scale=self.scale, preserve_range=True, **kwargs) if wc else
+                rescale(inp, scale=self.scale, preserve_range=True, **kwargs)
                 for inp, wc in zip(inputs, with_channels)
             )
         if len(outputs) == 1:
@@ -210,7 +217,7 @@ class PadIfNecessary:
         else:
             dim_diff = data.ndim - len(self.shape)
             pad_shape = data.shape[:dim_diff] + self.shape
-            assert len(pad_shape) == data.ndim
+            assert len(pad_shape) == data.ndim, f"{pad_shape}, {data.shape}"
 
         data_shape = data.shape
         if all(dsh == sh for dsh, sh in zip(data_shape, pad_shape)):

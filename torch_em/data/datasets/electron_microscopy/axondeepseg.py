@@ -24,7 +24,7 @@ URLS = {
     "tem": "https://osf.io/download/uewd9"
 }
 CHECKSUMS = {
-    "sem": "d334cbacf548f78ce8dd4a597bf86b884bd15a47a230a0ccc46e1ffa94d58426",
+    "sem": "12f2f03834c41720badf00131bb7b7a2127e532cf78e01fbea398e1ff800779b",
     "tem": "e4657280808f3b80d3bf1fba87d1cbbf2455f519baf1a7b16d2ddf2e54739a95"
 }
 
@@ -65,8 +65,8 @@ def _preprocess_sem_data(out_path):
             # raw data: invert to match tem em intensities
             raw = imageio.imread(rp)
             assert np.dtype(raw.dtype) == np.dtype("uint8")
-            if raw.ndim == 3:  # (one of the images is RGBA)
-                raw = np.mean(raw[..., :-3], axis=-1)
+            if raw.ndim == 3:  # Some images have extra channels (RGBA or grayscale+alpha).
+                raw = raw[..., 0]
             raw = 255 - raw
             f.create_dataset("raw", data=raw, compression="gzip")
 
@@ -75,6 +75,8 @@ def _preprocess_sem_data(out_path):
             # 127, 128 -> 1
             # 255 -> 2
             labels = imageio.imread(lp)
+            if labels.ndim == 3:  # Some labels have an extra alpha channel.
+                labels = labels[..., 0]
             assert labels.shape == raw.shape, f"{labels.shape}, {raw.shape}"
             label_vals = np.unique(labels)
             # 127, 128: both myelin labels, 130, 233: noise
