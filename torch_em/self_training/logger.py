@@ -29,32 +29,38 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
             zindex = x.shape[2] // 2
             x, y, pred = x[:, :, zindex], y[:, :, zindex], pred[:, :, zindex]
 
-        grid = make_grid(
-            [torch_em.transform.raw.normalize(x[0]), y[0, 0:1], pred[0, 0:1]],
-            padding=8
+        num_channels = y.shape[1]
+
+        images = (
+            [torch_em.transform.raw.normalize(x[0])] * num_channels +
+            [y[0, c:c+1] for c in range(num_channels)] +
+            [pred[0, c:c+1] for c in range(num_channels)]
         )
+        grid = make_grid(images, nrow=num_channels, padding=8)
         self.tb.add_image(tag=f"{name}/supervised/input-labels-prediction", img_tensor=grid, global_step=step)
 
-    def _add_unsupervised_images(self, step, name, x1, x2, pred, pseudo_labels, label_filter):
-        if x1.ndim == 5:
-            assert x2.ndim == pred.ndim == pseudo_labels.ndim == 5
-            zindex = x1.shape[2] // 2
-            x1, x2, pred = x1[:, :, zindex], x2[:, :, zindex], pred[:, :, zindex]
+    def _add_unsupervised_images(self, step, name, x, pred, pseudo_labels, label_filter):
+        if x.ndim == 5:
+            assert pred.ndim == pseudo_labels.ndim == 5
+            zindex = x.shape[2] // 2
+            x, pred = x[:, :, zindex], pred[:, :, zindex]
             pseudo_labels = pseudo_labels[:, :, zindex]
             if label_filter is not None:
                 assert label_filter.ndim == 5
                 label_filter = label_filter[:, :, zindex]
 
-        images = [
-            torch_em.transform.raw.normalize(x1[0]),
-            torch_em.transform.raw.normalize(x2[0]),
-            pred[0, 0:1], pseudo_labels[0, 0:1],
-        ]
-        im_name = f"{name}/unsupervised/aug1-aug2-prediction-pseudolabels"
+        num_channels = pred.shape[1]
+
+        images = (
+            [torch_em.transform.raw.normalize(x[0])] * num_channels +
+            [pred[0, c:c+1] for c in range(num_channels)] +
+            [pseudo_labels[0, c:c+1] for c in range(num_channels)]
+        )
+        im_name = f"{name}/unsupervised/image-prediction-pseudolabels"
         if label_filter is not None:
-            images.append(label_filter[0, 0:1])
-            name += "-labelfilter"
-        grid = make_grid(images, nrow=2, padding=8)
+            images.extend([label_filter[0, c:c+1] for c in range(num_channels)])
+            im_name += "-labelfilter"
+        grid = make_grid(images, nrow=num_channels, padding=8)
         self.tb.add_image(tag=im_name, img_tensor=grid, global_step=step)
 
     def log_combined_loss(self, step, loss):
@@ -81,19 +87,19 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         self.tb.add_scalar(tag="validation/supervised/metric", scalar_value=metric, global_step=step)
         self._add_supervised_images(step, "validation", x, y, pred)
 
-    def log_train_unsupervised(self, step, loss, x1, x2, pred, pseudo_labels, label_filter=None):
+    def log_train_unsupervised(self, step, loss, x, pred, pseudo_labels, label_filter=None):
         """@private
         """
         self.tb.add_scalar(tag="train/unsupervised/loss", scalar_value=loss, global_step=step)
         if step % self.log_image_interval == 0:
-            self._add_unsupervised_images(step, "train", x1, x2, pred, pseudo_labels, label_filter)
+            self._add_unsupervised_images(step, "train", x, pred, pseudo_labels, label_filter)
 
-    def log_validation_unsupervised(self, step, metric, loss, x1, x2, pred, pseudo_labels, label_filter=None):
+    def log_validation_unsupervised(self, step, metric, loss, x, pred, pseudo_labels, label_filter=None):
         """@private
         """
         self.tb.add_scalar(tag="validation/unsupervised/loss", scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag="validation/unsupervised/metric", scalar_value=metric, global_step=step)
-        self._add_unsupervised_images(step, "validation", x1, x2, pred, pseudo_labels, label_filter)
+        self._add_unsupervised_images(step, "validation", x, pred, pseudo_labels, label_filter)
 
     def log_validation(self, step, metric, loss, xt, xt1, xt2, y, z, gt, samples, gt_metric=None):
         """@private
@@ -102,56 +108,61 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         self.tb.add_scalar(tag="validation/metric", scalar_value=metric, global_step=step)
         if gt_metric is not None:
             self.tb.add_scalar(tag="validation/gt_metric", scalar_value=gt_metric, global_step=step)
-            
+  
     def log_ct(self, step, ct):
         self.tb.add_scalar(tag="train/confidence_threshold", scalar_value=ct, global_step=step)
 
 # LOG AUGMENTATIONS FOR DEBUGGING ###
     def _add_augmented_images(
-        self, step, name, x_u, pseudo_labels_inv, pred_inv
+        self, step, name, xu1, xu2, pseudo_labels, pred
     ):
-        if x_u.ndim == 5:
+        if xu1.ndim == 5:
             assert (
-                pseudo_labels_inv.ndim
-                == pred_inv.ndim
+                xu2.ndim
+                == pseudo_labels.ndim
+                == pred.ndim
                 == 5
             )
-            zindex = x_u.shape[2] // 2
-            x_u = x_u[:, :, zindex]
-            pred_inv = pred_inv[:, :, zindex]
-            pseudo_labels_inv = pseudo_labels_inv[:, :, zindex]
+            zindex = xu1.shape[2] // 2
+            xu1 = xu1[:, :, zindex]
+            xu2 = xu2[:, :, zindex]
+            pred = pred[:, :, zindex]
+            pseudo_labels = pseudo_labels[:, :, zindex]
 
         images = [
-            torch_em.transform.raw.normalize(x_u[0]),
-            pseudo_labels_inv[0, 0:1],
-            pred_inv[0, 0:1],
+            torch_em.transform.raw.normalize(xu1[0]),
+            torch_em.transform.raw.normalize(xu2[0]),
+            pseudo_labels[0, 0:1],
+            pred[0, 0:1],
         ]
         im_name = (
-            f"{name}/unsupervised/x_u-pseudolabels_inv-pred_inv"
+            f"{name}/unsupervised/aug1-aug2-pseudolabels-prediction"
         )
-        grid = make_grid(images, nrow=3, padding=8)
+        grid = make_grid(images, nrow=2, padding=8)
         self.tb.add_image(tag=im_name, img_tensor=grid, global_step=step)
 
-    def log_train_inverse_augmentations(
-        self, step, x_u, pseudo_labels_inv, pred_inv
+    def log_train_augmentations(
+        self, step, xu1, xu2, pseudo_labels, pred
     ):
         if step % self.log_image_interval == 0:
             self._add_augmented_images(
                 step,
                 "train_augmentations",
-                x_u,
-                pseudo_labels_inv,
-                pred_inv,
+                xu1,
+                xu2,
+                pseudo_labels,
+                pred,
             )
 
-    def log_validation_inverse_augmentations(
-        self, step, x_u, pseudo_labels_inv, pred_inv
+    def log_validation_augmentations(
+        self, step, xu1, xu2, pseudo_labels, pred
     ):
         if step % self.log_image_interval == 0:
             self._add_augmented_images(
                 step,
                 "validation_augmentations",
-                x_u,
-                pseudo_labels_inv,
-                pred_inv,
+                xu1,
+                xu2,
+                pseudo_labels,
+                pred,
             )

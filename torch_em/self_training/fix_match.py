@@ -224,10 +224,15 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 with torch.no_grad(), forward_context():
                     pred = pred if self._iteration % self.log_image_interval == 0 else None
                 self.logger.log_train_unsupervised(
-                    self._iteration, loss, xu1, xu2, pseudo_labels, pred, label_filter
+                    self._iteration, loss, xu, pred_inv, pseudo_labels_inv, label_filter_inv
+                )
+                self.logger.log_train_augmentations(
+                    self._iteration, xu1, xu2, pseudo_labels, pred,
                 )
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
                 self.logger.log_lr(self._iteration, lr)
+                if self.pseudo_labeler.confidence_threshold is not None:
+                    self.logger.log_ct(self._iteration, self.pseudo_labeler.confidence_threshold)
 
             self._iteration += 1
             n_iter += 1
@@ -291,12 +296,17 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
 
                 self.logger.log_train_supervised(self._iteration, supervised_loss, xs, ys, supervised_pred)
                 self.logger.log_train_unsupervised(
-                    self._iteration, unsupervised_loss, xu1, xu2, pseudo_labels, unsup_pred, label_filter
+                    self._iteration, unsupervised_loss, xu, unsup_pred_inv, pseudo_labels_inv, label_filter_inv
+                )
+                self.logger.log_train_augmentations(
+                    self._iteration, xu1, xu2, pseudo_labels, unsup_pred,
                 )
 
                 self.logger.log_combined_loss(self._iteration, loss)
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
                 self.logger.log_lr(self._iteration, lr)
+                if self.pseudo_labeler.confidence_threshold is not None:
+                    self.logger.log_ct(self._iteration, self.pseudo_labeler.confidence_threshold)
 
             self._iteration += 1
             n_iter += 1
@@ -355,8 +365,13 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
 
         if self.logger is not None:
             self.logger.log_validation_unsupervised(
-                self._iteration, metric_val, loss_val, x1, x2, pseudo_labels, pred, label_filter
+                self._iteration, metric_val, loss_val, x, pred_inv, pseudo_labels_inv, label_filter_inv
             )
+            self.logger.log_validation_augmentations(
+                self._iteration, x1, x2, pseudo_labels, pred,
+            )
+
+        self.pseudo_labeler.step(metric_val, self._epoch)
 
         self.augmenter.reset_all()
 

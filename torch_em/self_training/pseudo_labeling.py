@@ -1,6 +1,7 @@
 from typing import Callable, Literal, Optional, Union
 
 import torch
+import numpy as np
 
 
 class DefaultPseudoLabeler:
@@ -192,30 +193,36 @@ class ScheduledPseudoLabeler:
         self,
         activation: Optional[Union[torch.nn.Module, Callable]] = None,
         confidence_threshold: Optional[float] = None,
-        threshold_from_both_sides=True,
+        increase: bool = False,
+        last_step_epoch: int = None,
+        threshold_from_both_sides: bool = True,
         mode: Literal["min", "max"] = "min",
         factor: float = 0.05,
         patience: int = 10,
         threshold: float = 1e-4,
         threshold_mode: Literal["rel", "abs"] = "abs",
         min_ct: float = 0.5,
+        max_ct: float = 0.95,
         eps: float = 1e-8,
+        warm_up_epochs: int = 0,
+        mask_channel: Optional[int] = None,
         verbose: bool = True,
     ):
         self.activation = activation
         self.confidence_threshold = confidence_threshold
+        self.increase = increase
         self.threshold_from_both_sides = threshold_from_both_sides
         self.init_kwargs = {
             "activation": None, "confidence_threshold": confidence_threshold,
-            "threshold_from_both_sides": threshold_from_both_sides
+            "threshold_from_both_sides": threshold_from_both_sides,
+            "mask_channel": mask_channel,
         }
         # scheduler arguments
         if mode not in {"min", "max"}:
             raise ValueError(f"Invalid mode: {mode}. Mode should be 'min' or 'max'.")
         self.mode = mode
 
-        if factor >= 1.0:
-            raise ValueError("Factor should be < 1.0.")
+        assert factor < 1, f"Factor must be smaller than 1, got {factor}"
         self.factor = factor
 
         self.patience = patience
@@ -226,7 +233,10 @@ class ScheduledPseudoLabeler:
         self.threshold_mode = threshold_mode
 
         self.min_ct = min_ct
+        self.max_ct = max_ct
         self.eps = eps
+        self.warm_up_epochs = warm_up_epochs
+        self.mask_channel = mask_channel
         self.verbose = verbose
 
         if mode == "min":
@@ -237,6 +247,29 @@ class ScheduledPseudoLabeler:
         # self.best = 0
         self.num_bad_epochs: int = 0
         self.last_epoch = 0
+
+        if self.increase:
+            self.last_step_epoch = last_step_epoch
+
+            n_ct = len(np.arange(self.min_ct, self.max_ct + self.factor / 2, self.factor))
+            n_increments = n_ct - 1
+
+            if n_increments <= 0:
+                # nothing to increase
+                self.step_epoch = 0
+            else:
+                # compute initial step size; enforce minimum step size of 1
+                self.step_epoch = max(1, int(np.floor(self.last_step_epoch / n_increments)))
+
+                # ensure max_ct is reachable
+                required_epochs = self.step_epoch * n_increments
+                if self.last_step_epoch < required_epochs:
+                    self.last_step_epoch = required_epochs
+
+            print(
+                f"ScheduledPseudoLabeler: Increasing confidence_threshold every {self.step_epoch} epochs;",
+                f"until epoch {self.last_step_epoch}"
+            )
 
     def _compute_label_mask_both_sides(self, pseudo_labels):
         upper_threshold = self.confidence_threshold
@@ -255,9 +288,18 @@ class ScheduledPseudoLabeler:
         if self.confidence_threshold is None:
             label_mask = None
         else:
-            label_mask = self._compute_label_mask_both_sides(pseudo_labels) if self.threshold_from_both_sides\
-                else self._compute_label_mask_one_side(pseudo_labels)
+            mask_input = pseudo_labels if self.mask_channel is None\
+                else pseudo_labels[self.mask_channel:(self.mask_channel+1)]
+            label_mask = self._compute_label_mask_both_sides(mask_input) if self.threshold_from_both_sides\
+                else self._compute_label_mask_one_side(mask_input)
+            if self.mask_channel is not None:
+                size = (pseudo_labels.shape[0], pseudo_labels.shape[1], *([-1] * (pseudo_labels.ndim - 2)))
+                label_mask = label_mask.expand(*size)
         return pseudo_labels, label_mask
+
+    def end_warm_up(self):
+        self.confidence_threshold = self.max_ct
+        print(f"End of warm-up phase reached: setting confidence threshold to {self.confidence_threshold}")
 
     def _is_better(self, a, best):
         if self.mode == "min" and self.threshold_mode == "rel":
@@ -277,15 +319,15 @@ class ScheduledPseudoLabeler:
     def _reduce_ct(self, epoch):
         old_ct = self.confidence_threshold
         if self.threshold_mode == "rel":
-            new_ct = max(self.confidence_threshold * self.factor, self.min_ct)
+            new_ct = max(self.confidence_threshold * (1-self.factor), self.min_ct)
         else:  # threshold_mode == 'abs':
             new_ct = max(self.confidence_threshold - self.factor, self.min_ct)
-        if old_ct - new_ct > self.eps:
+        if abs(old_ct - new_ct) > self.eps:
             self.confidence_threshold = new_ct
         if self.verbose:
             print(f"Epoch {epoch}: reducing confidence threshold from {old_ct} to {self.confidence_threshold}")
 
-    def step(self, metric, epoch=None):
+    def decrease_step(self, metric, epoch=None):
         if epoch is None:
             epoch = self.last_epoch + 1
             self.last_epoch = epoch
@@ -310,3 +352,32 @@ class ScheduledPseudoLabeler:
             if self.num_bad_epochs > self.patience:
                 self._reduce_ct(epoch)
                 self.num_bad_epochs = 0
+
+    def _increase_ct(self, epoch):
+        old_ct = self.confidence_threshold
+        if self.threshold_mode == "rel":
+            new_ct = min(self.confidence_threshold * (1+self.factor), self.max_ct)
+        else:  # threshold_mode == 'abs':
+            new_ct = min(self.confidence_threshold + self.factor, self.max_ct)
+        if abs(old_ct - new_ct) > self.eps:
+            self.confidence_threshold = new_ct
+        if self.verbose:
+            print(f"Epoch {epoch}: increase confidence threshold from {old_ct} to {self.confidence_threshold}")
+
+    def increase_step(self, epoch):
+        if epoch > self.last_step_epoch:
+            return
+
+        if epoch % self.step_epoch == 0 and epoch != 0:
+            self._increase_ct(epoch)
+
+    def step(self, metric=None, epoch=None):
+        if epoch == self.warm_up_epochs and self.warm_up_epochs > 0:
+            self.end_warm_up()
+        elif epoch > self.warm_up_epochs:
+            if self.increase:
+                self.increase_step(epoch)
+            else:
+                self.decrease_step(metric, epoch)
+        else:
+            return
