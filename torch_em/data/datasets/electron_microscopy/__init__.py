@@ -14,6 +14,7 @@ from .human_organoids import get_human_organoids_loader, get_human_organoids_dat
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
+from .microns_nuclei import get_microns_nuclei_loader, get_microns_nuclei_dataset
 from .mitoem import get_mitoem_loader, get_mitoem_dataset
 from .mitoemv2 import get_mitoemv2_loader, get_mitoemv2_dataset
 from .nuc_mm import get_nuc_mm_loader, get_nuc_mm_dataset
