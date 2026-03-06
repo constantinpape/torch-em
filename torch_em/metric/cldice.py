@@ -4,30 +4,30 @@ import numpy as np
 # From "clDice -- A Novel Topology-Preserving Loss Function for Tubular Structure Segmentation":
 # https://arxiv.org/abs/2003.07311
 
-def cl_score(v, s):
-    """[this function computes the skeleton volume overlap]
+def cl_score(img, skel):
+    """Compute the skeleton volume intersection. 
 
     Args:
-        v ([bool]): [image]
-        s ([bool]): [skeleton]
+        img: image
+        skel: skeleton
 
     Returns:
-        [float]: [computed skeleton volume intersection]
+        Skeleton volume intersection. 
     """
-    return np.sum(v*s)/np.sum(s)
+    return np.sum(img*skel)/np.sum(skel)
 
 
-def clDice(v_p, v_l):
-    """[this function computes the cldice metric]
+def clDice(input_, target):
+    """Compute the clDice score between binary input and target. 
 
     Args:
-        v_p ([bool]): [predicted image]
-        v_l ([bool]): [ground truth image]
+        input_: The binary input.
+        target: The binary target.
 
     Returns:
-        [float]: [cldice metric]
+        clDice score.
     """
-    itprec = cl_score(v_p,skeletonize(v_l))
-    tsens = cl_score(v_l,skeletonize(v_p))
+    tprec = cl_score(input_, skeletonize(target))
+    tsens = cl_score(target, skeletonize(input_))
     
     return 2*tprec*tsens/(tprec+tsens)
