@@ -73,6 +73,25 @@ def predict_with_padding(
     return output
 
 
+def _pad_for_shift_left(arr, pad_vox, with_channels, mode="constant", constant_values=0.0):
+    pad_left = tuple(pad_vox)
+    pad_right = tuple(0 for _ in pad_vox)
+
+    pad_width = tuple((pl, pr) for pl, pr in zip(pad_left, pad_right))
+    if with_channels:
+        pad_width = ((0, 0),) + pad_width
+
+    arr_pad = np.pad(arr, pad_width, mode=mode, constant_values=constant_values)
+    return arr_pad, pad_left
+
+
+def _crop_after_shift_left(arr, pad_left, with_channels, original_shape_spatial):
+    starts = pad_left
+    stops = tuple(st + sh for st, sh in zip(starts, original_shape_spatial))
+    spatial_slices = tuple(slice(st, sp) for st, sp in zip(starts, stops))
+    return arr[(slice(None),) + spatial_slices] if with_channels else arr[spatial_slices]
+
+
 def _load_block(input_, offset, block_shape, halo, padding_mode="reflect", with_channels=False):
     shape = input_.shape
     if with_channels:
@@ -137,6 +156,7 @@ def predict_with_halo(
     prediction_function: Optional[Callable] = None,
     roi: Optional[Tuple[slice]] = None,
     iter_list: Optional[List[int]] = None,
+    grid_shift: Optional[Tuple[float, ...]] = None,
 ) -> ArrayLike:
     """Run block-wise network prediction with a halo.
 
@@ -157,7 +177,7 @@ def predict_with_halo(
         tqdm_desc: Fescription shown by the tqdm output.
         prediction_function: A wrapper function for prediction to enable custom prediction procedures.
         roi: A region of interest of the input for which to run prediction.
-
+        grid_shift: Per-axis fractional shift of the grid in units of the block size. E.g. (0, 0.25, 0).
     Returns:
         The model output.
     """
@@ -166,26 +186,60 @@ def predict_with_halo(
         (model if next(model.parameters()).device == device else deepcopy(model).to(device), device)
         for device in devices
     ]
-
     n_workers = len(gpu_ids)
-    shape = input_.shape
-    if with_channels:
-        shape = shape[1:]
 
-    ndim = len(shape)
+    # ---- original shape (spatial only) ----
+    shape0 = input_.shape
+    shape_spatial0 = shape0[1:] if with_channels else shape0
+    ndim = len(shape_spatial0)
     assert len(block_shape) == len(halo) == ndim
 
+    # ---- apply grid_shift via padding+cropping (zero padding) ----
+    input_eff = input_
+    mask_eff = mask
+
+    if grid_shift is not None:
+        assert len(grid_shift) == ndim, "grid_shift must match number of spatial dims"
+        pad_vox = tuple(int(np.rint(abs(gs) * bs)) for gs, bs in zip(grid_shift, block_shape))
+
+        if not isinstance(input_eff, np.ndarray):
+            raise TypeError("grid_shift padding currently requires input_ to be a numpy array")
+
+        input_eff, pad_left = _pad_for_shift_left(input_eff, pad_vox, with_channels=with_channels, mode="constant",
+                                                  constant_values=0)
+
+        if mask_eff is not None:
+            if not isinstance(mask_eff, np.ndarray):
+                raise TypeError("grid_shift padding currently requires mask to be a numpy array")
+            mask_eff, _ = _pad_for_shift_left(mask_eff, pad_vox, with_channels=False, mode="constant",
+                                              constant_values=0)
+    else:
+        pad_left = (0,) * ndim
+
+    # shapes after shift-padding
+    shape_eff = input_eff.shape
+    shape_spatial_eff = shape_eff[1:] if with_channels else shape_eff
+
+    # ---- blocking (on the padded input) ----
     if roi is None:
-        blocking = nt.blocking([0] * ndim, shape, block_shape)
+        blocking = nt.blocking([0] * ndim, shape_spatial_eff, block_shape)
     else:
         assert len(roi) == ndim
         blocking_start = [0 if ro.start is None else ro.start for ro in roi]
-        blocking_stop = [sh if ro.stop is None else ro.stop for ro, sh in zip(roi, shape)]
+        blocking_stop = [sh if ro.stop is None else ro.stop for ro, sh in zip(roi, shape_spatial_eff)]
         blocking = nt.blocking(blocking_start, blocking_stop, block_shape)
 
+    # ---- output allocation (for padded shape) ----
     if output is None:
         n_out = models[0][0].out_channels
-        output = np.zeros((n_out,) + shape, dtype="float32")
+        output = np.zeros((n_out,) + tuple(shape_spatial_eff), dtype="float32")
+    elif grid_shift:
+        raise ValueError(
+            "grid_shift is not supported together with a user-provided `output`, because "
+            "grid_shift requires internal zero-padding and a final cropping step. "
+            "Pass `output=None` (let this function allocate the output) or disable `grid_shift`. "
+            "Or pad the input manually beforehand."
+        )
 
     def predict_block(block_id):
         worker_id = block_id % n_workers
@@ -196,13 +250,13 @@ def predict_with_halo(
             offset = [beg for beg in block.begin]
             inner_bb = tuple(slice(ha, ha + bs) for ha, bs in zip(halo, block.shape))
 
-            if mask is not None:
-                mask_block, _ = _load_block(mask, offset, block_shape, halo, with_channels=False)
+            if mask_eff is not None:
+                mask_block, _ = _load_block(mask_eff, offset, block_shape, halo, with_channels=False)
                 mask_block = mask_block[inner_bb].astype("bool")
                 if mask_block.sum() == 0:
                     return
 
-            inp, _ = _load_block(input_, offset, block_shape, halo, with_channels=with_channels)
+            inp, _ = _load_block(input_eff, offset, block_shape, halo, with_channels=with_channels)
 
             if skip_block is not None and skip_block(inp):
                 return
@@ -227,31 +281,40 @@ def predict_with_halo(
                 prediction = postprocess(prediction)
 
             if prediction.ndim == ndim + 1:
-                inner_bb = (slice(None),) + inner_bb
-            prediction = prediction[inner_bb]
+                inner_bb_pred = (slice(None),) + inner_bb
+            else:
+                inner_bb_pred = inner_bb
+            prediction = prediction[inner_bb_pred]
 
-            if mask is not None:
+            if mask_eff is not None:
                 if prediction.ndim == ndim + 1:
-                    mask_block = np.concatenate(prediction.shape[0] * [mask_block[None]], axis=0)
-                prediction[~mask_block] = 0
+                    mb = np.broadcast_to(mask_block[None], prediction.shape)
+                else:
+                    mb = mask_block
+                prediction[~mb] = 0
 
             bb = tuple(slice(beg, end) for beg, end in zip(block.begin, block.end))
             if isinstance(output, list):  # we have multiple outputs and split the prediction channels
                 for out, channel_slice in output:
                     this_bb = bb if out.ndim == ndim else (slice(None),) + bb
                     out[this_bb] = prediction[channel_slice]
-
             else:  # we only have a single output array
                 if output.ndim == ndim + 1:
                     bb = (slice(None),) + bb
                 output[bb] = prediction
 
     n_blocks = blocking.numberOfBlocks
-    if iter_list is None:
-        iteration_ids = range(n_blocks)
-    else:
-        iteration_ids = np.array(iter_list)
+    iteration_ids = range(n_blocks) if iter_list is None else np.array(iter_list)
+
     with futures.ThreadPoolExecutor(n_workers) as tp:
-        list(tqdm(tp.map(predict_block, iteration_ids), total=len(iteration_ids), disable=disable_tqdm, desc=tqdm_desc))
+        list(tqdm(tp.map(predict_block, iteration_ids),
+                  total=len(iteration_ids),
+                  disable=disable_tqdm,
+                  desc=tqdm_desc))
+
+    # ---- crop away the shift padding so the returned output matches original shape ----
+    if grid_shift is not None:
+        output = _crop_after_shift_left(output, pad_left, with_channels=(output.ndim == ndim+1),
+                                        original_shape_spatial=tuple(shape_spatial0))
 
     return output

@@ -72,7 +72,7 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         """
         self.tb.add_scalar(tag="train/supervised/loss", scalar_value=loss, global_step=step)
         if step % self.log_image_interval == 0:
-            self._add_supervised_images(step, "validation", x, y, pred)
+            self._add_supervised_images(step, "train", x, y, pred)
 
     def log_validation_supervised(self, step, metric, loss, x, y, pred):
         """@private
@@ -86,7 +86,7 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         """
         self.tb.add_scalar(tag="train/unsupervised/loss", scalar_value=loss, global_step=step)
         if step % self.log_image_interval == 0:
-            self._add_unsupervised_images(step, "validation", x1, x2, pred, pseudo_labels, label_filter)
+            self._add_unsupervised_images(step, "train", x1, x2, pred, pseudo_labels, label_filter)
 
     def log_validation_unsupervised(self, step, metric, loss, x1, x2, pred, pseudo_labels, label_filter=None):
         """@private

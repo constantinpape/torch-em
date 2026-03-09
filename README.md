@@ -19,7 +19,7 @@ Design:
 - No callback logic; to extend the core functionality inherit from `torch_em.trainer.DefaultTrainer` instead.
 - All data-loading is lazy to support training on large datasets.
 
-`torch_em` can be installed via conda: `conda install -c conda-forge`.
+`torch_em` can be installed via conda: `conda install -c conda-forge torch_em`.
 Find an example script for how to train a 2D U-Net with it below and check out the [documentation](https://constantinpape.github.io/torch-em/torch_em.html) for more details.
 
 ```python

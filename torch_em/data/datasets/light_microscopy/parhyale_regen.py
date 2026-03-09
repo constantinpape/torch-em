@@ -6,7 +6,6 @@ Please cite it if you use this dataset for your research.
 """
 
 import os
-import requests
 from glob import glob
 from natsort import natsorted
 from typing import Union, Tuple, List
@@ -55,6 +54,8 @@ def get_parhyale_regen_data(path: Union[os.PathLike, str], download: bool = Fals
     Returns:
         Filepath where the training data is stored.
     """
+    import requests
+
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):
         return path

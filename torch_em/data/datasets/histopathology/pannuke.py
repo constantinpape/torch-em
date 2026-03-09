@@ -43,6 +43,7 @@ def get_pannuke_data(path, download, folds):
     """
     os.makedirs(path, exist_ok=True)
     for tmp_fold in folds:
+        assert tmp_fold in URLS.keys(), "Please choose one or more of existing folds: 'fold_1' / 'fold_2' / 'fold_3'."
         if os.path.exists(os.path.join(path, f"pannuke_{tmp_fold}.h5")):
             return
 
