@@ -104,7 +104,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         if self.unsupervised_val_loader is None:
             val_loader = self.supervised_val_loader
         else:
-            val_loader = self.unsupervised_train_loader
+            val_loader = self.unsupervised_val_loader
 
         # Check that we have at least one of supvervised / unsupervised loss and metric.
         assert sum((
