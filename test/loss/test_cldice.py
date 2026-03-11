@@ -3,8 +3,8 @@ import torch
 
 class TestclDiceLoss(unittest.TestCase):
     def test_cldice_random(self):
-        from torch_em.loss.cldice import SoftDiceclDiceLoss
-        loss = SoftDiceclDiceLoss()
+        from torch_em.loss.cldice import CombinedclDiceLoss
+        loss = CombinedclDiceLoss()
 
         shape = (1, 1, 32, 32)
         x = torch.rand(*shape)
@@ -22,8 +22,8 @@ class TestclDiceLoss(unittest.TestCase):
         self.assertEqual(grads.shape, x.shape)
 
     def test_cldice_perfect_overlap(self):
-        from torch_em.loss.cldice import SoftDiceclDiceLoss
-        loss = SoftDiceclDiceLoss()
+        from torch_em.loss.cldice import CombinedclDiceLoss
+        loss = CombinedclDiceLoss()
 
         shape = (1, 1, 32, 32)
 
@@ -38,8 +38,8 @@ class TestclDiceLoss(unittest.TestCase):
         self.assertAlmostEqual(lval.item(), 0.0)
 
     def test_cldice_no_overlap(self):
-        from torch_em.loss.cldice import SoftDiceclDiceLoss
-        loss = SoftDiceclDiceLoss()
+        from torch_em.loss.cldice import CombinedclDiceLoss
+        loss = CombinedclDiceLoss()
 
         shape = (1, 1, 32, 32)
 
@@ -54,8 +54,8 @@ class TestclDiceLoss(unittest.TestCase):
         self.assertAlmostEqual(lval.item(), 1.0, places=1)
 
     def test_cldice_invalid(self):
-        from torch_em.loss.cldice import SoftDiceclDiceLoss
-        loss = SoftDiceclDiceLoss()
+        from torch_em.loss.cldice import CombinedclDiceLoss
+        loss = CombinedclDiceLoss()
 
         shape1 = (1, 1, 32, 32)
         shape2 = (1, 2, 32, 32)
