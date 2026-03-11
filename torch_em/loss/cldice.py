@@ -66,19 +66,25 @@ class SoftSkeletonize(torch.nn.Module):
         """
         return self.soft_skel(input_)
 
-#TODO this is not used in the paper; rather they used the combined SoftDiceclDice as it is still good to have the loss consider the segmentation masks in addition to their skeletons
-class SoftclDice(nn.Module):
-    """Placeholder.
+
+class SoftclDiceLoss(nn.Module):
+    """Combined soft Dice and clDice loss for segmentation of tubular structures.
+
+        The soft clDice loss computes topology-aware loss by computing the soft skeleton of both the prediction and target
+        and measuring overlap of the two skeletons. Teaches the model to learn skeletons directly. 
+        In the clDice paper, the authors recommend using the combined soft-Dice and soft-clDice loss to learn topology-aware 
+        segmentations, which is implemented here as `SoftDiceclDiceLoss`. 
 
     Args:
         num_iter: Number of iterations for soft-skeletonization. 
         eps: The epsilon value added to the denominator for numerical stability.
-        exclude_background:
+        exclude_background: Whether to exclude background channel 0 from the loss computation. 
+            Useful for multi-class segmentation.
         channelwise: Not implemented; Whether to return the dice score independently per channel.
         reduce_channel: Not implemented; The epsilon value added to the denominator for numerical stability.
     """
-    def __init__(self, num_iter: int = 5, eps: int = 1., exclude_background: bool = False):
-        super(SoftclDice, self).__init__()
+    def __init__(self, num_iter: int = 5, eps: float = 1.0, exclude_background: bool = False):
+        super(SoftclDiceLoss, self).__init__()
 
         #TODO fix iter argument, soft skeletonize should get the self.num_iter instead of num_iter=10
         self.num_iter = num_iter
@@ -103,12 +109,12 @@ class SoftclDice(nn.Module):
         skel_target = self.soft_skeletonize(target)
         tprec = (torch.sum(torch.multiply(skel_input, target))+self.eps)/(torch.sum(skel_input)+self.eps)    
         tsens = (torch.sum(torch.multiply(skel_target, input_))+self.eps)/(torch.sum(skel_target)+self.eps)    
-        cl_dice = 1.- 2.0*(tprec*tsens)/(tprec+tsens)
+        cl_dice = 1.0 - 2.0*(tprec*tsens)/(tprec+tsens)
 
         return cl_dice
 
-
-def soft_dice(input_: torch.Tensor, target: torch.Tensor, eps: int = 1):
+#TODO consider resuing dice_score from dice.py as the implementation is better
+def soft_dice(input_: torch.Tensor, target: torch.Tensor, eps: float = 1.0):
     """Compute the soft dice score between the input logits and binary target.
 
     Args:
@@ -119,29 +125,32 @@ def soft_dice(input_: torch.Tensor, target: torch.Tensor, eps: int = 1):
     Returns:
         The soft dice score.
     """
-    #TODO should we be using eps = 1 for regular dice (in dice.py 1e-7)
     intersection = torch.sum((target * input_))
-    coeff = (2. *  intersection + eps) / (torch.sum(target) + torch.sum(input_) + eps)
-    return (1. - coeff)
+    coeff = (2.0 *  intersection + eps) / (torch.sum(target) + torch.sum(input_) + eps)
+    return (1.0 - coeff)
 
 
-#TODO update docstrings, forward 
-#TODO channelwise is default for DiceLoss, should we also implement that here?
+#TODO implement `channelwise` for multiclass segmentation
+#TODO consider if `exclude_background` is needed for multiclass segmentation
+class SoftDiceclDiceLoss(nn.Module):
+    """Combined soft-Dice and soft-clDice loss for segmentation of tubular structures.
 
-class SoftDiceclDice(nn.Module):
-    """Placeholder.
+        The soft-clDice loss computes topology-aware loss by computing the soft skeleton of both the prediction and target
+        and measuring overlap of the two skeletons. This encourages the model to preserve the connectivity and topology 
+        of tubular structures. The final loss is a weighted combination of soft Dice and clDice, controlled by alpha.
 
     Args:
         num_iter: Number of iterations for soft-skeletonization. 
         alpha: The weight for combining the soft Dice and soft clDice loss.
         eps: The epsilon value added to the denominator for numerical stability.
-        exclude_background:
+        exclude_background: Whether to exclude background channel 0 from the loss computation. Useful for multi-class segmentation.
+        invert: Not implemented; Whether to invert the returned dice score to obtain the dice error instead of the dice score.
         channelwise: Not implemented; Whether to return the dice score independently per channel.
         reduce_chnanel: Not implemented; How to return the dice score over the channel axis.
 
     """
-    def __init__(self, num_iter: int = 5, alpha: float = 0.5, eps: int = 1., exclude_background: bool = False):
-        super(SoftDiceclDice, self).__init__()
+    def __init__(self, num_iter: int = 5, alpha: float = 0.5, eps: float = 1.0, exclude_background: bool = False):
+        super(SoftDiceclDiceLoss, self).__init__()
 
         #TODO fix iter argument, soft skeletonize should get the self.num_iter instead of num_iter=10
 
@@ -171,7 +180,7 @@ class SoftDiceclDice(nn.Module):
         skel_target = self.soft_skeletonize(target)
         tprec = (torch.sum(torch.multiply(skel_input, target))+self.eps)/(torch.sum(skel_input)+self.eps)    
         tsens = (torch.sum(torch.multiply(skel_target, input_))+self.eps)/(torch.sum(skel_target)+self.eps)    
-        cl_dice = 1.- 2.0*(tprec*tsens)/(tprec+tsens)
+        cl_dice = 1.0 - 2.0*(tprec*tsens)/(tprec+tsens)
 
         return (1.0-self.alpha)*dice+self.alpha*cl_dice
 
