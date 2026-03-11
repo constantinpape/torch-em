@@ -3,10 +3,10 @@ import numpy as np
 import torch 
 
 
-class TestDiceLoss(unittest.TestCase):
+class TestclDiceLoss(unittest.TestCase): 
     def test_cldice_random(self):
-        from torch_em.loss import soft_dice_cldice
-        loss = soft_dice_cldice()
+        from torch_em.loss.cldice_loss import SoftDiceclDice
+        loss = SoftDiceclDice()
 
         shape = (1, 1, 32, 32)
         x = torch.rand(*shape)
@@ -36,7 +36,7 @@ class TestDiceLoss(unittest.TestCase):
         lval = loss(x, y)
         self.assertAlmostEqual(lval.item(), 1.0)
 
-    def test_dice_invalid(self):
+    def test_cldice_invalid(self):
         from torch_em.loss import DiceLoss
         loss = DiceLoss()
 
@@ -47,7 +47,7 @@ class TestDiceLoss(unittest.TestCase):
         with self.assertRaises(ValueError):
             loss(x, y)
 
-    def test_dice_reduction(self):
+    def test_cldice_reduction(self):
         from torch_em.loss import DiceLoss
 
         shape = (1, 3, 32, 32)
