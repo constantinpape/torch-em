@@ -66,7 +66,7 @@ class SoftSkeletonize(torch.nn.Module):
         return self.soft_skel(input_)
 
 #TODO update docstrings, args, and forward
-class soft_cldice(nn.Module):
+class SoftclDice(nn.Module):
     """Placeholder.
 
     Args:
@@ -75,7 +75,7 @@ class soft_cldice(nn.Module):
         exclude_background:
     """
     def __init__(self, iter_=3, smooth = 1., exclude_background=False):
-        super(soft_cldice, self).__init__()
+        super(SoftclDice, self).__init__()
 
         #TODO fix iter argument, soft skeletonize should get the self.iter_ instead of num_iter=10
         self.iter = iter_
@@ -124,7 +124,7 @@ def soft_dice(input_: torch.Tensor, target: torch.Tensor):
 #TODO update docstrings, forward 
 #TODO channelwise is default for DiceLoss, should we also implement that here?
 
-class soft_dice_cldice(nn.Module):
+class SoftDiceclDice(nn.Module):
     """Placeholder.
 
     Args:
@@ -134,15 +134,15 @@ class soft_dice_cldice(nn.Module):
         exclude_background:
 
     """
-    def __init__(self, iter_=3, alpha=0.5, smooth = 1., exclude_background=False):
-        super(soft_dice_cldice, self).__init__()
+    def __init__(self, iter_=5, alpha=0.5, smooth = 1., exclude_background=False):
+        super(SoftDiceclDice, self).__init__()
 
         #TODO fix iter argument, soft skeletonize should get the self.iter_ instead of num_iter=10
 
         self.iter = iter_
         self.smooth = smooth
         self.alpha = alpha
-        self.soft_skeletonize = SoftSkeletonize(num_iter=10)
+        self.soft_skeletonize = SoftSkeletonize(num_iter=5)
         self.exclude_background = exclude_background
 
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -154,7 +154,7 @@ class soft_dice_cldice(nn.Module):
             
 
         Returns:
-            Combined soft Dice and clDice loss. 
+            Combined dice loss. 
         """
         if self.exclude_background:
             target = target[:, 1:, :, :]
