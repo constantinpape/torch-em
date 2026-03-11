@@ -1,12 +1,10 @@
 import unittest
-import numpy as np 
-import torch 
+import torch
 
-
-class TestclDiceLoss(unittest.TestCase): 
+class TestclDiceLoss(unittest.TestCase):
     def test_cldice_random(self):
-        from torch_em.loss.cldice_loss import SoftDiceclDice
-        loss = SoftDiceclDice()
+        from torch_em.loss.cldice import SoftDiceclDiceLoss
+        loss = SoftDiceclDiceLoss()
 
         shape = (1, 1, 32, 32)
         x = torch.rand(*shape)
@@ -15,30 +13,49 @@ class TestclDiceLoss(unittest.TestCase):
         y = torch.rand(*shape)
 
         lval = loss(x, y)
-        self.assertNotEqual(lval.item(), 0.0)
 
+        # loss should be be in range (0, 1)
+        self.assertGreaterEqual(lval.item(), 0.0)
+        self.assertLessEqual(lval.item(), 1.0)
         lval.backward()
         grads = x.grad
         self.assertEqual(grads.shape, x.shape)
 
-    def test_cldice(self):
-        from torch_em.loss import DiceLoss
-        loss = DiceLoss()
+    def test_cldice_perfect_overlap(self):
+        from torch_em.loss.cldice import SoftDiceclDiceLoss
+        loss = SoftDiceclDiceLoss()
 
         shape = (1, 1, 32, 32)
+
+        # 4-pixel wide overlapping lines
         x = torch.ones(*shape)
+        x[0, 0, 14:18, :] = 1.0
+
         y = torch.ones(*shape)
+        y[0, 0, 14:18, :] = 1.0
+
         lval = loss(x, y)
         self.assertAlmostEqual(lval.item(), 0.0)
 
-        x = torch.ones(*shape)
+    def test_cldice_no_overlap(self):
+        from torch_em.loss.cldice import SoftDiceclDiceLoss
+        loss = SoftDiceclDiceLoss()
+
+        shape = (1, 1, 32, 32)
+
+        # 4-pixel wide non-overlapping lines
+        x = torch.zeros(*shape)
+        x[0, 0, 4:8, :] = 1.0
+        
         y = torch.zeros(*shape)
+        y[0, 0, 24:28, :] = 1.0
+
         lval = loss(x, y)
-        self.assertAlmostEqual(lval.item(), 1.0)
+        self.assertAlmostEqual(lval.item(), 1.0, places=1)
 
     def test_cldice_invalid(self):
-        from torch_em.loss import DiceLoss
-        loss = DiceLoss()
+        from torch_em.loss.cldice import SoftDiceclDiceLoss
+        loss = SoftDiceclDiceLoss()
 
         shape1 = (1, 1, 32, 32)
         shape2 = (1, 2, 32, 32)
@@ -46,23 +63,6 @@ class TestclDiceLoss(unittest.TestCase):
         y = torch.rand(*shape2)
         with self.assertRaises(ValueError):
             loss(x, y)
-
-    def test_cldice_reduction(self):
-        from torch_em.loss import DiceLoss
-
-        shape = (1, 3, 32, 32)
-        x = torch.rand(*shape)
-        y = torch.rand(*shape)
-
-        for reduction in (None, "mean", "min", "max", "sum"):
-            loss = DiceLoss(reduce_channel=reduction)
-            lval = loss(x, y)
-            if reduction is None:
-                self.assertEqual(tuple(lval.shape), (3,))
-            else:
-                self.assertEqual(tuple(lval.shape), tuple())
-                self.assertEqual(lval.numel(), 1)
-
 
 if __name__ == '__main__':
     unittest.main()

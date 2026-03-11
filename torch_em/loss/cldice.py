@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .dice import flatten_samples
 
 # From "clDice -- A Novel Topology-Preserving Loss Function for Tubular Structure Segmentation":
 # https://arxiv.org/abs/2003.07311
