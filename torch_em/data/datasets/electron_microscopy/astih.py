@@ -5,6 +5,7 @@ and train axon and myelin segmentation models. It provides over 60,000 manually
 segmented fibers across three microscopy modalities.
 
 The dataset is described at https://axondeepseg.github.io/ASTIH/.
+The dataset is from the publication https://openreview.net/forum?id=ExBq9A8Ypk.
 Please cite the corresponding publication if you use the dataset in your research.
 """
 
