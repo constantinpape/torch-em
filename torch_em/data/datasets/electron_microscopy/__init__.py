@@ -10,6 +10,7 @@ from .densecell import get_densecell_loader, get_densecell_dataset
 from .deepict import get_deepict_actin_loader, get_deepict_actin_dataset
 from .emneuron import get_emneuron_loader, get_emneuron_dataset
 from .fafb_nuclei import get_fafb_nuclei_loader, get_fafb_nuclei_dataset
+from .fib25 import get_fib25_loader, get_fib25_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
