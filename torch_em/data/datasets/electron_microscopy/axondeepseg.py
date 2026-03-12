@@ -10,8 +10,8 @@ from glob import glob
 from shutil import rmtree
 from typing import Optional, Tuple, Union, Literal, List
 
-import imageio
 import numpy as np
+import imageio.v3 as imageio
 
 from torch.utils.data import Dataset, DataLoader
 
