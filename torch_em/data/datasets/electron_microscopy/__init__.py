@@ -1,5 +1,6 @@
 from .aimseg import get_aimseg_loader, get_aimseg_dataset
 from .asem import get_asem_loader, get_asem_dataset
+from .astih import get_astih_loader, get_astih_dataset
 from .axondeepseg import get_axondeepseg_loader, get_axondeepseg_dataset
 from .axonem import get_axonem_loader, get_axonem_dataset
 from .betaseg import get_betaseg_loader, get_betaseg_dataset
