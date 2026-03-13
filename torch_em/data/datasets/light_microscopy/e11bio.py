@@ -25,6 +25,7 @@ Specify a consistent channel when mixing crops from different groups.
 
 The data is hosted at s3://e11bio-prism (anonymous access, no credentials required).
 The dataset is described in the E11bio open-data repository: https://github.com/e11bio/e11-open-data
+The dataset is from the publication https://www.biorxiv.org/content/10.1101/2025.09.26.678648v1.
 Please cite this resource if you use the dataset in your research.
 
 NOTE: accessing this dataset requires the `s3fs` package (pip install s3fs).
