@@ -16,7 +16,7 @@ def check_malecns():
         batch_size=1,
         download=True,
     )
-    check_loader(loader, 4, instance_labels=True, plt=True, save_path="./malecns.png")
+    check_loader(loader, 4, instance_labels=True)
 
 
 if __name__ == "__main__":
