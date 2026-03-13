@@ -11,8 +11,16 @@ gs://flyem-male-cns/v0.9/segmentation.
 The dataset is described at https://www.biorxiv.org/content/10.1101/2025.10.09.680999v2.
 Please cite this publication if you use the dataset in your research.
 
-Note: accessing this dataset requires the `cloud-volume` package
-(pip install cloud-volume).
+NOTE: accessing this dataset requires the `cloud-volume` package (pip install cloud-volume).
+
+NOTE (on data size): the full volume is (94088, 78317, 134576) voxels at 8nm isotropic
+resolution (~978 TB raw uncompressed, ~8 PB labels uncompressed). Downloading the entire
+volume is not feasible. Data is instead accessed by specifying bounding boxes
+(x_min, x_max, y_min, y_max, z_min, z_max) in 8nm voxel coordinates, which are streamed
+from GCS and cached locally as HDF5 files (~1.2 GB per 1024³ subvolume). To target
+specific regions of the CNS (central brain, optic lobes, VNC), the neuropil ROI volume
+at gs://flyem-male-cns/rois/fullbrain-roi-v4 can be used to identify relevant coordinate
+ranges.
 """
 
 import os
