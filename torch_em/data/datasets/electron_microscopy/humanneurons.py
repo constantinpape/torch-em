@@ -112,6 +112,10 @@ def get_humanneurons_data(
     raw = _fetch(em_vol,  x_min, x_max, y_min, y_max, z_min, z_max)
     labels = _fetch(seg_vol, x_min, x_max, y_min, y_max, z_min, z_max)
 
+    # Relabel to consecutive integers so IDs fit in uint32 (required for napari and float32 training).
+    from skimage.segmentation import relabel_sequential
+    labels, _, _ = relabel_sequential(labels)
+
     resolution_nm = em_vol.mip_resolution(1).tolist()  # [8, 8, 33] nm
 
     with h5py.File(h5_path, "w") as f:
@@ -119,7 +123,7 @@ def get_humanneurons_data(
         f.attrs["crop_size"] = raw.shape  # (z, y, x)
         f.attrs["resolution_nm"] = resolution_nm   # [x, y, z] in nm
         f.create_dataset("raw", data=raw.astype("uint8"),   compression="gzip", chunks=True)
-        f.create_dataset("labels", data=labels.astype("uint64"), compression="gzip", chunks=True)
+        f.create_dataset("labels", data=labels.astype("uint32"), compression="gzip", chunks=True)
 
     print(f"Cached to {h5_path}  (raw {raw.shape}, labels {labels.shape})")
     return h5_path
