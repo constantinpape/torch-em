@@ -1,0 +1,23 @@
+import os
+import sys
+
+from torch_em.data.datasets import get_humanneurons_loader
+from torch_em.util.debug import check_loader
+
+sys.path.append("..")
+
+
+def check_humanneurons():
+    from util import ROOT
+
+    loader = get_humanneurons_loader(
+        path=os.path.join(ROOT, "humanneurons"),
+        patch_shape=(8, 512, 512),
+        batch_size=1,
+        download=True,
+    )
+    check_loader(loader, 4, instance_labels=True, plt=True, save_path="./humanneurons.png")
+
+
+if __name__ == "__main__":
+    check_humanneurons()
