@@ -19,7 +19,7 @@ def check_e11bio():
         channel=0,
         download=True,
     )
-    check_loader(loader, 4, instance_labels=True, plt=True, save_path="./e11bio.png")
+    check_loader(loader, 4, instance_labels=True)
 
 
 if __name__ == "__main__":
