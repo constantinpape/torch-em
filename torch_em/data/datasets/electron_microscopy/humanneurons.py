@@ -118,7 +118,7 @@ def get_humanneurons_data(
 
     resolution_nm = em_vol.mip_resolution(1).tolist()  # [8, 8, 33] nm
 
-    with h5py.File(h5_path, "w") as f:
+    with h5py.File(h5_path, "w", locking=False) as f:
         f.attrs["bounding_box"] = bounding_box
         f.attrs["crop_size"] = raw.shape  # (z, y, x)
         f.attrs["resolution_nm"] = resolution_nm   # [x, y, z] in nm

@@ -101,7 +101,7 @@ def get_malecns_data(
 
     resolution_nm = em_vol.resolution.tolist()  # [x, y, z] in nm
 
-    with h5py.File(h5_path, "w") as f:
+    with h5py.File(h5_path, "w", locking=False) as f:
         f.attrs["bounding_box"] = bounding_box
         f.attrs["crop_size"] = raw.shape  # (z, y, x) after transpose
         f.attrs["resolution_nm"] = resolution_nm  # [x, y, z] in nm
