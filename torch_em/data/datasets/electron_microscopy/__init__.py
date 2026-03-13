@@ -14,6 +14,7 @@ from .emps import get_emps_loader, get_emps_dataset
 from .fafb_nuclei import get_fafb_nuclei_loader, get_fafb_nuclei_dataset
 from .fib25 import get_fib25_loader, get_fib25_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
+from .humanneurons import get_humanneurons_loader, get_humanneurons_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
