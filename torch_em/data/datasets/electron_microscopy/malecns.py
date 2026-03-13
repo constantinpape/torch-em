@@ -91,8 +91,12 @@ def get_malecns_data(
     raw = np.array(em_vol[x_min:x_max, y_min:y_max, z_min:z_max])[..., 0].transpose(2, 1, 0)
     labels = np.array(seg_vol[x_min:x_max, y_min:y_max, z_min:z_max])[..., 0].transpose(2, 1, 0)
 
+    resolution_nm = em_vol.resolution.tolist()  # [x, y, z] in nm
+
     with h5py.File(h5_path, "w") as f:
         f.attrs["bounding_box"] = bounding_box
+        f.attrs["crop_size"] = raw.shape  # (z, y, x) after transpose
+        f.attrs["resolution_nm"] = resolution_nm  # [x, y, z] in nm
         f.create_dataset("raw", data=raw.astype("uint8"), compression="gzip", chunks=True)
         f.create_dataset("labels", data=labels.astype("uint64"), compression="gzip", chunks=True)
 
