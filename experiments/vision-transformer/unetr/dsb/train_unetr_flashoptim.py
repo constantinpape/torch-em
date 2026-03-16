@@ -1,7 +1,14 @@
 import os
 
 import torch
+
+import torch_em
+from torch_em.model.unetr import UNETR
 from torch_em.trainer.flashoptim_trainer import FlashOptimTrainer
+
+from micro_sam.util import _download_sam_model
+
+from common import get_loaders
 
 
 def setup_env():
@@ -21,9 +28,6 @@ def setup_env():
 
 
 def get_model(pretrained):
-    from torch_em.model.unetr import UNETR
-    from micro_sam.util import _download_sam_model
-
     model_type = "vit_b"
     checkpoint = _download_sam_model(model_type=model_type)[0] if pretrained else None
     model = UNETR(
@@ -39,9 +43,6 @@ def get_model(pretrained):
 
 
 def train_unetr(pretrained, use_dice, mask_background):
-    import torch_em
-    from common import get_loaders
-
     model = get_model(pretrained)
 
     if use_dice:
