@@ -71,7 +71,7 @@ def train_unetr(pretrained, use_dice, mask_background):
         log_image_interval=100,
         trainer_class=FlashOptimTrainer,
     )
-    trainer.fit(n_iterations=1e4)
+    trainer.fit(iterations=int(1e4))
 
 
 if __name__ == "__main__":

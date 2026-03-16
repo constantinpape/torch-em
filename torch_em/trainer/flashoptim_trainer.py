@@ -33,24 +33,27 @@ class FlashOptimTrainer(DefaultTrainer):
                 "flashoptim is required for `FlashOptimTrainer`. Please install it using `pip install flashoptim`."
             )
 
+        optimizer = kwargs["optimizer"]
+        if not isinstance(optimizer, torch.optim.AdamW):
+            raise ValueError(
+                f"FlashOptimTrainer is currently tested with the AdamW optimizer, got '{type(optimizer).__name__}'. "
+                "FlashAdamW is a drop-in replacement for AdamW only."
+            )
+
+        # Cast the model parameters to bf16 precision.
+        lr = optimizer.param_groups[0]["lr"]
+        cast_model(kwargs["model"], dtype=torch.bfloat16)
+        kwargs["optimizer"] = FlashAdamW(kwargs["model"].parameters(), lr=lr)
+        kwargs["lr_scheduler"] = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            kwargs["optimizer"], mode="min", factor=0.5, patience=5
+        )
+
         # Pinning the values for 'mixed_precision' and 'compile_model' both to 'False'.
         kwargs["mixed_precision"] = False
-        kwargs["compile_model"] = False
+        kwargs["compile_model"] = False  # TODO: We should explore compiling the model if it brings an advantange.
 
         super().__init__(**kwargs)
         self._kwargs = {}  # Required by the serializer.
-
-        # This function casts the model parameters to bf16.
-        cast_model(self.model, dtype=torch.bfloat16)
-
-        lr = self.optimizer.param_groups[0]["lr"]
-
-        # Choice of FlashOptim optimizer - a direct drop-in replacement to PyTorch optimizer API.
-        self.optimizer = FlashAdamW(self.model.parameters(), lr=lr)
-
-        self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=5
-        )
 
     def _train_epoch_impl(self, progress, forward_context, backprop):
         self.model.train()
