@@ -93,10 +93,8 @@ class SoftclDiceLoss(nn.Module):
                  exclude_background: bool = False):
         super(SoftclDiceLoss, self).__init__()
 
-        # TODO fix iter argument, soft skeletonize should get the self.num_iter instead of num_iter=10
-        self.num_iter = num_iter
         self.eps = eps
-        self.soft_skeletonize = SoftSkeletonize(num_iter=5)
+        self.soft_skeletonize = SoftSkeletonize(num_iter=num_iter)
         self.exclude_background = exclude_background
 
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -173,12 +171,9 @@ class CombinedclDiceLoss(nn.Module):
                  exclude_background: bool = False):
         super(CombinedclDiceLoss, self).__init__()
 
-        #TODO fix iter argument, soft skeletonize should get the self.num_iter instead of num_iter=10
-
-        self.num_iter = num_iter
         self.eps = eps
         self.alpha = alpha
-        self.soft_skeletonize = SoftSkeletonize(num_iter=5)
+        self.soft_skeletonize = SoftSkeletonize(num_iter=num_iter)
         self.exclude_background = exclude_background
        
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
