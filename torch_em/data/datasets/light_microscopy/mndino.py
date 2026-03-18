@@ -6,8 +6,10 @@ nuclei masks (main nucleus bodies) and micronuclei masks (small nuclear fragment
 Images were acquired on four different microscopy platforms.
 
 The dataset is located at https://www.ebi.ac.uk/biostudies/bioimages/studies/S-BIAD2809.
-This dataset is from the publication https://doi.org/10.7554/elife.101579.
-Please cite it if you use this dataset for your research.
+This dataset is from the publication https://doi.org/10.7554/elife.101579
+and https://doi.org/10.64898/2026.03.09.710648.
+
+Please cite them if you use this dataset for your research.
 """
 
 import os
