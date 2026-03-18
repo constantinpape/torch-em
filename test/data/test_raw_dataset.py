@@ -79,6 +79,25 @@ class TestRawDataset(unittest.TestCase):
         for i in range(10):
             self.assertEqual(ds[i].shape, expected_raw_shape)
 
+class TestRawDatasetWithMasks(unittest.TestCase):
+    path = "./data.h5"
+
+    def tearDown(self):
+        os.remove(self.path)
+
+    def create_default_data(self, key, shape=None, chunks=None):
+        shape = (128,) * 3 if shape is None else shape
+        chunks = tuple(min(32, sh) for sh in shape) if chunks is None else chunks
+        with h5py.File(self.path, "a") as f:
+            f.create_dataset(key, data=np.random.rand(*shape), chunks=chunks)
+        return shape, chunks
+
+    def test_sample_mask(self):
+        from torch_em.data import RawDatasetWithMasks
+
+    def test_bg_mask(self):
+        from torch_em.data import RawDatasetWithMasks
+
 
 if __name__ == "__main__":
     unittest.main()

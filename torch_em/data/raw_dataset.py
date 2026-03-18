@@ -262,7 +262,7 @@ class RawDatasetWithMasks(RawDataset):
         self.bg_mask_key = bg_mask_key
         self.bg_mask = load_data(bg_mask_path, bg_mask_key) if bg_mask_path is not None else None
 
-    # TOOD should this handle with_channels? feels like unnecessary complexity
+    # TODO should this handle with_channels? feels like unnecessary complexity
     def _get_sample(self, index): #TODO update `_get_sample`
         if self.raw is None:
             raise RuntimeError("RawDataset has not been properly deserialized.")
