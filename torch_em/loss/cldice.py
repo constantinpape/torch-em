@@ -89,7 +89,7 @@ class SoftclDiceLoss(nn.Module):
         reduce_channel: Not implemented; The epsilon value added to the 
             denominator for numerical stability.
     """
-    def __init__(self, num_iter: int = 5, eps: float = 1.0,
+    def __init__(self, num_iter: int = 5, eps: float = 1e-7,
                  exclude_background: bool = False):
         super(SoftclDiceLoss, self).__init__()
 
@@ -122,7 +122,7 @@ class SoftclDiceLoss(nn.Module):
         return cl_dice
 
 # TODO consider resuing dice_score from dice.py as the implementation is better
-def soft_dice(input_: torch.Tensor, target: torch.Tensor, eps: float = 1.0):
+def soft_dice(input_: torch.Tensor, target: torch.Tensor, eps: float = 1e-7):
     """Compute the soft dice score between the input logits and binary target.
 
     Args:
@@ -167,7 +167,7 @@ class CombinedclDiceLoss(nn.Module):
             channel axis.
 
     """
-    def __init__(self, num_iter: int = 5, alpha: float = 0.5, eps: float = 1.0,
+    def __init__(self, num_iter: int = 5, alpha: float = 0.5, eps: float = 1e-7,
                  exclude_background: bool = False):
         super(CombinedclDiceLoss, self).__init__()
 
