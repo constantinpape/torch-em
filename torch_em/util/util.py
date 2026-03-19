@@ -89,7 +89,7 @@ def ensure_tensor(tensor: Union[torch.Tensor, ArrayLike], dtype: Optional[str] =
             tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
         # Try to convert the tensor, even if it has wrong byte-order
         try:
-            tensor = torch.from_numpy(tensor)
+            tensor = torch.from_numpy(tensor.copy())
         except ValueError:
             tensor = tensor.view(tensor.dtype.newbyteorder())
             if np.dtype(tensor.dtype) in DTYPE_MAP:
