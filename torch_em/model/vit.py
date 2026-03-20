@@ -73,7 +73,7 @@ class ViT_Sam(ImageEncoderViT):
         in_chans: int = 3,
         embed_dim: int = 768,
         global_attn_indexes: Tuple[int, ...] = [2, 5, 8, 11],
-        apply_neck: bool = True,
+        apply_neck: bool = False,
         **kwargs,
     ) -> None:
         if not _sam_import_success:
