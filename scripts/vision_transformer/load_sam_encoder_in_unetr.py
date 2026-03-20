@@ -2,18 +2,28 @@ import torch
 
 from torch_em.model import UNETR
 
-from micro_sam.util import get_sam_model
+from micro_sam.util import get_sam_model, _download_sam_model
+
+
+def load_sam1_encoder():
+    from torch_em.model.vit import get_vision_transformer
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    encoder = get_vision_transformer("sam", "vit_b")
+    encoder.to(device)
+
+    x = torch.ones((1, 3, 1024, 1024)).to(device)
+    y = encoder(x)
+    print(x.shape, y.shape)
 
 
 def load_sam1():
-    checkpoint = "/scratch/usr/nimanwai/models/segment-anything/checkpoints/sam_vit_b_01ec64.pth"
     model_type = "vit_b"
+    checkpoint, _, _ = _download_sam_model(model_type)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    predictor = get_sam_model(
-        model_type=model_type,
-        checkpoint_path=checkpoint
-    )
+    predictor = get_sam_model(model_type=model_type, checkpoint_path=checkpoint)
 
     model = UNETR(
         backbone="sam",
@@ -21,7 +31,7 @@ def load_sam1():
         out_channels=3,
         use_sam_stats=True,
         final_activation="Sigmoid",
-        use_skip_connection=False
+        use_skip_connection=False,
     )
     model.to(device)
 
@@ -83,9 +93,11 @@ def load_sam3():
 
 
 def main():
-    # load_sam1()
+    load_sam1()
     # load_sam2()
-    load_sam3()
+    # load_sam3()
+
+    # load_sam1_encoder()
 
 
 if __name__ == "__main__":
