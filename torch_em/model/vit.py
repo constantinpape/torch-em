@@ -65,6 +65,7 @@ class ViT_Sam(ImageEncoderViT):
         in_chans: The number of input channels.
         embed_dim: The embedding dimension, corresponding to the number of output channels of the vision transformer.
         global_attn_indexes: The global attention indices.
+        apply_neck: Whether to apply the convolutional bottleneck after outputs of the last attention head.
         kwargs: Keyword arguments for the image encoder base class.
     """
     def __init__(
@@ -72,6 +73,7 @@ class ViT_Sam(ImageEncoderViT):
         in_chans: int = 3,
         embed_dim: int = 768,
         global_attn_indexes: Tuple[int, ...] = [2, 5, 8, 11],
+        apply_neck: bool = False,
         **kwargs,
     ) -> None:
         if not _sam_import_success:
@@ -85,6 +87,7 @@ class ViT_Sam(ImageEncoderViT):
         self.chunks_for_projection = global_attn_indexes
         self.in_chans = in_chans
         self.embed_dim = embed_dim
+        self.apply_neck = apply_neck
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply the vision transformer to input data.
@@ -106,6 +109,10 @@ class ViT_Sam(ImageEncoderViT):
                 list_from_encoder.append(x)
 
         x = x.permute(0, 3, 1, 2)
+
+        if self.apply_neck:
+            x = self.neck(x)
+
         list_from_encoder = [e.permute(0, 3, 1, 2) for e in list_from_encoder]
         return x, list_from_encoder[:3]
 

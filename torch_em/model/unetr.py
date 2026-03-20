@@ -134,6 +134,10 @@ class UNETRBase(nn.Module):
             if embed_dim is None:
                 embed_dim = self.encoder.embed_dim
 
+            # For SAM1 encoder, if 'apply_neck' is applied, the embedding dimension must change.
+            if hasattr(self.encoder, "apply_neck") and self.encoder.apply_neck:
+                embed_dim = self.encoder.neck[2].out_channels  # the value is 256
+
         else:  # `nn.Module` ViT backbone
             self.encoder = encoder
 
