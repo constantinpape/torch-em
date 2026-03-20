@@ -47,7 +47,7 @@ class LossWrapper(nn.Module):
         target: Union[Sequence[torch.Tensor], torch.Tensor],
         **kwargs
     ) -> torch.Tensor:
-        """Apply the tranformations to prediction and/or target before computing the loss.
+        """Apply the transformations to prediction and/or target before computing the loss.
 
         Args:
             prediction: The prediction.
