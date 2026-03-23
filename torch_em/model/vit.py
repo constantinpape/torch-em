@@ -132,8 +132,9 @@ class ViT_CellposeSAM(nn.Module):
     Args:
         ps: The patch size (default for CellposeSAM is 8).
         bsize: The input image size (default for CellposeSAM is 256).
+        apply_neck: Whether to apply the convolutional bottleneck after outputs of the last attention head.
     """
-    def __init__(self, ps: int = 8, bsize: int = 256) -> None:
+    def __init__(self, ps: int = 8, bsize: int = 256, apply_neck: bool = True) -> None:
         super().__init__()
 
         if not _sam_import_success:
@@ -173,6 +174,7 @@ class ViT_CellposeSAM(nn.Module):
         self.embed_dim = nchan
         self.img_size = bsize
         self.in_chans = 3
+        self.apply_neck = apply_neck
 
         # Feature extraction at evenly-spaced depths.
         depth = len(self.blocks)
@@ -199,6 +201,10 @@ class ViT_CellposeSAM(nn.Module):
                 list_from_encoder.append(x)
 
         x = x.permute(0, 3, 1, 2)
+
+        if self.apply_neck:
+            x = self.neck(x)
+
         list_from_encoder = [e.permute(0, 3, 1, 2) for e in list_from_encoder]
         return x, list_from_encoder[:3]
 
