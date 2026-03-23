@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .dice import dice_score
+
 # From "clDice -- A Novel Topology-Preserving Loss Function for Tubular Structure Segmentation":
 # https://arxiv.org/abs/2003.07311
 
@@ -121,25 +123,6 @@ class SoftclDiceLoss(nn.Module):
 
         return cl_dice
 
-# TODO consider resuing dice_score from dice.py as the implementation is better
-def soft_dice(input_: torch.Tensor, target: torch.Tensor, eps: float = 1e-7):
-    """Compute the soft dice score between the input logits and binary target.
-
-    Args:
-        input_: The input logits.
-        target: The binary target.
-        eps: The epsilon value added to the denominator for numerical stability.
-
-    Returns:
-        The soft dice score.
-    """
-    if input_.shape != target.shape:
-        raise ValueError(f"Expect input and target of same shape, got: {input_.shape}, {target.shape}.")
-
-    intersection = torch.sum((target * input_))
-    coeff = (2.0 * intersection + eps) / (torch.sum(target) + torch.sum(input_) + eps)
-    return (1.0 - coeff)
-
 
 # TODO implement `channelwise` for multiclass segmentation
 # TODO consider if `exclude_background` is needed for multiclass segmentation
@@ -192,7 +175,7 @@ class CombinedclDiceLoss(nn.Module):
         if self.exclude_background:
             target = target[:, 1:, :, :]
             input_ = input_[:, 1:, :, :]
-        dice = soft_dice(target, input_)
+        dice = dice_score(input_, target, invert=True, channelwise=False, eps=self.eps)
         skel_input = self.soft_skeletonize(input_)
         skel_target = self.soft_skeletonize(target)
         tprec = (torch.sum(torch.multiply(skel_input, target))+self.eps)/(torch.sum(skel_input)+self.eps)    
