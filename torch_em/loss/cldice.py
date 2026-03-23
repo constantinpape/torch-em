@@ -68,6 +68,43 @@ class SoftSkeletonize(torch.nn.Module):
         """
         return self.soft_skel(input_)
 
+def cldice_score(
+    input_: torch.Tensor,
+    target: torch.Tensor,
+    num_iter: int = 5,
+    invert: bool = False,
+    eps: float = 1e-7,
+) -> torch.Tensor:
+    """Adapted from .dice.py `dice_score`. Compute the cldice score between input and target.
+
+    Args:
+        input_: The input tensor.
+        target: The target tensor.
+        num_iter: Number of iterations for soft-skeletonization.
+        invert: Whether to invert the returned dice score to obtain the cldice error instead of the cldice score.
+        channelwise: Not implemented; whether to return the dice score independently per channel.
+        reduce_channel: Not implemented; how to return the dice score over the channel axis.
+        eps: The epsilon value added to the denominator for numerical stability.
+
+    Returns:
+        The cldice score.
+    """
+    if input_.shape != target.shape:
+        raise ValueError(f"Expect input and target of same shape, got: {input_.shape}, {target.shape}.")
+
+    soft_skeletonize = SoftSkeletonize(num_iter=num_iter)
+    skel_input = soft_skeletonize(input_)
+    skel_target = soft_skeletonize(target)
+
+    t_prec = (skel_input * target).sum() / (skel_input.sum()).clamp(min=eps)
+    t_sens = (skel_target * input_).sum() / (skel_target.sum()).clamp(min=eps)
+    score = 2.*(t_prec*t_sens)/(t_prec+t_sens).clamp(min=eps)
+
+    if invert:
+        score = 1. - score
+
+    return score
+
 
 class SoftclDiceLoss(nn.Module):
     """Combined soft Dice and clDice loss for segmentation of tubular structures.
@@ -95,10 +132,10 @@ class SoftclDiceLoss(nn.Module):
                  exclude_background: bool = False):
         super(SoftclDiceLoss, self).__init__()
 
+        self.num_iter = num_iter
         self.eps = eps
-        self.soft_skeletonize = SoftSkeletonize(num_iter=num_iter)
         self.exclude_background = exclude_background
-
+    
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute soft clDice score between the input logits and binary target.
 
@@ -115,18 +152,15 @@ class SoftclDiceLoss(nn.Module):
         if self.exclude_background:
             target = target[:, 1:, :, :]
             input_ = input_[:, 1:, :, :]
-        skel_input = self.soft_skeletonize(input_)
-        skel_target = self.soft_skeletonize(target)
-        tprec = (torch.sum(torch.multiply(skel_input, target))+self.eps)/(torch.sum(skel_input)+self.eps)  
-        tsens = (torch.sum(torch.multiply(skel_target, input_))+self.eps)/(torch.sum(skel_target)+self.eps)
-        cl_dice = 1.0 - 2.0*(tprec*tsens)/(tprec+tsens)
+        
+        cldice = cldice_score(input_, target, num_iter=self.num_iter, invert=True, eps=self.eps)
 
-        return cl_dice
+        return cldice
 
 
 # TODO implement `channelwise` for multiclass segmentation
 # TODO consider if `exclude_background` is needed for multiclass segmentation
-class CombinedclDiceLoss(nn.Module):
+class CombinedclDiceLoss(SoftclDiceLoss):
     """Combined soft-Dice and soft-clDice loss for segmentation of tubular structures.
 
         The soft-clDice loss computes topology-aware loss by computing the
@@ -152,12 +186,9 @@ class CombinedclDiceLoss(nn.Module):
     """
     def __init__(self, num_iter: int = 5, alpha: float = 0.5, eps: float = 1e-7,
                  exclude_background: bool = False):
-        super(CombinedclDiceLoss, self).__init__()
+        super(CombinedclDiceLoss, self).__init__(num_iter=num_iter, eps=eps, exclude_background=exclude_background)
 
-        self.eps = eps
         self.alpha = alpha
-        self.soft_skeletonize = SoftSkeletonize(num_iter=num_iter)
-        self.exclude_background = exclude_background
        
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute combined soft Dice and clDice loss.
@@ -176,12 +207,6 @@ class CombinedclDiceLoss(nn.Module):
             target = target[:, 1:, :, :]
             input_ = input_[:, 1:, :, :]
         dice = dice_score(input_, target, invert=True, channelwise=False, eps=self.eps)
-        skel_input = self.soft_skeletonize(input_)
-        skel_target = self.soft_skeletonize(target)
-        tprec = (torch.sum(torch.multiply(skel_input, target))+self.eps)/(torch.sum(skel_input)+self.eps)    
-        tsens = (torch.sum(torch.multiply(skel_target, input_))+self.eps)/(torch.sum(skel_target)+self.eps)    
-        cl_dice = 1.0 - 2.0*(tprec*tsens)/(tprec+tsens)
+        cldice = cldice_score(input_, target, num_iter=self.num_iter, invert=True, eps=self.eps)
 
-        return (1.0-self.alpha)*dice+self.alpha*cl_dice
-
-
+        return (1.0-self.alpha)*dice+self.alpha*cldice
