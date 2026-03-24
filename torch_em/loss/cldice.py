@@ -75,7 +75,7 @@ def cldice_score(
     invert: bool = False,
     eps: float = 1e-7,
 ) -> torch.Tensor:
-    """Adapted from .dice.py `dice_score`. Compute the cldice score between input and target.
+    """Adapted from .dice.py `dice_score`. Compute the soft clDice score between input and target.
 
     Args:
         input_: The input tensor.
@@ -87,7 +87,7 @@ def cldice_score(
         eps: The epsilon value added to the denominator for numerical stability.
 
     Returns:
-        The cldice score.
+        The clDice score.
     """
     if input_.shape != target.shape:
         raise ValueError(f"Expect input and target of same shape, got: {input_.shape}, {target.shape}.")
