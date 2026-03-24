@@ -202,9 +202,14 @@ class RawDataset(torch.utils.data.Dataset):
 
 
 class RawDatasetWithMasks(RawDataset):
-    """Dataset that provides raw data stored in a container data format for unsupervised training.
+    """Extends `RawDataset` to support a sample mask and a background mask.
 
-    # TODO update subclass description, news args
+        - The sample mask is used by the sampler to extract patches from a region of interest, e.g.,
+            using `MinForegroundSampler`, to avoid empty patches. 
+
+        - The background mask is a binary mask identifying regions or structures that belong to the background. 
+            It can be used during unsupervised training to subtract background regions from the predicted
+            pseudo labels. 
 
     Args:
         raw_path: The file path to the raw image data. May also be a list of file paths.
