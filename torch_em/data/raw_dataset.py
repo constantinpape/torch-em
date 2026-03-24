@@ -222,10 +222,11 @@ class RawDatasetWithMasks(RawDataset):
         with_channels: Whether the raw data has channels.
         augmentations: Augmentations for contrastive learning. If given, these need to be two different callables.
             They will be applied to the sampled raw data to return two independent views of the raw data.
-        sample_mask_path: 
-        sample_mask_key: 
-        bg_mask_path: 
-        bg_mask_key: 
+        sample_mask_path: Filepaths to the sample masks used by the sampler to accept or reject 
+            patches for training.
+        sample_mask_key: The key to the dataset containing the sample masks.
+        bg_mask_path: Filepaths to the background masks, which will be returned together with the raw sample.
+        bg_mask_key: The key to the dataset containing the background masks. 
     """
     
     def __init__(
@@ -247,12 +248,20 @@ class RawDatasetWithMasks(RawDataset):
         bg_mask_path: Union[List[Any], str, os.PathLike] = None,
         bg_mask_key: Optional[str] = None,
     ):
-        super(RawDataset, self).__init__()
-        # enforce that keys are set to "data" when no key is provided; this allows `load_data` to load mrc files
-        if sample_mask_path is not None and sample_mask_key is None:
-            sample_mask_key = "data"
-        if bg_mask_path is not None and bg_mask_key is None:
-            bg_mask_key = "data"
+        super().__init__(
+            raw_path=raw_path,
+            raw_key=raw_key,
+            patch_shape=patch_shape,
+            raw_transform=raw_transform,
+            transform=transform,
+            roi=roi,
+            dtype=dtype,
+            n_samples=n_samples,
+            sampler=sampler,
+            ndim=ndim,
+            with_channels=with_channels,
+            augmentations=augmentations,
+        )
 
         self.sample_mask_path = sample_mask_path
         self.sample_mask_key = sample_mask_key
@@ -262,48 +271,57 @@ class RawDatasetWithMasks(RawDataset):
         self.bg_mask_key = bg_mask_key
         self.bg_mask = load_data(bg_mask_path, bg_mask_key) if bg_mask_path is not None else None
 
-    # TODO should this handle with_channels? feels like unnecessary complexity
+    def _extract_patch(self, data, bb):
+            return data[(slice(None),) + bb] if self._with_channels else data[bb]
+    
     def _get_sample(self, index): #TODO update `_get_sample`
         if self.raw is None:
             raise RuntimeError("RawDataset has not been properly deserialized.")
-        # TODO remove duplicate logic?
+        
+        # default behavior; use if sampler is None
         bb = self._sample_bounding_box()
-        raw = self.raw[(slice(None),) + bb] if self._with_channels else self.raw[bb]
+        raw = self._extract_patch(self.raw, bb)
         
 
         if self.sampler is not None:
             sample_id = 0
             if self.sample_mask is not None:
+                sample_mask = self._extract_patch(self.sample_mask, bb)
+
                 while not self.sampler(raw, sample_mask):
                     bb = self._sample_bounding_box()
-                    raw = self.raw[(slice(None),) + bb] if self._with_channels else self.raw[bb]
-                    sample_mask = self.sample_mask[(slice(None),) + bb] if self._with_channels else self.sample_mask[bb]
+                    raw = self._extract_patch(self.raw, bb)
+                    sample_mask = self._extract_patch(self.sample_mask, bb)
+
                     sample_id += 1
                     if sample_id > self.max_sampling_attempts:
                         raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
             else:
                 while not self.sampler(raw):
                     bb = self._sample_bounding_box()
-                    raw = self.raw[(slice(None),) + bb] if self._with_channels else self.raw[bb]
+                    raw = self._extract_patch(self.raw, bb)
                     sample_id += 1
                     if sample_id > self.max_sampling_attempts:
                         raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
         
-        # TODO also apply to bg_mask?
+        
+        bg_mask = self._extract_patch(self.bg_mask, bb) if self.bg_mask is not None else None
+        
         if self.patch_shape is not None:
-            raw = ensure_patch_shape(
-                raw=raw, labels=None, patch_shape=self.patch_shape, have_raw_channels=self._with_channels
-            )
-
+            raw, bg_mask = ensure_patch_shape(raw=raw, labels=bg_mask, patch_shape=self.patch_shape,
+                                              have_raw_channels=self._with_channels, have_label_channels=self._with_channels)
+   
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
         if len(self.patch_shape) == self._ndim + 1:
             raw = raw.squeeze(1 if self._with_channels else 0)
 
-        return raw, bb
+            if bg_mask is not None:
+                bg_mask = bg_mask.squeeze(1 if self._with_channels else 0)
+
+        return raw, bg_mask
     
-    # TODO update get_item
     def __getitem__(self, index):
-        raw, bb = self._get_sample(index)
+        raw, bg_mask = self._get_sample(index)
 
         if self.raw_transform is not None:
             raw = self.raw_transform(raw)
@@ -318,23 +336,23 @@ class RawDatasetWithMasks(RawDataset):
                 raw = self.crop(raw)
 
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
+        bg_mask = ensure_tensor_with_channels(bg_mask, ndim=self._ndim, dtype=self.dtype) if bg_mask is not None else None
+
         if self.augmentations is not None:
             aug1, aug2 = self.augmentations
             raw1, raw2 = aug1(raw), aug2(raw)
+
+            if bg_mask is not None:
+
+                # if background_mask, returned stacked data
+                return torch.cat((raw1, bg_mask), dim=0), torch.cat((raw2, bg_mask), dim=0)
+            
+            # else, return augmented raw
             return raw1, raw2
 
-        # extract the background mask
-        if self.bg_mask is not None:
-            bg_mask = self.bg_mask[(slice(None),) + bb] if self._with_channels else self.bg_mask[bb]
-            
-            # TODO instead use `ensure_patch_shape`
-            if raw.shape != bg_mask.shape:
-
-                raise ValueError(f"Expect raw and background mask of same shape, got: \
-                                 {raw.shape}, {bg_mask.shape}.")
-
+        if bg_mask is not None:
             # if background_mask, returned stacked data
-            return np.stacked(raw, bg_mask, axis=0)
+            return torch.cat((raw, bg_mask), dim=0)
             
         # else, return raw
         return raw
