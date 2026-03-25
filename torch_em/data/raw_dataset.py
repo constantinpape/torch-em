@@ -206,7 +206,6 @@ class RawDatasetWithMasks(RawDataset):
 
         - The sample mask is used by the sampler to extract patches from a region of interest, e.g.,
             using `MinForegroundSampler`, to avoid empty patches. 
-
         - The background mask is a binary mask identifying regions or structures that belong to the background. 
             It can be used during unsupervised training to subtract background regions from the predicted
             pseudo labels. 
@@ -279,7 +278,7 @@ class RawDatasetWithMasks(RawDataset):
     def _extract_patch(self, data, bb):
             return data[(slice(None),) + bb] if self._with_channels else data[bb]
     
-    def _get_sample(self, index): #TODO update `_get_sample`
+    def _get_sample(self, index):
         if self.raw is None:
             raise RuntimeError("RawDataset has not been properly deserialized.")
         
@@ -313,8 +312,12 @@ class RawDatasetWithMasks(RawDataset):
         bg_mask = self._extract_patch(self.bg_mask, bb) if self.bg_mask is not None else None
         
         if self.patch_shape is not None:
-            raw, bg_mask = ensure_patch_shape(raw=raw, labels=bg_mask, patch_shape=self.patch_shape,
-                                              have_raw_channels=self._with_channels, have_label_channels=self._with_channels)
+            if bg_mask is not None:
+                raw, bg_mask = ensure_patch_shape(raw=raw, labels=bg_mask, patch_shape=self.patch_shape,
+                                                have_raw_channels=self._with_channels, have_label_channels=self._with_channels)
+            else:
+                raw = ensure_patch_shape(raw=raw, labels=None, patch_shape=self.patch_shape,
+                                                have_raw_channels=self._with_channels, have_label_channels=self._with_channels)
    
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
         if len(self.patch_shape) == self._ndim + 1:
@@ -356,6 +359,7 @@ class RawDatasetWithMasks(RawDataset):
             return raw1, raw2
 
         if bg_mask is not None:
+            
             # if background_mask, returned stacked data
             return torch.cat((raw, bg_mask), dim=0)
             
