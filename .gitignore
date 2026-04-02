@@ -11,8 +11,4 @@ logs/
 *.sh
 *.pth
 *.pt
-<<<<<<< cldice_loss
 .DS_Store
-=======
-*.DS_Store
->>>>>>> main
