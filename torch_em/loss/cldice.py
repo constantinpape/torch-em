@@ -135,6 +135,7 @@ class SoftclDiceLoss(nn.Module):
         self.num_iter = num_iter
         self.eps = eps
         self.exclude_background = exclude_background
+        self.init_kwargs = {"num_iter": num_iter, "eps": eps, "exclude_background": exclude_background}
     
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute soft clDice score between the input logits and binary target.
@@ -189,6 +190,7 @@ class CombinedclDiceLoss(SoftclDiceLoss):
         super(CombinedclDiceLoss, self).__init__(num_iter=num_iter, eps=eps, exclude_background=exclude_background)
 
         self.alpha = alpha
+        self.init_kwargs = {"num_iter": num_iter, "alpha": alpha, "eps": eps, "exclude_background": exclude_background}
        
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute combined soft Dice and clDice loss.
