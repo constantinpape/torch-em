@@ -264,5 +264,7 @@ def get_organoid_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_organoid_dataset(path, patch_shape, split, source, source_channels, download, **ds_kwargs)
+    dataset = get_organoid_dataset(
+        path, patch_shape, split=split, source=source, source_channels=source_channels, download=download, **ds_kwargs
+    )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
