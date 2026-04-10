@@ -35,7 +35,7 @@ def get_acdc_data(path: Union[os.PathLike, str], download: bool = False) -> str:
         download: Whether to download the data if it is not present.
 
     Returns:
-        Filepath where the data is downlaoded.
+        Filepath where the data is downloaded.
     """
     zip_path = os.path.join(path, "ACDC.zip")
     trg_dir = os.path.join(path, "ACDC")
