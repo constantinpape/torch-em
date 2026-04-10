@@ -55,7 +55,7 @@ def get_pengwin_data(
         download: Whether to download the data if it is not present.
 
     Returns:
-        Filepath where the data is downlaoded.
+        Filepath where the data is downloaded.
     """
     if not isinstance(modality, str) and modality in MODALITIES:
         raise ValueError(f"'{modality}' is not a valid modality. Please choose from {MODALITIES}.")
