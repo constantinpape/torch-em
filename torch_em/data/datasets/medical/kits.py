@@ -41,7 +41,7 @@ def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
         The folder where the dataset is downloaded and preprocessed.
     """
     data_dir = os.path.join(path, "preprocessed")
-    if os.path.exists(data_dir):
+    if os.path.exists(data_dir) and all(os.path.exists(os.path.join(data_dir, s)) for s in VALID_SPLITS):
         return data_dir
 
     os.makedirs(path, exist_ok=True)
@@ -68,8 +68,10 @@ def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
 
     return data_dir
 
+
 def _preprocess_inputs(path):
     patient_dirs = glob(os.path.join(path, "kits23", "dataset", "case*"))
+
     preprocessed_dir = os.path.join(path, "preprocessed")
 
     for split in VALID_SPLITS:
@@ -90,8 +92,8 @@ def _preprocess_inputs(path):
         train_dirs, val_dirs = train_test_split(train_dirs, test_size=0.1, random_state=42)
         split_map = {
             **{d: "train" for d in train_dirs},
-            **{d: "val"   for d in val_dirs},
-            **{d: "test"  for d in test_dirs},
+            **{d: "val" for d in val_dirs},
+            **{d: "test" for d in test_dirs},
         }
         split_info = {"train": [], "val": [], "test": []}
 
@@ -107,21 +109,25 @@ def _preprocess_inputs(path):
         if os.path.exists(patient_path):
             continue
 
+        # Next, we find all rater annotations.
         kidney_anns = natsorted(glob(os.path.join(patient_dir, "instances", "kidney_instance-1*")))
-        tumor_anns  = natsorted(glob(os.path.join(patient_dir, "instances", "tumor_instance*")))
-        cyst_anns   = natsorted(glob(os.path.join(patient_dir, "instances", "cyst_instance*")))
+        tumor_anns = natsorted(glob(os.path.join(patient_dir, "instances", "tumor_instance*")))
+        cyst_anns = natsorted(glob(os.path.join(patient_dir, "instances", "cyst_instance*")))
 
         import h5py
         import nibabel as nib
 
         with h5py.File(patient_path, "w") as f:
+            # Input image.
             raw = nib.load(os.path.join(patient_dir, "imaging.nii.gz")).get_fdata()
             f.create_dataset("raw", data=raw, compression="gzip")
 
+            # Valid segmentation masks for all classes.
             labels = nib.load(os.path.join(patient_dir, "segmentation.nii.gz")).get_fdata()
-            assert raw.shape == labels.shape, "Shape mismatch between inputs and segmentation."
+            assert raw.shape == labels.shape, "The shape of inputs and corresponding segmentation does not match."
             f.create_dataset("labels/all", data=labels, compression="gzip")
 
+            # Add annotations for kidneys per rater.
             _k_exclusive = False
             if not kidney_anns:
                 _k_exclusive = True
@@ -130,41 +136,58 @@ def _preprocess_inputs(path):
             assert kidney_anns, f"There must be kidney annotations for '{patient_id}'."
             for p in kidney_anns:
                 masks = np.zeros_like(raw)
-                rater_id = p[-8]
-                other_p = p.replace("instance-2", "instance-3") if _k_exclusive else p.replace("instance-1", "instance-2")
+                rater_id = p[-8]  # The rater count
+
+                # Get the other kidney instance.
                 if _k_exclusive:
                     print("The kidney annotations are numbered strangely.")
+                    other_p = p.replace("instance-2", "instance-3")
+                else:
+                    other_p = p.replace("instance-1", "instance-2")
+
+                # Merge both left and right kidney as one semantic id.
                 masks[nib.load(p).get_fdata() > 0] = 1
                 if os.path.exists(other_p):
                     masks[nib.load(other_p).get_fdata() > 0] = 1
                 else:
                     print(f"The second kidney instance does not exist for patient: '{patient_id}'.")
+
+                # Create a hierarchy for the particular rater's kidney annotations.
                 f.create_dataset(f"labels/kidney/rater_{rater_id}", data=masks, compression="gzip")
 
+            # Add annotations for tumor per rater.
             assert tumor_anns, f"There must be tumor annotations for '{patient_id}'."
+            # Find the raters.
             raters = [p[-8] for p in tumor_anns]
-            for rater in np.unique(raters):
+            # Get masks per rater
+            unique_raters = np.unique(raters)
+            for rater in unique_raters:
                 masks = np.zeros_like(raw)
                 for p in glob(os.path.join(patient_dir, "instances", f"tumor_instance*-{rater}.nii.gz")):
                     masks[nib.load(p).get_fdata() > 0] = 1
+
                 f.create_dataset(f"labels/tumor/rater_{rater}", data=masks, compression="gzip")
 
+            # Add annotations for cysts per rater.
             if cyst_anns:
+                # Find the raters first
                 raters = [p[-8] for p in cyst_anns]
-                for rater in np.unique(raters):
+                # Get masks per rater
+                unique_raters = np.unique(raters)
+                for rater in unique_raters:
                     masks = np.zeros_like(raw)
                     for p in glob(os.path.join(patient_dir, "instances", f"cyst_instance*-{rater}.nii.gz")):
                         masks[nib.load(p).get_fdata() > 0] = 1
+
                     f.create_dataset(f"labels/cyst/rater_{rater}", data=masks, compression="gzip")
 
     if not os.path.exists(json_path):
         with open(json_path, "w") as f:
             json.dump(split_info, f, indent=2)
 
+
 def get_kits_paths(
-    path: Union[os.PathLike, str],
-    split: Literal["train", "val", "test"], 
-    download: bool = False
+    path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
 ) -> List[str]:
     """Get paths to the KiTS data.
 
