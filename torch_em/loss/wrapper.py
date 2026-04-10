@@ -158,7 +158,7 @@ class MaskIgnoreLabel(ApplyMask):
     Supports the same masking methods as `ApplyMask`.
 
     Args:
-        ignore_label: The ignore label, which will be msaked.
+        ignore_label: The ignore label, which will be masked.
         masking_method: The masking method to use. Can be one of 'crop' or 'multiply'.
         channel_dim: The dimension of the channel axis.
     """

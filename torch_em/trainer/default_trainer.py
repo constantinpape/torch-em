@@ -144,9 +144,9 @@ class DefaultTrainer:
     @property
     def checkpoint_folder(self):
         assert self.id_ is not None  # Because the logger may generate and set trainer.id on logger.__init__.
-        # Save_root enables saving the checkpoints somewhere else than in the local older.
+        # Save_root enables saving the checkpoints somewhere else than in the local folder.
         # This is handy for filesystems with limited space, where saving the checkpoints
-        # and log files can ead to running out of space.
+        # and log files can lead to running out of space.
         save_root = getattr(self, "save_root", None)
         return os.path.join("./checkpoints", self.id_) if save_root is None else\
             os.path.join(save_root, "./checkpoints", self.id_)

@@ -9,7 +9,7 @@ from torch_em.util import get_trainer
 from torch_em.util.modelzoo import import_bioimageio_model
 from .prepare_shallow2deep import _get_filters, _apply_filters
 
-# optional imports only needed for using ilastik api for the predictio
+# optional imports only needed for using ilastik api for the prediction
 try:
     import lazyflow
     from ilastik.experimental.api import from_project_file

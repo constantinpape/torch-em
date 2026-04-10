@@ -259,7 +259,7 @@ class AffinityTransform:
     def __init__(
         self,
         offsets: List[List[int]],
-        ignore_label: Optional[bool] = None,
+        ignore_label: Optional[int] = None,
         add_binary_target: bool = False,
         add_mask: bool = False,
         include_ignore_transitions: bool = False,
@@ -364,7 +364,7 @@ class DistanceTransform:
         normalize: Whether to normalize the computed distances.
         max_distance: Maximal distance at which to threshold the distances.
         foreground_id: Label id to which the distance is compute.
-        invert Whether to invert the distances:
+        invert: Whether to invert the distances.
         func: Normalization function for the distances.
     """
     eps = 1e-7

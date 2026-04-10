@@ -230,6 +230,7 @@ def get_humanneurons_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_humanneurons_dataset(
-        path, patch_shape, bounding_boxes, download, offsets, boundaries, **ds_kwargs
+        path, patch_shape, bounding_boxes=bounding_boxes, download=download,
+        offsets=offsets, boundaries=boundaries, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -230,8 +230,8 @@ def default_segmentation_loader(
     label_transform2: Optional[Callable] = None,
     raw_transform: Optional[Callable] = None,
     transform: Optional[Callable] = None,
-    dtype: torch.device = torch.float32,
-    label_dtype: torch.device = torch.float32,
+    dtype: torch.dtype = torch.float32,
+    label_dtype: torch.dtype = torch.float32,
     rois: Optional[Union[slice, Tuple[slice, ...]]] = None,
     n_samples: Optional[int] = None,
     sampler: Optional[Callable] = None,
@@ -257,7 +257,7 @@ def default_segmentation_loader(
             Set to None for regular image files, numpy arrays, or torch tensors.
         label_paths: The file path(s) to the label data. Can either be a single path or multiple file paths.
             This argument also accepts a list of numpy arrays or torch tensors.
-        label_key: The name of the internal dataset containing the raw data.
+        label_key: The name of the internal dataset containing the label data.
             Set to None for regular image files, numpy arrays, or torch tensors.
         batch_size: The batch size for the data loader.
         patch_shape: The patch shape for the training samples.
@@ -353,7 +353,7 @@ def default_segmentation_dataset(
             Set to None for regular image files, numpy arrays, or torch tensors.
         label_paths: The file path(s) to the label data. Can either be a single path or multiple file paths.
             This argument also accepts a list of numpy arrays or torch tensors.
-        label_key: The name of the internal dataset containing the raw data.
+        label_key: The name of the internal dataset containing the label data.
             Set to None for regular image files, numpy arrays, or torch tensors.
         patch_shape: The patch shape for the training samples.
         label_transform: Transformation applied to the label data of a sample,

@@ -119,7 +119,7 @@ def get_u20s_dataset(
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
-        The DataLoader.
+        The segmentation dataset.
     """
     image_paths, label_paths = get_u20s_paths(path, download)
 
