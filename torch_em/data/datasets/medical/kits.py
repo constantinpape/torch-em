@@ -8,6 +8,7 @@ Please cite it if you use this dataset for your research.
 """
 
 import os
+import json
 import subprocess
 from glob import glob
 from tqdm import tqdm
@@ -17,6 +18,7 @@ from typing import Union, Tuple, List, Optional, Literal
 
 import numpy as np
 
+from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
@@ -25,6 +27,7 @@ from .. import util
 
 
 URL = "https://github.com/neheller/kits23"
+VALID_SPLITS = ("train", "val", "test")
 
 
 def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
@@ -65,40 +68,60 @@ def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
 
     return data_dir
 
-
 def _preprocess_inputs(path):
     patient_dirs = glob(os.path.join(path, "kits23", "dataset", "case*"))
-
     preprocessed_dir = os.path.join(path, "preprocessed")
-    os.makedirs(preprocessed_dir, exist_ok=True)
+
+    for split in VALID_SPLITS:
+        os.makedirs(os.path.join(preprocessed_dir, split), exist_ok=True)
+
+    json_path = os.path.join(path, "splits_kits.json")
+
+    if os.path.exists(json_path):
+        with open(json_path) as f:
+            split_info = json.load(f)
+        split_map = {
+            os.path.join(path, "kits23", "dataset", Path(fname).stem): split
+            for split, fnames in split_info.items()
+            for fname in fnames
+        }
+    else:
+        train_dirs, test_dirs = train_test_split(patient_dirs, test_size=0.25, random_state=42)
+        train_dirs, val_dirs = train_test_split(train_dirs, test_size=0.1, random_state=42)
+        split_map = {
+            **{d: "train" for d in train_dirs},
+            **{d: "val"   for d in val_dirs},
+            **{d: "test"  for d in test_dirs},
+        }
+        split_info = {"train": [], "val": [], "test": []}
 
     for patient_dir in tqdm(patient_dirs, desc="Preprocessing inputs"):
         patient_id = os.path.basename(patient_dir)
-        patient_path = os.path.join(preprocessed_dir, Path(patient_id).with_suffix(".h5"))
+        split = split_map[patient_dir]
+        patient_fname = Path(patient_id).with_suffix(".h5")
+        patient_path = os.path.join(preprocessed_dir, split, patient_fname)
+
+        if not os.path.exists(json_path):
+            split_info[split].append(str(patient_fname))
 
         if os.path.exists(patient_path):
             continue
 
-        # Next, we find all rater annotations.
         kidney_anns = natsorted(glob(os.path.join(patient_dir, "instances", "kidney_instance-1*")))
-        tumor_anns = natsorted(glob(os.path.join(patient_dir, "instances", "tumor_instance*")))
-        cyst_anns = natsorted(glob(os.path.join(patient_dir, "instances", "cyst_instance*")))
+        tumor_anns  = natsorted(glob(os.path.join(patient_dir, "instances", "tumor_instance*")))
+        cyst_anns   = natsorted(glob(os.path.join(patient_dir, "instances", "cyst_instance*")))
 
         import h5py
         import nibabel as nib
 
         with h5py.File(patient_path, "w") as f:
-            # Input image.
             raw = nib.load(os.path.join(patient_dir, "imaging.nii.gz")).get_fdata()
             f.create_dataset("raw", data=raw, compression="gzip")
 
-            # Valid segmentation masks for all classes.
             labels = nib.load(os.path.join(patient_dir, "segmentation.nii.gz")).get_fdata()
-            assert raw.shape == labels.shape, "The shape of inputs and corresponding segmentation does not match."
-
+            assert raw.shape == labels.shape, "Shape mismatch between inputs and segmentation."
             f.create_dataset("labels/all", data=labels, compression="gzip")
 
-            # Add annotations for kidneys per rater.
             _k_exclusive = False
             if not kidney_anns:
                 _k_exclusive = True
@@ -107,70 +130,73 @@ def _preprocess_inputs(path):
             assert kidney_anns, f"There must be kidney annotations for '{patient_id}'."
             for p in kidney_anns:
                 masks = np.zeros_like(raw)
-                rater_id = p[-8]  # The rater count
-
-                # Get the other kidney instance.
+                rater_id = p[-8]
+                other_p = p.replace("instance-2", "instance-3") if _k_exclusive else p.replace("instance-1", "instance-2")
                 if _k_exclusive:
                     print("The kidney annotations are numbered strangely.")
-                    other_p = p.replace("instance-2", "instance-3")
-                else:
-                    other_p = p.replace("instance-1", "instance-2")
-
-                # Merge both left and right kidney as one semantic id.
                 masks[nib.load(p).get_fdata() > 0] = 1
                 if os.path.exists(other_p):
                     masks[nib.load(other_p).get_fdata() > 0] = 1
                 else:
                     print(f"The second kidney instance does not exist for patient: '{patient_id}'.")
-
-                # Create a hierarchy for the particular rater's kidney annotations.
                 f.create_dataset(f"labels/kidney/rater_{rater_id}", data=masks, compression="gzip")
 
-            # Add annotations for tumor per rater.
             assert tumor_anns, f"There must be tumor annotations for '{patient_id}'."
-            # Find the raters.
             raters = [p[-8] for p in tumor_anns]
-            # Get masks per rater
-            unique_raters = np.unique(raters)
-            for rater in unique_raters:
+            for rater in np.unique(raters):
                 masks = np.zeros_like(raw)
                 for p in glob(os.path.join(patient_dir, "instances", f"tumor_instance*-{rater}.nii.gz")):
                     masks[nib.load(p).get_fdata() > 0] = 1
-
                 f.create_dataset(f"labels/tumor/rater_{rater}", data=masks, compression="gzip")
 
-            # Add annotations for cysts per rater.
             if cyst_anns:
-                # Find the raters first
                 raters = [p[-8] for p in cyst_anns]
-                # Get masks per rater
-                unique_raters = np.unique(raters)
-                for rater in unique_raters:
+                for rater in np.unique(raters):
                     masks = np.zeros_like(raw)
                     for p in glob(os.path.join(patient_dir, "instances", f"cyst_instance*-{rater}.nii.gz")):
                         masks[nib.load(p).get_fdata() > 0] = 1
-
                     f.create_dataset(f"labels/cyst/rater_{rater}", data=masks, compression="gzip")
 
+    if not os.path.exists(json_path):
+        with open(json_path, "w") as f:
+            json.dump(split_info, f, indent=2)
 
-def get_kits_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
+def get_kits_paths(
+    path: Union[os.PathLike, str],
+    split: Literal["train", "val", "test"], 
+    download: bool = False
+) -> List[str]:
     """Get paths to the KiTS data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: Which data split to use.
         download: Whether to download the data if it is not present.
 
     Returns:
         List of filepaths for the input data.
     """
-    data_dir = get_kits_data(path, download)
-    volume_paths = natsorted(glob(os.path.join(data_dir, "*.h5")))
+
+    if split not in VALID_SPLITS:
+        raise ValueError(f"Invalid split '{split}'. Must be one of {VALID_SPLITS}.")
+
+    get_kits_data(path, download)
+
+    split_dir = os.path.join(path, "preprocessed", split)
+    if not os.path.exists(split_dir):
+        raise RuntimeError(f"Split folder '{split_dir}' does not exist.")
+
+    volume_paths = natsorted(glob(os.path.join(split_dir, "*.h5")))
+    if not volume_paths:
+        raise RuntimeError(f"No .h5 files found in split folder '{split_dir}'.")
+
     return volume_paths
 
 
 def get_kits_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
+    split: Literal["train", "val", "test"],
     rater: Optional[Literal[1, 2, 3]] = None,
     annotation_choice: Optional[Literal["kidney", "tumor", "cyst"]] = None,
     resize_inputs: bool = False,
@@ -182,16 +208,17 @@ def get_kits_dataset(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        split: Which data split to use.
         rater: The choice of rater.
         annotation_choice: The choice of annotations.
-        resize_inputs:  Whether to resize inputs to the desired patch shape.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    volume_paths = get_kits_paths(path, download)
+    volume_paths = get_kits_paths(path, split, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -225,6 +252,7 @@ def get_kits_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, ...],
+    split: Literal["train", "val", "test"],
     rater: Optional[Literal[1, 2, 3]] = None,
     annotation_choice: Optional[Literal["kidney", "tumor", "cyst"]] = None,
     resize_inputs: bool = False,
@@ -237,9 +265,10 @@ def get_kits_loader(
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        split: Which data split to use.
         rater: The choice of rater.
         annotation_choice: The choice of annotations.
-        resize_inputs:  Whether to resize inputs to the desired patch shape.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -247,5 +276,5 @@ def get_kits_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_kits_dataset(path, patch_shape, rater, annotation_choice, resize_inputs, download, **ds_kwargs)
+    dataset = get_kits_dataset(path, patch_shape, split, rater, annotation_choice, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
