@@ -42,7 +42,7 @@ class TestUnetr(unittest.TestCase):
         model_registry = models()
         checkpoint = model_registry.fetch("vit_b")
 
-        model = UNETR(encoder_checkpoint=checkpoint)
+        model = UNETR(encoder_checkpoint=checkpoint, use_skip_connection=False)
         self._test_net(model, (1, 3, 512, 512))
 
     def test_unetr_with_conv_transpose_decoder(self):
