@@ -365,4 +365,18 @@ class RawDatasetWithMasks(RawDataset):
             
         # else, return raw
         return raw
-    
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        del state["sample_mask"]
+        del state["bg_mask"]
+        return state
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        sample_mask_path = state.get("sample_mask_path")
+        sample_mask_key = state.get("sample_mask_key")
+        bg_mask_path = state.get("bg_mask_path")
+        bg_mask_key = state.get("bg_mask_key")
+        self.sample_mask = load_data(sample_mask_path, sample_mask_key) if sample_mask_path is not None else None
+        self.bg_mask = load_data(bg_mask_path, bg_mask_key) if bg_mask_path is not None else None
