@@ -144,7 +144,9 @@ def get_cremi_dataset(
 
     # defect augmentations
     if defect_augmentation_kwargs is not None:
+        from torch_em.transform.raw import standardize
         raw_transform = torch_em.transform.get_raw_transform(
+            normalizer=kwargs.pop("raw_transform", standardize),
             augmentation1=torch_em.transform.EMDefectAugmentation(**defect_augmentation_kwargs)
         )
         kwargs = util.update_kwargs(kwargs, "raw_transform", raw_transform)
