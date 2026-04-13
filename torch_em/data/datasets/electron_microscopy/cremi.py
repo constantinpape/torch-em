@@ -7,6 +7,7 @@ Please cite the challenge if you use the dataset in your research.
 # TODO add support for realigned volumes
 
 import os
+import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -16,6 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch_em
 
 from .. import util
+from ....transform.raw import standardize
 
 
 CREMI_URLS = {
@@ -144,7 +146,11 @@ def get_cremi_dataset(
 
     # defect augmentations
     if defect_augmentation_kwargs is not None:
-        from torch_em.transform.raw import standardize
+        if "raw_transform" in kwargs:
+            warnings.warn(
+                "'raw_transform' was found in kwargs. It will be used as the "
+                "normalizer for the defect augmentation pipeline."
+            )
         raw_transform = torch_em.transform.get_raw_transform(
             normalizer=kwargs.pop("raw_transform", standardize),
             augmentation1=torch_em.transform.EMDefectAugmentation(**defect_augmentation_kwargs)
