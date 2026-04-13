@@ -60,11 +60,11 @@ def dice_score(
         # where N is the number of samples
         input_ = flatten_samples(input_)
         target = flatten_samples(target)
-        # Compute numerator and denominator (by summing over samples and
-        # leaving the channels intact)
-        numerator = (input_ * target).sum(-1)
-        denominator = (input_ * input_).sum(-1) + (target * target).sum(-1)
-        channelwise_score = 2 * (numerator / denominator.clamp(min=eps))
+        # Compute intersection and union per channel.
+        # eps is added to both numerator and denominator so that empty patches give score=1 rather than score=0.
+        intersection = (input_ * target).sum(-1)
+        union = input_.sum(-1) + target.sum(-1)
+        channelwise_score = (2. * intersection + eps) / (union + eps)
         if invert:
             channelwise_score = 1. - channelwise_score
 
@@ -84,9 +84,9 @@ def dice_score(
             raise ValueError(f"Unsupported channel reduction {reduce_channel}")
 
     else:
-        numerator = (input_ * target).sum()
-        denominator = (input_ * input_).sum() + (target * target).sum()
-        score = 2. * (numerator / denominator.clamp(min=eps))
+        intersection = (input_ * target).sum()
+        union = input_.sum() + target.sum()
+        score = (2. * intersection + eps) / (union + eps)
         if invert:
             score = 1. - score
 
@@ -219,7 +219,7 @@ class BCEDiceLossWithLogits(nn.Module):
 
     Args:
         alpha: The weight for combining the BCE and dice loss.
-        channelwise: Whether to return the dice score independently per channel.
+        channelwise: Whether to return the dice scor e independently per channel.
         eps: The epsilon value added to the denominator for numerical stability.
         reduce_channel: How to return the dice score over the channel axis.
     """
