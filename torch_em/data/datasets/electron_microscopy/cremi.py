@@ -149,7 +149,8 @@ def get_cremi_dataset(
         if "raw_transform" in kwargs:
             warnings.warn(
                 "'raw_transform' was found in kwargs. It will be used as the "
-                "normalizer for the defect augmentation pipeline."
+                "normalizer for the defect augmentation pipeline, which may lead to incorrect results"
+                "if the normalizer maps to an unexpected data range."
             )
         raw_transform = torch_em.transform.get_raw_transform(
             normalizer=kwargs.pop("raw_transform", standardize),
