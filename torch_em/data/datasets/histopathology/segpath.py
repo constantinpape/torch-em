@@ -6,6 +6,7 @@ Please cite it if you use this dataset for your research.
 """
 
 import csv
+import gzip
 import os
 import tarfile
 from glob import glob
@@ -84,6 +85,11 @@ def _to_cell_types(cell_types):
     return cell_types
 
 
+def _is_gzip(path):
+    with open(path, "rb") as f:
+        return f.read(2) == b"\x1f\x8b"
+
+
 def _extract_data(path):
     data_folder = os.path.splitext(os.path.splitext(os.path.basename(path))[0])[0]
     extract_path = os.path.join(os.path.dirname(path), data_folder)
@@ -134,7 +140,8 @@ def _get_paths_from_metadata(path, cell_type, split):
     metadata_path = os.path.join(path, source["metadata_name"])
     image_paths, label_paths = [], []
 
-    with open(metadata_path) as f:
+    open_file = gzip.open if _is_gzip(metadata_path) else open
+    with open_file(metadata_path, mode="rt") as f:
         reader = csv.DictReader(f)
         for row in reader:
             if split is not None and row["train_val_test"] != split:
