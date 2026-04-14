@@ -1,5 +1,6 @@
-"""SegPath contains semantic segmentation masks for H&E stained histopathology images.
+"""SegPath contains semantic segmentation masks for H&E stained histopathology images from diverse cancer tissues.
 
+The dataset is located at https://dakomura.github.io/SegPath/ (across several Zenodo links).
 The dataset is from the publication https://doi.org/10.1016/j.patter.2023.100688.
 Please cite it if you use this dataset for your research.
 """
