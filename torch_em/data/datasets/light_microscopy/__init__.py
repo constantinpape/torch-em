@@ -1,4 +1,5 @@
 from .aisegcell import get_aisegcell_loader, get_aisegcell_dataset
+from .bbbc034 import get_bbbc034_loader, get_bbbc034_dataset
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bac_mother import get_bac_mother_loader, get_bac_mother_dataset
 from .balf import get_balf_loader, get_balf_dataset
@@ -14,6 +15,8 @@ from .celegans_atlas import get_celegans_atlas_loader, get_celegans_atlas_datase
 from .cellbindb import get_cellbindb_loader, get_cellbindb_dataset
 from .cellpose import get_cellpose_loader, get_cellpose_dataset
 from .cellseg_3d import get_cellseg_3d_loader, get_cellseg_3d_dataset
+from .cisd import get_cisd_loader, get_cisd_dataset
+from .cshaper import get_cshaper_loader, get_cshaper_dataset
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .ctc import get_ctc_segmentation_loader, get_ctc_segmentation_dataset
 from .cvz_fluo import get_cvz_fluo_loader, get_cvz_fluo_dataset
@@ -42,6 +45,8 @@ from .neurips_cell_seg import (
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
 )
 from .nis3d import get_nis3d_loader, get_nis3d_dataset
+from .nisnet3d import get_nisnet3d_loader, get_nisnet3d_dataset
+from .neurosphere import get_neurosphere_loader, get_neurosphere_dataset
 from .nuc_morph import get_nuc_morph_loader, get_nuc_morph_dataset
 from .oocyteseg import get_oocyteseg_loader, get_oocyteseg_dataset
 from .omnipose import get_omnipose_loader, get_omnipose_dataset
@@ -54,13 +59,16 @@ from .phmamm import get_phmamm_loader, get_phmamm_dataset
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .pnas_arabidopsis import get_pnas_arabidopsis_loader, get_pnas_arabidopsis_dataset
 from .segpc import get_segpc_loader, get_segpc_dataset
+from .scaffold_a549 import get_scaffold_a549_loader, get_scaffold_a549_dataset
 from .slimia import get_slimia_loader, get_slimia_dataset
+from .spheroids_hepg2 import get_spheroids_hepg2_loader, get_spheroids_hepg2_dataset
 from .synthmt import get_synthmt_loader, get_synthmt_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .toiam import get_toiam_loader, get_toiam_dataset
 from .u20s import get_u20s_loader, get_u20s_dataset
 from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
 from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
+from .vibrio_cholerae import get_vibrio_cholerae_loader, get_vibrio_cholerae_dataset
 from .vicar import get_vicar_loader, get_vicar_dataset
 from .wing_disc import get_wing_disc_loader, get_wing_disc_dataset
 from .xpress import get_xpress_loader, get_xpress_dataset
