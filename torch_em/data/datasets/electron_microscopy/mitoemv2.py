@@ -107,6 +107,9 @@ def _preprocess_dataset(path, dataset_name, dataset_dir):
                     print("Label dimensions in nifti are stored the other way around for this sample, transposing labels...")
                     labels = np.transpose(labels, (2, 1, 0))
 
+                if raw.shape != labels.shape:
+                    raise RuntimeError("There is a shape mismatch between raw and labels.")
+
                 with z5py.File(n5_path, "a") as f:
                     f.create_dataset("raw", data=raw, chunks=(32, 256, 256), compression="gzip")
                     f.create_dataset("labels", data=labels.astype("uint64"), chunks=(32, 256, 256), compression="gzip")
