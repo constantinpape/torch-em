@@ -7,7 +7,7 @@ NOTE: The dataset contains 20 unlabeled training volumes and
 Also, the labeled test volume isn't the best of annotation quality.
 
 The dataset is located at https://github.com/Kaiseem/Scaffold-A549.
-This dataset is from the publication https://doi.org/10.1093/bioinformatics/btad229.
+This dataset is from the publication https://doi.org/10.1007/s12559-021-09944-4.
 Please cite it if you use this dataset in your research.
 """
 

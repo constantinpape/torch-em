@@ -13,7 +13,7 @@ NOTE: The data must be downloaded manually. Download the zip from the SharePoint
 provided at https://doi.org/10.6084/m9.figshare.12839315 and place it as
 `{path}/OneDrive.zip` (or whatever filename it downloads as).
 
-The dataset is from the publication https://doi.org/10.1093/bioinformatics/btab710.
+The dataset is from the publication https://doi.org/10.1038/s41467-020-19863-x.
 Please cite it if you use this dataset in your research.
 """
 
