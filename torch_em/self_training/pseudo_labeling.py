@@ -159,25 +159,31 @@ class ProbabilisticPseudoLabeler:
 
 class ScheduledPseudoLabeler:
     """
-    This class implements a scheduled pseudo-labeling mechanism, where pseudo labels
-    are generated from a teacher model's predictions, and the confidence threshold
-    for filtering the pseudo labels can be adjusted over time based on a performance
-    metric or a fixed schedule. It includes options for adjusting thresholds from
-    both sides (for binary classification) or from one side (for multiclass problems).
-    The threshold can be dynamically reduced to improve the quality of the pseudo labels
-    when the model performance does not improve for a given number of epochs (patience).
+    Implement scheduled pseudo-labeling with dynamic confidence-threshold updates.
+
+    Pseudo labels are generated from a teacher model prediction and can be filtered
+    by a confidence mask. The confidence threshold can be adapted over time either
+    by decreasing it based on a monitored metric (plateau behavior) or by increasing
+    it with a fixed epoch schedule.
 
     Args:
         activation: Activation function applied to the teacher prediction.
         confidence_threshold: Threshold for computing a mask for filtering the pseudo labels.
-            If none is given no mask will be computed.
-        threshold_from_both_sides: Whether to include both values bigger than the threshold and smaller than 1 - it,
-            or only values bigger than it in the mask. The former should be used for binary labels,
-            the latter for for multiclass labels.
+            If None is given, no mask will be computed.
+        increase: If True, increase the confidence threshold over time according to
+            a fixed schedule. If False, decrease it based on plateau detection.
+        last_step_epoch: Last epoch at which threshold increase is allowed when
+            `increase=True`.
+        threshold_from_both_sides: Whether to include values larger than the
+            threshold and smaller than 1 - the threshold in the mask, or only values
+            larger than the threshold. The former should be used for binary labels,
+            the latter for multiclass labels.
         mode: Determines whether the confidence threshold reduction is triggered by a "min" or "max" metric.
             - 'min': A lower value of the monitored metric is considered better (e.g., loss).
             - 'max': A higher value of the monitored metric is considered better (e.g., accuracy).
-        factor Factor by which the confidence threshold is reduced when the performance stagnates.
+        factor: Update size for confidence-threshold scheduling. Interpreted as a
+            multiplicative factor for `threshold_mode='rel'` and as an additive step
+            for `threshold_mode='abs'`.
         patience: Number of epochs (with no improvement) after which the confidence threshold will be reduced.
         threshold: Threshold value for determining a significant improvement in the performance metric
             to reset the patience counter. This can be relative (percentage improvement)
@@ -185,8 +191,14 @@ class ScheduledPseudoLabeler:
         threshold_mode: Determines whether the `threshold` is interpreted as a relative improvement ('rel')
             or an absolute improvement ('abs').
         min_ct: Minimum allowed confidence threshold. The threshold will not be reduced below this value.
+        max_ct: Maximum allowed confidence threshold. The threshold will not be increased above this value.
         eps: A small value to avoid floating-point precision errors during threshold comparison.
-        verbose: If True, prints messages when the confidence threshold is reduced.
+        warm_up_epochs: Number of warm-up epochs. At the end of warm-up,
+            `confidence_threshold` is set to `max_ct`. This is intended for
+            decreasing-threshold scheduling (`increase=False`).
+        mask_channel: Specific channel to use for confidence masking. Currently,
+            only None is supported.
+        verbose: If True, prints messages when the confidence threshold is updated.
     """
 
     def __init__(
@@ -236,6 +248,9 @@ class ScheduledPseudoLabeler:
         self.max_ct = max_ct
         self.eps = eps
         self.warm_up_epochs = warm_up_epochs
+
+        if self.increase and self.warm_up_epochs > 0:
+            raise ValueError("warm_up_epochs > 0 is only supported when increase=False.")
 
         # TODO implement mask_channel functionality; for now only None is supported
         if mask_channel is not None:
