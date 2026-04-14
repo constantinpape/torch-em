@@ -20,7 +20,7 @@ def check_segpath():
         download=True,
     )
 
-    check_loader(loader, 8, instance_labels=False, rgb=True)
+    check_loader(loader, 8, instance_labels=False, rgb=True, plt=True, save_path="segpath.png")
 
 
 if __name__ == "__main__":
