@@ -11,3 +11,5 @@ logs/
 *.sh
 *.pth
 *.pt
+*.DS_Store
+.claude/

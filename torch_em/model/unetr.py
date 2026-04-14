@@ -134,6 +134,10 @@ class UNETRBase(nn.Module):
             if embed_dim is None:
                 embed_dim = self.encoder.embed_dim
 
+            # For SAM1 encoder, if 'apply_neck' is applied, the embedding dimension must change.
+            if hasattr(self.encoder, "apply_neck") and self.encoder.apply_neck:
+                embed_dim = self.encoder.neck[2].out_channels  # the value is 256
+
         else:  # `nn.Module` ViT backbone
             self.encoder = encoder
 
@@ -755,7 +759,7 @@ class DepthStripPooling(nn.Module):
         to Z=1, and then passes through a small 1x1x1 MLP, then broadcasts it back to Z to
         modulate the original features (using a gated residual).
 
-        For 2D (Z == 1 or Z == 3): returns input unchanged (no-op).
+        For 2D (Z == 1): returns input unchanged (no-op).
 
         Args:
             channels: The output channels.
@@ -773,7 +777,7 @@ class DepthStripPooling(nn.Module):
             raise ValueError(f"DepthStripPooling expects 5D tensors as input, got '{x.shape}'.")
 
         B, C, Z, H, W = x.shape
-        if Z == 1 or Z == 3:  # i.e. 2d-as-1-slice or RGB_2d-as-1-slice.
+        if Z == 1:  # i.e. always the case of all 2d.
             return x  # We simply do nothing there.
 
         # We pool only along the depth dimension: i.e. target shape (B, C, 1, H, W)

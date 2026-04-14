@@ -188,13 +188,13 @@ def predict_with_halo(
     ]
     n_workers = len(gpu_ids)
 
-    # ---- original shape (spatial only) ----
+    # original shape (spatial only)
     shape0 = input_.shape
     shape_spatial0 = shape0[1:] if with_channels else shape0
     ndim = len(shape_spatial0)
     assert len(block_shape) == len(halo) == ndim
 
-    # ---- apply grid_shift via padding+cropping (zero padding) ----
+    # apply grid_shift via padding+cropping (zero padding)
     input_eff = input_
     mask_eff = mask
 
@@ -220,7 +220,7 @@ def predict_with_halo(
     shape_eff = input_eff.shape
     shape_spatial_eff = shape_eff[1:] if with_channels else shape_eff
 
-    # ---- blocking (on the padded input) ----
+    # blocking (on the padded input)
     if roi is None:
         blocking = nt.blocking([0] * ndim, shape_spatial_eff, block_shape)
     else:
@@ -229,7 +229,7 @@ def predict_with_halo(
         blocking_stop = [sh if ro.stop is None else ro.stop for ro, sh in zip(roi, shape_spatial_eff)]
         blocking = nt.blocking(blocking_start, blocking_stop, block_shape)
 
-    # ---- output allocation (for padded shape) ----
+    # output allocation (for padded shape)
     if output is None:
         n_out = models[0][0].out_channels
         output = np.zeros((n_out,) + tuple(shape_spatial_eff), dtype="float32")
@@ -312,7 +312,7 @@ def predict_with_halo(
                   disable=disable_tqdm,
                   desc=tqdm_desc))
 
-    # ---- crop away the shift padding so the returned output matches original shape ----
+    # crop away the shift padding so the returned output matches original shape
     if grid_shift is not None:
         output = _crop_after_shift_left(output, pad_left, with_channels=(output.ndim == ndim+1),
                                         original_shape_spatial=tuple(shape_spatial0))
