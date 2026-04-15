@@ -47,7 +47,7 @@ class SoftSkeletonize(torch.nn.Module):
     def soft_skel(self, input_: torch.Tensor):
 
         input1 = self.soft_open(input_)
-        skel = F.relu(input1)
+        skel = F.relu(input_ - input1)
 
         for j in range(self.num_iter):
             input_ = self.soft_erode(input_)
