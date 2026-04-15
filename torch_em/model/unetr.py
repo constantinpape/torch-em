@@ -322,18 +322,20 @@ class UNETRBase(nn.Module):
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         """@private
         """
-        device = x.device
         is_3d = (x.ndim == 5)
         device, dtype = x.device, x.dtype
 
         if self.use_sam_stats:
-            mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
+            if self.backbone == "sam2":
+                mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+            elif self.backbone == "sam3":
+                mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+            else:  # sam1 / default
+                mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
         elif self.use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
             raise NotImplementedError
-        elif self.use_dino_stats or (self.use_sam_stats and self.backbone == "sam2"):
+        elif self.use_dino_stats:
             mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
-        elif self.use_sam_stats and self.backbone == "sam3":
-            mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
         else:
             mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
 
