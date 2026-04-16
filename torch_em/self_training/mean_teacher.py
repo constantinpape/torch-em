@@ -7,6 +7,7 @@ import torch_em
 from torch_em.util import get_constructor_arguments
 
 from .logger import SelfTrainingTensorboardLogger
+from .invertible_augmentations import InvertibleAugmenter
 
 
 class Dummy(torch.nn.Module):
@@ -412,6 +413,10 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
     - supervised_val_loader (optional): Same as supervised_train_loader
     At least one of unsupervised_val_loader and supervised_val_loader must be given.
 
+    The augmenter defines separate invertible transforms for teacher and student inputs.
+    Teacher and student views are generated independently, and the corresponding inverse
+    transforms map predictions and pseudo-labels back into a shared reference frame.
+
     And the following elements to customize the pseudo labeling:
     - pseudo_labeler: to compute the psuedo-labels
         - Parameters: teacher, teacher_input
@@ -443,6 +448,8 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
         unsupervised_train_loader: The loader for unsupervised training.
         unsupervised_loss: The loss for unsupervised training.
         pseudo_labeler: The pseudo labeler that predicts labels in unsupervised training.
+        augmenter: Invertible augmenter providing separate teacher and student transforms,
+            including corresponding inverse transforms to align predictions in a common frame.
         supervised_train_loader: The loader for supervised training.
         supervised_loss: The loss for supervised training.
         unsupervised_loss_and_metric: The loss and metric for unsupervised training.
@@ -460,7 +467,7 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
         unsupervised_train_loader: torch.utils.data.DataLoader,
         unsupervised_loss: torch.utils.data.DataLoader,
         pseudo_labeler: Callable,
-        augmenter: torch.nn.Module,
+        augmenter: InvertibleAugmenter,
         supervised_train_loader: Optional[torch.utils.data.DataLoader] = None,
         unsupervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
         supervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
@@ -473,77 +480,24 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
         sampler: Optional[Callable] = None,
         **kwargs,
     ):
-        self.sampler = sampler
-        # Do we have supervised data or not?
-        if supervised_train_loader is None:
-            # No. -> We use the unsupervised training logic.
-            train_loader = unsupervised_train_loader
-            self._train_epoch_impl = self._train_epoch_unsupervised
-        else:
-            # Yes. -> We use the semi-supervised training logic.
-            assert supervised_loss is not None
-            train_loader = supervised_train_loader if len(supervised_train_loader) < len(unsupervised_train_loader)\
-                else unsupervised_train_loader
-            self._train_epoch_impl = self._train_epoch_semisupervised
-
-        self.unsupervised_train_loader = unsupervised_train_loader
-        self.supervised_train_loader = supervised_train_loader
-
-        # Check that we have at least one of supvervised / unsupervised val loader.
-        assert sum((
-            supervised_val_loader is not None,
-            unsupervised_val_loader is not None,
-        )) > 0
-        self.supervised_val_loader = supervised_val_loader
-        self.unsupervised_val_loader = unsupervised_val_loader
-
-        if self.unsupervised_val_loader is None:
-            val_loader = self.supervised_val_loader
-        else:
-            val_loader = self.unsupervised_train_loader
-
-        # Check that we have at least one of supvervised / unsupervised loss and metric.
-        assert sum((
-            supervised_loss_and_metric is not None,
-            unsupervised_loss_and_metric is not None,
-        )) > 0
-        self.supervised_loss_and_metric = supervised_loss_and_metric
-        self.unsupervised_loss_and_metric = unsupervised_loss_and_metric
-
-        # train_loader, val_loader, loss and metric may be unnecessarily deserialized
-        kwargs.pop("train_loader", None)
-        kwargs.pop("val_loader", None)
-        kwargs.pop("metric", None)
-        kwargs.pop("loss", None)
         super().__init__(
-            model=model, train_loader=train_loader, val_loader=val_loader,
-            loss=Dummy(), metric=Dummy(), logger=logger, **kwargs
+            model=model,
+            unsupervised_train_loader=unsupervised_train_loader,
+            unsupervised_loss=unsupervised_loss,
+            pseudo_labeler=pseudo_labeler,
+            supervised_train_loader=supervised_train_loader,
+            unsupervised_val_loader=unsupervised_val_loader,
+            supervised_val_loader=supervised_val_loader,
+            supervised_loss=supervised_loss,
+            unsupervised_loss_and_metric=unsupervised_loss_and_metric,
+            supervised_loss_and_metric=supervised_loss_and_metric,
+            logger=logger,
+            momentum=momentum,
+            reinit_teacher=reinit_teacher,
+            sampler=sampler,
+            **kwargs,
         )
-
-        self.unsupervised_loss = unsupervised_loss
-        self.supervised_loss = supervised_loss
-        self.pseudo_labeler = pseudo_labeler
-        self.momentum = momentum
-
-        # determine how we initialize the teacher weights (copy or reinitialization)
-        if reinit_teacher is None:
-            # semisupervised training: reinitialize
-            # unsupervised training: copy
-            self.reinit_teacher = supervised_train_loader is not None
-        else:
-            self.reinit_teacher = reinit_teacher
-
-        with torch.no_grad():
-            self.teacher = deepcopy(self.model)
-            if self.reinit_teacher:
-                for layer in self.teacher.children():
-                    if hasattr(layer, "reset_parameters"):
-                        layer.reset_parameters()
-            for param in self.teacher.parameters():
-                param.requires_grad = False
-
         self.augmenter = augmenter
-        self._kwargs = kwargs
 
     #
     # training and validation functionality
@@ -586,7 +540,7 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 with torch.no_grad(), forward_context():
                     pred = pred if self._iteration % self.log_image_interval == 0 else None
                 self.logger.log_train_unsupervised(
-                    self._iteration, loss, xu, pred_inv, pseudo_labels_inv, label_filter_inv
+                    self._iteration, loss, xu, xu, pred_inv, pseudo_labels_inv, label_filter_inv
                 )
                 self.logger.log_train_augmentations(
                     self._iteration, xu1, xu2, pseudo_labels, pred,
@@ -654,7 +608,7 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
 
                 self.logger.log_train_supervised(self._iteration, supervised_loss, xs, ys, supervised_pred)
                 self.logger.log_train_unsupervised(
-                    self._iteration, unsupervised_loss, xu, unsup_pred_inv, pseudo_labels_inv, label_filter_inv
+                    self._iteration, unsupervised_loss, xu, xu, unsup_pred_inv, pseudo_labels_inv, label_filter_inv
                 )
                 self.logger.log_train_augmentations(
                     self._iteration, xu1, xu2, pseudo_labels, unsup_pred,
@@ -719,20 +673,20 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
             loss_val += loss.item()
             metric_val += metric.item()
 
+            self.augmenter.reset_all()  # TODO check placement!
+
         metric_val /= len(self.unsupervised_val_loader)
         loss_val /= len(self.unsupervised_val_loader)
 
         if self.logger is not None:
             self.logger.log_validation_unsupervised(
-                self._iteration, metric_val, loss_val, x, pred_inv, pseudo_labels_inv, label_filter_inv
+                self._iteration, metric_val, loss_val, x, x, pred_inv, pseudo_labels_inv, label_filter_inv
             )
             self.logger.log_validation_augmentations(
                 self._iteration, x1, x2, pseudo_labels, pred,
             )
 
         self.pseudo_labeler.step(metric_val, self._epoch)
-
-        self.augmenter.reset_all()
 
         return metric_val
 
