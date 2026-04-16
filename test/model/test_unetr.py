@@ -12,6 +12,25 @@ except ImportError:
     micro_sam = None
 
 
+class TestUnetrNormalizationRange(unittest.TestCase):
+    def test_input_normalization_range_check(self):
+        from torch_em.model.unetr import UNETRBase
+
+        model = object.__new__(UNETRBase)
+        model._check_input_normalization_range(torch.tensor([0.0, 0.5, 1.0]), (0.0, 1.0))
+        model._check_input_normalization_range(torch.tensor([0.0, 128.0, 255.0]), (0.0, 255.0))
+        model._check_input_normalization_range(torch.tensor([0, 1], dtype=torch.uint8), (0.0, 255.0))
+
+        with self.assertRaises(ValueError):
+            model._check_input_normalization_range(torch.tensor([0.0, 2.0]), (0.0, 1.0))
+
+        with self.assertRaises(ValueError):
+            model._check_input_normalization_range(torch.tensor([0.0, 1.0]), (0.0, 255.0))
+
+        with self.assertRaises(ValueError):
+            model._check_input_normalization_range(torch.tensor([0.0, float("nan")]), (0.0, 1.0))
+
+
 @unittest.skipIf(segment_anything is None, "Needs segment_anything")
 class TestUnetr(unittest.TestCase):
     def _test_net(self, net, shape):

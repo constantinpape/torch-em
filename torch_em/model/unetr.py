@@ -319,6 +319,26 @@ class UNETRBase(nn.Module):
         pixel_std = torch.tensor(std, device=device, dtype=dtype).view(*view_shape)
         return pixel_mean, pixel_std
 
+    def _check_input_normalization_range(self, x: torch.Tensor, expected_range: Optional[Tuple[float, float]]) -> None:
+        """Check whether raw inputs match the value range expected by the model normalizer."""
+        if expected_range is None:
+            return
+
+        if not torch.all(torch.isfinite(x)):
+            raise ValueError("The UNETR input contains NaN or infinite values before normalization.")
+
+        min_value, max_value = expected_range
+        is_out_of_range = torch.any((x < min_value) | (x > max_value))
+        looks_unit_scaled = x.is_floating_point() and max_value > 1.0 and torch.amax(x) <= 1.0
+        if is_out_of_range or looks_unit_scaled:
+            actual_min, actual_max = torch.aminmax(x.detach())
+            raise ValueError(
+                "The UNETR input is outside the expected scale before normalization: "
+                f"expected values in [{min_value}, {max_value}], got [{actual_min.item()}, {actual_max.item()}]. "
+                "Please check whether the raw inputs should be scaled to [0, 1] or kept in [0, 255] "
+                "before applying the pretrained normalization statistics."
+            )
+
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         """@private
         """
@@ -328,17 +348,23 @@ class UNETRBase(nn.Module):
         if self.use_sam_stats:
             if self.backbone == "sam2":
                 mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+                expected_range = (0.0, 1.0)
             elif self.backbone == "sam3":
                 mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+                expected_range = (0.0, 1.0)
             else:  # sam1 / default
                 mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
+                expected_range = (0.0, 255.0)
         elif self.use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
             raise NotImplementedError
         elif self.use_dino_stats:
             mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+            expected_range = (0.0, 1.0)
         else:
             mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+            expected_range = None
 
+        self._check_input_normalization_range(x, expected_range)
         pixel_mean, pixel_std = self._as_stats(mean, std, device=device, dtype=dtype, is_3d=is_3d)
 
         if self.resize_input:
