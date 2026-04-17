@@ -252,3 +252,103 @@ class SelfTrainingLossAndMetricWithInvertibleAugmentations(nn.Module):
             loss = self.loss(prediction * label_filter, labels * label_filter)
         metric = self.metric(prediction, labels)
         return loss, metric
+    
+
+class UniMatchv2TrainingLoss(nn.Module):
+
+    def __init__(self, loss: nn.Module = DiceLoss(), activation: Optional[nn.Module] = None):
+        super().__init__()
+        self.activation = activation
+        self.loss = loss
+        self.init_kwargs = {}
+
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+        pred_dim: int = 1,
+    ) -> torch.Tensor:
+        """Compute the loss for self-training.
+
+        Args:
+            model: The model.
+            input_: The model inputs for this batch.
+            labels: The (pseudo) labels for this batch.
+            label_filter: A mask to exclude from the loss computation.
+
+        Returns:
+            The loss value.
+        """
+        if self.activation is not None:
+            prediction = self.activation(prediction)
+
+        if pred_dim == 2:
+            if label_filter is None:
+                loss = (self.loss(prediction[0], labels) + self.loss(prediction[1], labels)) / 2
+            else:
+                loss = (self.loss(
+                    prediction[0] * label_filter, labels * label_filter
+                ) + self.loss(prediction[1] * label_filter, labels * label_filter)) / 2
+            return loss
+
+        else:
+            if label_filter is None:
+                loss = self.loss(prediction, labels)
+            else:
+                loss = self.loss(prediction * label_filter, labels * label_filter)
+            return loss
+
+
+class UniMatchv2TrainingLossAndMetric(nn.Module):
+    """Loss and metric function for self training.
+
+    Similar to `DefaultSelfTrainingLoss`, but computes loss and metric value in one call
+    to avoid running prediction with the model twice.
+
+    Args:
+        loss: The internal loss function to use for comparing predictions of the teacher and student model.
+        metric: The internal metric function to use for comparing predictions of the teacher and student model.
+        activation: The activation function to be applied to the prediction before passing it to the loss.
+    """
+    def __init__(
+        self,
+        loss: nn.Module = DiceLoss(),
+        metric: nn.Module = DiceLoss(),
+        activation: Optional[nn.Module] = None
+    ):
+        super().__init__()
+        self.activation = activation
+        self.loss = loss
+        self.metric = metric
+        self.init_kwargs = {}
+
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+        pred_dim: int = 1,
+    ):
+
+        if self.activation is not None:
+            prediction = self.activation(prediction)
+
+        if pred_dim == 2:
+            assert len(prediction) == 2, "only implemented for list of len 2"
+            if label_filter is None:
+                loss = (self.loss(prediction[0], labels) + self.loss(prediction[1], labels)) / 2
+            else:
+                loss = (self.loss(
+                    prediction[0] * label_filter, labels * label_filter
+                ) + self.loss(prediction[1] * label_filter, labels * label_filter)) / 2
+            metric = (self.metric(prediction[0], labels) + self.metric(prediction[1], labels)) / 2
+            return loss, metric
+
+        else:
+            if label_filter is None:
+                loss = self.loss(prediction, labels)
+            else:
+                loss = self.loss(prediction * label_filter, labels * label_filter)
+            metric = self.metric(prediction, labels)
+            return loss, metric
