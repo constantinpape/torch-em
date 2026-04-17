@@ -7,7 +7,7 @@ from torch_em.util import get_constructor_arguments
 
 from .logger import SelfTrainingTensorboardLogger
 from .mean_teacher import Dummy
-from .invertible_augmentations import InvertibleAugmenter
+from ..transform.invertible_augmentations import InvertibleAugmenter
 
 
 class FixMatchTrainer(torch_em.trainer.DefaultTrainer):

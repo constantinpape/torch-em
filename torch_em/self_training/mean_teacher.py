@@ -7,7 +7,7 @@ import torch_em
 from torch_em.util import get_constructor_arguments
 
 from .logger import SelfTrainingTensorboardLogger
-from .invertible_augmentations import InvertibleAugmenter
+from ..transform.invertible_augmentations import InvertibleAugmenter
 
 
 class Dummy(torch.nn.Module):
