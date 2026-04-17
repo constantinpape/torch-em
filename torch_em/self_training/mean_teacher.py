@@ -675,7 +675,7 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
             loss_val += loss.item()
             metric_val += metric.item()
 
-            self.augmenter.reset_all()  # TODO check placement!
+            self.augmenter.reset_all()
 
         metric_val /= len(self.unsupervised_val_loader)
         loss_val /= len(self.unsupervised_val_loader)
