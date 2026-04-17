@@ -9,4 +9,3 @@ from .mean_teacher import MeanTeacherTrainer, MeanTeacherTrainerWithInvertibleAu
 from .fix_match import FixMatchTrainer, FixMatchTrainerWithInvertibleAugmentations
 from .pseudo_labeling import DefaultPseudoLabeler, ProbabilisticPseudoLabeler, ScheduledPseudoLabeler
 from .probabilistic_unet_trainer import ProbabilisticUNetTrainer, DummyLoss
-from .invertible_augmentations import InvertibleAugmenter, MeanTeacherAugmenters, FixMatchAugmenters
