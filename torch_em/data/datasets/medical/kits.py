@@ -30,33 +30,46 @@ URL = "https://github.com/neheller/kits23"
 VALID_SPLITS = ("train", "val", "test")
 
 
-def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+def get_kits_data(path: Union[os.PathLike, str], download: bool = False, overwrite_splits: bool = False) -> str:
     """Download the KiTS data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         download: Whether to download the data if it is not present.
+        overwrite_splits: Whether to recompute the tumor-size-stratified splits even if split metadata exists.
 
     Returns:
         The folder where the dataset is downloaded and preprocessed.
     """
     data_dir = os.path.join(path, "preprocessed")
-    if os.path.exists(data_dir) and all(os.path.exists(os.path.join(data_dir, s)) for s in VALID_SPLITS):
+    json_path = os.path.join(path, "splits_kits.json")
+    if (
+        not overwrite_splits
+        and os.path.exists(json_path)
+        and os.path.exists(data_dir)
+        and all(os.path.exists(os.path.join(data_dir, s)) for s in VALID_SPLITS)
+    ):
         return data_dir
 
     os.makedirs(path, exist_ok=True)
 
-    if not download:
-        raise RuntimeError("The dataset is not found and download is set to False.")
-
-    # We clone the environment.
-    if not os.path.exists(os.path.join(path, "kits23")):
-        subprocess.run(["git", "clone", URL, os.path.join(path, "kits23")])
+    kits_root = os.path.join(path, "kits23")
+    dataset_root = os.path.join(kits_root, "dataset")
+    if not os.path.exists(kits_root):
+        if not download:
+            raise RuntimeError("The dataset is not found and download is set to False.")
+        subprocess.run(["git", "clone", URL, kits_root])
 
     # We install the package-only (with the assumption that the other necessary packages already exists).
-    chosen_patient_dir = natsorted(glob(os.path.join(path, "kits23", "dataset", "case*")))[-1]
+    patient_dirs = natsorted(glob(os.path.join(dataset_root, "case*")))
+    if not patient_dirs:
+        raise RuntimeError(f"No KiTS case folders found in '{dataset_root}'.")
+
+    chosen_patient_dir = patient_dirs[-1]
     if not os.path.exists(os.path.join(chosen_patient_dir, "imaging.nii.gz")):
-        subprocess.run(["pip", "install", "-e", os.path.join(path, "kits23"), "--no-deps"])
+        if not download:
+            raise RuntimeError("The KiTS images are not found and download is set to False.")
+        subprocess.run(["pip", "install", "-e", kits_root, "--no-deps"])
 
         print("The download might take several hours. Make sure you have consistent internet connection.")
 
@@ -64,12 +77,69 @@ def get_kits_data(path: Union[os.PathLike, str], download: bool = False) -> str:
         subprocess.run(["kits23_download_data"])
 
     # Preprocess the images.
-    _preprocess_inputs(path)
+    _preprocess_inputs(path, overwrite_splits=overwrite_splits)
 
     return data_dir
 
 
-def _preprocess_inputs(path):
+def _make_tumor_size_stratified_splits(patient_dirs, seed=42):
+    import nibabel as nib
+
+    patient_dirs = natsorted(patient_dirs)
+    cases, tumor_sizes = [], []
+    for patient_dir in tqdm(patient_dirs, desc="Computing tumor sizes"):
+        labels = np.asarray(nib.load(os.path.join(patient_dir, "segmentation.nii.gz")).dataobj)
+        cases.append(str(Path(os.path.basename(patient_dir)).with_suffix(".h5")))
+        tumor_sizes.append(int((labels == 2).sum()))
+
+    tumor_sizes = np.asarray(tumor_sizes, dtype="float64")
+    if np.all(tumor_sizes == tumor_sizes[0]):
+        size_bins = np.zeros(len(tumor_sizes), dtype="int64")
+    else:
+        edges = np.unique(np.quantile(tumor_sizes, np.linspace(0, 1, 6)[1:-1]))
+        size_bins = np.searchsorted(edges, tumor_sizes, side="right").astype("int64")
+
+    records = [
+        {"case": case, "tumor_voxels": int(size), "size_bin": int(size_bin)}
+        for case, size, size_bin in zip(cases, tumor_sizes, size_bins)
+    ]
+
+    def _strata(subset):
+        labels = [record["size_bin"] for record in subset]
+        counts = {label: labels.count(label) for label in set(labels)}
+        return labels if min(counts.values()) >= 2 else None
+
+    train_val, test = train_test_split(
+        records, test_size=0.25, random_state=seed, stratify=_strata(records)
+    )
+    train, val = train_test_split(
+        train_val, test_size=0.1, random_state=seed, stratify=_strata(train_val)
+    )
+    split_records = {"train": train, "val": val, "test": test}
+    split_info = {
+        split: natsorted(record["case"] for record in records)
+        for split, records in split_records.items()
+    }
+
+    report = {"seed": seed, "strategy": "tumor_size_stratified", "summary": {}}
+    for split, records in split_records.items():
+        values = np.asarray([record["tumor_voxels"] for record in records], dtype="float64")
+        bins = {}
+        for record in records:
+            bins[str(record["size_bin"])] = bins.get(str(record["size_bin"]), 0) + 1
+        report["summary"][split] = {
+            "n_cases": len(records),
+            "tumor_voxels_min": int(values.min()),
+            "tumor_voxels_median": float(np.median(values)),
+            "tumor_voxels_mean": float(values.mean()),
+            "tumor_voxels_max": int(values.max()),
+            "size_bins": dict(sorted(bins.items())),
+        }
+
+    return split_info, report
+
+
+def _preprocess_inputs(path, overwrite_splits=False):
     patient_dirs = glob(os.path.join(path, "kits23", "dataset", "case*"))
 
     preprocessed_dir = os.path.join(path, "preprocessed")
@@ -79,23 +149,21 @@ def _preprocess_inputs(path):
 
     json_path = os.path.join(path, "splits_kits.json")
 
-    if os.path.exists(json_path):
+    created_new_splits = overwrite_splits or not os.path.exists(json_path)
+
+    if not created_new_splits:
         with open(json_path) as f:
             split_info = json.load(f)
-        split_map = {
-            os.path.join(path, "kits23", "dataset", Path(fname).stem): split
-            for split, fnames in split_info.items()
-            for fname in fnames
-        }
     else:
-        train_dirs, test_dirs = train_test_split(patient_dirs, test_size=0.25, random_state=42)
-        train_dirs, val_dirs = train_test_split(train_dirs, test_size=0.1, random_state=42)
-        split_map = {
-            **{d: "train" for d in train_dirs},
-            **{d: "val" for d in val_dirs},
-            **{d: "test" for d in test_dirs},
-        }
-        split_info = {"train": [], "val": [], "test": []}
+        split_info, split_report = _make_tumor_size_stratified_splits(patient_dirs, seed=42)
+        with open(os.path.join(path, "splits_kits_morphology.json"), "w") as f:
+            json.dump(split_report, f, indent=2)
+
+    split_map = {
+        os.path.join(path, "kits23", "dataset", Path(fname).stem): split
+        for split, fnames in split_info.items()
+        for fname in fnames
+    }
 
     for patient_dir in tqdm(patient_dirs, desc="Preprocessing inputs"):
         patient_id = os.path.basename(patient_dir)
@@ -103,8 +171,12 @@ def _preprocess_inputs(path):
         patient_fname = Path(patient_id).with_suffix(".h5")
         patient_path = os.path.join(preprocessed_dir, split, patient_fname)
 
-        if not os.path.exists(json_path):
-            split_info[split].append(str(patient_fname))
+        if not os.path.exists(patient_path):
+            for old_split in VALID_SPLITS:
+                old_patient_path = os.path.join(preprocessed_dir, old_split, patient_fname)
+                if old_patient_path != patient_path and os.path.exists(old_patient_path):
+                    os.replace(old_patient_path, patient_path)
+                    break
 
         if os.path.exists(patient_path):
             continue
@@ -181,13 +253,16 @@ def _preprocess_inputs(path):
 
                     f.create_dataset(f"labels/cyst/rater_{rater}", data=masks, compression="gzip")
 
-    if not os.path.exists(json_path):
+    if created_new_splits:
         with open(json_path, "w") as f:
             json.dump(split_info, f, indent=2)
 
 
 def get_kits_paths(
-    path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
+    path: Union[os.PathLike, str],
+    split: Literal["train", "val", "test"],
+    download: bool = False,
+    overwrite_splits: bool = False,
 ) -> List[str]:
     """Get paths to the KiTS data.
 
@@ -195,6 +270,7 @@ def get_kits_paths(
         path: Filepath to a folder where the data is downloaded for further processing.
         split: Which data split to use.
         download: Whether to download the data if it is not present.
+        overwrite_splits: Whether to recompute the tumor-size-stratified splits even if split metadata exists.
 
     Returns:
         List of filepaths for the input data.
@@ -203,7 +279,7 @@ def get_kits_paths(
     if split not in VALID_SPLITS:
         raise ValueError(f"Invalid split '{split}'. Must be one of {VALID_SPLITS}.")
 
-    get_kits_data(path, download)
+    get_kits_data(path, download, overwrite_splits)
 
     split_dir = os.path.join(path, "preprocessed", split)
     if not os.path.exists(split_dir):
@@ -224,6 +300,7 @@ def get_kits_dataset(
     annotation_choice: Optional[Literal["kidney", "tumor", "cyst"]] = None,
     resize_inputs: bool = False,
     download: bool = False,
+    overwrite_splits: bool = False,
     **kwargs
 ) -> Dataset:
     """Get the KiTS dataset for kidney, tumor and cyst segmentation.
@@ -236,12 +313,13 @@ def get_kits_dataset(
         annotation_choice: The choice of annotations.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
+        overwrite_splits: Whether to recompute the tumor-size-stratified splits even if split metadata exists.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    volume_paths = get_kits_paths(path, split, download)
+    volume_paths = get_kits_paths(path, split, download, overwrite_splits)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -280,6 +358,7 @@ def get_kits_loader(
     annotation_choice: Optional[Literal["kidney", "tumor", "cyst"]] = None,
     resize_inputs: bool = False,
     download: bool = False,
+    overwrite_splits: bool = False,
     **kwargs
 ) -> DataLoader:
     """Get the KiTS dataloader for kidney, tumor and cyst segmentation.
@@ -293,11 +372,14 @@ def get_kits_loader(
         annotation_choice: The choice of annotations.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
+        overwrite_splits: Whether to recompute the tumor-size-stratified splits even if split metadata exists.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_kits_dataset(path, patch_shape, split, rater, annotation_choice, resize_inputs, download, **ds_kwargs)
+    dataset = get_kits_dataset(
+        path, patch_shape, split, rater, annotation_choice, resize_inputs, download, overwrite_splits, **ds_kwargs
+    )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

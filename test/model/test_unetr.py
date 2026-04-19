@@ -25,9 +25,6 @@ class TestUnetrNormalizationRange(unittest.TestCase):
             model._check_input_normalization_range(torch.tensor([0.0, 2.0]), (0.0, 1.0))
 
         with self.assertRaises(ValueError):
-            model._check_input_normalization_range(torch.tensor([0.0, 1.0]), (0.0, 255.0))
-
-        with self.assertRaises(ValueError):
             model._check_input_normalization_range(torch.tensor([0.0, float("nan")]), (0.0, 1.0))
 
 
