@@ -328,9 +328,7 @@ class UNETRBase(nn.Module):
             raise ValueError("The UNETR input contains NaN or infinite values before normalization.")
 
         min_value, max_value = expected_range
-        is_out_of_range = torch.any((x < min_value) | (x > max_value))
-        looks_unit_scaled = x.is_floating_point() and max_value > 1.0 and torch.amax(x) <= 1.0
-        if is_out_of_range or looks_unit_scaled:
+        if torch.any((x < min_value) | (x > max_value)):
             actual_min, actual_max = torch.aminmax(x.detach())
             raise ValueError(
                 "The UNETR input is outside the expected scale before normalization: "
