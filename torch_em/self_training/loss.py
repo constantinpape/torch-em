@@ -254,7 +254,7 @@ class SelfTrainingLossAndMetricWithInvertibleAugmentations(nn.Module):
         return loss, metric
     
 
-class UniMatchv2TrainingLoss(nn.Module):
+class UniMatchv2Loss(nn.Module):
 
     def __init__(self, loss: nn.Module = DiceLoss(), activation: Optional[nn.Module] = None):
         super().__init__()
@@ -300,7 +300,7 @@ class UniMatchv2TrainingLoss(nn.Module):
             return loss
 
 
-class UniMatchv2TrainingLossAndMetric(nn.Module):
+class UniMatchv2LossAndMetric(nn.Module):
     """Loss and metric function for self training.
 
     Similar to `DefaultSelfTrainingLoss`, but computes loss and metric value in one call

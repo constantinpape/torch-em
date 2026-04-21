@@ -7,7 +7,7 @@ import os
 # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 
-class MicroMatchTrainer(MeanTeacherTrainerWithInvertibleAugmentations):
+class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
     """
     Trainer for semi-supervised learning and domain adaptation following the UniMatch v2 framework.
     """

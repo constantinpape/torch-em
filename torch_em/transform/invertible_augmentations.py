@@ -180,3 +180,20 @@ class FixMatchAugmenters:
         self.teacher.reset()
         self.student.reset()
 
+
+class UniMatchv2Augmenters:
+    def __init__(
+        self,
+        ndim: int,
+        weak=None,
+        strong1=None,
+        strong2=None,
+    ):
+        self.weak = weak or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
+        self.strong1 = strong1 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim))
+        self.strong2 = strong2 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim))
+
+    def reset_all(self):
+        self.weak.reset()
+        self.strong1.reset()
+        self.strong2.reset()
