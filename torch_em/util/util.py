@@ -285,15 +285,22 @@ def get_constructor_arguments(obj):
 
     # recover the arguments for torch dataloader
     elif isinstance(obj, torch.utils.data.DataLoader):
-        # These are all the "simple" arguements.
-        # "sampler", "batch_sampler" and "worker_init_fn" are more complicated
-        # and generally not used in torch_em
-        return _get_args(
-            obj, [
-                "batch_size", "shuffle", "num_workers", "pin_memory", "drop_last",
-                "persistent_workers", "prefetch_factor", "timeout"
-            ]
-        )
+        sampler = getattr(obj, "sampler", None)
+        shuffle = getattr(obj, "shuffle", None)
+        if shuffle is None:
+            shuffle = getattr(sampler, "shuffle", None)
+        if shuffle is None:
+            shuffle = isinstance(sampler, (torch.utils.data.RandomSampler, torch.utils.data.SubsetRandomSampler))
+
+        return {
+            **_get_args(
+                obj, [
+                    "batch_size", "num_workers", "pin_memory", "drop_last",
+                    "persistent_workers", "prefetch_factor", "timeout"
+                ]
+            ),
+            "shuffle": shuffle,
+        }
 
     # TODO support common torch losses (e.g. CrossEntropy, BCE)
     warnings.warn(
