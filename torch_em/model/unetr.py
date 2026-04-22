@@ -30,6 +30,53 @@ except ImportError:
 #
 
 
+def _check_input_normalization_range(
+    x: torch.Tensor,
+    expected_range: Optional[Tuple[float, float]],
+    unit_scale_max: Optional[float] = None,
+) -> None:
+    """Check whether raw inputs match the value range expected by the model normalizer.
+
+    Args:
+        x: The input tensor to validate.
+        expected_range: The (min, max) value range the input must lie within. If None, all checks are skipped.
+        unit_scale_max: If set, raises an error when the input's maximum value is at or below this threshold,
+            catching inputs that are likely in the wrong scale (e.g. [0, 1] instead of [0, 255] for SAM1).
+    """
+    if expected_range is None:
+        return
+
+    if not torch.all(torch.isfinite(x)):
+        raise ValueError("The input contains NaN or infinite values before normalization.")
+
+    min_value, max_value = expected_range
+    if torch.any((x < min_value) | (x > max_value)):
+        actual_min, actual_max = torch.aminmax(x.detach())
+        raise ValueError(
+            "The input is outside the expected scale before normalization: "
+            f"expected values in [{min_value}, {max_value}], got [{actual_min.item()}, {actual_max.item()}]. "
+            "Please check whether the raw inputs should be scaled to [0, 1] or kept in [0, 255] "
+            "before applying the pretrained normalization statistics."
+        )
+
+    if unit_scale_max is not None:
+        actual_max = x.detach().max().item()
+        if actual_max <= unit_scale_max:
+            raise ValueError(
+                f"The input maximum value ({actual_max:.4f}) suggests the input is in the wrong scale: "
+                f"expected inputs with values in [{min_value}, {max_value}], "
+                f"but the maximum is only {actual_max:.4f}. "
+                "Please check whether the raw inputs should be scaled to [0, 255] instead of [0, 1]."
+            )
+
+
+def _as_stats(mean, std, device, dtype, is_3d: bool):
+    view_shape = (1, -1, 1, 1, 1) if is_3d else (1, -1, 1, 1)
+    pixel_mean = torch.tensor(mean, device=device, dtype=dtype).view(*view_shape)
+    pixel_std = torch.tensor(std, device=device, dtype=dtype).view(*view_shape)
+    return pixel_mean, pixel_std
+
+
 class UNETRBase(nn.Module):
     """Base class for implementing a UNETR.
 
@@ -56,6 +103,8 @@ class UNETRBase(nn.Module):
         embed_dim: The embedding dimensionality, corresponding to the output dimension of the vision transformer.
         use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
             By default, it uses resampling for upsampling.
+        perform_range_checks: Whether to validate the input value range before normalization on each forward pass.
+            You can disable the checks to avoid GPU sync overhead during training when inputs are known to be correct.
 
         NOTE: The currently supported combinations of 'backbone' x 'encoder' are the following:
 
@@ -111,6 +160,7 @@ class UNETRBase(nn.Module):
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
+        perform_range_checks: bool = True,
         **kwargs
     ) -> None:
         super().__init__()
@@ -121,6 +171,7 @@ class UNETRBase(nn.Module):
         self.use_dino_stats = use_dino_stats
         self.use_skip_connection = use_skip_connection
         self.resize_input = resize_input
+        self.perform_range_checks = perform_range_checks
         self.use_conv_transpose = use_conv_transpose
         self.backbone = backbone
 
@@ -313,73 +364,27 @@ class UNETRBase(nn.Module):
     def _as_stats(self, mean, std, device, dtype, is_3d: bool):
         """@private
         """
-        # Either 2d batch: (1, C, 1, 1) or 3d batch: (1, C, 1, 1, 1).
-        view_shape = (1, -1, 1, 1, 1) if is_3d else (1, -1, 1, 1)
-        pixel_mean = torch.tensor(mean, device=device, dtype=dtype).view(*view_shape)
-        pixel_std = torch.tensor(std, device=device, dtype=dtype).view(*view_shape)
-        return pixel_mean, pixel_std
+        return _as_stats(mean, std, device, dtype, is_3d)
 
     def _check_input_normalization_range(self, x: torch.Tensor, expected_range: Optional[Tuple[float, float]]) -> None:
-        """Check whether raw inputs match the value range expected by the model normalizer."""
-        if expected_range is None:
-            return
-
-        if not torch.all(torch.isfinite(x)):
-            raise ValueError("The UNETR input contains NaN or infinite values before normalization.")
-
-        min_value, max_value = expected_range
-        if torch.any((x < min_value) | (x > max_value)):
-            actual_min, actual_max = torch.aminmax(x.detach())
-            raise ValueError(
-                "The UNETR input is outside the expected scale before normalization: "
-                f"expected values in [{min_value}, {max_value}], got [{actual_min.item()}, {actual_max.item()}]. "
-                "Please check whether the raw inputs should be scaled to [0, 1] or kept in [0, 255] "
-                "before applying the pretrained normalization statistics."
-            )
+        """@private
+        """
+        _check_input_normalization_range(x, expected_range)
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         """@private
         """
-        is_3d = (x.ndim == 5)
-        device, dtype = x.device, x.dtype
-
-        if self.use_sam_stats:
-            if self.backbone == "sam2":
-                mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
-                expected_range = (0.0, 1.0)
-            elif self.backbone == "sam3":
-                mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-                expected_range = (0.0, 1.0)
-            else:  # sam1 / default
-                mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
-                expected_range = (0.0, 255.0)
-        elif self.use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
-            raise NotImplementedError
-        elif self.use_dino_stats:
-            mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
-            expected_range = (0.0, 1.0)
-        else:
-            mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
-            expected_range = None
-
-        self._check_input_normalization_range(x, expected_range)
-        pixel_mean, pixel_std = self._as_stats(mean, std, device=device, dtype=dtype, is_3d=is_3d)
-
-        if self.resize_input:
-            x = self.resize_longest_side(x)
-        input_shape = x.shape[-3:] if is_3d else x.shape[-2:]
-
-        x = (x - pixel_mean) / pixel_std
-        h, w = x.shape[-2:]
-        padh = self.encoder.img_size - h
-        padw = self.encoder.img_size - w
-
-        if is_3d:
-            x = F.pad(x, (0, padw, 0, padh, 0, 0))
-        else:
-            x = F.pad(x, (0, padw, 0, padh))
-
-        return x, input_shape
+        return preprocess_vit_inputs(
+            x,
+            use_sam_stats=self.use_sam_stats,
+            backbone=self.backbone,
+            use_mae_stats=self.use_mae_stats,
+            use_dino_stats=self.use_dino_stats,
+            resize_input=self.resize_input,
+            img_size=self.img_size,
+            encoder_img_size=self.encoder.img_size,
+            perform_range_checks=self.perform_range_checks,
+        )
 
     def postprocess_masks(
         self, masks: torch.Tensor, input_size: Tuple[int, ...], original_size: Tuple[int, ...],
@@ -412,6 +417,91 @@ class UNETRBase(nn.Module):
         return masks
 
 
+def preprocess_vit_inputs(
+    x: torch.Tensor,
+    use_sam_stats: bool = False,
+    backbone: str = "sam",
+    use_mae_stats: bool = False,
+    use_dino_stats: bool = False,
+    resize_input: bool = True,
+    img_size: int = 1024,
+    encoder_img_size: int = 1024,
+    perform_range_checks: bool = True,
+) -> Tuple[torch.Tensor, Tuple]:
+    """Preprocess inputs for ViT-backbones in UNETR models.
+
+    Handles normalization stat selection, input range validation, optional resizing to the longest side,
+    and padding to `encoder_img_size`. Can be used as a standalone function without a model instance.
+
+    Args:
+        x: Input tensor of shape (B, C, H, W) for 2D or (B, C, Z, H, W) for 3D.
+        use_sam_stats: Whether to normalize with SAM/SAM2/SAM3 backbone statistics.
+        backbone: The backbone name — controls which SAM stats are used when `use_sam_stats=True`.
+        use_mae_stats: Whether to normalize with MAE statistics.
+        use_dino_stats: Whether to normalize with DINOv2/DINOv3 statistics.
+        resize_input: Whether to resize the input to the longest side before padding.
+        img_size: The model image size, used for 3D resize.
+        encoder_img_size: The encoder image size, used for 2D resize and padding.
+        perform_range_checks: Whether to validate the expected input value range before normalization.
+            You can disable the checks to avoid GPU sync overhead during training when inputs are known to be correct.
+
+    Returns:
+        The preprocessed tensor and the spatial shape after resizing (before padding).
+    """
+    is_3d = (x.ndim == 5)
+    device, dtype = x.device, x.dtype
+    mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+    expected_range = None
+    unit_scale_max = None
+
+    if use_sam_stats:
+        if backbone == "sam2":
+            mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+            expected_range = (0.0, 1.0)
+        elif backbone == "sam3":
+            mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+            expected_range = (0.0, 1.0)
+        else:  # sam1 / default
+            mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
+            expected_range = (0.0, 255.0)
+            unit_scale_max = 1.0
+    elif use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
+        raise NotImplementedError
+    elif use_dino_stats:
+        mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+        expected_range = (0.0, 1.0)
+    else:
+        mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+        expected_range = None
+
+    if perform_range_checks:
+        _check_input_normalization_range(x, expected_range, unit_scale_max)
+    pixel_mean, pixel_std = _as_stats(mean, std, device=device, dtype=dtype, is_3d=is_3d)
+
+    if resize_input:
+        if x.ndim == 4:
+            target_size = UNETRBase.get_preprocess_shape(x.shape[2], x.shape[3], encoder_img_size)
+            x = F.interpolate(x, target_size, mode="bilinear", align_corners=False, antialias=True)
+        elif x.ndim == 5:
+            B, C, Z, H, W = x.shape
+            target_size = UNETRBase.get_preprocess_shape(H, W, img_size)
+            x = F.interpolate(x, (Z, *target_size), mode="trilinear", align_corners=False)
+
+    input_shape = x.shape[-3:] if is_3d else x.shape[-2:]
+
+    x = (x - pixel_mean) / pixel_std
+    h, w = x.shape[-2:]
+    padh = encoder_img_size - h
+    padw = encoder_img_size - w
+
+    if is_3d:
+        x = F.pad(x, (0, padw, 0, padh, 0, 0))
+    else:
+        x = F.pad(x, (0, padw, 0, padh))
+
+    return x, input_shape
+
+
 class UNETR(UNETRBase):
     """A (2d-only) UNet Transformer using a vision transformer as encoder and a convolutional decoder.
     """
@@ -431,6 +521,7 @@ class UNETR(UNETRBase):
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
+        perform_range_checks: bool = True,
         **kwargs
     ) -> None:
 
@@ -449,6 +540,7 @@ class UNETR(UNETRBase):
             use_skip_connection=use_skip_connection,
             embed_dim=embed_dim,
             use_conv_transpose=use_conv_transpose,
+            perform_range_checks=perform_range_checks,
             **kwargs,
         )
 
@@ -628,6 +720,7 @@ class UNETR3D(UNETRBase):
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
         use_strip_pooling: bool = True,
+        perform_range_checks: bool = True,
         **kwargs
     ):
         if use_skip_connection:
@@ -653,6 +746,7 @@ class UNETR3D(UNETRBase):
             use_skip_connection=use_skip_connection,
             embed_dim=embed_dim,
             use_conv_transpose=use_conv_transpose,
+            perform_range_checks=perform_range_checks,
             **kwargs,
         )
 
