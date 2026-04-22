@@ -13,6 +13,10 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         trainer: The instantiated trainer class.
         save_root: The root directory for saving the checkpoints and logs.
     """
+    @staticmethod
+    def _get_image_channel(x):
+        return x[0, 0:1] if x.shape[1] > 1 else x[0]
+
     def __init__(self, trainer, save_root, **unused_kwargs):
         super().__init__(trainer, save_root)
         self.my_root = save_root
@@ -30,7 +34,7 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
             x, y, pred = x[:, :, zindex], y[:, :, zindex], pred[:, :, zindex]
 
         grid = make_grid(
-            [torch_em.transform.raw.normalize(x[0]), y[0, 0:1], pred[0, 0:1]],
+            [torch_em.transform.raw.normalize(self._get_image_channel(x)), y[0, 0:1], pred[0, 0:1]],
             padding=8
         )
         self.tb.add_image(tag=f"{name}/supervised/input-labels-prediction", img_tensor=grid, global_step=step)
@@ -46,8 +50,8 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
                 label_filter = label_filter[:, :, zindex]
 
         images = [
-            torch_em.transform.raw.normalize(x1[0]),
-            torch_em.transform.raw.normalize(x2[0]),
+            torch_em.transform.raw.normalize(self._get_image_channel(x1)),
+            torch_em.transform.raw.normalize(self._get_image_channel(x2)),
             pred[0, 0:1], pseudo_labels[0, 0:1],
         ]
         im_name = f"{name}/unsupervised/aug1-aug2-prediction-pseudolabels"
