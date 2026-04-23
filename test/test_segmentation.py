@@ -178,6 +178,22 @@ class TestSegmentation(unittest.TestCase):
                 rois=np.s_[:0, :, :],
             )
 
+    def test_roi_smaller_than_patch_shape(self):
+        from torch_em.segmentation import default_segmentation_loader
+
+        patch_shape = (64, 64, 64)
+        loader = default_segmentation_loader(
+            self.data_path, self.raw_key,
+            self.data_path, self.semantic_label_key,
+            batch_size=1,
+            patch_shape=patch_shape,
+            rois=(slice(0, 10), slice(0, 10), slice(0, 10)),
+        )
+
+        raw, labels = loader.dataset[0]
+        self.assertEqual(raw.shape, (1,) + patch_shape)
+        self.assertEqual(labels.shape, (1,) + patch_shape)
+
     def test_training_with_numpy_data(self):
         from torch_em.segmentation import default_segmentation_loader
         from torch_em.transform import labels_to_binary
