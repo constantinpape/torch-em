@@ -474,6 +474,7 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
 
         # Sample from both the supervised and unsupervised loader.
         for xu in self.unsupervised_train_loader:
+            self.augmenter.reset_all()
             xu = xu.to(self.device, non_blocking=True)
 
             xu1, xu2 = self.augmenter.teacher.transform(xu), self.augmenter.student.transform(xu)
@@ -482,15 +483,18 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
-                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
 
             pseudo_labels = pseudo_labels.detach()
             if label_filter is not None:
                 label_filter = label_filter.detach()
 
-            # Perform distribution alignment for pseudo labels
+            # Perform distribution alignment for pseudo labels, then invert into the reference frame.
             pseudo_labels = self.get_distribution_alignment(pseudo_labels)
+            pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+            label_filter_inv = (
+                self.augmenter.teacher.reverse_transform(label_filter)
+                if label_filter is not None else None
+            )
 
             self.optimizer.zero_grad()
             # Perform unsupervised training
@@ -521,8 +525,6 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
                 break
             progress.update(1)
 
-            self.augmenter.reset_all()
-
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -534,6 +536,7 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
 
         # Sample from both the supervised and unsupervised loader.
         for (xs, ys), xu in zip(self.supervised_train_loader, self.unsupervised_train_loader):
+            self.augmenter.reset_all()
             xs, ys = xs.to(self.device, non_blocking=True), ys.to(self.device, non_blocking=True)
             xu = xu.to(self.device, non_blocking=True)
 
@@ -551,15 +554,18 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
-                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
 
             pseudo_labels = pseudo_labels.detach()
             if label_filter is not None:
                 label_filter = label_filter.detach()
 
-            # Perform distribution alignment for pseudo labels
+            # Perform distribution alignment for pseudo labels, then invert into the reference frame.
             pseudo_labels = self.get_distribution_alignment(pseudo_labels)
+            pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+            label_filter_inv = (
+                self.augmenter.teacher.reverse_transform(label_filter)
+                if label_filter is not None else None
+            )
 
             # Perform unsupervised training
             with forward_context():
@@ -595,8 +601,6 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
                 break
             progress.update(1)
 
-            self.augmenter.reset_all()
-
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -625,6 +629,7 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
         loss_val = 0.0
 
         for x in self.unsupervised_val_loader:
+            self.augmenter.reset_all()
             x = x.to(self.device, non_blocking=True)
 
             x1, x2 = self.augmenter.teacher.transform(x), self.augmenter.student.transform(x)
@@ -633,15 +638,16 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
             with forward_context():
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
                 pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
+                label_filter_inv = (
+                    self.augmenter.teacher.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
 
                 pred = self.model(model_input)
                 pred_inv = self.augmenter.student.reverse_transform(pred)
                 loss, metric = self.unsupervised_loss_and_metric(pred_inv, pseudo_labels_inv, label_filter_inv)
             loss_val += loss.item()
             metric_val += metric.item()
-
-            self.augmenter.reset_all()
 
         metric_val /= len(self.unsupervised_val_loader)
         loss_val /= len(self.unsupervised_val_loader)
