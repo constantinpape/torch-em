@@ -7,7 +7,7 @@ import torch
 
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_tensor_with_channels, ensure_patch_shape, load_data
+from ..util import ensure_tensor_with_channels, ensure_patch_shape, load_data, validate_roi
 
 
 class RawDataset(torch.utils.data.Dataset):
@@ -70,9 +70,8 @@ class RawDataset(torch.utils.data.Dataset):
         self._with_channels = with_channels
 
         if roi is not None:
-            if isinstance(roi, slice):
-                roi = (roi,)
-
+            shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
+            roi = validate_roi(roi, shape, patch_shape)
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
 
         self.shape = self.raw.shape[1:] if self._with_channels else self.raw.shape

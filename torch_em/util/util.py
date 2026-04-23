@@ -102,6 +102,40 @@ def ensure_tensor(tensor: Union[torch.Tensor, ArrayLike], dtype: Optional[str] =
     return tensor
 
 
+def validate_roi(roi, shape, patch_shape=None):
+    """Normalize an ROI to explicit slices and validate that it is non-empty."""
+    if roi is None:
+        return None
+    if isinstance(roi, slice):
+        roi = (roi,)
+    if not isinstance(roi, tuple):
+        raise TypeError(f"Invalid roi type: {type(roi)}")
+    if len(roi) > len(shape):
+        raise ValueError(f"Invalid roi {roi} for data shape {shape}: too many dimensions")
+
+    normalized_roi = []
+    for this_roi, dim in zip(roi, shape):
+        if not isinstance(this_roi, slice):
+            raise TypeError(f"Invalid roi entry: {this_roi}. Only slices are supported")
+        step = 1 if this_roi.step is None else this_roi.step
+        if step != 1:
+            raise ValueError(f"Invalid roi {roi}: slice steps other than 1 are not supported")
+        start, stop, _ = this_roi.indices(dim)
+        normalized_roi.append(slice(start, stop))
+
+    if len(roi) < len(shape):
+        normalized_roi.extend(slice(0, dim) for dim in shape[len(roi):])
+
+    roi_shape = tuple(sl.stop - sl.start for sl in normalized_roi)
+    if any(sh <= 0 for sh in roi_shape):
+        msg = f"Invalid roi {roi} for data shape {shape}: it results in an empty region"
+        if patch_shape is not None:
+            msg += f" for patch_shape {patch_shape}"
+        raise ValueError(msg)
+
+    return tuple(normalized_roi)
+
+
 def ensure_tensor_with_channels(
     tensor: Union[torch.Tensor, ArrayLike], ndim: int, dtype: Optional[str] = None
 ) -> torch.Tensor:
