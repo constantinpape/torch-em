@@ -322,12 +322,37 @@ def get_constructor_arguments(obj):
         # These are all the "simple" arguements.
         # "sampler", "batch_sampler" and "worker_init_fn" are more complicated
         # and generally not used in torch_em
-        return _get_args(
-            obj, [
-                "batch_size", "shuffle", "num_workers", "pin_memory", "drop_last",
-                "persistent_workers", "prefetch_factor", "timeout"
-            ]
-        )
+        sampler = getattr(obj, "sampler", None)
+        if sampler is not None and not isinstance(
+            sampler,
+            (
+                torch.utils.data.RandomSampler,
+                torch.utils.data.SequentialSampler,
+                torch.utils.data.SubsetRandomSampler,
+            ),
+        ):
+            warnings.warn(
+                f"DataLoader uses sampler {type(sampler).__name__}, but only its effective `shuffle` setting "
+                "is serialized. `DefaultTrainer.from_checkpoint` will recreate the loader without the original "
+                "sampler, so sampling behavior may change."
+            )
+        shuffle = getattr(obj, "shuffle", None)
+        if shuffle is None:
+            shuffle = getattr(sampler, "shuffle", None)
+        if shuffle is None:
+            # Only randomized samplers map to shuffle=True. SequentialSampler is handled
+            # by the default fallback of shuffle=False and does not need a special case.
+            shuffle = isinstance(sampler, (torch.utils.data.RandomSampler, torch.utils.data.SubsetRandomSampler))
+
+        return {
+            **_get_args(
+                obj, [
+                    "batch_size", "num_workers", "pin_memory", "drop_last",
+                    "persistent_workers", "prefetch_factor", "timeout"
+                ]
+            ),
+            "shuffle": shuffle,
+        }
 
     # TODO support common torch losses (e.g. CrossEntropy, BCE)
     warnings.warn(

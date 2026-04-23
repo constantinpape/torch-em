@@ -105,8 +105,6 @@ class DefaultTrainer:
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
 
-        if not all(hasattr(loader, "shuffle") for loader in [train_loader, val_loader]):
-            raise ValueError(f"{self.__class__} requires each dataloader to have 'shuffle' attribute.")
 
         self._generate_name = name is None
         self.name = name
