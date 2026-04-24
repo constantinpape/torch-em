@@ -513,6 +513,7 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
 
         # Sample from both the supervised and unsupervised loader.
         for xu in self.unsupervised_train_loader:
+            self.augmenter.reset_all()
             xu = xu.to(self.device, non_blocking=True)
 
             xu1, xu2 = self.augmenter.teacher.transform(xu), self.augmenter.student.transform(xu)
@@ -522,7 +523,10 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
                 pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
+                label_filter_inv = (
+                    self.augmenter.teacher.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
 
             # If we have a sampler then check if the current batch matches the condition for inclusion in training.
             if self.sampler is not None:
@@ -561,8 +565,6 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 break
             progress.update(1)
 
-            self.augmenter.reset_all()
-
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -574,6 +576,7 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
 
         # Sample from both the supervised and unsupervised loader.
         for (xs, ys), xu in zip(self.supervised_train_loader, self.unsupervised_train_loader):
+            self.augmenter.reset_all()
             xs, ys = xs.to(self.device, non_blocking=True), ys.to(self.device, non_blocking=True)
             xu = xu.to(self.device, non_blocking=True)
 
@@ -592,7 +595,10 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
                 pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
+                label_filter_inv = (
+                    self.augmenter.teacher.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
 
             # Perform unsupervised training
             with forward_context():
@@ -631,8 +637,6 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 break
             progress.update(1)
 
-            self.augmenter.reset_all()
-
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -661,21 +665,23 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
         loss_val = 0.0
 
         for x in self.unsupervised_val_loader:
+            self.augmenter.reset_all()
             x = x.to(self.device, non_blocking=True)
             x1, x2 = self.augmenter.teacher.transform(x), self.augmenter.student.transform(x)
             teacher_input, model_input = x1, x2
             with forward_context():
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
                 pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.teacher.reverse_transform(label_filter)
+                label_filter_inv = (
+                    self.augmenter.teacher.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
 
                 pred = self.model(model_input)
                 pred_inv = self.augmenter.student.reverse_transform(pred)
                 loss, metric = self.unsupervised_loss_and_metric(pred_inv, pseudo_labels_inv, label_filter_inv)
             loss_val += loss.item()
             metric_val += metric.item()
-
-            self.augmenter.reset_all()
 
         metric_val /= len(self.unsupervised_val_loader)
         loss_val /= len(self.unsupervised_val_loader)
