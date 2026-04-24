@@ -133,6 +133,8 @@ class TestRawDatasetWithMasks(TestRawDatasetBase, unittest.TestCase):
             self.assertEqual(patch.shape, expected_shape)
 
             # check that patches are sampled inside the ROI defined by sample mask
+            # note that the raw data and the sample mask are identical, so this checks if the
+            # positive samples from the sample mask are correct
             self.assertGreaterEqual(patch.mean().item(), min_fraction)
 
     def test_bg_mask(self):
