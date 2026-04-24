@@ -166,3 +166,89 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
         metric = self.metric(avg_samples, labels)
 
         return loss, metric
+
+
+class SelfTrainingLossWithInvertibleAugmentations(nn.Module):
+    """Loss function for self training.
+
+    This loss takes as input a model and its input, as well as (pseudo) labels and potentially
+    a mask for the labels. It then runs prediction with the model and compares the outputs
+    to the (pseudo) labels using an internal loss function. Typically, the labels are derived
+    from the predictions of a teacher model, and the model passed is the student model.
+
+    Args:
+        loss: The internal loss function to use for comparing predictions of the teacher and student model.
+        activation: The activation function to be applied to the prediction before passing it to the loss.
+    """
+    def __init__(self, loss: nn.Module = torch_em.loss.DiceLoss(), activation: Optional[nn.Module] = None):
+        super().__init__()
+        self.activation = activation
+        self.loss = loss
+        # TODO serialize the class names and kwargs instead
+        self.init_kwargs = {}
+
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Compute the loss for self-training.
+
+        Args:
+            model: The model.
+            input_: The model inputs for this batch.
+            labels: The (pseudo) labels for this batch.
+            label_filter: A mask to exclude from the loss computation.
+
+        Returns:
+            The loss value.
+        """
+
+        if self.activation is not None:
+            prediction = self.activation(prediction)
+        if label_filter is None:
+            loss = self.loss(prediction, labels)
+        else:
+            loss = self.loss(prediction * label_filter, labels * label_filter)
+        return loss
+
+
+class SelfTrainingLossAndMetricWithInvertibleAugmentations(nn.Module):
+    """Loss and metric function for self training.
+
+    Similar to `DefaultSelfTrainingLoss`, but computes loss and metric value in one call
+    to avoid running prediction with the model twice.
+
+    Args:
+        loss: The internal loss function to use for comparing predictions of the teacher and student model.
+        metric: The internal metric function to use for comparing predictions of the teacher and student model.
+        activation: The activation function to be applied to the prediction before passing it to the loss.
+    """
+    def __init__(
+        self,
+        loss: nn.Module = torch_em.loss.DiceLoss(),
+        metric: nn.Module = torch_em.loss.DiceLoss(),
+        activation: Optional[nn.Module] = None
+    ):
+        super().__init__()
+        self.activation = activation
+        self.loss = loss
+        self.metric = metric
+        # TODO serialize the class names and dicts instead
+        self.init_kwargs = {}
+
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+    ):
+        if self.activation is not None:
+            prediction = self.activation(prediction)
+        if label_filter is None:
+            loss = self.loss(prediction, labels)
+        else:
+            loss = self.loss(prediction * label_filter, labels * label_filter)
+        metric = self.metric(prediction, labels)
+        return loss, metric
