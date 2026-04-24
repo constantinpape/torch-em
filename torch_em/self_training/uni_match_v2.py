@@ -96,7 +96,7 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
         t_per_iter = time.time()
 
         for x_u in self.unsupervised_train_loader:
-
+            self.augmenter.reset_all()
             x_u = x_u.to(self.device, non_blocking=True)
 
             x_u_w = self.augmenter.weak.transform(x_u)
@@ -106,7 +106,10 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
             with forward_context(), torch.no_grad():
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, x_u_w)
                 pseudo_labels_inv = self.augmenter.weak.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.weak.reverse_transform(label_filter)
+                label_filter_inv = (
+                    self.augmenter.weak.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
 
             # Perform unsupervised training
             with forward_context():
@@ -159,8 +162,6 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
                 break
             progress.update(1)
 
-            self.augmenter.reset_all()
-
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -174,6 +175,7 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
         t_per_iter = time.time()
 
         for i, ((x_s, y_s), x_u) in enumerate(train_loader):
+            self.augmenter.reset_all()
 
             x_s, y_s = x_s.to(self.device, non_blocking=True), y_s.to(self.device, non_blocking=True)
             x_u = x_u.to(self.device, non_blocking=True)
@@ -192,16 +194,18 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
             with forward_context(), torch.no_grad():
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, x_u_w)
                 pseudo_labels_inv = self.augmenter.weak.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.weak.reverse_transform(label_filter)
+                label_filter_inv = (
+                    self.augmenter.weak.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
 
             # Perform unsupervised training
+            self.optimizer.zero_grad()
             with forward_context():
-                # if self.complementary_dropout:
-                #     pred_s1, pred_s2 = self.predict_with_comp_drop(self.model, torch.cat((x_u_s1, x_u_s2))).chunk(2)
-                # else:
-                #     pred_s1, pred_s2 = self.model(torch.cat((x_u_s1, x_u_s2))).chunk(2)
-                pred_s1 = self.model(x_u_s1)
-                pred_s2 = pred_s1
+                if self.complementary_dropout:
+                    pred_s1, pred_s2 = self.predict_with_comp_drop(self.model, torch.cat((x_u_s1, x_u_s2))).chunk(2)
+                else:
+                    pred_s1, pred_s2 = self.model(torch.cat((x_u_s1, x_u_s2))).chunk(2)
                 pred_s1_inv = self.augmenter.strong1.reverse_transform(pred_s1)
                 pred_s2_inv = self.augmenter.strong2.reverse_transform(pred_s2)
                 unsupervised_loss = self.unsupervised_loss(
@@ -250,8 +254,6 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
                 break
             progress.update(1)
 
-            self.augmenter.reset_all()
-
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
@@ -286,6 +288,7 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
         loss_val = 0.0
 
         for x in self.unsupervised_val_loader:
+            self.augmenter.reset_all()
             x = x.to(self.device, non_blocking=True)
 
             # apply augmentations
@@ -296,7 +299,10 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
             with forward_context():
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, x_w)
                 pseudo_labels_inv = self.augmenter.weak.reverse_transform(pseudo_labels)
-                label_filter_inv = self.augmenter.weak.reverse_transform(label_filter)
+                label_filter_inv = (
+                    self.augmenter.weak.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
 
                 if self.complementary_dropout:
                     pred_s1, pred_s2 = self.predict_with_comp_drop(self.model, torch.cat((x_s1, x_s2))).chunk(2)
@@ -313,8 +319,6 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
                 )
             loss_val += loss.item()
             metric_val += metric.item()
-
-            self.augmenter.reset_all()
 
         metric_val /= len(self.unsupervised_val_loader)
         loss_val /= len(self.unsupervised_val_loader)
