@@ -7,6 +7,7 @@ import torch_em
 from torch_em.util import get_constructor_arguments
 
 from .logger import SelfTrainingTensorboardLogger
+from ..transform.invertible_augmentations import InvertibleAugmenter
 
 
 class Dummy(torch.nn.Module):
@@ -310,6 +311,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 self.logger.log_combined_loss(self._iteration, loss)
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
                 self.logger.log_lr(self._iteration, lr)
+                if self.pseudo_labeler.confidence_threshold is not None:
+                    self.logger.log_ct(self._iteration, self.pseudo_labeler.confidence_threshold)
 
             with torch.no_grad():
                 self._momentum_update()
@@ -368,6 +371,330 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             )
 
         self.pseudo_labeler.step(metric_val, self._epoch) # NOTE: scheduler added in validation step
+
+        return metric_val
+
+    def _validate_impl(self, forward_context):
+        self.model.eval()
+
+        with torch.no_grad():
+
+            if self.supervised_val_loader is None:
+                supervised_metric = None
+            else:
+                supervised_metric = self._validate_supervised(forward_context)
+
+            if self.unsupervised_val_loader is None:
+                unsupervised_metric = None
+            else:
+                unsupervised_metric = self._validate_unsupervised(forward_context)
+
+        if unsupervised_metric is None:
+            metric = supervised_metric
+        elif supervised_metric is None:
+            metric = unsupervised_metric
+        else:
+            metric = (supervised_metric + unsupervised_metric) / 2
+
+        return metric
+
+
+class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
+    """Trainer for semi-supervised learning and domain adaptation following the MeanTeacher approach.
+
+    Mean Teacher was introduced by Tarvainen & Vapola in https://arxiv.org/abs/1703.01780.
+    It uses a teacher model derived from the student model via EMA of weights
+    to predict pseudo-labels on unlabeled data. We support two training strategies:
+    - Joint training on labeled and unlabeled data (with a supervised and unsupervised loss function).
+    - Training only on the unsupervised data.
+
+    This class expects the following data loaders:
+    - unsupervised_train_loader: Returns two augmentations of the same input.
+    - supervised_train_loader (optional): Returns input and labels.
+    - unsupervised_val_loader (optional): Same as unsupervised_train_loader
+    - supervised_val_loader (optional): Same as supervised_train_loader
+    At least one of unsupervised_val_loader and supervised_val_loader must be given.
+
+    The augmenter defines separate invertible transforms for teacher and student inputs.
+    Teacher and student views are generated independently, and the corresponding inverse
+    transforms map predictions and pseudo-labels back into a shared reference frame.
+
+    And the following elements to customize the pseudo labeling:
+    - pseudo_labeler: to compute the psuedo-labels
+        - Parameters: teacher, teacher_input
+        - Returns: pseudo_labels, label_filter (<- label filter can for example be mask, weight or None)
+    - unsupervised_loss: the loss between model predictions and pseudo labels
+        - Parameters: model, model_input, pseudo_labels, label_filter
+        - Returns: loss
+    - supervised_loss (optional): the supervised loss function
+        - Parameters: model, input, labels
+        - Returns: loss
+    - unsupervised_loss_and_metric (optional): the unsupervised loss function and metric
+        - Parameters: model, model_input, pseudo_labels, label_filter
+        - Returns: loss, metric
+    - supervised_loss_and_metric (optional): the supervised loss function and metric
+        - Parameters: model, input, labels
+        - Returns: loss, metric
+    At least one of unsupervised_loss_and_metric and supervised_loss_and_metric must be given.
+
+    If the parameter reinit_teacher is set to true, the teacher weights are re-initialized.
+    If it is None, the most appropriate initialization scheme for the training approach is chosen:
+    - semi-supervised training -> reinit, because we usually train a model from scratch
+    - unsupervised training -> do not reinit, because we usually fine-tune a model
+
+    Note: adjust the batch size ratio between the 'unsupervised_train_loader' and 'supervised_train_loader'
+    for setting the ratio between supervised and unsupervised training samples
+
+    Args:
+        model: The model to be trained.
+        unsupervised_train_loader: The loader for unsupervised training.
+        unsupervised_loss: The loss for unsupervised training.
+        pseudo_labeler: The pseudo labeler that predicts labels in unsupervised training.
+        augmenter: Invertible augmenter providing separate teacher and student transforms,
+            including corresponding inverse transforms to align predictions in a common frame.
+        supervised_train_loader: The loader for supervised training.
+        supervised_loss: The loss for supervised training.
+        unsupervised_loss_and_metric: The loss and metric for unsupervised training.
+        supervised_loss_and_metric: The loss and metrhic for supervised training.
+        logger: The logger.
+        momentum: The momentum value for the exponential moving weight average of the teacher model.
+        reinit_teacher: Whether to reinit the teacher model before starting the training.
+        sampler: A sampler for rejecting pseudo-labels according to a defined criterion.
+        kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
+    """
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        unsupervised_train_loader: torch.utils.data.DataLoader,
+        unsupervised_loss: torch.utils.data.DataLoader,
+        pseudo_labeler: Callable,
+        augmenter: InvertibleAugmenter,
+        supervised_train_loader: Optional[torch.utils.data.DataLoader] = None,
+        unsupervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
+        supervised_val_loader: Optional[torch.utils.data.DataLoader] = None,
+        supervised_loss: Optional[Callable] = None,
+        unsupervised_loss_and_metric: Optional[Callable] = None,
+        supervised_loss_and_metric: Optional[Callable] = None,
+        logger=SelfTrainingTensorboardLogger,
+        momentum: float = 0.999,
+        reinit_teacher: Optional[bool] = None,
+        sampler: Optional[Callable] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            model=model,
+            unsupervised_train_loader=unsupervised_train_loader,
+            unsupervised_loss=unsupervised_loss,
+            pseudo_labeler=pseudo_labeler,
+            supervised_train_loader=supervised_train_loader,
+            unsupervised_val_loader=unsupervised_val_loader,
+            supervised_val_loader=supervised_val_loader,
+            supervised_loss=supervised_loss,
+            unsupervised_loss_and_metric=unsupervised_loss_and_metric,
+            supervised_loss_and_metric=supervised_loss_and_metric,
+            logger=logger,
+            momentum=momentum,
+            reinit_teacher=reinit_teacher,
+            sampler=sampler,
+            **kwargs,
+        )
+        self.augmenter = augmenter
+
+    #
+    # training and validation functionality
+    #
+
+    def _train_epoch_unsupervised(self, progress, forward_context, backprop):
+        self.model.train()
+
+        n_iter = 0
+        t_per_iter = time.time()
+
+        # Sample from both the supervised and unsupervised loader.
+        for xu in self.unsupervised_train_loader:
+            self.augmenter.reset_all()
+            xu = xu.to(self.device, non_blocking=True)
+
+            xu1, xu2 = self.augmenter.teacher.transform(xu), self.augmenter.student.transform(xu)
+            teacher_input, model_input = xu1, xu2
+
+            with forward_context(), torch.no_grad():
+                # Compute the pseudo labels.
+                pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
+                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+                label_filter_inv = (
+                    self.augmenter.teacher.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
+
+            # If we have a sampler then check if the current batch matches the condition for inclusion in training.
+            if self.sampler is not None:
+                keep_batch = self.sampler(pseudo_labels, label_filter)
+                if not keep_batch:
+                    continue
+
+            self.optimizer.zero_grad()
+            # Perform unsupervised training
+            with forward_context():
+                pred = self.model(model_input)
+                pred_inv = self.augmenter.student.reverse_transform(pred)
+                loss = self.unsupervised_loss(pred_inv, pseudo_labels_inv, label_filter_inv)
+            backprop(loss)
+
+            if self.logger is not None:
+                with torch.no_grad(), forward_context():
+                    pred = pred if self._iteration % self.log_image_interval == 0 else None
+                self.logger.log_train_unsupervised(
+                    self._iteration, loss, xu, xu, pred_inv, pseudo_labels_inv, label_filter_inv
+                )
+                self.logger.log_train_augmentations(
+                    self._iteration, xu1, xu2, pseudo_labels, pred,
+                )
+                lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
+                self.logger.log_lr(self._iteration, lr)
+                if self.pseudo_labeler.confidence_threshold is not None:
+                    self.logger.log_ct(self._iteration, self.pseudo_labeler.confidence_threshold)
+
+            with torch.no_grad():
+                self._momentum_update()
+
+            self._iteration += 1
+            n_iter += 1
+            if self._iteration >= self.max_iteration:
+                break
+            progress.update(1)
+
+        t_per_iter = (time.time() - t_per_iter) / n_iter
+        return t_per_iter
+
+    def _train_epoch_semisupervised(self, progress, forward_context, backprop):
+        self.model.train()
+
+        n_iter = 0
+        t_per_iter = time.time()
+
+        # Sample from both the supervised and unsupervised loader.
+        for (xs, ys), xu in zip(self.supervised_train_loader, self.unsupervised_train_loader):
+            self.augmenter.reset_all()
+            xs, ys = xs.to(self.device, non_blocking=True), ys.to(self.device, non_blocking=True)
+            xu = xu.to(self.device, non_blocking=True)
+
+            xu1, xu2 = self.augmenter.teacher.transform(xu), self.augmenter.student.transform(xu)
+            teacher_input, model_input = xu1, xu2
+
+            # Perform supervised training.
+            self.optimizer.zero_grad()
+            with forward_context():
+                # We pass the model, the input and the labels to the supervised loss function,
+                # so that how the loss is calculated stays flexible, e.g. to enable ELBO for PUNet.
+                supervised_pred = self.model(xs)
+                supervised_loss = self.supervised_loss(supervised_pred, ys)
+
+            with forward_context(), torch.no_grad():
+                # Compute the pseudo labels.
+                pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
+                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+                label_filter_inv = (
+                    self.augmenter.teacher.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
+
+            # Perform unsupervised training
+            with forward_context():
+                unsup_pred = self.model(model_input)
+                unsup_pred_inv = self.augmenter.student.reverse_transform(unsup_pred)
+                unsupervised_loss = self.unsupervised_loss(unsup_pred_inv, pseudo_labels_inv, label_filter_inv)
+
+            loss = (supervised_loss + unsupervised_loss) / 2
+            backprop(loss)
+
+            if self.logger is not None:
+                with torch.no_grad(), forward_context():
+                    unsup_pred = unsup_pred if self._iteration % self.log_image_interval == 0 else None
+                    supervised_pred = supervised_pred if self._iteration % self.log_image_interval == 0 else None
+
+                self.logger.log_train_supervised(self._iteration, supervised_loss, xs, ys, supervised_pred)
+                self.logger.log_train_unsupervised(
+                    self._iteration, unsupervised_loss, xu, xu, unsup_pred_inv, pseudo_labels_inv, label_filter_inv
+                )
+                self.logger.log_train_augmentations(
+                    self._iteration, xu1, xu2, pseudo_labels, unsup_pred,
+                )
+
+                self.logger.log_combined_loss(self._iteration, loss)
+                lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
+                self.logger.log_lr(self._iteration, lr)
+                if self.pseudo_labeler.confidence_threshold is not None:
+                    self.logger.log_ct(self._iteration, self.pseudo_labeler.confidence_threshold)
+
+            with torch.no_grad():
+                self._momentum_update()
+
+            self._iteration += 1
+            n_iter += 1
+            if self._iteration >= self.max_iteration:
+                break
+            progress.update(1)
+
+        t_per_iter = (time.time() - t_per_iter) / n_iter
+        return t_per_iter
+
+    def _validate_supervised(self, forward_context):
+        metric_val = 0.0
+        loss_val = 0.0
+
+        for x, y in self.supervised_val_loader:
+            x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
+            with forward_context():
+                pred = self.model(x)
+                loss, metric = self.supervised_loss_and_metric(pred, y)
+            loss_val += loss.item()
+            metric_val += metric.item()
+
+        metric_val /= len(self.supervised_val_loader)
+        loss_val /= len(self.supervised_val_loader)
+
+        if self.logger is not None:
+            self.logger.log_validation_supervised(self._iteration, metric_val, loss_val, x, y, pred)
+
+        return metric_val
+
+    def _validate_unsupervised(self, forward_context):
+        metric_val = 0.0
+        loss_val = 0.0
+
+        for x in self.unsupervised_val_loader:
+            self.augmenter.reset_all()
+            x = x.to(self.device, non_blocking=True)
+            x1, x2 = self.augmenter.teacher.transform(x), self.augmenter.student.transform(x)
+            teacher_input, model_input = x1, x2
+            with forward_context():
+                pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
+                pseudo_labels_inv = self.augmenter.teacher.reverse_transform(pseudo_labels)
+                label_filter_inv = (
+                    self.augmenter.teacher.reverse_transform(label_filter)
+                    if label_filter is not None else None
+                )
+
+                pred = self.model(model_input)
+                pred_inv = self.augmenter.student.reverse_transform(pred)
+                loss, metric = self.unsupervised_loss_and_metric(pred_inv, pseudo_labels_inv, label_filter_inv)
+            loss_val += loss.item()
+            metric_val += metric.item()
+
+        metric_val /= len(self.unsupervised_val_loader)
+        loss_val /= len(self.unsupervised_val_loader)
+
+        if self.logger is not None:
+            self.logger.log_validation_unsupervised(
+                self._iteration, metric_val, loss_val, x, x, pred_inv, pseudo_labels_inv, label_filter_inv
+            )
+            self.logger.log_validation_augmentations(
+                self._iteration, x1, x2, pseudo_labels, pred,
+            )
+
+        self.pseudo_labeler.step(metric_val, self._epoch)
 
         return metric_val
 
