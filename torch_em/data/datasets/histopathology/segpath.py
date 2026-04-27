@@ -95,7 +95,7 @@ def _is_gzip(path):
         return f.read(2) == b"\x1f\x8b"
 
 
-def _save_as_h5(sample_path: Tuple[Path, Path, Path]):
+def _save_as_h5(sample_path):
 
     img = imageio.imread(sample_path[0])
     mask = imageio.imread(sample_path[1])
@@ -107,7 +107,7 @@ def _save_as_h5(sample_path: Tuple[Path, Path, Path]):
         f.create_dataset(name="labels/mask", data=mask, compression="gzip")
 
 
-def _extract_data(tar_path: Path, extract_path: Path):
+def _extract_data(tar_path, extract_path):
     extract_root = tar_path.parent.resolve() / "unprocessed"
 
     with tarfile.open(tar_path) as f:
@@ -128,7 +128,7 @@ def _extract_data(tar_path: Path, extract_path: Path):
         list(tqdm(
             p.imap_unordered(_save_as_h5, sample_paths),
             total=len(sample_paths),
-            desc="Saving to .h5"
+            desc="Saving to H5"
         ))
 
     rmtree(extract_root)
@@ -164,7 +164,7 @@ def get_segpath_data(
             _extract_data(tar_path, extracted_path)
 
 
-def _get_paths_from_metadata(path: Path, cell_type, split):
+def _get_paths_from_metadata(path, cell_type, split):
     source = URLS[cell_type]
     metadata_path = path / source["metadata_name"]
     volume_paths = []
@@ -191,7 +191,7 @@ def _get_paths_from_metadata(path: Path, cell_type, split):
     return volume_paths
 
 
-def _get_paths_from_files(path: Path, cell_type, split):
+def _get_paths_from_files(path, cell_type, split):
     if split is not None:
         raise RuntimeError(
             "The SegPath metadata CSV is required for split selection, but it could not be found. "
@@ -200,7 +200,7 @@ def _get_paths_from_files(path: Path, cell_type, split):
 
     data_name = URLS[cell_type]["data_name"].split(".")[0]
 
-    return (path / data_name / "data").glob("*.h5")
+    return sorted((path / data_name / "data").glob("*.h5"))
 
 
 def get_segpath_paths(
