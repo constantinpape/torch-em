@@ -166,3 +166,241 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
         metric = self.metric(avg_samples, labels)
 
         return loss, metric
+
+
+class SelfTrainingLossWithInvertibleAugmentations(nn.Module):
+    """Loss function for self-training with invertible augmentations.
+
+    Variant of `DefaultSelfTrainingLoss` for use with `FixMatchTrainerWithInvertibleAugmentations`
+    and `MeanTeacherTrainerWithInvertibleAugmentations`. Unlike `DefaultSelfTrainingLoss`, this loss
+    receives pre-computed predictions directly rather than a model and input, because the trainer
+    already applies the model and invertible augmentations before calling the loss.
+
+    Args:
+        loss: The internal loss function used to compare student predictions to pseudo-labels.
+        activation: Optional activation applied to the prediction before the loss.
+    """
+    def __init__(self, loss: nn.Module = torch_em.loss.DiceLoss(), activation: Optional[nn.Module] = None):
+        super().__init__()
+        self.activation = activation
+        self.loss = loss
+        # TODO serialize the class names and kwargs instead
+        self.init_kwargs = {}
+
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Compute the self-training loss.
+
+        Args:
+            prediction: Student model predictions, already mapped to the reference frame
+                via the inverse augmentation transform.
+            labels: The (pseudo) labels, mapped to the same reference frame.
+            label_filter: Optional mask or weight tensor. Where provided, both prediction
+                and labels are multiplied by this tensor before the loss is computed.
+
+        Returns:
+            The loss value.
+        """
+
+        if self.activation is not None:
+            prediction = self.activation(prediction)
+        if label_filter is None:
+            loss = self.loss(prediction, labels)
+        else:
+            loss = self.loss(prediction * label_filter, labels * label_filter)
+        return loss
+
+
+class SelfTrainingLossAndMetricWithInvertibleAugmentations(nn.Module):
+    """Loss and metric function for self-training with invertible augmentations.
+
+    Variant of `DefaultSelfTrainingLossAndMetric` for use with
+    `FixMatchTrainerWithInvertibleAugmentations` and `MeanTeacherTrainerWithInvertibleAugmentations`.
+    Computes both loss and metric in a single call from pre-computed predictions, avoiding a
+    second forward pass. Used during validation where the trainer already holds the predictions.
+
+    Args:
+        loss: The internal loss function used to compare student predictions to pseudo-labels.
+        metric: The internal metric function used to evaluate student predictions against pseudo-labels.
+        activation: Optional activation applied to the prediction before the loss and metric.
+    """
+    def __init__(
+        self,
+        loss: nn.Module = torch_em.loss.DiceLoss(),
+        metric: nn.Module = torch_em.loss.DiceLoss(),
+        activation: Optional[nn.Module] = None
+    ):
+        super().__init__()
+        self.activation = activation
+        self.loss = loss
+        self.metric = metric
+        # TODO serialize the class names and dicts instead
+        self.init_kwargs = {}
+
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+    ):
+        """Compute the self-training loss.
+
+        Args:
+            prediction: Student model predictions, already mapped to the reference frame
+                via the inverse augmentation transform.
+            labels: The (pseudo) labels, mapped to the same reference frame.
+            label_filter: Optional mask or weight tensor. Where provided, both prediction
+                and labels are multiplied by this tensor before the loss is computed.
+
+        Returns:
+            The loss and metric value.
+        """
+        if self.activation is not None:
+            prediction = self.activation(prediction)
+        if label_filter is None:
+            loss = self.loss(prediction, labels)
+        else:
+            loss = self.loss(prediction * label_filter, labels * label_filter)
+        metric = self.metric(prediction, labels)
+        return loss, metric
+
+
+class UniMatchv2Loss(nn.Module):
+    """Loss function for `UniMatchv2Trainer`.
+
+    Extends `SelfTrainingLossWithInvertibleAugmentations` to support the two-student-view scheme
+    of UniMatch v2. When `pred_dim=2`, `prediction` is expected to be a stacked tensor of two
+    student predictions `[pred_s1_inv, pred_s2_inv]`, and the loss is averaged over both views.
+    When `pred_dim=1`, it falls back to the standard single-prediction behaviour.
+
+    Args:
+        loss: The internal loss function used to compare student predictions to pseudo-labels.
+        activation: Optional activation applied to the predictions before the loss.
+    """
+    def __init__(self, loss: nn.Module = DiceLoss(), activation: Optional[nn.Module] = None):
+        super().__init__()
+        self.activation = activation
+        self.loss = loss
+        self.init_kwargs = {}
+
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+        pred_dim: int = 1,
+    ) -> torch.Tensor:
+        """Compute the UniMatch v2 self-training loss.
+
+        Args:
+            prediction: Student predictions mapped to the reference frame. When `pred_dim=2`,
+                a stacked tensor of shape `(2, B, C, ...)` holding the two strong-view predictions.
+                When `pred_dim=1`, a standard `(B, C, ...)` prediction tensor.
+            labels: The (pseudo) labels, mapped to the same reference frame.
+            label_filter: Optional mask or weight tensor applied to both prediction and labels
+                before the loss is computed.
+            pred_dim: Number of student views. Use `2` for the standard UniMatch v2 dual-view
+                training and `1` for single-view inference or validation.
+
+        Returns:
+            The loss value.
+        """
+
+        assert pred_dim in (1, 2), "pred_dim must be either 1 or 2"
+
+        if self.activation is not None:
+            prediction = self.activation(prediction)
+
+        if pred_dim == 2:
+            if label_filter is None:
+                loss = (self.loss(prediction[0], labels) + self.loss(prediction[1], labels)) / 2
+            else:
+                loss = (self.loss(
+                    prediction[0] * label_filter, labels * label_filter
+                ) + self.loss(prediction[1] * label_filter, labels * label_filter)) / 2
+            return loss
+
+        else:
+            if label_filter is None:
+                loss = self.loss(prediction, labels)
+            else:
+                loss = self.loss(prediction * label_filter, labels * label_filter)
+            return loss
+
+
+class UniMatchv2LossAndMetric(nn.Module):
+    """Loss and metric function for `UniMatchv2Trainer`.
+
+    Extends `SelfTrainingLossAndMetricWithInvertibleAugmentations` to support the two-student-view scheme
+    of UniMatch v2. `pred_dim` depends on how many views the student model processes
+    at the same time. Supports the same dual-view `pred_dim=2` convention: when two student
+    predictions are stacked, loss and metric are each averaged over both views.
+    When `pred_dim=1`, it falls back to the standard single-prediction behaviour.
+
+    Args:
+        loss: The internal loss function used to compare student predictions to pseudo-labels.
+        metric: The internal metric function used to evaluate student predictions against pseudo-labels.
+        activation: Optional activation applied to the predictions before the loss and metric.
+    """
+    def __init__(
+        self,
+        loss: nn.Module = DiceLoss(),
+        metric: nn.Module = DiceLoss(),
+        activation: Optional[nn.Module] = None
+    ):
+        super().__init__()
+        self.activation = activation
+        self.loss = loss
+        self.metric = metric
+        self.init_kwargs = {}
+
+    def __call__(
+        self,
+        prediction: torch.Tensor,
+        labels: torch.Tensor,
+        label_filter: Optional[torch.Tensor] = None,
+        pred_dim: int = 1,
+    ):
+        """Compute the UniMatch v2 self-training loss.
+
+        Args:
+            prediction: Student predictions mapped to the reference frame. When `pred_dim=2`,
+                a stacked tensor of shape `(2, B, C, ...)` holding the two strong-view predictions.
+                When `pred_dim=1`, a standard `(B, C, ...)` prediction tensor.
+            labels: The (pseudo) labels, mapped to the same reference frame.
+            label_filter: Optional mask or weight tensor applied to both prediction and labels
+                before the loss is computed.
+            pred_dim: Number of student views. Use `2` for the standard UniMatch v2 dual-view
+                training and `1` for single-view inference or validation.
+
+        Returns:
+            The loss and metric value.
+        """
+
+        if self.activation is not None:
+            prediction = self.activation(prediction)
+
+        assert pred_dim in (1, 2), "pred_dim must be either 1 or 2"
+
+        if pred_dim == 2:
+            assert len(prediction) == 2, "only implemented for list of len 2"
+            if label_filter is None:
+                loss = (self.loss(prediction[0], labels) + self.loss(prediction[1], labels)) / 2
+            else:
+                loss = (self.loss(
+                    prediction[0] * label_filter, labels * label_filter
+                ) + self.loss(prediction[1] * label_filter, labels * label_filter)) / 2
+            metric = (self.metric(prediction[0], labels) + self.metric(prediction[1], labels)) / 2
+            return loss, metric
+
+        else:
+            if label_filter is None:
+                loss = self.loss(prediction, labels)
+            else:
+                loss = self.loss(prediction * label_filter, labels * label_filter)
+            metric = self.metric(prediction, labels)
+            return loss, metric

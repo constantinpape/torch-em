@@ -6,6 +6,7 @@ Please cite it if you use this dataset in your research.
 """
 
 import os
+import json
 import requests
 from tqdm import tqdm
 from shutil import copyfileobj
@@ -88,6 +89,16 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
 
 
 def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types):
+    # Use a per-cell_types cache to avoid reloading the COCO JSON when data is already prepared.
+    cache_key = "all" if cell_types is None else "_".join(sorted(cell_types))
+    cache_file = os.path.join(seg_folder, f"seg_paths_{cache_key}.json")
+    if os.path.exists(cache_file):
+        with open(cache_file) as f:
+            cached = json.load(f)
+        image_paths = [os.path.join(seg_folder, fname) for fname in cached["image_paths"]]
+        seg_paths = [os.path.join(seg_folder, fname) for fname in cached["seg_paths"]]
+        return image_paths, seg_paths
+
     if COCO is None:
         raise ModuleNotFoundError(
             "'pycocotools' is required for processing the LIVECell ground-truth. "
@@ -130,6 +141,12 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
     assert len(image_paths) == len(seg_paths)
     assert len(image_paths) > 0, \
         f"No matching image paths were found. Did you pass invalid cell type names ({cell_types})?"
+
+    cache_dir = os.path.dirname(cache_file)
+    image_paths_rel = [os.path.relpath(image_path, start=cache_dir) for image_path in image_paths]
+    seg_paths_rel = [os.path.relpath(seg_path, start=cache_dir) for seg_path in seg_paths]
+    with open(cache_file, "w") as f:
+        json.dump({"image_paths": image_paths_rel, "seg_paths": seg_paths_rel}, f)
 
     return image_paths, seg_paths
 
