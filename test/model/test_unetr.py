@@ -12,6 +12,36 @@ except ImportError:
     micro_sam = None
 
 
+class TestUnetrNormalizationRange(unittest.TestCase):
+    def test_input_normalization_range_check(self):
+        from torch_em.model.unetr import _check_input_normalization_range
+
+        _check_input_normalization_range(torch.tensor([0.0, 0.5, 1.0]), (0.0, 1.0))
+        _check_input_normalization_range(torch.tensor([0.0, 128.0, 255.0]), (0.0, 255.0))
+        _check_input_normalization_range(torch.tensor([0, 1], dtype=torch.uint8), (0.0, 255.0))
+
+        with self.assertRaises(ValueError):
+            _check_input_normalization_range(torch.tensor([0.0, 2.0]), (0.0, 1.0))
+
+        with self.assertRaises(ValueError):
+            _check_input_normalization_range(torch.tensor([0.0, float("nan")]), (0.0, 1.0))
+
+        # SAM1: [0, 1]-scaled inputs must be rejected when expected range is [0, 255].
+        with self.assertRaises(ValueError):
+            _check_input_normalization_range(torch.tensor([0.0, 0.5, 1.0]), (0.0, 255.0), unit_scale_max=1.0)
+
+        # SAM1: valid [0, 255]-scaled input should pass.
+        _check_input_normalization_range(torch.tensor([0.0, 128.0, 255.0]), (0.0, 255.0), unit_scale_max=1.0)
+
+        # Out-of-range input is silently accepted when perform_range_checks=False.
+        from torch_em.model.unetr import preprocess_vit_inputs
+        preprocess_vit_inputs(
+            torch.ones(1, 3, 64, 64) * 2.0,
+            use_dino_stats=True,
+            perform_range_checks=False,
+        )
+
+
 @unittest.skipIf(segment_anything is None, "Needs segment_anything")
 class TestUnetr(unittest.TestCase):
     def _test_net(self, net, shape):
@@ -42,7 +72,7 @@ class TestUnetr(unittest.TestCase):
         model_registry = models()
         checkpoint = model_registry.fetch("vit_b")
 
-        model = UNETR(encoder_checkpoint=checkpoint)
+        model = UNETR(encoder_checkpoint=checkpoint, use_skip_connection=False)
         self._test_net(model, (1, 3, 512, 512))
 
     def test_unetr_with_conv_transpose_decoder(self):

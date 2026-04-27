@@ -260,7 +260,7 @@ def get_pannuke_loader(
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
-        The DataLoader
+        The DataLoader.
     """
     dataset_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     ds = get_pannuke_dataset(
