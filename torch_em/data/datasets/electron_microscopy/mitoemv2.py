@@ -104,7 +104,7 @@ def _preprocess_dataset(path, dataset_name, dataset_dir):
                     labels = f_lbl["data"][:]
 
                 if sample == "me2-jurkat_train02":
-                    print("Label dimensions in nifti are stored the other way around for this sample, transposing labels...")  # noqa: E501
+                    print("Label dimensions in nifti are stored the other way around for this sample, transposing labels...")  # noqa
                     labels = np.transpose(labels, (2, 1, 0))
 
                 if raw.shape != labels.shape:
