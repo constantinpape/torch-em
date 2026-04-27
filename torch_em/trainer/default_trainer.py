@@ -105,7 +105,6 @@ class DefaultTrainer:
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
 
-
         self._generate_name = name is None
         self.name = name
         self.id_ = id_ or name

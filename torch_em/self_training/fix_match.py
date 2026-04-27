@@ -459,7 +459,7 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
             source_distribution=source_distribution,
             **kwargs,
         )
-        
+
         self.augmenter = augmenter
 
     #

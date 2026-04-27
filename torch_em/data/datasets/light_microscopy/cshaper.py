@@ -99,7 +99,6 @@ def _convert_to_h5(data_dir: str, split: str) -> str:
     ])
 
     for sample_dir in sample_dirs:
-        sample_name = os.path.basename(sample_dir.rstrip("/"))
         raw_files = natsorted(glob(os.path.join(sample_dir, "RawMemb", "*.nii.gz")))
         seg_dir = os.path.join(sample_dir, "SegCell")
 

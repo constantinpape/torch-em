@@ -3,7 +3,6 @@ import time
 import torch
 from torch_em.self_training.mean_teacher import MeanTeacherTrainerWithInvertibleAugmentations
 
-import os
 # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 
