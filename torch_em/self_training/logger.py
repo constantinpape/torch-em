@@ -9,6 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
     """Logger for self-training via `torch_em.self_training.FixMatch` or `torch_em.self_training.MeanTeacher`.
+    Also supports logging training with invertible augmentations.
 
     Args:
         trainer: The instantiated trainer class.
@@ -173,7 +174,7 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
 
 
 class UniMatchv2TensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
-    """Logger for self-training via `torch_em.self_training.FixMatch` or `torch_em.self_training.MeanTeacher`.
+    """Logger for self-training via `torch_em.self_training.UniMatchv2Trainer`.
 
     Args:
         trainer: The instantiated trainer class.

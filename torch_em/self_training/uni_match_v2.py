@@ -8,8 +8,70 @@ import os
 
 
 class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
-    """
-    Trainer for semi-supervised learning and domain adaptation following the UniMatch v2 framework.
+    """Trainer for semi-supervised learning and domain adaptation following the UniMatch v2 framework.
+
+    UniMatch v2 was introduced by Yang et al. in https://arxiv.org/abs/2410.10777v2.
+    It uses a teacher model derived from the student model via EMA of weights to predict
+    pseudo-labels on unlabeled data. Three augmented views are generated per sample — one weak
+    (for the teacher) and two strong (for the student) — and the student loss is computed as the
+    average over both strong-view predictions against the shared weak-view pseudo-label.
+    We support two training strategies:
+    - Joint training on labeled and unlabeled data (with a supervised and unsupervised loss function).
+    - Training only on the unsupervised data.
+
+    This class expects the following data loaders:
+    - unsupervised_train_loader: Returns a single (raw) input per sample. The trainer applies
+      weak and two strong augmentations internally via the augmenter.
+    - supervised_train_loader (optional): Returns input and labels.
+    - unsupervised_val_loader (optional): Same format as unsupervised_train_loader.
+    - supervised_val_loader (optional): Same format as supervised_train_loader.
+    At least one of unsupervised_val_loader and supervised_val_loader must be given.
+
+    The augmenter must be a `UniMatchv2Augmenters` instance providing three invertible transforms:
+    `.weak` for the teacher view, `.strong1` and `.strong2` for the two student views. The
+    corresponding inverse transforms map predictions and pseudo-labels back into a shared
+    reference frame before the loss is computed.
+
+    The following arguments can be used to customize the pseudo labeling:
+    - pseudo_labeler: to compute the pseudo-labels
+        - Parameters: teacher, teacher_input
+        - Returns: pseudo_labels, label_filter (<- label filter can for example be mask, weight or None)
+    - unsupervised_loss: the loss between stacked student predictions and pseudo-labels
+        - Parameters: prediction (stacked [pred_s1_inv, pred_s2_inv]), pseudo_labels, label_filter, pred_dim
+        - Returns: loss
+    - supervised_loss (optional): the supervised loss function
+        - Parameters: prediction, labels
+        - Returns: loss
+    - unsupervised_loss_and_metric (optional): the unsupervised loss function and metric
+        - Parameters: prediction (stacked), pseudo_labels, label_filter, pred_dim
+        - Returns: loss, metric
+    - supervised_loss_and_metric (optional): the supervised loss function and metric
+        - Parameters: prediction, labels
+        - Returns: loss, metric
+    At least one of unsupervised_loss_and_metric and supervised_loss_and_metric must be given.
+
+    Note: adjust the batch size of the 'unsupervised_train_loader' relative to
+    'supervised_train_loader' to control the ratio of supervised to unsupervised training samples.
+
+    Args:
+        model: The model to be trained.
+        unsupervised_train_loader: The loader for unsupervised training (returns raw inputs only).
+        unsupervised_loss: The loss for unsupervised training.
+        pseudo_labeler: The pseudo labeler that predicts labels in unsupervised training.
+        augmenter: `UniMatchv2Augmenters` instance providing `.weak`, `.strong1`, and `.strong2`
+            invertible transforms with corresponding inverse transforms.
+        complementary_dropout: If True, applies complementary feature dropout to the encoder
+            features before decoding, creating two complementary student views. Requires a
+            UNETR-compatible model architecture.
+        supervised_train_loader: The loader for supervised training.
+        supervised_loss: The loss for supervised training.
+        unsupervised_loss_and_metric: The loss and metric for unsupervised training.
+        supervised_loss_and_metric: The loss and metric for supervised training.
+        logger: The logger. Defaults to `UniMatchv2TensorboardLogger`.
+        momentum: The momentum value for the exponential moving weight average of the teacher model.
+        reinit_teacher: Whether to reinit the teacher model before starting the training.
+        sampler: A sampler for rejecting pseudo-labels according to a defined criterion.
+        kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
     """
 
     def __init__(
