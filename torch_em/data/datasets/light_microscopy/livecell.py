@@ -88,10 +88,6 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
     return seg.astype("uint16")
 
 
-def _resolve_cached_paths(cache_dir, paths):
-    return [path if os.path.isabs(path) else os.path.join(cache_dir, path) for path in paths]
-
-
 def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types):
     # Use a per-cell_types cache to avoid reloading the COCO JSON when data is already prepared.
     cache_key = "all" if cell_types is None else "_".join(sorted(cell_types))
@@ -99,9 +95,8 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
     if os.path.exists(cache_file):
         with open(cache_file) as f:
             cached = json.load(f)
-        cache_dir = os.path.dirname(cache_file)
-        image_paths = _resolve_cached_paths(cache_dir, cached["image_paths"])
-        seg_paths = _resolve_cached_paths(cache_dir, cached["seg_paths"])
+        image_paths = [os.path.join(seg_folder, fname) for fname in cached["image_paths"]]
+        seg_paths = [os.path.join(seg_folder, fname) for fname in cached["seg_paths"]]
         return image_paths, seg_paths
 
     if COCO is None:
