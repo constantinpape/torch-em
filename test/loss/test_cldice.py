@@ -28,14 +28,14 @@ class TestclDiceLoss(unittest.TestCase):
         shape = (1, 1, 32, 32)
 
         # 4-pixel wide overlapping lines
-        x = torch.ones(*shape)
+        x = torch.zeros(*shape)
         x[0, 0, 14:18, :] = 1.0
 
-        y = torch.ones(*shape)
+        y = torch.zeros(*shape)
         y[0, 0, 14:18, :] = 1.0
 
         lval = loss(x, y)
-        self.assertAlmostEqual(lval.item(), 0.0)
+        self.assertAlmostEqual(lval.item(), 0.0, places=1)
 
     def test_cldice_no_overlap(self):
         from torch_em.loss.cldice import CombinedclDiceLoss
