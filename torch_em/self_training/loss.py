@@ -267,7 +267,7 @@ class SelfTrainingLossAndMetricWithInvertibleAugmentations(nn.Module):
             loss = self.loss(prediction * label_filter, labels * label_filter)
         metric = self.metric(prediction, labels)
         return loss, metric
-    
+
 
 class UniMatchv2Loss(nn.Module):
     """Loss function for `UniMatchv2Trainer`.
@@ -336,8 +336,8 @@ class UniMatchv2LossAndMetric(nn.Module):
     """Loss and metric function for `UniMatchv2Trainer`.
 
     Extends `SelfTrainingLossAndMetricWithInvertibleAugmentations` to support the two-student-view scheme
-    of UniMatch v2. `pred_dim` depends on how many views the student model processes 
-    at the same time. Supports the same dual-view `pred_dim=2` convention: when two student 
+    of UniMatch v2. `pred_dim` depends on how many views the student model processes
+    at the same time. Supports the same dual-view `pred_dim=2` convention: when two student
     predictions are stacked, loss and metric are each averaged over both views.
     When `pred_dim=1`, it falls back to the standard single-prediction behaviour.
 
