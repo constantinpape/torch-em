@@ -13,3 +13,4 @@ logs/
 *.pt
 *.DS_Store
 .claude/
+.codex
