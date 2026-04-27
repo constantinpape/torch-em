@@ -15,6 +15,10 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         trainer: The instantiated trainer class.
         save_root: The root directory for saving the checkpoints and logs.
     """
+    @staticmethod
+    def _get_image_channel(x):
+        return x[0, 0:1] if x.shape[1] > 1 else x[0]
+
     def __init__(self, trainer, save_root, **unused_kwargs):
         super().__init__(trainer, save_root)
         self.my_root = save_root
@@ -34,7 +38,7 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         num_channels = y.shape[1]
 
         images = (
-            [torch_em.transform.raw.normalize(x[0])] * num_channels +
+            [torch_em.transform.raw.normalize(self._get_image_channel(x))] * num_channels +
             [y[0, c:c+1] for c in range(num_channels)] +
             [pred[0, c:c+1] for c in range(num_channels)]
         )
@@ -50,18 +54,19 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
             if label_filter is not None:
                 assert label_filter.ndim == 5
                 label_filter = label_filter[:, :, zindex]
-        
+
         num_channels = pred.shape[1]
 
         images = (
-            [torch_em.transform.raw.normalize(x1[0])] +
-            [torch_em.transform.raw.normalize(x2[0])] +
-            [torch.zeros_like(x1[0])] * (num_channels - 2) +
+            [torch_em.transform.raw.normalize(self._get_image_channel(x1))] +
+            [torch_em.transform.raw.normalize(self._get_image_channel(x2))] +
+            [torch.zeros_like(self._get_image_channel(x1))] * (num_channels - 2) +
             [pred[0, c:c+1] for c in range(num_channels)] +
             [pseudo_labels[0, c:c+1] for c in range(num_channels)]
         )
         im_name = f"{name}/unsupervised/image-prediction-pseudolabels"
-        # if trainer with invertible augmentations, untransformed images and inverted pred/labels are logged for better visual comparison, 
+        # if trainer with invertible augmentations, untransformed images
+        # and inverted pred/labels are logged for better visual comparison,
         # otherwise the transformed images are logged
         if label_filter is not None:
             images.extend([label_filter[0, c:c+1] for c in range(num_channels)])
@@ -114,10 +119,10 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
         self.tb.add_scalar(tag="validation/metric", scalar_value=metric, global_step=step)
         if gt_metric is not None:
             self.tb.add_scalar(tag="validation/gt_metric", scalar_value=gt_metric, global_step=step)
-            
+
     def log_ct(self, step, ct):
         self.tb.add_scalar(tag="train/confidence_threshold", scalar_value=ct, global_step=step)
-    
+
     def _add_augmented_images(
         self, step, name, xu1, xu2, pseudo_labels, pred
     ):
