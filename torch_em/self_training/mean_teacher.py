@@ -370,7 +370,7 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 self._iteration, metric_val, loss_val, x1, x2, pred, pseudo_labels, label_filter
             )
 
-        self.pseudo_labeler.step(metric_val, self._epoch) # NOTE: scheduler added in validation step
+        self.pseudo_labeler.step(metric_val, self._epoch)  # NOTE: scheduler added in validation step
 
         return metric_val
 

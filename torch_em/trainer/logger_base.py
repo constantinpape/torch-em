@@ -1,7 +1,7 @@
 try:
-    from typing import Literal
+    from typing import Literal  # noqa: F401
 except ImportError:
-    from typing_extensions import Literal  # type: ignore
+    from typing_extensions import Literal  # type: ignore  # noqa: F401
 
 
 class TorchEmLogger:

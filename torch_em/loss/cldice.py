@@ -7,6 +7,7 @@ from .dice import dice_score
 # From "clDice -- A Novel Topology-Preserving Loss Function for Tubular Structure Segmentation":
 # https://arxiv.org/abs/2003.07311
 
+
 class SoftSkeletonize(torch.nn.Module):
     """`SoftSkeletonize` is a differentiable approximation for skeletonization,
         which applies iterative min- and max-pooling as a proxy for
@@ -68,6 +69,7 @@ class SoftSkeletonize(torch.nn.Module):
         """
         return self.soft_skel(input_)
 
+
 def cldice_score(
     input_: torch.Tensor,
     target: torch.Tensor,
@@ -125,7 +127,7 @@ class SoftclDiceLoss(nn.Module):
             Useful for multi-class segmentation.
         channelwise: Not implemented; Whether to return the dice score
             independently per channel.
-        reduce_channel: Not implemented; The epsilon value added to the 
+        reduce_channel: Not implemented; The epsilon value added to the
             denominator for numerical stability.
     """
     def __init__(self, num_iter: int = 5, eps: float = 1e-7,
@@ -136,7 +138,7 @@ class SoftclDiceLoss(nn.Module):
         self.eps = eps
         self.exclude_background = exclude_background
         self.init_kwargs = {"num_iter": num_iter, "eps": eps, "exclude_background": exclude_background}
-    
+
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute soft clDice score between the input logits and binary target.
 
@@ -149,11 +151,11 @@ class SoftclDiceLoss(nn.Module):
         """
         if input_.shape != target.shape:
             raise ValueError(f"Expect input and target of same shape, got: {input_.shape}, {target.shape}.")
-        
+
         if self.exclude_background:
             target = target[:, 1:, :, :]
             input_ = input_[:, 1:, :, :]
-        
+
         cldice = cldice_score(input_, target, num_iter=self.num_iter, invert=True, eps=self.eps)
 
         return cldice
@@ -191,7 +193,7 @@ class CombinedclDiceLoss(SoftclDiceLoss):
 
         self.alpha = alpha
         self.init_kwargs = {"num_iter": num_iter, "alpha": alpha, "eps": eps, "exclude_background": exclude_background}
-       
+
     def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute combined soft Dice and clDice loss.
 
@@ -204,7 +206,7 @@ class CombinedclDiceLoss(SoftclDiceLoss):
         """
         if input_.shape != target.shape:
             raise ValueError(f"Expect input and target of same shape, got: {input_.shape}, {target.shape}.")
-  
+
         if self.exclude_background:
             target = target[:, 1:, :, :]
             input_ = input_[:, 1:, :, :]

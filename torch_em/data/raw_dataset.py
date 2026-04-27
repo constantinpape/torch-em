@@ -204,10 +204,10 @@ class RawDatasetWithMasks(RawDataset):
     """Extends `RawDataset` to support a sample mask and a background mask.
 
         - The sample mask is used by the sampler to extract patches from a region of interest, e.g.,
-            using `MinForegroundSampler`, to avoid empty patches. 
-        - The background mask is a binary mask identifying regions or structures that belong to the background. 
+            using `MinForegroundSampler`, to avoid empty patches.
+        - The background mask is a binary mask identifying regions or structures that belong to the background.
             It can be used during unsupervised training to subtract background regions from the predicted
-            pseudo labels. 
+            pseudo labels.
 
     Args:
         raw_path: The file path to the raw image data. May also be a list of file paths.
@@ -225,13 +225,13 @@ class RawDatasetWithMasks(RawDataset):
         with_channels: Whether the raw data has channels.
         augmentations: Augmentations for contrastive learning. If given, these need to be two different callables.
             They will be applied to the sampled raw data to return two independent views of the raw data.
-        sample_mask_path: Filepaths to the sample masks used by the sampler to accept or reject 
+        sample_mask_path: Filepaths to the sample masks used by the sampler to accept or reject
             patches for training.
         sample_mask_key: The key to the dataset containing the sample masks.
         bg_mask_path: Filepaths to the background masks, which will be returned together with the raw sample.
-        bg_mask_key: The key to the dataset containing the background masks. 
+        bg_mask_key: The key to the dataset containing the background masks.
     """
-    
+
     def __init__(
         self,
         raw_path: Union[List[Any], str, os.PathLike],
@@ -275,16 +275,15 @@ class RawDatasetWithMasks(RawDataset):
         self.bg_mask = load_data(bg_mask_path, bg_mask_key) if bg_mask_path is not None else None
 
     def _extract_patch(self, data, bb):
-            return data[(slice(None),) + bb] if self._with_channels else data[bb]
-    
+        return data[(slice(None),) + bb] if self._with_channels else data[bb]
+
     def _get_sample(self, index):
         if self.raw is None:
             raise RuntimeError("RawDataset has not been properly deserialized.")
-        
+
         # default behavior; use if sampler is None
         bb = self._sample_bounding_box()
         raw = self._extract_patch(self.raw, bb)
-        
 
         if self.sampler is not None:
             sample_id = 0
@@ -306,18 +305,20 @@ class RawDatasetWithMasks(RawDataset):
                     sample_id += 1
                     if sample_id > self.max_sampling_attempts:
                         raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
-        
-        
+
         bg_mask = self._extract_patch(self.bg_mask, bb) if self.bg_mask is not None else None
-        
+
         if self.patch_shape is not None:
             if bg_mask is not None:
-                raw, bg_mask = ensure_patch_shape(raw=raw, labels=bg_mask, patch_shape=self.patch_shape,
-                                                have_raw_channels=self._with_channels, have_label_channels=self._with_channels)
+                raw, bg_mask = ensure_patch_shape(
+                    raw=raw, labels=bg_mask, patch_shape=self.patch_shape,
+                    have_raw_channels=self._with_channels, have_label_channels=self._with_channels
+                )
             else:
-                raw = ensure_patch_shape(raw=raw, labels=None, patch_shape=self.patch_shape,
-                                                have_raw_channels=self._with_channels, have_label_channels=self._with_channels)
-   
+                raw = ensure_patch_shape(
+                    raw=raw, labels=None, patch_shape=self.patch_shape,
+                    have_raw_channels=self._with_channels, have_label_channels=self._with_channels
+                )
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
         if len(self.patch_shape) == self._ndim + 1:
             raw = raw.squeeze(1 if self._with_channels else 0)
@@ -326,7 +327,7 @@ class RawDatasetWithMasks(RawDataset):
                 bg_mask = bg_mask.squeeze(1 if self._with_channels else 0)
 
         return raw, bg_mask
-    
+
     def __getitem__(self, index):
         raw, bg_mask = self._get_sample(index)
 
@@ -343,7 +344,8 @@ class RawDatasetWithMasks(RawDataset):
                 raw = self.crop(raw)
 
         raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
-        bg_mask = ensure_tensor_with_channels(bg_mask, ndim=self._ndim, dtype=self.dtype) if bg_mask is not None else None
+        if bg_mask is not None:
+            bg_mask = ensure_tensor_with_channels(bg_mask, ndim=self._ndim, dtype=self.dtype)
 
         if self.augmentations is not None:
             aug1, aug2 = self.augmentations
@@ -353,15 +355,15 @@ class RawDatasetWithMasks(RawDataset):
 
                 # if background_mask, returned stacked data
                 return torch.cat((raw1, bg_mask), dim=0), torch.cat((raw2, bg_mask), dim=0)
-            
+
             # else, return augmented raw
             return raw1, raw2
 
         if bg_mask is not None:
-            
+
             # if background_mask, returned stacked data
             return torch.cat((raw, bg_mask), dim=0)
-            
+
         # else, return raw
         return raw
 
