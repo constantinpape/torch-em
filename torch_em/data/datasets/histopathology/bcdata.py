@@ -66,6 +66,10 @@ def _points_to_mask(shape, positive_coordinates, negative_coordinates, cell_radi
     return labels
 
 
+def _label_subdir(cell_radius, binary):
+    return f"radius_{cell_radius}_{'binary' if binary else 'classes'}"
+
+
 def _check_data(path):
     data_root = os.path.join(path, "BCData")
     return all(os.path.exists(os.path.join(data_root, "images", split)) for split in SPLITS)
@@ -77,7 +81,7 @@ def _process_bcdata(path, cell_radius, binary):
 
     for split in SPLITS:
         image_paths = natsorted(glob(os.path.join(data_root, "images", split, "*.png")))
-        split_label_root = os.path.join(label_root, split, f"radius_{cell_radius}_{'binary' if binary else 'classes'}")
+        split_label_root = os.path.join(label_root, split, _label_subdir(cell_radius, binary))
         os.makedirs(split_label_root, exist_ok=True)
 
         for image_path in image_paths:
@@ -86,14 +90,14 @@ def _process_bcdata(path, cell_radius, binary):
             if os.path.exists(label_path):
                 continue
 
-            image = imageio.imread(image_path)
+            shape = imageio.improps(image_path).shape[:2]
             positive_path = os.path.join(data_root, "annotations", split, "positive", f"{image_id}.h5")
             negative_path = os.path.join(data_root, "annotations", split, "negative", f"{image_id}.h5")
             positive_coordinates = _load_coordinates(positive_path)
             negative_coordinates = _load_coordinates(negative_path)
 
             labels = _points_to_mask(
-                image.shape[:2], positive_coordinates, negative_coordinates, cell_radius=cell_radius, binary=binary
+                shape, positive_coordinates, negative_coordinates, cell_radius=cell_radius, binary=binary
             )
             imageio.imwrite(label_path, labels, compression="zlib")
 
@@ -155,8 +159,10 @@ def get_bcdata_paths(
     data_root = get_bcdata_data(path, download=download, cell_radius=cell_radius, binary=binary)
     image_paths = natsorted(glob(os.path.join(data_root, "images", split, "*.png")))
     label_paths = [
-        os.path.join(data_root, "labels", split, f"radius_{cell_radius}_{'binary' if binary else 'classes'}",
-                     f"{os.path.splitext(os.path.basename(image_path))[0]}.tif")
+        os.path.join(
+            data_root, "labels", split, _label_subdir(cell_radius, binary),
+            f"{os.path.splitext(os.path.basename(image_path))[0]}.tif"
+        )
         for image_path in image_paths
     ]
 

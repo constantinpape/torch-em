@@ -97,7 +97,9 @@ def _find_cells_zarr(sample_dir):
 def _find_morphology_files(sample_dir):
     focus_dir = os.path.join(sample_dir, "morphology_focus")
     if os.path.isdir(focus_dir):
-        focus_files = sorted(set(glob(os.path.join(focus_dir, "*.ome.tif"))) | set(glob(os.path.join(focus_dir, "*.tif"))))
+        ome_tifs = set(glob(os.path.join(focus_dir, "*.ome.tif")))
+        tifs = set(glob(os.path.join(focus_dir, "*.tif")))
+        focus_files = sorted(ome_tifs | tifs)
         if focus_files:
             return focus_files
 
@@ -142,15 +144,15 @@ def _normalize_channel_selection(raw_channels, channel_names):
     selected = []
     for channel in raw_channels:
         if isinstance(channel, int):
+            if channel < 0 or channel >= len(channel_names):
+                raise ValueError(
+                    f"Invalid raw channel index: {channel}. Available indices are 0 to {len(channel_names) - 1}."
+                )
             selected.append(channel)
         else:
             if channel not in channel_names:
                 raise ValueError(f"Unknown raw channel '{channel}'. Available channels are {channel_names}.")
             selected.append(channel_names.index(channel))
-
-    invalid = [channel for channel in selected if channel < 0 or channel >= len(channel_names)]
-    if invalid:
-        raise ValueError(f"Invalid raw channel indices: {invalid}. Available indices are 0 to {len(channel_names) - 1}.")
     return selected
 
 
@@ -162,7 +164,7 @@ def _read_morphology_channels(sample_dir, projection, z_index):
     channels, names = [], []
     if len(morphology_files) > 1:
         for channel_id, morphology_file in enumerate(morphology_files):
-            channel = _to_channel_stack(_read_tiff(morphology_file), projection="slice", z_index=0)
+            channel = _to_channel_stack(_read_tiff(morphology_file), projection="slice", z_index=z_index)
             if len(channel) != 1:
                 channel = channel[:1]
             channels.append(channel[0])
@@ -182,7 +184,7 @@ def _preprocess_sample(sample_dir, output_path, raw_channels, projection, z_inde
         with h5py.File(output_path, "r") as f:
             if raw_channels is None and bool(f.attrs.get("all_channels_stored", False)):
                 return
-            if raw_channels is not None:
+            if raw_channels is not None and "raw" in f:
                 requested = raw_channels if isinstance(raw_channels, (list, tuple)) else [raw_channels]
                 raw_keys = set(f["raw"].keys())
                 if all((f"channel_{ch}" if isinstance(ch, int) else ch) in raw_keys for ch in requested):

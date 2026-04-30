@@ -172,30 +172,45 @@ def _write_cell_type_mapping(output_root, mapping):
 
 def _make_semantic_label_from_instances(row, image_path, nuclei, cell_table, cell_type_mapping, cell_columns):
     cell_type_column, x_column, y_column = cell_columns
-    semantics = np.zeros(nuclei.shape, dtype="uint16")
     origin = _get_tile_origin(row, image_path)
     tile_h, tile_w = nuclei.shape
 
-    for _, cell in cell_table.iterrows():
-        if pd.isna(cell[cell_type_column]):
-            continue
+    valid_mask = cell_table[cell_type_column].notna()
+    if not valid_mask.any():
+        return np.zeros(nuclei.shape, dtype="uint16")
 
-        x, y = float(cell[x_column]), float(cell[y_column])
-        candidates = []
-        if origin is not None:
-            candidates.append((int(round(x - origin[0])), int(round(y - origin[1]))))
-        candidates.append((int(round(x)), int(round(y))))
+    cells = cell_table[valid_mask]
+    xs = cells[x_column].to_numpy(dtype=float)
+    ys = cells[y_column].to_numpy(dtype=float)
+    class_ids = np.array([cell_type_mapping[str(v)] for v in cells[cell_type_column]], dtype="uint16")
 
-        class_id = cell_type_mapping[str(cell[cell_type_column])]
-        for local_x, local_y in candidates:
-            if not (0 <= local_x < tile_w and 0 <= local_y < tile_h):
-                continue
-            instance_id = nuclei[local_y, local_x]
-            if instance_id > 0:
-                semantics[nuclei == instance_id] = class_id
-            break
+    if origin is not None:
+        lx = np.round(xs - origin[0]).astype(int)
+        ly = np.round(ys - origin[1]).astype(int)
+        in_bounds = (lx >= 0) & (lx < tile_w) & (ly >= 0) & (ly < tile_h)
+        inst_ids = np.zeros(len(xs), dtype=nuclei.dtype)
+        inst_ids[in_bounds] = nuclei[ly[in_bounds], lx[in_bounds]]
 
-    return semantics
+        needs_fallback = ~in_bounds | (inst_ids == 0)
+        if needs_fallback.any():
+            lx_raw = np.round(xs).astype(int)
+            ly_raw = np.round(ys).astype(int)
+            fb = needs_fallback & (lx_raw >= 0) & (lx_raw < tile_w) & (ly_raw >= 0) & (ly_raw < tile_h)
+            inst_ids[fb] = nuclei[ly_raw[fb], lx_raw[fb]]
+    else:
+        lx = np.round(xs).astype(int)
+        ly = np.round(ys).astype(int)
+        in_bounds = (lx >= 0) & (lx < tile_w) & (ly >= 0) & (ly < tile_h)
+        inst_ids = np.zeros(len(xs), dtype=nuclei.dtype)
+        inst_ids[in_bounds] = nuclei[ly[in_bounds], lx[in_bounds]]
+
+    hit = inst_ids > 0
+    if not hit.any():
+        return np.zeros(nuclei.shape, dtype="uint16")
+
+    inst_to_class = np.zeros(int(nuclei.max()) + 1, dtype="uint16")
+    inst_to_class[inst_ids[hit]] = class_ids[hit]
+    return inst_to_class[nuclei]
 
 
 def _get_output_path(output_root, split, index, image_path):
@@ -233,9 +248,10 @@ def _preprocess_split(root, split):
         if os.path.exists(output_path):
             continue
 
+        slide_name = row["slide_name"] if "slide_name" in row else None
         nuclei = _read_label(nucleus_path)
         with h5py.File(output_path, "w") as f:
-            f.attrs["slide_name"] = row["slide_name"] if "slide_name" in row else ""
+            f.attrs["slide_name"] = slide_name or ""
             f.attrs["he_path"] = he_path
             f.attrs["mif_path"] = mif_path
             f.attrs["nuclei_path"] = nucleus_path
@@ -243,7 +259,6 @@ def _preprocess_split(root, split):
             f.create_dataset("raw/mif", data=_read_image(mif_path), compression="gzip")
             f.create_dataset("labels/nucleus/instances", data=nuclei, compression="gzip")
 
-            slide_name = row["slide_name"] if "slide_name" in row else None
             if cell_columns is not None and slide_name in cell_tables:
                 semantics = _make_semantic_label_from_instances(
                     row, he_path, nuclei, cell_tables[slide_name], cell_type_mapping, cell_columns
@@ -287,9 +302,8 @@ def get_orion_crc_data(
             )
 
     splits = SPLITS if split is None else (split,)
-    output_root = os.path.join(path, "preprocessed", "orion_crc")
     for this_split in splits:
-        _preprocess_split(path, this_split)
+        output_root = _preprocess_split(path, this_split)
     return output_root
 
 
@@ -351,13 +365,8 @@ def get_orion_crc_dataset(
     paths = get_orion_crc_paths(path, split, download)
 
     if label_type == "semantic":
-        import h5py
-        missing_semantics = []
-        for path_ in paths:
-            with h5py.File(path_, "r") as f:
-                if "labels/nucleus/semantic" not in f:
-                    missing_semantics.append(path_)
-        if missing_semantics:
+        output_root = os.path.dirname(os.path.dirname(paths[0]))
+        if not os.path.exists(os.path.join(output_root, "semantic_label_mapping.csv")):
             raise RuntimeError(
                 "Semantic labels are not available for this ORION-CRC data. "
                 "They require per-cell CSV metadata with cell types and nucleus coordinates."
