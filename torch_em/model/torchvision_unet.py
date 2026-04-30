@@ -415,8 +415,9 @@ class TorchvisionUNet2d(TorchvisionUNetBase):
     Args:
         backbone: Name of the torchvision backbone to use.
         out_channels: Number of output channels.
-        in_channels: Number of input channels. If != 3, a learned 1x1 projection
-            maps the input to 3 channels before the backbone.
+        in_channels: Number of input channels. Must be 3 when pretrained=True.
+            If != 3 and pretrained=False, a learned 1x1 projection maps the input
+            to 3 channels before the backbone.
         depth: Number of encoder/decoder levels. Most backbones support depth=4;
             ConvNeXt, MobileNetV3, and MnasNet support depth=3.
         initial_features: Controls decoder channel widths: level i has
@@ -448,6 +449,11 @@ class TorchvisionUNet2d(TorchvisionUNetBase):
     ):
         if backbone not in BACKBONE_REGISTRY_2D:
             raise ValueError(f"Unknown 2D backbone '{backbone}'. Choose from: {list(BACKBONE_REGISTRY_2D)}")
+        if pretrained and in_channels != 3:
+            raise ValueError(
+                "pretrained=True requires in_channels=3. The backbone was pretrained on 3-channel inputs "
+                "and cannot be meaningfully initialized from pretrained weights with a different channel count."
+            )
 
         encoder, base, decoder, scale_factors, pre_skip_factor, features_decoder = _build_encoder_and_decoder(
             backbone_name=backbone, registry=BACKBONE_REGISTRY_2D, depth=depth,
@@ -457,7 +463,7 @@ class TorchvisionUNet2d(TorchvisionUNetBase):
         )
         out_conv = None if out_channels is None else nn.Conv2d(features_decoder[-1], out_channels, kernel_size=1)
 
-        if pretrained and in_channels == 3:
+        if pretrained:
             norm_mean = torch.tensor((0.485, 0.456, 0.406)).view(1, 3, 1, 1)
             norm_std = torch.tensor((0.229, 0.224, 0.225)).view(1, 3, 1, 1)
         else:
@@ -494,8 +500,9 @@ class TorchvisionUNet3d(TorchvisionUNetBase):
     Args:
         backbone: Name of the torchvision video backbone to use.
         out_channels: Number of output channels.
-        in_channels: Number of input channels. If != 3, a learned 1x1 projection
-            maps the input to 3 channels before the backbone.
+        in_channels: Number of input channels. Must be 3 when pretrained=True.
+            If != 3 and pretrained=False, a learned 1x1 projection maps the input
+            to 3 channels before the backbone.
         depth: Number of encoder/decoder levels (max 3 for supported video backbones).
         initial_features: Controls decoder channel widths: level i has
             initial_features * gain ** i channels.
@@ -526,6 +533,11 @@ class TorchvisionUNet3d(TorchvisionUNetBase):
     ):
         if backbone not in BACKBONE_REGISTRY_3D:
             raise ValueError(f"Unknown 3D backbone '{backbone}'. Choose from: {list(BACKBONE_REGISTRY_3D)}")
+        if pretrained and in_channels != 3:
+            raise ValueError(
+                "pretrained=True requires in_channels=3. The backbone was pretrained on 3-channel inputs "
+                "and cannot be meaningfully initialized from pretrained weights with a different channel count."
+            )
 
         encoder, base, decoder, scale_factors, pre_skip_factor, features_decoder = _build_encoder_and_decoder(
             backbone_name=backbone, registry=BACKBONE_REGISTRY_3D, depth=depth,
@@ -535,7 +547,7 @@ class TorchvisionUNet3d(TorchvisionUNetBase):
         )
         out_conv = None if out_channels is None else nn.Conv3d(features_decoder[-1], out_channels, kernel_size=1)
 
-        if pretrained and in_channels == 3:
+        if pretrained:
             norm_mean = torch.tensor((0.43216, 0.394666, 0.37645)).view(1, 3, 1, 1, 1)
             norm_std = torch.tensor((0.22803, 0.22145, 0.216989)).view(1, 3, 1, 1, 1)
         else:
