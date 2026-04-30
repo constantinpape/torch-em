@@ -3,13 +3,14 @@ images of Escherichia coli cells from three experiments studying regulatory asym
 in transcription factor autoregulatory gene networks.
 
 Each acquisition contains three imaging channels:
-- Phase contrast (channel 0): cell morphology — used as raw input for segmentation
+- Phase contrast (channel 0): cell morphology - used as raw input for segmentation
 - mCherry (channel 1): transcription factor gene expression level
 - YFP (channel 2): downstream target gene expression level
 
 The Phase channel images are extracted from Nikon ND2 files and paired with
-hand-segmented cell instance masks. Reading ND2 files requires the `nd2` package:
-    pip install nd2
+hand-segmented cell instance masks. Note: annotations are sparse - not all
+visible cells in each field of view are labeled. Reading ND2 files requires
+the `nd2` package: pip install nd2
 
 Data is hosted on EBI FTP: ftp.ebi.ac.uk/pub/databases/IDR/idr0095-ali-asymmetry/
 The dataset accession on IDR is idr0095.
@@ -114,7 +115,7 @@ def _extract_phase_tiffs(exp_dir: str, experiment: str) -> None:
                 phase_idx = _get_phase_channel_index(f)
                 arr = f.asarray()  # shape varies by acquisition settings
         except Exception as e:
-            print(f"Warning: skipping {nd2_path} — could not read ND2 file: {e}")
+            print(f"Warning: skipping {nd2_path} - could not read ND2 file: {e}")
             continue
 
         # Normalize to (N_fields, N_channels, H, W).
@@ -123,7 +124,7 @@ def _extract_phase_tiffs(exp_dir: str, experiment: str) -> None:
             arr = arr[np.newaxis, np.newaxis]  # (1, 1, H, W)
         elif arr.ndim == 3:
             arr = arr[:, np.newaxis]  # (P, 1, H, W) or (C, H, W)?
-        # If 4-D, assume (P, C, H, W) — standard nd2 layout for multi-position/channel.
+        # If 4-D, assume (P, C, H, W) - standard nd2 layout for multi-position/channel.
 
         n_frames = arr.shape[0]
 
@@ -142,7 +143,7 @@ def get_idr0095_data(
 ) -> str:
     """Download the IDR0095 dataset from EBI FTP and extract Phase channel TIFFs.
 
-    NOTE: This dataset is large — Experiment A is ~6 GB, B ~9 GB, C ~18 GB.
+    NOTE: This dataset is large - Experiment A is ~6 GB, B ~9 GB, C ~18 GB.
     Raw images are in Nikon ND2 format; the `nd2` package (pip install nd2)
     is required to extract the Phase channel TIFFs on first use.
 

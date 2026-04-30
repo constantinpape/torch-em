@@ -97,8 +97,9 @@ def get_deepbacs_data(path: Union[os.PathLike, str], bac_type: str, download: bo
         util.download_source(zip_path, URLS[bac_type], download, checksum=CHECKSUMS[bac_type])
     util.unzip(zip_path, os.path.join(path, bac_type))
 
-    # Get a val split for the expected bacteria type.
-    _assort_val_set(path, bac_type)
+    # e_coli_stationary ships its own train/test splits; no val-splitting needed.
+    if bac_type != "e_coli_stationary":
+        _assort_val_set(path, bac_type)
     return data_folder
 
 
@@ -127,11 +128,19 @@ def get_deepbacs_paths(
     else:
         dir_choice = split
 
-    if bac_type != "mixed":
-        raise NotImplementedError(f"Currently only the bacteria type 'mixed' is supported, not {bac_type}")
-
-    image_folder = os.path.join(path, bac_type, dir_choice, "source")
-    label_folder = os.path.join(path, bac_type, dir_choice, "target")
+    if bac_type == "e_coli_stationary":
+        if split == "val":
+            raise NotImplementedError("The e_coli_stationary dataset does not have a val split.")
+        from natsort import natsorted
+        image_folder = natsorted(glob(os.path.join(path, bac_type, dir_choice, "brightfield", "*.tif")))
+        label_folder = natsorted(glob(os.path.join(path, bac_type, dir_choice, "masks", "*.tif")))
+    elif bac_type != "mixed":
+        raise NotImplementedError(
+            f"Currently only 'mixed' and 'e_coli_stationary' are supported, not {bac_type}"
+        )
+    else:
+        image_folder = os.path.join(path, bac_type, dir_choice, "source")
+        label_folder = os.path.join(path, bac_type, dir_choice, "target")
 
     return image_folder, label_folder
 
@@ -162,11 +171,14 @@ def get_deepbacs_dataset(
 
     image_folder, label_folder = get_deepbacs_paths(path, bac_type, split, download)
 
+    # e_coli_stationary returns explicit file lists; mixed returns folder+glob strings.
+    raw_key = None if isinstance(image_folder, list) else "*.tif"
+    label_key = None if isinstance(label_folder, list) else "*.tif"
     return torch_em.default_segmentation_dataset(
         raw_paths=image_folder,
-        raw_key="*.tif",
+        raw_key=raw_key,
         label_paths=label_folder,
-        label_key="*.tif",
+        label_key=label_key,
         patch_shape=patch_shape,
         **kwargs
     )

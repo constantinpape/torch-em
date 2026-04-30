@@ -151,7 +151,7 @@ def get_malecns_dataset(
         patch_shape: The patch shape (z, y, x) to use for training.
         bounding_boxes: List of subvolumes to use, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 8 nm voxel coordinates.
-            Defaults to [DEFAULT_BOUNDING_BOX] — a central 1024³ region.
+            Defaults to [DEFAULT_BOUNDING_BOX] - a central 1024³ region.
         download: Whether to stream and cache data if not already present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
@@ -197,7 +197,7 @@ def get_malecns_loader(
         batch_size: The batch size for training.
         bounding_boxes: List of subvolumes to use, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 8 nm voxel coordinates.
-            Defaults to [DEFAULT_BOUNDING_BOX] — a central 1024³ region.
+            Defaults to [DEFAULT_BOUNDING_BOX] - a central 1024³ region.
         download: Whether to stream and cache data if not already present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.

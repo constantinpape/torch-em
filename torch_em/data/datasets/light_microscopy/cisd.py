@@ -4,7 +4,7 @@ from digital cytology, with manually annotated instance segmentation masks.
 The data comes from 30 cytology slides prepared from healthy patient urine samples
 and digitized with 21 focal planes. Two 2D image modes are supported:
 - center_slice: Single best-focus 2D plane (JPG)
-- edf: Extended Depth of Field — 21 planes merged into one focused 2D image (JPG)
+- edf: Extended Depth of Field - 21 planes merged into one focused 2D image (JPG)
 
 NOTE: The raw dataset also provides a "stack" mode (all 21 focal planes per sample),
 but it is not supported here because the annotations are always 2D instance masks.
@@ -73,7 +73,7 @@ def _decode_rle(rle_counts, height, width):
 def _convert_annotations(data_dir: str, mode: str) -> str:
     """Convert CISD.json RLE masks to per-sample 2D TIFF label images.
 
-    Reads image dimensions from the mask 'size' field — no raw images are loaded.
+    Reads image dimensions from the mask 'size' field - no raw images are loaded.
     Runs once; subsequent calls return the cached label directory immediately.
 
     Args:
@@ -106,7 +106,7 @@ def _convert_annotations(data_dir: str, mode: str) -> str:
         base_name = os.path.splitext(file_name)[0]   # e.g. "0241_BB_01471"
         anns = asset.get("annotations", [])
 
-        # Get (H, W) from the first RLE size field — no image loading needed
+        # Get (H, W) from the first RLE size field - no image loading needed
         h, w = None, None
         for ann in anns:
             for item in ann.get("data", []):

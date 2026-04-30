@@ -35,17 +35,25 @@ CHECKSUM = None
 
 
 def _coco_to_instance_masks(image_dir: str, annotation_file: str, mask_dir: str) -> None:
-    """Convert COCO polygon annotations to per-image instance segmentation TIF masks."""
+    """Convert COCO polygon annotations to per-image instance segmentation TIF masks.
+
+    Only cell annotations (supercategory 'cell') are included; nucleus annotations
+    (supercategory 'cell_part') are skipped.
+    """
     from skimage.draw import polygon as draw_polygon
 
     with open(annotation_file, "r") as f:
         coco = json.load(f)
 
+    # Keep only cell categories, not cell parts (nuclei).
+    cell_cat_ids = {c["id"] for c in coco["categories"] if c.get("supercategory") != "cell_part"}
+
     images = {img["id"]: img for img in coco["images"]}
 
     ann_by_image = defaultdict(list)
     for ann in coco["annotations"]:
-        ann_by_image[ann["image_id"]].append(ann)
+        if ann["category_id"] in cell_cat_ids:
+            ann_by_image[ann["image_id"]].append(ann)
 
     os.makedirs(mask_dir, exist_ok=True)
 
@@ -59,7 +67,7 @@ def _coco_to_instance_masks(image_dir: str, annotation_file: str, mask_dir: str)
         for ann in ann_by_image[img_id]:
             segs = ann.get("segmentation", [])
             if isinstance(segs, dict):
-                # RLE format — skip (requires pycocotools)
+                # RLE format - skip (requires pycocotools)
                 continue
             for seg in segs:
                 pts = np.array(seg).reshape(-1, 2)

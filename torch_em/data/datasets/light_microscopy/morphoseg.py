@@ -6,6 +6,9 @@ Images were acquired with a Leica DM IRB bright-field microscope (10x and 20x) a
 a Google Pixel 4 mobile phone camera. The dataset has 36 annotated training images
 and an unannotated test set.
 
+Note: annotations are sparse - only a subset of the visible cells in each image
+are labeled (~10% pixel coverage despite ~20% cell-like content).
+
 The dataset is located at https://doi.org/10.15131/shef.data.25604421.
 This dataset is from the following publication:
 - Zhang et al. (2025): https://doi.org/10.1016/j.neucom.2025.130511
@@ -125,7 +128,7 @@ def get_morphoseg_paths(
     """
     if split == "test":
         raise RuntimeError(
-            "The MorphoSeg test split does not contain segmentation masks — only images are available."
+            "The MorphoSeg test split does not contain segmentation masks - only images are available."
         )
 
     data_dir = get_morphoseg_data(path, split, download)

@@ -17,7 +17,7 @@ Data is instead streamed and cached locally as HDF5 files by specifying bounding
 (x_min, x_max, y_min, y_max, z_min, z_max) in 8 nm voxel coordinates.
 
 The volume is highly anisotropic: 8 nm in-plane (xy) and 33 nm in z. Patch shapes should
-account for this — e.g. patch_shape=(8, 512, 512) corresponds to a ~264 nm x 4 µm x 4 µm
+account for this - e.g. patch_shape=(8, 512, 512) corresponds to a ~264 nm x 4 µm x 4 µm
 volume. The full z-extent is only 5,293 slices (~175 µm), so bounding boxes spanning the
 complete z range are feasible.
 """
@@ -105,7 +105,7 @@ def get_humanneurons_data(
 
     print(f"Streaming H01 Human Neurons EM + segmentation for bbox {bounding_box} ...")
 
-    # EM at mip=1 gives 8×8×33 nm — same resolution as the C3 segmentation at mip=0.
+    # EM at mip=1 gives 8×8×33 nm - same resolution as the C3 segmentation at mip=0.
     em_vol = cloudvolume.CloudVolume(EM_URL,  use_https=True, mip=1, progress=True)
     seg_vol = cloudvolume.CloudVolume(SEG_URL, use_https=True, mip=0, progress=True, fill_missing=True)
 
@@ -170,7 +170,7 @@ def get_humanneurons_dataset(
             e.g. patch_shape=(8, 512, 512).
         bounding_boxes: List of subvolumes to use, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 8 nm voxel coordinates.
-            Defaults to [DEFAULT_BOUNDING_BOX] — a 2048 x 2048 x 64 cortex region.
+            Defaults to [DEFAULT_BOUNDING_BOX] - a 2048 x 2048 x 64 cortex region.
         download: Whether to stream and cache data if not already present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
@@ -218,7 +218,7 @@ def get_humanneurons_loader(
         batch_size: The batch size for training.
         bounding_boxes: List of subvolumes to use, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 8 nm voxel coordinates.
-            Defaults to [DEFAULT_BOUNDING_BOX] — a 2048 x 2048 x 64 cortex region.
+            Defaults to [DEFAULT_BOUNDING_BOX] - a 2048 x 2048 x 64 cortex region.
         download: Whether to stream and cache data if not already present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.

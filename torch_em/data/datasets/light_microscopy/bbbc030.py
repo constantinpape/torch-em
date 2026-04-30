@@ -55,7 +55,7 @@ def _contours_to_instances(contour_mask: np.ndarray) -> np.ndarray:
     interior = ~closed
     labeled = label(interior)
 
-    # The largest connected component is the background — remove it.
+    # The largest connected component is the background - remove it.
     props = regionprops(labeled)
     if not props:
         return np.zeros_like(contour_mask, dtype=np.int32)
