@@ -11,8 +11,8 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
 
     UniMatch v2 was introduced by Yang et al. in https://arxiv.org/abs/2410.10777v2.
     It uses a teacher model derived from the student model via EMA of weights to predict
-    pseudo-labels on unlabeled data. Three augmented views are generated per sample — one weak
-    (for the teacher) and two strong (for the student) — and the student loss is computed as the
+    pseudo-labels on unlabeled data. Three augmented views are generated per sample - one weak
+    (for the teacher) and two strong (for the student) - and the student loss is computed as the
     average over both strong-view predictions against the shared weak-view pseudo-label.
     We support two training strategies:
     - Joint training on labeled and unlabeled data (with a supervised and unsupervised loss function).
