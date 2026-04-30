@@ -1,4 +1,5 @@
 from .bcss import get_bcss_loader, get_bcss_dataset
+from .bcdata import get_bcdata_loader, get_bcdata_dataset
 from .conic import get_conic_loader, get_conic_dataset
 from .consep import get_consep_loader, get_consep_dataset
 from .cpm import get_cpm_loader, get_cpm_dataset
@@ -12,6 +13,7 @@ from .monuseg import get_monuseg_loader, get_monuseg_dataset
 from .monusac import get_monusac_loader, get_monusac_dataset
 from .nuclick import get_nuclick_loader, get_nuclick_dataset
 from .nuinsseg import get_nuinsseg_loader, get_nuinsseg_dataset
+from .orion_crc import get_orion_crc_loader, get_orion_crc_dataset
 from .pannuke import get_pannuke_loader, get_pannuke_dataset
 from .panoptils import get_panoptils_loader, get_panoptils_dataset
 from .puma import get_puma_loader, get_puma_dataset
