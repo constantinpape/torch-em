@@ -9,7 +9,7 @@ The dataset contains annotated subvolumes from eight microscopy volumes:
 - Diabetic_Biopsy_Human_Spectral_3: Diabetic biopsy human spectral (6 subvolumes)
 - Kidney_Cortex_Human_Spectral_1: Kidney cortex human spectral (6 subvolumes)
 - Kidney_Human_Nephrectomy_1: Kidney human nephrectomy (4 subvolumes)
-- Rat_liver_1: Shallow rat liver (confocal, Hoechst) — entire volume annotated
+- Rat_liver_1: Shallow rat liver (confocal, Hoechst) - entire volume annotated
 - Scale-cleared_rat_kidney_1: Scale-cleared rat kidney (confocal, DAPI)
 
 NOTE: The original paper also includes a V5 volume (zebrafish brain EM) sourced
