@@ -1,4 +1,5 @@
 from .aisegcell import get_aisegcell_loader, get_aisegcell_dataset
+from .bbbc030 import get_bbbc030_loader, get_bbbc030_dataset
 from .bbbc034 import get_bbbc034_loader, get_bbbc034_dataset
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bac_mother import get_bac_mother_loader, get_bac_mother_dataset
@@ -31,14 +32,17 @@ from .enseg import get_enseg_loader, get_enseg_dataset
 from .evican import get_evican_loader, get_evican_dataset
 from .medussa import get_medussa_loader, get_medussa_dataset
 from .mndino import get_mndino_loader, get_mndino_dataset
+from .glioma_c6 import get_glioma_c6_loader, get_glioma_c6_dataset
 from .gonuclear import get_gonuclear_loader, get_gonuclear_dataset
 from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
 from .ifnuclei import get_ifnuclei_loader, get_ifnuclei_dataset
+from .idr0095 import get_idr0095_loader, get_idr0095_dataset
 from .livecell import get_livecell_loader, get_livecell_dataset
 from .lpc_nucseg import get_lpc_nucseg_loader, get_lpc_nucseg_dataset
 from .lsm_mouse_embryo import get_lsm_mouse_embryo_loader, get_lsm_mouse_embryo_dataset
 from .microbeseg import get_microbeseg_loader, get_microbeseg_dataset
 from .morphonet import get_morphonet_loader, get_morphonet_dataset
+from .morphoseg import get_morphoseg_loader, get_morphoseg_dataset
 from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
 from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,

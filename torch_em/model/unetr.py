@@ -436,7 +436,7 @@ def preprocess_vit_inputs(
     Args:
         x: Input tensor of shape (B, C, H, W) for 2D or (B, C, Z, H, W) for 3D.
         use_sam_stats: Whether to normalize with SAM/SAM2/SAM3 backbone statistics.
-        backbone: The backbone name — controls which SAM stats are used when `use_sam_stats=True`.
+        backbone: The backbone name - controls which SAM stats are used when `use_sam_stats=True`.
         use_mae_stats: Whether to normalize with MAE statistics.
         use_dino_stats: Whether to normalize with DINOv2/DINOv3 statistics.
         resize_input: Whether to resize the input to the longest side before padding.

@@ -7,7 +7,7 @@ The dataset contains 3 imaging conditions (1024 x 1024 x 52 voxels):
 - Colony center (3 channels, no ground truth)
 - Colony edge (3 channels, no ground truth)
 
-NOTE: The ground truth is sparsely annotated — only a subset of the visible
+NOTE: The ground truth is sparsely annotated - only a subset of the visible
 nuclei in the annotated volume are labeled. Consider using a sampler to reject
 patches that contain no annotations when training.
 
