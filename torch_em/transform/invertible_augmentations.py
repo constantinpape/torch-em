@@ -139,7 +139,9 @@ class InvertibleAugmenter(torch.nn.Module):
         self.params = None
 
     def transform(self, x: torch.Tensor) -> torch.Tensor:
+        clip_max = 255.0 if x.max() > 1.0 else 1.0
         x = self.intensity_transforms(x)
+        x = torch.clamp(x, 0.0, clip_max)
         x = self.geometrical_transforms(x)
 
         self.params = self.geometrical_transforms._params
