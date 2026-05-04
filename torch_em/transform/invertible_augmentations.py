@@ -129,19 +129,21 @@ class InvertibleAugmenter(torch.nn.Module):
         self,
         intensity_transforms: Callable[[torch.Tensor], torch.Tensor],
         geometrical_transforms: Callable[[torch.Tensor], torch.Tensor],
+        clip_max = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.intensity_transforms = intensity_transforms
         self.geometrical_transforms = geometrical_transforms
+        self.clip_max = clip_max
 
     def reset(self):
         self.params = None
 
     def transform(self, x: torch.Tensor) -> torch.Tensor:
-        clip_max = 255.0 if x.max() > 1.0 else 1.0
         x = self.intensity_transforms(x)
-        x = torch.clamp(x, 0.0, clip_max)
+        if self.clip_max is not None:
+            x = torch.clamp(x, 0.0, self.clip_max)
         x = self.geometrical_transforms(x)
 
         self.params = self.geometrical_transforms._params
@@ -159,9 +161,10 @@ class MeanTeacherAugmenters:
         ndim: int,
         teacher=None,
         student=None,
+        clip_max=None,
     ):
-        self.teacher = teacher or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
-        self.student = student or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
+        self.teacher = teacher or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.student = student or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.teacher.reset()
@@ -174,9 +177,10 @@ class FixMatchAugmenters:
         ndim: int,
         teacher=None,
         student=None,
+        clip_max=None,
     ):
-        self.teacher = teacher or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
-        self.student = student or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim))
+        self.teacher = teacher or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.student = student or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.teacher.reset()
@@ -190,10 +194,11 @@ class UniMatchv2Augmenters:
         weak=None,
         strong1=None,
         strong2=None,
+        clip_max=None,
     ):
-        self.weak = weak or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
-        self.strong1 = strong1 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim))
-        self.strong2 = strong2 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim))
+        self.weak = weak or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.strong1 = strong1 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim), clip_max=clip_max)
+        self.strong2 = strong2 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.weak.reset()
