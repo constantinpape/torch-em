@@ -15,7 +15,6 @@ def check_hpa():
         split="train",
         patch_shape=(1024, 1024),
         batch_size=1,
-        channels=["protein", "er"],
         download=True,
     )
     check_loader(loader, 8, instance_labels=True)

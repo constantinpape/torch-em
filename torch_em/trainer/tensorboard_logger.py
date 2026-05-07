@@ -22,6 +22,8 @@ from ..loss import EMBEDDING_LOSSES
 
 
 def normalize_im(im):
+    """@private
+    """
     im = ensure_tensor(im, dtype=torch.float32)
     im -= im.min()
     im /= im.max()
@@ -29,6 +31,8 @@ def normalize_im(im):
 
 
 def make_grid_image(image, y, prediction, selection, gradients=None):
+    """@private
+    """
     target_image = normalize_im(y[selection].cpu())
     pred_image = normalize_im(prediction[selection].detach().cpu())
 
@@ -66,6 +70,8 @@ def make_grid_image(image, y, prediction, selection, gradients=None):
 
 
 def make_embedding_image(image, y, prediction, selection, gradients=None):
+    """@private
+    """
     assert gradients is None, "Not implemented"
     image = image.numpy()
 
@@ -86,7 +92,13 @@ def make_embedding_image(image, y, prediction, selection, gradients=None):
 
 
 class TensorboardLogger(TorchEmLogger):
-    def __init__(self, trainer, save_root, **unused_kwargs):
+    """Logger to write training progress to tensorboard.
+
+    Args:
+        trainer: The instantiated trainer.
+        save_root: The root directury for writing checkpoints and log files.
+    """
+    def __init__(self, trainer, save_root: str, **unused_kwargs):
         super().__init__(trainer, save_root)
         self.log_dir = f"./logs/{trainer.name}" if save_root is None else\
             os.path.join(save_root, "logs", trainer.name)
@@ -116,19 +128,19 @@ class TensorboardLogger(TorchEmLogger):
             self.make_image = make_grid_image
 
     def log_images(self, step, x, y, prediction, name, gradients=None):
-
+        """@private
+        """
         selection = np.s_[0] if x.ndim == 4 else np.s_[0, :, x.shape[2] // 2]
-
         image = normalize_im(x[selection].cpu())
-        self.tb.add_image(tag=f"{name}/input",
-                          img_tensor=image,
-                          global_step=step)
+        self.tb.add_image(tag=f"{name}/input", img_tensor=image, global_step=step)
 
         im, im_name = self.make_image(image, y, prediction, selection, gradients)
         im_name = f"{name}/{im_name}"
         self.tb.add_image(tag=im_name, img_tensor=im, global_step=step)
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
+        """@private
+        """
         self.tb.add_scalar(tag="train/loss", scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag="train/learning_rate", scalar_value=lr, global_step=step)
 
@@ -143,6 +155,8 @@ class TensorboardLogger(TorchEmLogger):
             self.log_images(step, x, y, prediction, "train", gradients=gradients)
 
     def log_validation(self, step, metric, loss, x, y, prediction):
+        """@private
+        """
         self.tb.add_scalar(tag="validation/loss", scalar_value=loss, global_step=step)
         self.tb.add_scalar(tag="validation/metric", scalar_value=metric, global_step=step)
         self.log_images(step, x, y, prediction, "validation")

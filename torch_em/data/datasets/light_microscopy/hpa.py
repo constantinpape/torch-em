@@ -321,11 +321,7 @@ def _check_data(path):
     return have_train and have_test and have_val
 
 
-def get_hpa_segmentation_data(
-    path: Union[os.PathLike, str],
-    download: bool,
-    n_workers_preproc: int = 8
-) -> str:
+def get_hpa_segmentation_data(path: Union[os.PathLike, str], download: bool, n_workers_preproc: int = 8) -> str:
     """Download the HPA training data.
 
     Args:
@@ -341,6 +337,25 @@ def get_hpa_segmentation_data(
         _download_hpa_data(path, "segmentation", download)
         _process_hpa_data(path, n_workers_preproc, remove=True)
     return path
+
+
+def get_hpa_segmentation_paths(
+    path: Union[os.PathLike, str], split: str, download: bool = False, n_workers_preproc: int = 8,
+) -> List[str]:
+    """Get paths to the HPA data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split for the dataset. Available splits are 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+        n_workers_preproc: The number of workers to use for preprocessing.
+
+    Returns:
+        List of filepaths to the stored data.
+    """
+    get_hpa_segmentation_data(path, download, n_workers_preproc)
+    paths = glob(os.path.join(path, split, "*.h5"))
+    return paths
 
 
 def get_hpa_segmentation_dataset(
@@ -378,19 +393,22 @@ def get_hpa_segmentation_dataset(
         if chan not in VALID_CHANNELS:
             raise ValueError(f"'{chan}' is not a valid channel for HPA dataset.")
 
-    get_hpa_segmentation_data(path, download, n_workers_preproc)
-
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, binary=binary, boundaries=boundaries, offsets=offsets
     )
     kwargs = util.update_kwargs(kwargs, "ndim", 2)
     kwargs = util.update_kwargs(kwargs, "with_channels", True)
 
-    paths = glob(os.path.join(path, split, "*.h5"))
-    raw_key = [f"raw/{chan}" for chan in channels]
-    label_key = "labels"
+    paths = get_hpa_segmentation_paths(path, split, download, n_workers_preproc)
 
-    return torch_em.default_segmentation_dataset(paths, raw_key, paths, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(
+        raw_paths=paths,
+        raw_key=[f"raw/{chan}" for chan in channels],
+        label_paths=paths,
+        label_key="labels",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
 
 def get_hpa_segmentation_loader(
@@ -425,14 +443,11 @@ def get_hpa_segmentation_loader(
     Returns:
        The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_hpa_segmentation_dataset(
         path, split, patch_shape,
         offsets=offsets, boundaries=boundaries, binary=binary,
         channels=channels, download=download, n_workers_preproc=n_workers_preproc,
         **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

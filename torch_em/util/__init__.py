@@ -1,9 +1,12 @@
+"""Helper functionality for loading checkpoints and image data, network prediction, model export and more.
+"""
 from .image import load_data, load_image, supports_memmap
 from .reporting import get_training_summary
 from .training import parser_helper
 from .util import (
     auto_compile, ensure_array, ensure_spatial_array, ensure_tensor, ensure_tensor_with_channels,
-    get_constructor_arguments, get_trainer, is_compiled, load_model, model_is_equal, ensure_patch_shape
+    get_constructor_arguments, get_trainer, is_compiled, load_model, model_is_equal, ensure_patch_shape,
+    validate_roi
 )
 
 # NOTE: we don't import the modelzoo convenience functions here.

@@ -4,8 +4,9 @@ import sys
 import numpy as np
 from torch_em.transform.raw import standardize, normalize_percentile
 
-from torch_em.data.datasets import get_tissuenet_loader
 from torch_em.util.debug import check_loader
+from torch_em.data.datasets import get_tissuenet_loader
+
 
 sys.path.append("..")
 

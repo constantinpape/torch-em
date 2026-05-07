@@ -1,11 +1,12 @@
 """The LIVECell dataset contains phase-contrast microscopy images
 and annotations for cell segmentations for 8 different cell lines.
 
-This dataset is desceibed in the publication https://doi.org/10.1038/s41592-021-01249-6.
+This dataset is described in the publication https://doi.org/10.1038/s41592-021-01249-6.
 Please cite it if you use this dataset in your research.
 """
 
 import os
+import json
 import requests
 from tqdm import tqdm
 from shutil import copyfileobj
@@ -14,12 +15,13 @@ from typing import List, Optional, Sequence, Tuple, Union
 import numpy as np
 import imageio.v3 as imageio
 
-import torch.utils.data
+import torch
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
 from .. import util
+from ... import ImageCollectionDataset
 
 try:
     from pycocotools.coco import COCO
@@ -38,19 +40,7 @@ URLS = {
 # TODO
 CHECKSUM = None
 
-
-def _download_livecell_images(path, download):
-    os.makedirs(path, exist_ok=True)
-    image_path = os.path.join(path, "images")
-
-    if os.path.exists(image_path):
-        return
-
-    url = URLS["images"]
-    checksum = CHECKSUM
-    zip_path = os.path.join(path, "livecell.zip")
-    util.download_source(zip_path, url, download, checksum)
-    util.unzip(zip_path, path, True)
+CELL_TYPES = ['A172', 'BT474', 'BV2', 'Huh7', 'MCF7', 'SHSY5Y', 'SkBr3', 'SKOV3']
 
 
 # TODO use download flag
@@ -99,7 +89,21 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
 
 
 def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types):
-    assert COCO is not None, "pycocotools is required for processing the LiveCELL ground-truth."
+    # Use a per-cell_types cache to avoid reloading the COCO JSON when data is already prepared.
+    cache_key = "all" if cell_types is None else "_".join(sorted(cell_types))
+    cache_file = os.path.join(seg_folder, f"seg_paths_{cache_key}.json")
+    if os.path.exists(cache_file):
+        with open(cache_file) as f:
+            cached = json.load(f)
+        image_paths = [os.path.join(seg_folder, fname) for fname in cached["image_paths"]]
+        seg_paths = [os.path.join(seg_folder, fname) for fname in cached["seg_paths"]]
+        return image_paths, seg_paths
+
+    if COCO is None:
+        raise ModuleNotFoundError(
+            "'pycocotools' is required for processing the LIVECell ground-truth. "
+            "Install it with 'conda install -c conda-forge pycocotools'."
+        )
 
     coco = COCO(annotation_file)
     category_ids = coco.getCatIds(catNms=["cell"])
@@ -136,7 +140,14 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
 
     assert len(image_paths) == len(seg_paths)
     assert len(image_paths) > 0, \
-        f"No matching image paths were found. Did you pass invalid cell type naems ({cell_types})?"
+        f"No matching image paths were found. Did you pass invalid cell type names ({cell_types})?"
+
+    cache_dir = os.path.dirname(cache_file)
+    image_paths_rel = [os.path.relpath(image_path, start=cache_dir) for image_path in image_paths]
+    seg_paths_rel = [os.path.relpath(seg_path, start=cache_dir) for seg_path in seg_paths]
+    with open(cache_file, "w") as f:
+        json.dump({"image_paths": image_paths_rel, "seg_paths": seg_paths_rel}, f)
+
     return image_paths, seg_paths
 
 
@@ -156,14 +167,34 @@ def _download_livecell_annotations(path, split, download, cell_types, label_path
     return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types)
 
 
-def get_livecell_data(
+def get_livecell_data(path: Union[os.PathLike], download: bool = False):
+    """Download the LIVECell dataset.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+    """
+    os.makedirs(path, exist_ok=True)
+    image_path = os.path.join(path, "images")
+
+    if os.path.exists(image_path):
+        return
+
+    url = URLS["images"]
+    checksum = CHECKSUM
+    zip_path = os.path.join(path, "livecell.zip")
+    util.download_source(zip_path, url, download, checksum)
+    util.unzip(zip_path, path, True)
+
+
+def get_livecell_paths(
     path: Union[os.PathLike, str],
     split: str,
-    download: bool,
+    download: bool = False,
     cell_types: Optional[Sequence[str]] = None,
     label_path: Optional[Union[os.PathLike, str]] = None
 ) -> Tuple[List[str], List[str]]:
-    """Download the LIVECell dataset.
+    """Get paths to the LIVECell data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -173,10 +204,10 @@ def get_livecell_data(
         label_path: Optional path for loading the label data.
 
     Returns:
-        The paths to the image data.
-        The paths to the label data.
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
-    _download_livecell_images(path, download)
+    get_livecell_data(path, download)
     image_paths, seg_paths = _download_livecell_annotations(path, split, download, cell_types, label_path)
     return image_paths, seg_paths
 
@@ -217,18 +248,20 @@ def get_livecell_dataset(
         assert isinstance(cell_types, (list, tuple)), \
             f"cell_types must be passed as a list or tuple instead of {cell_types}"
 
-    image_paths, seg_paths = get_livecell_data(path, split, download, cell_types, label_path)
+    image_paths, seg_paths = get_livecell_paths(path, split, download, cell_types, label_path)
 
     kwargs = util.ensure_transforms(ndim=2, **kwargs)
     kwargs, label_dtype = util.add_instance_label_transform(
-        kwargs, add_binary_target=True, label_dtype=label_dtype,
-        offsets=offsets, boundaries=boundaries, binary=binary
+        kwargs, add_binary_target=True, label_dtype=label_dtype, offsets=offsets, boundaries=boundaries, binary=binary
     )
 
-    dataset = torch_em.data.ImageCollectionDataset(
-        image_paths, seg_paths, patch_shape=patch_shape, label_dtype=label_dtype, **kwargs
+    return ImageCollectionDataset(
+        raw_image_paths=image_paths,
+        label_image_paths=seg_paths,
+        patch_shape=patch_shape,
+        label_dtype=label_dtype,
+        **kwargs
     )
-    return dataset
 
 
 def get_livecell_loader(
@@ -269,5 +302,4 @@ def get_livecell_loader(
         path, split, patch_shape, download=download, offsets=offsets, boundaries=boundaries, binary=binary,
         cell_types=cell_types, label_path=label_path, label_dtype=label_dtype, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

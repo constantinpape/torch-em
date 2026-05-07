@@ -30,14 +30,26 @@ class TestDefaultTrainer(unittest.TestCase):
         rmtree(self.checkpoint_folder, ignore_errors=True)
         rmtree(self.log_folder, ignore_errors=True)
 
-    def _get_kwargs(self, with_roi=False, compile_model=False):
+    def _get_loader(self, with_roi=False, external=False):
         roi = np.s_[:6, :, :] if with_roi else None
-        loader = torch_em.default_segmentation_loader(
-            raw_paths=self.data_path, raw_key="raw",
-            label_paths=self.data_path, label_key="labels",
-            batch_size=1, patch_shape=(1, 128, 128), ndim=2,
-            rois=roi,
-        )
+        if external:
+            ds = torch_em.default_segmentation_dataset(
+                raw_paths=self.data_path, raw_key="raw",
+                label_paths=self.data_path, label_key="labels",
+                patch_shape=(1, 128, 128), ndim=2,
+                rois=roi,
+            )
+            return torch.utils.data.DataLoader(ds, batch_size=1, shuffle=True)
+        else:
+            return torch_em.default_segmentation_loader(
+                raw_paths=self.data_path, raw_key="raw",
+                label_paths=self.data_path, label_key="labels",
+                batch_size=1, patch_shape=(1, 128, 128), ndim=2,
+                rois=roi,
+            )
+
+    def _get_kwargs(self, with_roi=False, compile_model=False, external=False):
+        loader = self._get_loader(with_roi=with_roi, external=external)
         model = UNet2d(in_channels=1, out_channels=1,
                        depth=2, initial_features=4)
         kwargs = {
@@ -102,6 +114,28 @@ class TestDefaultTrainer(unittest.TestCase):
 
         trainer2.fit(10)
         self.assertEqual(trainer2.iteration, 20)
+
+    def test_from_checkpoint_external_dataloader(self):
+        from torch_em.trainer import DefaultTrainer
+
+        trainer = DefaultTrainer(**self._get_kwargs(with_roi=True, external=True))
+        self.assertFalse(hasattr(trainer.train_loader, "shuffle"))
+        self.assertFalse(hasattr(trainer.val_loader, "shuffle"))
+        trainer.fit(4)
+        exp_model = trainer.model
+        exp_data_shape = trainer.train_loader.dataset.raw.shape
+
+        trainer2 = DefaultTrainer.from_checkpoint(
+            os.path.join(self.checkpoint_folder, self.name),
+            name="latest"
+        )
+        self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
+        self.assertTrue(torch_em.util.model_is_equal(exp_model, trainer2.model))
+        self.assertTrue(hasattr(trainer2.train_loader, "shuffle"))
+        self.assertTrue(hasattr(trainer2.val_loader, "shuffle"))
+        self.assertTrue(trainer2.train_loader.shuffle)
+        self.assertTrue(trainer2.val_loader.shuffle)
 
     @unittest.skipIf(sys.version_info.minor > 10, "Not supported for python > 3.10")
     def test_compiled_model(self):

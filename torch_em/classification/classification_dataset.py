@@ -1,10 +1,32 @@
+from typing import Sequence, Tuple
+
 import numpy as np
 import torch
+
+from numpy.typing import ArrayLike
 from skimage.transform import resize
 
 
 class ClassificationDataset(torch.utils.data.Dataset):
-    def __init__(self, data, target, normalization, augmentation, image_shape):
+    """Dataset for classification training.
+
+    Args:
+        data: The input data for classification. Expects a sequence of array-like data.
+            The data can be two or three dimensional.
+        target: The target data for classification. Expects a sequence of the same length as `data`.
+            Each value in the sequence must be a scalar.
+        normalization: The normalization function.
+        augmentation: The augmentation function.
+        image_shape: The target shape of the data. If given, each sample will be resampled to this size.
+    """
+    def __init__(
+        self,
+        data: Sequence[ArrayLike],
+        target: Sequence[ArrayLike],
+        normalization: callable,
+        augmentation: callable,
+        image_shape: Tuple[int, ...],
+    ):
         if len(data) != len(target):
             raise ValueError(f"Length of data and target don't agree: {len(data)} != {len(target)}")
         self.data = data
@@ -17,6 +39,8 @@ class ClassificationDataset(torch.utils.data.Dataset):
         return len(self.data)
 
     def resize(self, x):
+        """@private
+        """
         out = [resize(channel, self.image_shape, preserve_range=True)[None] for channel in x]
         return np.concatenate(out, axis=0)
 

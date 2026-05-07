@@ -31,10 +31,7 @@ URL = "https://zenodo.org/records/13120679/files/2021-11-15_HepG2_Calcein_AM.zip
 CHECKSUM = "42b939d01c5fc2517dc3ad34bde596ac38dbeba2a96173f37e1b6dfe14cbe3a2"
 
 
-def get_dic_hepg2_data(
-    path: Union[str, os.PathLike],
-    download: bool = False,
-) -> str:
+def get_dic_hepg2_data(path: Union[str, os.PathLike], download: bool = False) -> str:
     """Download the DIC HepG2 dataset.
 
     Args:
@@ -42,7 +39,7 @@ def get_dic_hepg2_data(
         download: Whether to download the data if it is not present.
 
     Returns:
-        Path to the folder where data is stored.
+        The path to the folder where data is stored.
     """
     if os.path.exists(path):
         return path
@@ -86,10 +83,26 @@ def _create_segmentations_from_coco_annotation(path, split):
     return image_folder, gt_folder
 
 
-def _get_dic_hepg2_paths(path, split):
+def get_dic_hepg2_paths(
+    path: Union[os.PathLike, str], split: str, download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to DIC HepG2 data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
+    path = get_dic_hepg2_data(path=path, download=download)
+
     image_folder, gt_folder = _create_segmentations_from_coco_annotation(path=path, split=split)
     gt_paths = natsorted(glob(os.path.join(gt_folder, "*.tif")))
     image_paths = [os.path.join(image_folder, f"{Path(gt_path).stem}.png") for gt_path in gt_paths]
+
     return image_paths, gt_paths
 
 
@@ -118,15 +131,14 @@ def get_dic_hepg2_dataset(
     Returns:
         The segmentation dataset.
     """
-    path = get_dic_hepg2_data(path=path, download=download)
-    image_paths, gt_paths = _get_dic_hepg2_paths(path=path, split=split)
+    image_paths, gt_paths = get_dic_hepg2_paths(path=path, split=split)
 
     kwargs = util.ensure_transforms(ndim=2, **kwargs)
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, offsets=offsets, boundaries=boundaries, binary=binary
     )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
@@ -135,7 +147,6 @@ def get_dic_hepg2_dataset(
         is_seg_dataset=False,
         **kwargs
     )
-    return dataset
 
 
 def get_dic_hepg2_loader(
@@ -176,5 +187,4 @@ def get_dic_hepg2_loader(
         download=download,
         **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)

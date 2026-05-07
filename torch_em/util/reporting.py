@@ -1,3 +1,4 @@
+from typing import Dict, Optional, Union
 from .util import get_trainer
 
 
@@ -51,8 +52,23 @@ def _get_training_summary(trainer, lr):
 
 
 def get_training_summary(
-    ckpt, lr=None, model_name="best", to_md=False
-):
+    ckpt: str,
+    lr: Optional[float] = None,
+    model_name: str = "best",
+    to_md: bool = False,
+) -> Union[str, Dict]:
+    """Summarize the training process of a checkpoint.
+
+    Args:
+        ckpt: The checkpoint.
+        lr: The initial learning rate this model was trained with.
+            The initial learning rate cannot be read from the checkpoint.
+        model_name: The name of the checkpoint to load.
+        to_md: Whether to translate the training summary to markdown.
+
+    Returns:
+        The training summary, either as a dictionary or markdown str (if `to_md=True`).
+    """
     trainer = get_trainer(ckpt, name=model_name)
     print("Model summary for", ckpt, "using the", model_name, "model")
     training_summary = _get_training_summary(trainer, lr)

@@ -1,49 +1,88 @@
 import os
 import warnings
+from typing import List, Union, Tuple, Optional, Any, Callable
+
 import numpy as np
-from typing import List, Union, Tuple, Optional, Any
+from math import ceil
 
 import torch
 
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data, ensure_patch_shape
+from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data, ensure_patch_shape, validate_roi
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
-    """
+    """Dataset that provides raw data and labels stored in a container data format for segmentation training.
+
+    The dataset loads a patch from the raw and label data and returns a sample for a batch.
+    Image data and label data must have the same shape, except for potential channels.
+    The dataset supports all file formats that can be opened with `elf.io.open_file`, such as hdf5, zarr or n5.
+    Use `raw_path` / `label_path` to specify the file path and `raw_key` / `label_key` to specify the internal dataset.
+    It also supports regular image formats, such as .tif. For these cases set `raw_key=None` / `label_key=None`.
+
+    Args:
+        raw_path: The file path to the raw image data. May also be a list of file paths.
+        raw_key: The key to the internal dataset containing the raw data.
+        label_path: The file path to the label data. May also be a list of file paths.
+        label_key: The key to the internal dataset containing the label data
+        patch_shape: The patch shape for a training sample.
+        raw_transform: Transformation applied to the raw data of a sample.
+        label_transform: Transformation applied to the label data of a sample,
+            before applying augmentations via `transform`.
+        label_transform2: Transformation applied to the label data of a sample,
+            after applying augmentations via `transform`.
+        transform: Transformation applied to both the raw data and label data of a sample.
+            This can be used to implement data augmentations.
+        roi: Region of interest in the data. If given, the data will only be loaded from the corresponding area.
+        dtype: The return data type of the raw data.
+        label_dtype: The return data type of the label data.
+        n_samples: The length of this dataset. If None, the length will be set to `len(raw_image_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data (as numpy arrays) as input.
+        ndim: The spatial dimensionality of the data. If None, will be derived from the raw data.
+        with_channels: Whether the raw data has channels.
+        with_label_channels: Whether the label data has channels.
+        with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
+        z_ext: Extra bounding box for loading the data across z.
+        pre_label_transform: Transformation applied to the label data of a chosen random sample,
+            before applying the sample validity via the `sampler`.
     """
     max_sampling_attempts = 500
+    """The maximal number of sampling attempts, for loading a sample via `__getitem__`.
+    This is used when `sampler` rejects a sample, to avoid an infinite loop if no valid sample can be found.
+    """
 
     @staticmethod
     def compute_len(shape, patch_shape):
         if patch_shape is None:
             return 1
         else:
-            n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
+            n_samples = ceil(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
             return n_samples
 
     def __init__(
         self,
         raw_path: Union[List[Any], str, os.PathLike],
-        raw_key: str,
+        raw_key: Optional[str],
         label_path: Union[List[Any], str, os.PathLike],
-        label_key: str,
+        label_key: Optional[str],
         patch_shape: Tuple[int, ...],
-        raw_transform=None,
-        label_transform=None,
-        label_transform2=None,
-        transform=None,
-        roi: Optional[dict] = None,
+        raw_transform: Optional[Callable] = None,
+        label_transform: Optional[Callable] = None,
+        label_transform2: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
+        roi: Optional[Union[slice, Tuple[slice, ...]]] = None,
         dtype: torch.dtype = torch.float32,
         label_dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
-        sampler=None,
+        sampler: Optional[Callable] = None,
         ndim: Optional[int] = None,
         with_channels: bool = False,
         with_label_channels: bool = False,
         with_padding: bool = True,
         z_ext: Optional[int] = None,
+        pre_label_transform: Optional[Callable] = None,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -57,8 +96,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self._with_label_channels = with_label_channels
 
         if roi is not None:
-            if isinstance(roi, slice):
-                roi = (roi,)
+            shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
+            roi = validate_roi(roi, shape, patch_shape)
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
             self.labels = RoiWrapper(self.labels, (slice(None),) + roi) if self._with_label_channels else\
                 RoiWrapper(self.labels, roi)
@@ -84,6 +123,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.transform = transform
         self.sampler = sampler
         self.with_padding = with_padding
+        self.pre_label_transform = pre_label_transform
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -124,8 +164,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         else:
             bb_start = [
-                np.random.randint(0, sh - psh) if sh - psh > 0 else 0
-                for sh, psh in zip(self.shape, self.sample_shape)
+                np.random.randint(0, sh - psh) if sh - psh > 0 else 0 for sh, psh in zip(self.shape, self.sample_shape)
             ]
             patch_shape_for_bb = self.sample_shape
 
@@ -136,6 +175,13 @@ class SegmentationDataset(torch.utils.data.Dataset):
         bb_raw = (slice(None),) + bb if self._with_channels else bb
         bb_labels = (slice(None),) + bb if self._with_label_channels else bb
         raw, labels = self.raw[bb_raw], self.labels[bb_labels]
+
+        # Additional label transform on top to make sampler consider expected labels
+        # (eg. run connected components on disconnected semantic labels)
+        pre_label_transform = getattr(self, "pre_label_transform", None)
+        if pre_label_transform is not None:
+            labels = pre_label_transform(labels)
+
         return raw, labels
 
     def _get_sample(self, index):
@@ -151,6 +197,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
                 sample_id += 1
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+
         # Padding the patch to match the expected input shape.
         if self.patch_shape is not None and self.with_padding:
             raw, labels = ensure_patch_shape(
@@ -169,6 +216,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
         return raw, labels
 
     def crop(self, tensor):
+        """@private
+        """
         bb = self.inner_bb
         if tensor.ndim > len(bb):
             bb = (tensor.ndim - len(bb)) * (slice(None),) + bb

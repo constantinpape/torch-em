@@ -1,19 +1,26 @@
 import os
 from functools import partial
+from typing import Dict, Any, Optional, Callable
 
 import torch
-import torch_em
+import torch.utils.data
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
+import torch_em
+
 
 def setup(rank, world_size):
+    """@private
+    """
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 
 def cleanup():
+    """@private
+    """
     dist.destroy_process_group()
 
 
@@ -34,8 +41,9 @@ def _create_data_loader(ds_callable, ds_kwargs, loader_kwargs, world_size, rank)
 
 
 class DDP(DistributedDataParallel):
-    """Wrapper for the DistributedDataParallel class that overrides the `__getattr__` method
-    to handle access from the "model" object module wrapped by DDP.
+    """Wrapper for the DistributedDataParallel class.
+
+    Oerrides the `__getattr__` method to handle access from the "model" object module wrapped by DDP.
     """
     def __getattr__(self, name):
         try:
@@ -45,22 +53,22 @@ class DDP(DistributedDataParallel):
 
 
 def _train_impl(
-    rank,
-    world_size,
-    model_callable,
-    model_kwargs,
-    train_dataset_callable,
-    train_dataset_kwargs,
-    val_dataset_callable,
-    val_dataset_kwargs,
-    loader_kwargs,
-    iterations,
-    find_unused_parameters=True,
-    optimizer_callable=None,
-    optimizer_kwargs=None,
-    lr_scheduler_callable=None,
-    lr_scheduler_kwargs=None,
-    trainer_callable=None,
+    rank: int,
+    world_size: int,
+    model_callable: Callable[[Any], torch.nn.Module],
+    model_kwargs: Dict[str, Any],
+    train_dataset_callable: Callable[[Any], torch.utils.data.Dataset],
+    train_dataset_kwargs: Dict[str, Any],
+    val_dataset_callable: Callable[[Any], torch.utils.data.Dataset],
+    val_dataset_kwargs: Dict[str, Any],
+    loader_kwargs: Dict[str, Any],
+    iterations: int,
+    find_unused_parameters: bool = True,
+    optimizer_callable: Optional[Callable[[Any], torch.optim.Optimizer]] = None,
+    optimizer_kwargs: Optional[Dict[str, Any]] = None,
+    lr_scheduler_callable: Optional[Callable[[Any], torch.optim.lr_scheduler._LRScheduler]] = None,
+    lr_scheduler_kwargs: Optional[Dict[str, Any]] = None,
+    trainer_callable: Optional[Callable] = None,
     **kwargs
 ):
     assert "device" not in kwargs
@@ -97,27 +105,68 @@ def _train_impl(
 
 
 def train_multi_gpu(
-    model_callable,
-    model_kwargs,
-    train_dataset_callable,
-    train_dataset_kwargs,
-    val_dataset_callable,
-    val_dataset_kwargs,
-    loader_kwargs,
-    iterations,
-    find_unused_parameters=True,
-    optimizer_callable=None,
-    optimizer_kwargs=None,
-    lr_scheduler_callable=None,
-    lr_scheduler_kwargs=None,
-    trainer_callable=None,
+    model_callable: Callable[[Any], torch.nn.Module],
+    model_kwargs: Dict[str, Any],
+    train_dataset_callable: Callable[[Any], torch.utils.data.Dataset],
+    train_dataset_kwargs: Dict[str, Any],
+    val_dataset_callable: Callable[[Any], torch.utils.data.Dataset],
+    val_dataset_kwargs: Dict[str, Any],
+    loader_kwargs: Dict[str, Any],
+    iterations: int,
+    find_unused_parameters: bool = True,
+    optimizer_callable: Optional[Callable[[Any], torch.optim.Optimizer]] = None,
+    optimizer_kwargs: Optional[Dict[str, Any]] = None,
+    lr_scheduler_callable: Optional[Callable[[Any], torch.optim.lr_scheduler._LRScheduler]] = None,
+    lr_scheduler_kwargs: Optional[Dict[str, Any]] = None,
+    trainer_callable: Optional[Callable] = None,
     **kwargs
 ) -> None:
-    """
+    """Run data parallel training on multiple local GPUs via torch.distributed.
+
+    This function will run training on all available local GPUs in parallel.
+    To use it, the function / classes and keywords for the model and data loaders must be given.
+    Optionaly, functions / classes and keywords for the optimizer, learning rate scheduler and trainer class
+    may be given, so that they can be instantiated for each training child process.
+
+    Here is an example for training a 2D U-Net on the DSB dataset:
+    ```python
+    from torch_em.model import UNet2d
+    from torch_em.multi_gpu_training import train_multi_gpu
+    from torch_em.data.datasets.light_microscopy.dsb import get_dsb_dataset, get_dsb_data
+
+    # Make sure the data is downloaded before starting multi-gpu training.
+    data_root = "/path/to/save/the/training/data"
+    get_dsb_data(data_root, source="reduced", download=True)
+
+    patch_shape = (256, 256)
+    train_multi_gpu(
+        model_callable=UNet2d,
+        model_kwargs={"in_channels": 1, "out_channels": 1},
+        train_dataset_callable=get_dsb_dataset,
+        train_dataset_kwargs={"path": data_root, patch_shape: patch_shape, "split": "train"},
+        val_dataset_callable=get_dsb_dataset,
+        val_dataset_kwargs={"path": data_root, patch_shape: patch_shape, "split": "test"},
+        loader_kwargs={"shuffle": True},
+        iterations=int(5e4),  # Train for 50.000 iterations.
+    )
+    ```
 
     Args:
-        model: The PyTorch model to be trained.
-        kwargs: Keyword arguments for `torch_em.segmentation.default_segmentation_trainer`.
+        model_callable: Function or class to create the model.
+        model_kwargs: Keyword arguments for `model_callable`.
+        train_dataset_callable: Function or class to create the training dataset.
+        train_dataset_kwargs: Keyword arguments for `train_dataset_callable`.
+        val_dataset_callable: Function or class to create the validation dataset.
+        val_dataset_kwargs: Keyword arguments for `val_dataset_callable`.
+        loader_kwargs: Keyword arguments for the torch data loader.
+        iterations: Number of iterations to train for.
+        find_unused_parameters: Whether to find unused parameters of the model to exclude from the optimization.
+        optimizer_callable: Function or class to create the optimizer.
+        optimizer_kwargs: Keyword arguments for `optimizer_callable`.
+        lr_scheduler_callable: Function or class to create the learning rate scheduler.
+        lr_scheduler_kwargs: Keyword arguments for `lr_scheduler_callable`.
+        trainer_callable: Function or class to create the trainer.
+        kwargs: Keyword arguments for `trainer_callable`.
     """
     world_size = torch.cuda.device_count()
     train = partial(

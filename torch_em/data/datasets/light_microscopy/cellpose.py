@@ -1,5 +1,4 @@
-"""This dataset contains annotation for cell segmentation in
-fluorescene microscently-labeled microscopy images.
+"""This dataset contains annotation for cell segmentation in fluorescene microscently-labeled microscopy images.
 
 This dataset is from the following publications:
 - https://doi.org/10.1038/s41592-020-01018-x
@@ -10,7 +9,7 @@ Please cite it if you use this dataset in your research.
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, Literal, Optional
+from typing import Union, Tuple, Literal, Optional, List
 
 import torch_em
 
@@ -23,19 +22,12 @@ from .neurips_cell_seg import to_rgb
 AVAILABLE_CHOICES = ["cyto", "cyto2"]
 
 
-def _get_cellpose_paths(data_dir):
-    image_paths = natsorted(glob(os.path.join(data_dir, "*_img.png")))
-    gt_paths = natsorted(glob(os.path.join(data_dir, "*_masks.png")))
-
-    return image_paths, gt_paths
-
-
 def get_cellpose_data(
     path: Union[os.PathLike, str],
     split: Literal["train", "test"],
     choice: Literal["cyto", "cyto2"],
     download: bool = False,
-):
+) -> str:
     """Instruction to download CellPose data.
 
     NOTE: Please download the dataset from "https://www.cellpose.org/dataset".
@@ -47,14 +39,8 @@ def get_cellpose_data(
         download: Whether to download the data if it is not present.
 
     Returns:
-        The filepath to the data.
+        The filepath to the folder where the data is manually downloaded.
     """
-    if download:
-        assert NotImplementedError(
-            "The dataset cannot be automatically downloaded. ",
-            "Please see 'get_cellpose_data' in 'torch_em/data/datasets/cellpose.py' for details."
-        )
-
     per_choice_dir = os.path.join(path, choice)  # path where the unzipped files will be stored
     if choice == "cyto":
         assert split in ["train", "test"], f"'{split}' is not a valid split in '{choice}'."
@@ -67,16 +53,51 @@ def get_cellpose_data(
     else:
         raise ValueError(f"'{choice}' is not a valid dataset choice.")
 
-    if not os.path.exists(data_dir):
+    if os.path.exists(data_dir):
+        return data_dir
+    else:
+        if not os.path.exists(zip_path) and download:
+            raise NotImplementedError(
+                "The dataset cannot be automatically downloaded. "
+                "Please see 'get_cellpose_data' in 'torch_em/data/datasets/light_microscopy/cellpose.py' for details."
+            )
         util.unzip(zip_path=zip_path, dst=per_choice_dir, remove=False)
 
     return data_dir
 
 
+def get_cellpose_paths(
+    path: Union[os.PathLike, str],
+    split: Literal['train', 'test'],
+    choice: Optional[Literal["cyto", "cyto2"]] = None,
+    download: bool = False,
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the CellPose data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split to use. Either 'train', or 'test'.
+        choice: The choice of dataset. Either 'cyto' or 'cyto2'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
+    data_dir = get_cellpose_data(path, split, choice, download)
+
+    image_paths = natsorted(glob(os.path.join(data_dir, "*_img.png")))
+    gt_paths = natsorted(glob(os.path.join(data_dir, "*_masks.png")))
+
+    assert len(image_paths) == len(gt_paths) and len(image_paths) > 0
+
+    return image_paths, gt_paths
+
+
 def get_cellpose_dataset(
     path: Union[os.PathLike, str],
-    split: Literal["train", "test"],
     patch_shape: Tuple[int, int],
+    split: Literal["train", "test"],
     choice: Optional[Literal["cyto", "cyto2"]] = None,
     download: bool = False,
     **kwargs
@@ -85,8 +106,8 @@ def get_cellpose_dataset(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        split: The data split to use. Either 'train', or 'test'.
         patch_shape: The patch shape to use for training.
+        split: The data split to use. Either 'train', or 'test'.
         choice: The choice of dataset. Either 'cyto' or 'cyto2'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -105,36 +126,33 @@ def get_cellpose_dataset(
     image_paths, gt_paths = [], []
     for per_choice in choice:
         assert per_choice in AVAILABLE_CHOICES
-        data_dir = get_cellpose_data(path=path, split=split, choice=per_choice, download=download)
-        per_image_paths, per_gt_paths = _get_cellpose_paths(data_dir=data_dir)
+        per_image_paths, per_gt_paths = get_cellpose_paths(path, split, per_choice, download)
         image_paths.extend(per_image_paths)
         gt_paths.extend(per_gt_paths)
 
     if "raw_transform" not in kwargs:
-        raw_transform = torch_em.transform.get_raw_transform(augmentation2=to_rgb)
+        kwargs["raw_transform"] = torch_em.transform.get_raw_transform(augmentation2=to_rgb)
 
     if "transform" not in kwargs:
-        transform = torch_em.transform.get_augmentations(ndim=2)
+        kwargs["transform"] = torch_em.transform.get_augmentations(ndim=2)
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key=None,
         label_paths=gt_paths,
         label_key=None,
         is_seg_dataset=False,
         patch_shape=patch_shape,
-        raw_transform=raw_transform,
-        transform=transform,
+        ndim=2,
         **kwargs
     )
-    return dataset
 
 
 def get_cellpose_loader(
     path: Union[os.PathLike, str],
-    split: Literal["train", "test"],
-    patch_shape: Tuple[int, int],
     batch_size: int,
+    patch_shape: Tuple[int, int],
+    split: Literal["train", "test"],
     choice: Optional[Literal["cyto", "cyto2"]] = None,
     download: bool = False,
     **kwargs
@@ -143,24 +161,16 @@ def get_cellpose_loader(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        split: The data split to use. Either 'train', or 'test'.
-        patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        split: The data split to use. Either 'train', or 'test'.
         choice: The choice of dataset. Either 'cyto' or 'cyto2'.
         download: Whether to download the data if it is not present.
-        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cellpose_dataset(
-        path=path,
-        split=split,
-        patch_shape=patch_shape,
-        choice=choice,
-        download=download,
-        **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_cellpose_dataset(path, patch_shape, split, choice, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

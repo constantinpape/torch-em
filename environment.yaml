@@ -1,0 +1,19 @@
+channels:
+    - conda-forge
+name:
+    torch-em-dev
+dependencies:
+    - affogato
+    - bioimageio.spec
+    - bioimageio.core >=0.8.0
+    - imagecodecs
+    - natsort
+    - nifty >=1.2.3
+    - python-elf
+    - pytorch
+    - tensorboard
+    - tifffile >=2024
+    - torchvision
+    - tqdm
+    - kornia
+    - requests

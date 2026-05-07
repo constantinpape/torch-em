@@ -1,19 +1,47 @@
 import os
 import warnings
 import numpy as np
-from typing import List, Union, Tuple, Optional, Any
+from typing import List, Union, Tuple, Optional, Any, Callable
 
 import torch
 
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_tensor_with_channels, load_data
+from ..util import ensure_tensor_with_channels, ensure_patch_shape, load_data, validate_roi
 
 
 class RawDataset(torch.utils.data.Dataset):
-    """
+    """Dataset that provides raw data stored in a container data format for unsupervised training.
+
+    The dataset loads a patch from the raw data and returns a sample for a batch.
+    The dataset supports all file formats that can be opened with `elf.io.open_file`, such as hdf5, zarr or n5.
+    Use `raw_path` to specify the path to the file and `raw_key` to specify the internal dataset.
+    It also supports regular image formats, such as .tif. For these cases set `raw_key=None`.
+
+    The dataset can also be used for contrastive learning that relies on two different views of the same data.
+    You can use the `augmentations` argument for this.
+
+    Args:
+        raw_path: The file path to the raw image data. May also be a list of file paths.
+        raw_key: The key to the internal dataset containing the raw data.
+        patch_shape: The patch shape for a training sample.
+        raw_transform: Transformation applied to the raw data of a sample.
+        transform: Transformation to the raw data. This can be used to implement data augmentations.
+        roi: Region of interest in the raw data.
+            If given, the raw data will only be loaded from the corresponding area.
+        dtype: The return data type of the raw data.
+        n_samples: The length of this dataset. If None, the length will be set to `len(raw_image_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data (as numpy arrays) as input.
+        ndim: The spatial dimensionality of the data. If None, will be derived from the raw data.
+        with_channels: Whether the raw data has channels.
+        augmentations: Augmentations for contrastive learning. If given, these need to be two different callables.
+            They will be applied to the sampled raw data to return two independent views of the raw data.
     """
     max_sampling_attempts = 500
+    """The maximal number of sampling attempts, for loading a sample via `__getitem__`.
+    This is used when `sampler` rejects a sample, to avoid an infinite loop if no valid sample can be found.
+    """
 
     @staticmethod
     def compute_len(shape, patch_shape):
@@ -23,17 +51,17 @@ class RawDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         raw_path: Union[List[Any], str, os.PathLike],
-        raw_key: str,
+        raw_key: Optional[str],
         patch_shape: Tuple[int, ...],
-        raw_transform=None,
-        transform=None,
-        roi: Optional[dict] = None,
+        raw_transform: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
+        roi: Optional[Union[slice, Tuple[slice, ...]]] = None,
         dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
-        sampler=None,
+        sampler: Optional[Callable] = None,
         ndim: Optional[int] = None,
         with_channels: bool = False,
-        augmentations=None,
+        augmentations: Optional[Tuple[Callable, Callable]] = None,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -42,8 +70,8 @@ class RawDataset(torch.utils.data.Dataset):
         self._with_channels = with_channels
 
         if roi is not None:
-            if isinstance(roi, slice):
-                roi = (roi,)
+            shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
+            roi = validate_roi(roi, shape, patch_shape)
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
 
         self.shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
@@ -108,6 +136,11 @@ class RawDataset(torch.utils.data.Dataset):
                 if sample_id > self.max_sampling_attempts:
                     raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
 
+        if self.patch_shape is not None:
+            raw = ensure_patch_shape(
+                raw=raw, labels=None, patch_shape=self.patch_shape, have_raw_channels=self._with_channels
+            )
+
         # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
         if len(self.patch_shape) == self._ndim + 1:
             raw = raw.squeeze(1 if self._with_channels else 0)
@@ -131,6 +164,7 @@ class RawDataset(torch.utils.data.Dataset):
             if isinstance(raw, list):
                 assert len(raw) == 1
                 raw = raw[0]
+
             if self.trafo_halo is not None:
                 raw = self.crop(raw)
 
@@ -162,4 +196,188 @@ class RawDataset(torch.utils.data.Dataset):
             msg += "But it cannot be used for further training and wil throw an error."
             warnings.warn(msg)
             state["raw"] = None
+
         self.__dict__.update(state)
+
+
+class RawDatasetWithMasks(RawDataset):
+    """Extends `RawDataset` to support a sample mask and a background mask.
+
+        - The sample mask is used by the sampler to extract patches from a region of interest, e.g.,
+            using `MinForegroundSampler`, to avoid empty patches.
+        - The background mask is a binary mask identifying regions or structures that belong to the background.
+            It can be used during unsupervised training to subtract background regions from the predicted
+            pseudo labels.
+
+    Args:
+        raw_path: The file path to the raw image data. May also be a list of file paths.
+        raw_key: The key to the internal dataset containing the raw data.
+        patch_shape: The patch shape for a training sample.
+        raw_transform: Transformation applied to the raw data of a sample.
+        transform: Transformation to the raw data. This can be used to implement data augmentations.
+        roi: Region of interest in the raw data.
+            If given, the raw data will only be loaded from the corresponding area.
+        dtype: The return data type of the raw data.
+        n_samples: The length of this dataset. If None, the length will be set to `len(raw_image_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data (as numpy arrays) as input.
+        ndim: The spatial dimensionality of the data. If None, will be derived from the raw data.
+        with_channels: Whether the raw data has channels.
+        augmentations: Augmentations for contrastive learning. If given, these need to be two different callables.
+            They will be applied to the sampled raw data to return two independent views of the raw data.
+        sample_mask_path: Filepaths to the sample masks used by the sampler to accept or reject
+            patches for training.
+        sample_mask_key: The key to the dataset containing the sample masks.
+        bg_mask_path: Filepaths to the background masks, which will be returned together with the raw sample.
+        bg_mask_key: The key to the dataset containing the background masks.
+    """
+
+    def __init__(
+        self,
+        raw_path: Union[List[Any], str, os.PathLike],
+        raw_key: Optional[str],
+        patch_shape: Tuple[int, ...],
+        raw_transform: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
+        roi: Optional[Union[slice, Tuple[slice, ...]]] = None,
+        dtype: torch.dtype = torch.float32,
+        n_samples: Optional[int] = None,
+        sampler: Optional[Callable] = None,
+        ndim: Optional[int] = None,
+        with_channels: bool = False,
+        augmentations: Optional[Tuple[Callable, Callable]] = None,
+        sample_mask_path: Union[List[Any], str, os.PathLike] = None,
+        sample_mask_key: Optional[str] = None,
+        bg_mask_path: Union[List[Any], str, os.PathLike] = None,
+        bg_mask_key: Optional[str] = None,
+    ):
+        super().__init__(
+            raw_path=raw_path,
+            raw_key=raw_key,
+            patch_shape=patch_shape,
+            raw_transform=raw_transform,
+            transform=transform,
+            roi=roi,
+            dtype=dtype,
+            n_samples=n_samples,
+            sampler=sampler,
+            ndim=ndim,
+            with_channels=with_channels,
+            augmentations=augmentations,
+        )
+
+        self.sample_mask_path = sample_mask_path
+        self.sample_mask_key = sample_mask_key
+        self.sample_mask = load_data(sample_mask_path, sample_mask_key) if sample_mask_path is not None else None
+
+        self.bg_mask_path = bg_mask_path
+        self.bg_mask_key = bg_mask_key
+        self.bg_mask = load_data(bg_mask_path, bg_mask_key) if bg_mask_path is not None else None
+
+    def _extract_patch(self, data, bb):
+        return data[(slice(None),) + bb] if self._with_channels else data[bb]
+
+    def _get_sample(self, index):
+        if self.raw is None:
+            raise RuntimeError("RawDataset has not been properly deserialized.")
+
+        # default behavior; use if sampler is None
+        bb = self._sample_bounding_box()
+        raw = self._extract_patch(self.raw, bb)
+
+        if self.sampler is not None:
+            sample_id = 0
+            if self.sample_mask is not None:
+                sample_mask = self._extract_patch(self.sample_mask, bb)
+
+                while not self.sampler(raw, sample_mask):
+                    bb = self._sample_bounding_box()
+                    raw = self._extract_patch(self.raw, bb)
+                    sample_mask = self._extract_patch(self.sample_mask, bb)
+
+                    sample_id += 1
+                    if sample_id > self.max_sampling_attempts:
+                        raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+            else:
+                while not self.sampler(raw):
+                    bb = self._sample_bounding_box()
+                    raw = self._extract_patch(self.raw, bb)
+                    sample_id += 1
+                    if sample_id > self.max_sampling_attempts:
+                        raise RuntimeError(f"Could not sample a valid batch in {self.max_sampling_attempts} attempts")
+
+        bg_mask = self._extract_patch(self.bg_mask, bb) if self.bg_mask is not None else None
+
+        if self.patch_shape is not None:
+            if bg_mask is not None:
+                raw, bg_mask = ensure_patch_shape(
+                    raw=raw, labels=bg_mask, patch_shape=self.patch_shape,
+                    have_raw_channels=self._with_channels, have_label_channels=self._with_channels
+                )
+            else:
+                raw = ensure_patch_shape(
+                    raw=raw, labels=None, patch_shape=self.patch_shape,
+                    have_raw_channels=self._with_channels, have_label_channels=self._with_channels
+                )
+        # squeeze the singleton spatial axis if we have a spatial shape that is larger by one than self._ndim
+        if len(self.patch_shape) == self._ndim + 1:
+            raw = raw.squeeze(1 if self._with_channels else 0)
+
+            if bg_mask is not None:
+                bg_mask = bg_mask.squeeze(1 if self._with_channels else 0)
+
+        return raw, bg_mask
+
+    def __getitem__(self, index):
+        raw, bg_mask = self._get_sample(index)
+
+        if self.raw_transform is not None:
+            raw = self.raw_transform(raw)
+
+        if self.transform is not None:
+            raw = self.transform(raw)
+            if isinstance(raw, list):
+                assert len(raw) == 1
+                raw = raw[0]
+
+            if self.trafo_halo is not None:
+                raw = self.crop(raw)
+
+        raw = ensure_tensor_with_channels(raw, ndim=self._ndim, dtype=self.dtype)
+        if bg_mask is not None:
+            bg_mask = ensure_tensor_with_channels(bg_mask, ndim=self._ndim, dtype=self.dtype)
+
+        if self.augmentations is not None:
+            aug1, aug2 = self.augmentations
+            raw1, raw2 = aug1(raw), aug2(raw)
+
+            if bg_mask is not None:
+
+                # if background_mask, returned stacked data
+                return torch.cat((raw1, bg_mask), dim=0), torch.cat((raw2, bg_mask), dim=0)
+
+            # else, return augmented raw
+            return raw1, raw2
+
+        if bg_mask is not None:
+
+            # if background_mask, returned stacked data
+            return torch.cat((raw, bg_mask), dim=0)
+
+        # else, return raw
+        return raw
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        del state["sample_mask"]
+        del state["bg_mask"]
+        return state
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        sample_mask_path = state.get("sample_mask_path")
+        sample_mask_key = state.get("sample_mask_key")
+        bg_mask_path = state.get("bg_mask_path")
+        bg_mask_key = state.get("bg_mask_key")
+        self.sample_mask = load_data(sample_mask_path, sample_mask_key) if sample_mask_path is not None else None
+        self.bg_mask = load_data(bg_mask_path, bg_mask_key) if bg_mask_path is not None else None

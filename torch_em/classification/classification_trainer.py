@@ -6,6 +6,12 @@ import torch_em
 
 
 class ClassificationTrainer(torch_em.trainer.DefaultTrainer):
+    """Trainer for classification tasks.
+
+    This class inherits from `torch_em.trainer.DefaultTrainer` with minor changes for
+    classification instead of segmentation training. Check out the documentation of
+    the default trainer class for details on how to configure and use the trainer
+    """
     def _validate_impl(self, forward_context):
         self.model.eval()
 

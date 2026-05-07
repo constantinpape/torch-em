@@ -21,6 +21,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from .. import util
 
+
 URL = "http://www.casser.io/files/kasthuri_pp.zip "
 CHECKSUM = "bbb78fd205ec9b57feb8f93ebbdf1666261cbc3e0305e7f11583ab5157a3d792"
 
@@ -69,7 +70,7 @@ def _create_data(root, inputs, out_path):
         f.create_dataset("labels", data=labels, compression="gzip")
 
 
-def get_kasthuri_data(path: Union[os.PathLike, str], download: bool) -> str:
+def get_kasthuri_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Download the kasthuri dataset.
 
     Args:
@@ -100,12 +101,25 @@ def get_kasthuri_data(path: Union[os.PathLike, str], download: bool) -> str:
     return path
 
 
+def get_kasthuri_paths(path: Union[os.PathLike, str], split: str, download: bool = False) -> str:
+    """Get paths to the Kasthuri data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The data split. Either 'train' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepath to the stored data.
+    """
+    get_kasthuri_data(path, download)
+    data_path = os.path.join(path, f"kasthuri_{split}.h5")
+    assert os.path.exists(data_path), data_path
+    return data_path
+
+
 def get_kasthuri_dataset(
-    path: Union[os.PathLike, str],
-    split: str,
-    patch_shape: Tuple[int, int, int],
-    download: bool = False,
-    **kwargs
+    path: Union[os.PathLike, str], split: str, patch_shape: Tuple[int, int, int], download: bool = False, **kwargs
 ) -> Dataset:
     """Get dataset for EM mitochondrion segmentation in the kasthuri dataset.
 
@@ -120,11 +134,17 @@ def get_kasthuri_dataset(
         The segmentation dataset.
     """
     assert split in ("train", "test")
-    get_kasthuri_data(path, download)
-    data_path = os.path.join(path, f"kasthuri_{split}.h5")
-    assert os.path.exists(data_path), data_path
-    raw_key, label_key = "raw", "labels"
-    return torch_em.default_segmentation_dataset(data_path, raw_key, data_path, label_key, patch_shape, **kwargs)
+
+    data_path = get_kasthuri_paths(path, split, download)
+
+    return torch_em.default_segmentation_dataset(
+        raw_paths=data_path,
+        raw_key="raw",
+        label_paths=data_path,
+        label_key="labels",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
 
 def get_kasthuri_loader(
@@ -148,9 +168,6 @@ def get_kasthuri_loader(
     Returns:
         The PyTorch DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_kasthuri_dataset(path, split, patch_shape, download=download, **ds_kwargs)
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

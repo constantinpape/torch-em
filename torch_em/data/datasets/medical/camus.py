@@ -1,6 +1,16 @@
+"""The CAMUS dataset contains annotations for cardiac structures segmentation in 2d echocardiography images.
+
+The database is located at:
+https://humanheart-project.creatis.insa-lyon.fr/database/#collection/6373703d73e9f0047faa1bc8.
+This dataset is from the publication https://doi.org/10.1109/TMI.2019.2900516.
+Please cite it if you use this dataset for a publication.
+"""
+
 import os
 from glob import glob
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple, Optional, Literal, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -13,12 +23,21 @@ URL = "https://humanheart-project.creatis.insa-lyon.fr/database/api/v1/folder/63
 # CHECKSUM = "43745d640db5d979332bda7f00f4746747a2591b46efc8f1966b573ce8d65655"
 
 
-def get_camus_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_camus_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Get the CAMUS dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "database_nifti")
     if os.path.exists(data_dir):
         return data_dir
+
+    os.makedirs(path, exist_ok=True)
 
     zip_path = os.path.join(path, "CAMUS.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=None)
@@ -27,7 +46,20 @@ def get_camus_data(path, download):
     return data_dir
 
 
-def _get_camus_paths(path, chamber, download):
+def get_camus_paths(
+    path: Union[os.PathLike, str], chamber: Optional[Literal[2, 4]] = None, download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the CAMUS data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        chamber: The choice of chamber.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     data_dir = get_camus_data(path=path, download=download)
 
     if chamber is None:
@@ -45,20 +77,25 @@ def _get_camus_paths(path, chamber, download):
 def get_camus_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    chamber: Optional[int] = None,
+    chamber: Optional[Literal[2, 4]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataset for segmenting cardiac structures in 2d echocardiography images.
+) -> Dataset:
+    """Get the CAMUS dataset for cardiac structure segmentation.
 
-    The database is located at:
-    https://humanheart-project.creatis.insa-lyon.fr/database/#collection/6373703d73e9f0047faa1bc8
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        chamber: The choice of chamber.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
-    This dataset is from the CAMUS challenge - https://doi.org/10.1109/TMI.2019.2900516.
-    Please cite it if you use this dataset for a publication.
+    Returns:
+        The segmentation dataset.
     """
-    image_paths, gt_paths = _get_camus_paths(path=path, chamber=chamber, download=download)
+    image_paths, gt_paths = get_camus_paths(path, chamber, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -66,7 +103,7 @@ def get_camus_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -75,23 +112,30 @@ def get_camus_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_camus_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
     batch_size: int,
-    chamber: Optional[int] = None,
+    patch_shape: Tuple[int, int],
+    chamber: Optional[Literal[2, 4]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for segmenting cardiac structures in 2d echocardiography images. See `get_camus_dataset` for details
+) -> DataLoader:
+    """Get the CAMUS dataloader for cardiac structure segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        chamber: The choice of chamber.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_camus_dataset(
-        path=path, patch_shape=patch_shape, chamber=chamber, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_camus_dataset(path, patch_shape, chamber, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
