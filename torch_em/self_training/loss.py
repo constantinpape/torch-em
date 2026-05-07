@@ -104,12 +104,6 @@ def l2_regularisation(m):
 class ProbabilisticUNetLoss(nn.Module):
     """@private
     """
-    # """Loss function for Probabilistic UNet
-
-    Parameters :
-        # TODO : Implement a generic utility function for all Probabilistic UNet schemes (ELBO, GECO, etc.)
-        loss [nn.Module] - the loss function to be used. (default: None)
-    """
     def __init__(self, loss=None, output_channels=None):
         super().__init__()
         self.loss = loss
