@@ -20,12 +20,14 @@ from .. import util
 URLS = {
     "s_aureus": "https://zenodo.org/record/5550933/files/DeepBacs_Data_Segmentation_Staph_Aureus_dataset.zip?download=1",  # noqa
     "e_coli": "https://zenodo.org/record/5550935/files/DeepBacs_Data_Segmentation_E.coli_Brightfield_dataset.zip?download=1",  # noqa
+    "e_coli_stationary": "https://zenodo.org/records/6400327/files/DeepBacs_Data_Segmentation_Ecoli_stationary_phase.zip?download=1",  # noqa
     "b_subtilis": "https://zenodo.org/record/5639253/files/Multilabel_U-Net_dataset_B.subtilis.zip?download=1",
     "mixed": "https://zenodo.org/record/5551009/files/DeepBacs_Data_Segmentation_StarDist_MIXED_dataset.zip?download=1",
 }
 CHECKSUMS = {
     "s_aureus": "4047792f1248ee82fce34121d0ade84828e55db5a34656cc25beec46eacaf307",
     "e_coli": "f812a2f814c3875c78fcc1609a2e9b34c916c7a9911abbf8117f423536ef1c17",
+    "e_coli_stationary": None,
     "b_subtilis": "1",
     "mixed": "2730e6b391637d6dc05bbc7b8c915fd8184d835ac3611e13f23ac6f10f86c2a0",
 }
@@ -70,7 +72,7 @@ def _assort_val_set(path, bac_type):
         shutil.move(src_val_label_path, dst_val_label_path)
 
 
-def get_deebacs_data(path: Union[os.PathLike, str], bac_type: str, download: bool) -> str:
+def get_deepbacs_data(path: Union[os.PathLike, str], bac_type: str, download: bool) -> str:
     f"""Download the DeepBacs training data.
 
     Args:
@@ -95,12 +97,30 @@ def get_deebacs_data(path: Union[os.PathLike, str], bac_type: str, download: boo
         util.download_source(zip_path, URLS[bac_type], download, checksum=CHECKSUMS[bac_type])
     util.unzip(zip_path, os.path.join(path, bac_type))
 
-    # Get a val split for the expected bacteria type.
-    _assort_val_set(path, bac_type)
+    # e_coli_stationary ships its own train/test splits; no val-splitting needed.
+    if bac_type != "e_coli_stationary":
+        _assort_val_set(path, bac_type)
     return data_folder
 
 
-def _get_paths(path, bac_type, split):
+def get_deepbacs_paths(
+    path: Union[os.PathLike, str], bac_type: str, split: str, download: bool = False
+) -> Tuple[str, str]:
+    f"""Get paths to the DeepBacs data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train', 'val' or 'test'.
+        bac_type: The bacteria type. The available types are:
+            {', '.join(URLS.keys())}
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath to the folder where image data is stored.
+        Filepath to the folder where label data is stored.
+    """
+    get_deepbacs_data(path, bac_type, download)
+
     # the bacteria types other than mixed are a bit more complicated so we don't have the dataloaders for them yet
     # mixed is the combination of all other types
     if split == "train":
@@ -108,10 +128,20 @@ def _get_paths(path, bac_type, split):
     else:
         dir_choice = split
 
-    if bac_type != "mixed":
-        raise NotImplementedError(f"Currently only the bacteria type 'mixed' is supported, not {bac_type}")
-    image_folder = os.path.join(path, bac_type, dir_choice, "source")
-    label_folder = os.path.join(path, bac_type, dir_choice, "target")
+    if bac_type == "e_coli_stationary":
+        if split == "val":
+            raise NotImplementedError("The e_coli_stationary dataset does not have a val split.")
+        from natsort import natsorted
+        image_folder = natsorted(glob(os.path.join(path, bac_type, dir_choice, "brightfield", "*.tif")))
+        label_folder = natsorted(glob(os.path.join(path, bac_type, dir_choice, "masks", "*.tif")))
+    elif bac_type != "mixed":
+        raise NotImplementedError(
+            f"Currently only 'mixed' and 'e_coli_stationary' are supported, not {bac_type}"
+        )
+    else:
+        image_folder = os.path.join(path, bac_type, dir_choice, "source")
+        label_folder = os.path.join(path, bac_type, dir_choice, "target")
+
     return image_folder, label_folder
 
 
@@ -123,7 +153,7 @@ def get_deepbacs_dataset(
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    f"""Get the CTC dataset for cell segmentation.
+    f"""Get the DeepBacs dataset for bacteria segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -138,12 +168,20 @@ def get_deepbacs_dataset(
        The segmentation dataset.
     """
     assert split in ("train", "val", "test")
-    get_deebacs_data(path, bac_type, download)
-    image_folder, label_folder = _get_paths(path, bac_type, split)
-    dataset = torch_em.default_segmentation_dataset(
-        image_folder, "*.tif", label_folder, "*.tif", patch_shape=patch_shape, **kwargs
+
+    image_folder, label_folder = get_deepbacs_paths(path, bac_type, split, download)
+
+    # e_coli_stationary returns explicit file lists; mixed returns folder+glob strings.
+    raw_key = None if isinstance(image_folder, list) else "*.tif"
+    label_key = None if isinstance(label_folder, list) else "*.tif"
+    return torch_em.default_segmentation_dataset(
+        raw_paths=image_folder,
+        raw_key=raw_key,
+        label_paths=label_folder,
+        label_key=label_key,
+        patch_shape=patch_shape,
+        **kwargs
     )
-    return dataset
 
 
 def get_deepbacs_loader(
@@ -155,7 +193,7 @@ def get_deepbacs_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    f"""Get the CTC dataset for cell segmentation.
+    f"""Get the DeepBacs dataset for bacteria segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -172,5 +210,4 @@ def get_deepbacs_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_deepbacs_dataset(path, split, patch_shape, bac_type=bac_type, download=download, **ds_kwargs)
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

@@ -82,12 +82,28 @@ def get_vgg_hela_data(path: Union[os.PathLike, str], download: bool) -> str:
     return path
 
 
+def get_vgg_hela_paths(path: Union[os.PathLike, str], split: str, download: bool = False) -> Tuple[str, str]:
+    """Get paths for HeLA VGG data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        split: The split to use for the dataset. Either 'train' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath to the folder where image data is stored.
+        Filepath to the folder where label data is stored.
+    """
+    get_vgg_hela_data(path, download)
+
+    image_path = os.path.join(path, split, "images")
+    label_path = os.path.join(path, split, "labels")
+
+    return image_path, label_path
+
+
 def get_vgg_hela_dataset(
-    path: Union[os.PathLike, str],
-    split: str,
-    patch_shape: Tuple[int, int],
-    download: bool = False,
-    **kwargs
+    path: Union[os.PathLike, str], split: str, patch_shape: Tuple[int, int], download: bool = False, **kwargs
 ) -> Dataset:
     """Get the HeLA VGG dataset for cell counting.
 
@@ -102,15 +118,19 @@ def get_vgg_hela_dataset(
        The segmentation dataset.
     """
     assert split in ("test", "train"), split
-    get_vgg_hela_data(path, download)
 
-    image_path = os.path.join(path, split, "images")
-    label_path = os.path.join(path, split, "labels")
+    image_path, label_path = get_vgg_hela_paths(path, split, download)
 
     kwargs = util.update_kwargs(kwargs, "ndim", 2)
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
+
     return torch_em.default_segmentation_dataset(
-        image_path, "*.tif", label_path, "*.tif", patch_shape, **kwargs
+        raw_paths=image_path,
+        raw_key="*.tif",
+        label_paths=label_path,
+        label_key="*.tif",
+        patch_shape=patch_shape,
+        **kwargs
     )
 
 
@@ -135,11 +155,6 @@ def get_vgg_hela_loader(
     Returns:
         The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
-    dataset = get_vgg_hela_dataset(
-        path, split, patch_shape, download=download, **ds_kwargs,
-    )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_vgg_hela_dataset(path, split, patch_shape, download=download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

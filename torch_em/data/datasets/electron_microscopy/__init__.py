@@ -1,12 +1,27 @@
+from .aimseg import get_aimseg_loader, get_aimseg_dataset
 from .asem import get_asem_loader, get_asem_dataset
+from .astih import get_astih_loader, get_astih_dataset
 from .axondeepseg import get_axondeepseg_loader, get_axondeepseg_dataset
+from .axonem import get_axonem_loader, get_axonem_dataset
+from .betaseg import get_betaseg_loader, get_betaseg_dataset
+from .cellmap import get_cellmap_loader, get_cellmap_dataset
 from .cem import get_mitolab_loader
 from .cremi import get_cremi_loader, get_cremi_dataset
+from .densecell import get_densecell_loader, get_densecell_dataset
 from .deepict import get_deepict_actin_loader, get_deepict_actin_dataset
+from .emneuron import get_emneuron_loader, get_emneuron_dataset
+from .emps import get_emps_loader, get_emps_dataset
+from .fafb_nuclei import get_fafb_nuclei_loader, get_fafb_nuclei_dataset
+from .fib25 import get_fib25_loader, get_fib25_dataset
+from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
+from .humanneurons import get_humanneurons_loader, get_humanneurons_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
+from .malecns import get_malecns_loader, get_malecns_dataset
+from .microns_nuclei import get_microns_nuclei_loader, get_microns_nuclei_dataset
 from .mitoem import get_mitoem_loader, get_mitoem_dataset
+from .mitoemv2 import get_mitoemv2_loader, get_mitoemv2_dataset
 from .nuc_mm import get_nuc_mm_loader, get_nuc_mm_dataset
 from .platynereis import (
     get_platynereis_cell_loader, get_platynereis_cell_dataset,
@@ -18,3 +33,4 @@ from .snemi import get_snemi_loader, get_snemi_dataset
 from .sponge_em import get_sponge_em_loader, get_sponge_em_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
 from .vnc import get_vnc_mito_loader, get_vnc_mito_dataset
+from .waenet import get_waenet_loader, get_waenet_dataset

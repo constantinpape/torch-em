@@ -1,9 +1,18 @@
+"""The PanNuke datasets contains annotations for nucleus segmentation
+in histopathology images across different tissue types.
+
+This dataset is from the publication https://doi.org/10.48550/arXiv.2003.10778.
+Please cite it if you use this dataset for your research.
+"""
+
 import os
 import shutil
 from glob import glob
-from typing import List
+from typing import List, Union, Dict, Tuple
 
 import numpy as np
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -17,7 +26,6 @@ URLS = {
     "fold_3": "https://warwick.ac.uk/fac/cross_fac/tia/data/pannuke/fold_3.zip"
 }
 
-
 CHECKSUM = {
     "fold_1": "6e19ad380300e8ce9480f9ab6a14cc91fa4b6a511609b40e3d70bdf9c881ed0b",
     "fold_2": "5bc540cc509f64b5f5a274d6e5a245527dbd3e6d3155d43555115c5d54709b07",
@@ -25,16 +33,21 @@ CHECKSUM = {
 }
 
 
-def _download_pannuke_dataset(path, download, folds):
+def get_pannuke_data(path, download, folds):
+    """Download the PanNuke data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        download: Whether to download the data if it is not present.
+        folds: The data fold(s) of choice to be used.
+    """
     os.makedirs(path, exist_ok=True)
-
-    checksum = CHECKSUM
-
     for tmp_fold in folds:
+        assert tmp_fold in URLS.keys(), "Please choose one or more of existing folds: 'fold_1' / 'fold_2' / 'fold_3'."
         if os.path.exists(os.path.join(path, f"pannuke_{tmp_fold}.h5")):
             return
 
-        util.download_source(os.path.join(path, f"{tmp_fold}.zip"), URLS[tmp_fold], download, checksum[tmp_fold])
+        util.download_source(os.path.join(path, f"{tmp_fold}.zip"), URLS[tmp_fold], download, CHECKSUM[tmp_fold])
 
         print(f"Unzipping the PanNuke dataset in {tmp_fold} directories...")
         util.unzip(os.path.join(path, f"{tmp_fold}.zip"), os.path.join(path, f"{tmp_fold}"), True)
@@ -146,17 +159,54 @@ def _channels_to_semantics(labels):
     return f_segmentation
 
 
+def get_pannuke_paths(
+    path: Union[os.PathLike, str], folds: List[str] = ["fold_1", "fold_2", "fold_3"], download: bool = False,
+) -> List[str]:
+    """Get paths to the PanNuke data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        folds: The data fold(s) of choice to be used.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths to the stored data.
+    """
+    get_pannuke_data(path, download, folds)
+
+    data_paths = [os.path.join(path, f"pannuke_{fold}.h5") for fold in folds]
+    return data_paths
+
+
 def get_pannuke_dataset(
-        path,
-        patch_shape,
-        folds: List[str] = ["fold_1", "fold_2", "fold_3"],
-        rois={},
-        download=False,
-        with_channels=True,
-        with_label_channels=False,
-        custom_label_choice: str = "instances",
-        **kwargs
-):
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    folds: List[str] = ["fold_1", "fold_2", "fold_3"],
+    rois: Dict = {},
+    download: bool = False,
+    custom_label_choice: str = "instances",
+    with_channels: bool = True,
+    with_label_channels: bool = False,
+    resize_inputs: bool = False,
+    **kwargs
+) -> Dataset:
+    """Get the PanNuke dataset for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        folds: The data fold(s) of choice to be used.
+        download: Whether to download the data if it is not present.
+        rois: The choice of rois per fold to create the dataloader for training.
+        custom_label_choice: The choice of labels to be used for training.
+        with_channels: Whether the inputs have channels.
+        with_label_channels: Whether the labels have channels.
+        resize_inputs: Whether to resize the inputs.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset
+    """
     assert custom_label_choice in [
         "masks", "instances", "semantic"
     ], "Select the type of labels you want from [masks/instances/semantic] (See `_convert_to_hdf5` for details)"
@@ -164,34 +214,55 @@ def get_pannuke_dataset(
     if rois is not None:
         assert isinstance(rois, dict)
 
-    _download_pannuke_dataset(path, download, folds)
+    data_paths = get_pannuke_paths(path, folds, download)
 
-    data_paths = [os.path.join(path, f"pannuke_{fold}.h5") for fold in folds]
-    data_rois = [rois.get(fold, np.s_[:, :, :]) for fold in folds]
-
-    raw_key = "images"
-    label_key = f"labels/{custom_label_choice}"
+    if resize_inputs:
+        resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
+        kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
+            kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
 
     return torch_em.default_segmentation_dataset(
-        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois,
-        with_channels=with_channels, with_label_channels=with_label_channels, **kwargs
+        raw_paths=data_paths,
+        raw_key="images",
+        label_paths=data_paths,
+        label_key=f"labels/{custom_label_choice}",
+        patch_shape=patch_shape,
+        rois=[rois.get(fold, np.s_[:, :, :]) for fold in folds],
+        with_channels=with_channels,
+        with_label_channels=with_label_channels,
+        **kwargs
     )
 
 
 def get_pannuke_loader(
-        path,
-        patch_shape,
-        batch_size,
-        folds=["fold_1", "fold_2", "fold_3"],
-        download=False,
-        rois={},
-        custom_label_choice="instances",
-        **kwargs
-):
-    """TODO
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    batch_size: str,
+    folds: List[str] = ["fold_1", "fold_2", "fold_3"],
+    download: bool = False,
+    rois: Dict = {},
+    custom_label_choice: str = "instances",
+    resize_inputs: bool = False,
+    **kwargs
+) -> DataLoader:
+    """Get the PanNuke dataloader for nucleus segmentation.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        patch_shape: The patch shape to use for training.
+        batch_size: The batch size for training.
+        folds: The data fold(s) of choice to be used.
+        download: Whether to download the data if it is not present.
+        rois: The choice of rois per fold to create the dataloader for training.
+        custom_label_choice: The choice of labels to be used for training.
+        resize_inputs: Whether to resize the inputs.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     dataset_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-
     ds = get_pannuke_dataset(
         path=path,
         patch_shape=patch_shape,
@@ -199,5 +270,7 @@ def get_pannuke_loader(
         rois=rois,
         download=download,
         custom_label_choice=custom_label_choice,
-        **dataset_kwargs)
+        resize_inputs=resize_inputs,
+        **dataset_kwargs
+    )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)

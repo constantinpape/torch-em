@@ -1,9 +1,17 @@
+"""The HaN-Seg dataset contains annotations for head and neck organs in CT scans.
+
+This dataset is from Podobnik et al. - https://doi.org/10.1002/mp.16197
+Please cite it if you use it in a publication.
+"""
+
 import os
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple
+from typing import Union, Tuple, List
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -14,23 +22,40 @@ URL = "https://zenodo.org/records/7442914/files/HaN-Seg.zip"
 CHECKSUM = "20226dd717f334dc1b1afe961b3375f946fa56b64a80bf5349128f90c0bbfa5f"
 
 
-def get_han_seg_data(path, download):
-    os.makedirs(path, exist_ok=True)
+def get_han_seg_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+    """Get the HaN-Seg dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     data_dir = os.path.join(path, "HaN-Seg")
     if os.path.exists(data_dir):
         return data_dir
 
+    os.makedirs(path, exist_ok=True)
+
     zip_path = os.path.join(path, "HaN-Seg.zip")
-    util.download_source(
-        path=zip_path, url=URL, download=download, checksum=CHECKSUM
-    )
+    util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
     util.unzip(zip_path=zip_path, dst=path, remove=False)
 
     return data_dir
 
 
-def _get_han_seg_paths(path, download):
+def get_han_seg_paths(path: Union[os.PathLike, str], download: bool = False) -> Tuple[List[str], List[str]]:
+    """Get the HaN-Seg dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
     import nrrd
     import numpy as np
     import nibabel as nib
@@ -84,13 +109,20 @@ def get_han_seg_dataset(
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataset for head and neck organ-at-rish segmentation in CT scans.
+) -> Dataset:
+    """Get the HaN-Seg dataset for head and neck organ segmentation.
 
-    This dataset is from Podobnik et al. - https://doi.org/10.1002/mp.16197
-    Please cite it if you use it in a publication.
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset..
     """
-    image_paths, gt_paths = _get_han_seg_paths(path=path, download=download)
+    image_paths, gt_paths = get_han_seg_paths(path, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -98,7 +130,7 @@ def get_han_seg_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs,
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -107,22 +139,28 @@ def get_han_seg_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_han_seg_loader(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    """Dataloader for for head and neck organ-at-rish segmentation in CT scans. See `get_han_seg_dataset` for details.
+) -> DataLoader:
+    """Get the HaN-Seg dataloader for head and neck organ segmentation.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_han_seg_dataset(
-        path=path, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_han_seg_dataset(path, patch_shape, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

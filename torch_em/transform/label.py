@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, List, Optional, Sequence, Union, Tuple
 
 import numpy as np
 import skimage.measure
@@ -13,7 +13,17 @@ except ImportError:
     compute_affinities = None
 
 
-def connected_components(labels, ndim=None, ensure_zero=False):
+def connected_components(labels: np.ndarray, ndim: Optional[int] = None, ensure_zero: bool = False) -> np.ndarray:
+    """Apply connected components to a segmentation.
+
+    Args:
+        labels: The input segmentation.
+        ndim: The expected dimensionality of the data.
+        ensure_zero: Whether to ensure that the data has a zero label.
+
+    Returns:
+        The segmentation after connected components.
+    """
     labels = ensure_array(labels) if ndim is None else ensure_spatial_array(labels, ndim)
     labels = skimage.measure.label(labels)
     if ensure_zero and 0 not in labels:
@@ -21,11 +31,29 @@ def connected_components(labels, ndim=None, ensure_zero=False):
     return labels
 
 
-def labels_to_binary(labels, background_label=0):
+def labels_to_binary(labels: np.ndarray, background_label: int = 0) -> np.ndarray:
+    """Transform a segmentation to binary labels.
+
+    Args:
+        labels: The input segmentation.
+        background_label: The id of the background label.
+
+    Returns:
+        The binary segmentation.
+    """
     return (labels != background_label).astype(labels.dtype)
 
 
-def label_consecutive(labels, with_background=True):
+def label_consecutive(labels: np.ndarray, with_background: bool = True) -> np.ndarray:
+    """Ensure that the input segmentation is labeled consecutively.
+
+    Args:
+        labels: The input segmentation.
+        with_background: Whether this segmentation has a background label.
+
+    Returns:
+        The consecutively labeled segmentation.
+    """
     if with_background:
         seg = skimage.segmentation.relabel_sequential(labels)[0]
     else:
@@ -38,12 +66,27 @@ def label_consecutive(labels, with_background=True):
 
 
 class MinSizeLabelTransform:
-    def __init__(self, min_size=None, ndim=None, ensure_zero=False):
+    """Transformation to filter out objects smaller than a minimal size from the segmentation.
+
+    Args:
+        min_size: The minimal object size of the segmentation.
+        ndim: The dimensionality of the segmentation.
+        ensure_zero: Ensure that the segmentation contains the id zero.
+    """
+    def __init__(self, min_size: Optional[int] = None, ndim: Optional[int] = None, ensure_zero: bool = False):
         self.min_size = min_size
         self.ndim = ndim
         self.ensure_zero = ensure_zero
 
-    def __call__(self, labels):
+    def __call__(self, labels: np.ndarray) -> np.ndarray:
+        """Filter out small objects from segmentation.
+
+        Args:
+            labels: The input segmentation.
+
+        Returns:
+            The size filtered segmentation.
+        """
         components = connected_components(labels, ndim=self.ndim, ensure_zero=self.ensure_zero)
         if self.min_size is not None:
             ids, sizes = np.unique(components, return_counts=True)
@@ -55,12 +98,27 @@ class MinSizeLabelTransform:
 
 # TODO smoothing
 class BoundaryTransform:
-    def __init__(self, mode="thick", add_binary_target=False, ndim=None):
+    """Transformation to convert an instance segmentation into boundaries.
+
+    Args:
+        mode: The mode for converting the segmentation to boundaries.
+        add_binary_target: Whether to add a binary mask channel to the transformation output.
+        ndim: The expected dimensionality of the data.
+    """
+    def __init__(self, mode: str = "thick", add_binary_target: bool = False, ndim: Optional[int] = None):
         self.mode = mode
         self.add_binary_target = add_binary_target
         self.ndim = ndim
 
-    def __call__(self, labels):
+    def __call__(self, labels: np.ndarray) -> np.ndarray:
+        """Apply the boundary transformation to an input segmentation.
+
+        Args:
+            labels: The input segmentation.
+
+        Returns:
+            The boundaries.
+        """
         labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
         boundaries = skimage.segmentation.find_boundaries(labels, mode=self.mode)[None]
         if self.add_binary_target:
@@ -73,14 +131,41 @@ class BoundaryTransform:
 
 # TODO smoothing
 class NoToBackgroundBoundaryTransform:
-    def __init__(self, bg_label=0, mask_label=-1, mode="thick", add_binary_target=False, ndim=None):
+    """Transformation to convert an instance segmentation into boundaries.
+
+    This transformation sets boundaries with the ignore label to the ignore label
+    in the output of the transformation.
+
+    Args:
+        bg_label: The background label.
+        mask_label: The mask label.
+        mode: The mode for converting the segmentation to boundaries.
+        add_binary_target: Whether to add a binary mask channel to the transformation output.
+        ndim: The expected dimensionality of the data.
+    """
+    def __init__(
+        self,
+        bg_label: int = 0,
+        mask_label: int = -1,
+        mode: str = "thick",
+        add_binary_target: bool = False,
+        ndim: Optional[int] = None,
+    ):
         self.bg_label = bg_label
         self.mask_label = mask_label
         self.mode = mode
         self.ndim = ndim
         self.add_binary_target = add_binary_target
 
-    def __call__(self, labels):
+    def __call__(self, labels: np.ndarray) -> np.ndarray:
+        """Apply the boundary transformation to an input segmentation.
+
+        Args:
+            labels: The input segmentation.
+
+        Returns:
+            The boundaries.
+        """
         labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
         # calc normal boundaries
         boundaries = skimage.segmentation.find_boundaries(labels, mode=self.mode)[None]
@@ -105,13 +190,38 @@ class NoToBackgroundBoundaryTransform:
 
 # TODO smoothing
 class BoundaryTransformWithIgnoreLabel:
-    def __init__(self, ignore_label=-1, mode="thick", add_binary_target=False, ndim=None):
+    """Transformation to convert an instance segmentation into boundaries.
+
+    This transformation sets boundaries with the ignore label to the ignore label
+    in the output of the transformation.
+
+    Args:
+        ignore_label: The ignore label.
+        mode: The mode for converting the segmentation to boundaries.
+        add_binary_target: Whether to add a binary mask channel to the transformation output.
+        ndim: The expected dimensionality of the data.
+    """
+    def __init__(
+        self,
+        ignore_label: int = -1,
+        mode: str = "thick",
+        add_binary_target: bool = False,
+        ndim: Optional[int] = None,
+    ):
         self.ignore_label = ignore_label
         self.mode = mode
         self.ndim = ndim
         self.add_binary_target = add_binary_target
 
-    def __call__(self, labels):
+    def __call__(self, labels: np.ndarray) -> np.ndarray:
+        """Apply the boundary transformation to an input segmentation.
+
+        Args:
+            labels: The input segmentation.
+
+        Returns:
+            The boundaries.
+        """
         labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
         # calculate the normal boundaries
         boundaries = skimage.segmentation.find_boundaries(labels, mode=self.mode)[None]
@@ -136,11 +246,24 @@ class BoundaryTransformWithIgnoreLabel:
 
 # TODO affinity smoothing
 class AffinityTransform:
-    def __init__(self, offsets,
-                 ignore_label=None,
-                 add_binary_target=False,
-                 add_mask=False,
-                 include_ignore_transitions=False):
+    """Transformation to compute affinities from a segmentation.
+
+    Args:
+        offsets: The offsets for computing affinities.
+        ignore_label: The ignore label to use for computing the ignore mask.
+        add_binary_target: Whether to add a binary channel to the affinities.
+        add_mask: Whether to add the ignore mask as extra output channels.
+        include_ignore_transitions: Whether transitions to the ignore label
+            should be positive in the ignore mask or negative in it.
+    """
+    def __init__(
+        self,
+        offsets: List[List[int]],
+        ignore_label: Optional[int] = None,
+        add_binary_target: bool = False,
+        add_mask: bool = False,
+        include_ignore_transitions: bool = False,
+    ):
         assert compute_affinities is not None
         self.offsets = offsets
         self.ndim = len(self.offsets[0])
@@ -152,6 +275,8 @@ class AffinityTransform:
         self.include_ignore_transitions = include_ignore_transitions
 
     def add_ignore_transitions(self, affs, mask, labels):
+        """@private
+        """
         ignore_seg = (labels == self.ignore_label).astype(labels.dtype)
         ignore_transitions, invalid_mask = compute_affinities(ignore_seg, self.offsets)
         invalid_mask = np.logical_not(invalid_mask)
@@ -162,7 +287,15 @@ class AffinityTransform:
         mask[ignore_transitions] = 1
         return affs, mask
 
-    def __call__(self, labels):
+    def __call__(self, labels: np.ndarray) -> np.ndarray:
+        """Compute the affinities.
+
+        Args:
+            labels: The segmentation.
+
+        Returns:
+            The affinities.
+        """
         dtype = "uint64"
         if np.dtype(labels.dtype) in (np.dtype("int16"), np.dtype("int32"), np.dtype("int64")):
             dtype = "int64"
@@ -197,10 +330,23 @@ class AffinityTransform:
 
 
 class OneHotTransform:
-    def __init__(self, class_ids=None):
+    """Transformations to compute one-hot labels from a semantic segmentation.
+
+    Args:
+        class_ids: The class ids to convert to one-hot labels.
+    """
+    def __init__(self, class_ids: Optional[Union[int, Sequence[int]]] = None):
         self.class_ids = list(range(class_ids)) if isinstance(class_ids, int) else class_ids
 
-    def __call__(self, labels):
+    def __call__(self, labels: np.ndarray) -> np.ndarray:
+        """Compute the one hot transformation.
+
+        Args:
+            labels: The segmentation.
+
+        Returns:
+            The one-hot transformation.
+        """
         class_ids = np.unique(labels).tolist() if self.class_ids is None else self.class_ids
         n_classes = len(class_ids)
         one_hot = np.zeros((n_classes,) + labels.shape, dtype="float32")
@@ -210,7 +356,7 @@ class OneHotTransform:
 
 
 class DistanceTransform:
-    """Compute distances to foreground in the labels.
+    """Transformation to compute distances to foreground in the labels.
 
     Args:
         distances: Whether to compute the absolute distances.
@@ -218,7 +364,7 @@ class DistanceTransform:
         normalize: Whether to normalize the computed distances.
         max_distance: Maximal distance at which to threshold the distances.
         foreground_id: Label id to which the distance is compute.
-        invert Whether to invert the distances:
+        invert: Whether to invert the distances.
         func: Normalization function for the distances.
     """
     eps = 1e-7
@@ -229,9 +375,9 @@ class DistanceTransform:
         directed_distances: bool = False,
         normalize: bool = True,
         max_distance: Optional[float] = None,
-        foreground_id=1,
-        invert=False,
-        func=None
+        foreground_id: int = 1,
+        invert: bool = False,
+        func: Optional[Callable] = None,
     ):
         if sum((distances, directed_distances)) == 0:
             raise ValueError("At least one of 'distances' or 'directed_distances' must be set to 'True'")
@@ -272,7 +418,15 @@ class DistanceTransform:
         data = np.full((labels.ndim,) + shape, fill_value)
         return data
 
-    def __call__(self, labels):
+    def __call__(self, labels: np.ndarray) -> np.ndarray:
+        """Compute the distances.
+
+        Args:
+            labels: The segmentation.
+
+        Returns:
+            The distances.
+        """
         distance_mask = (labels == self.foreground_id).astype("uint32")
         # the distances are not computed corrected if they are all zero
         # so this case needs to be handled separately
@@ -298,31 +452,35 @@ class DistanceTransform:
 
 
 class PerObjectDistanceTransform:
-    """Compute normalized distances per object in a segmentation.
+    """Transformation to compute normalized distances per object in a segmentation.
 
     Args:
         distances: Whether to compute the undirected distances.
         boundary_distances: Whether to compute the distances to the object boundaries.
         directed_distances: Whether to compute the directed distances (vector distances).
         foreground: Whether to return a foreground channel.
+        instances: Whether to append the original labels as an extra channel to the target.
         apply_label: Whether to apply connected components to the labels before computing distances.
         correct_centers: Whether to correct centers that are not in the objects.
         min_size: Minimal size of objects for distance calculdation.
         distance_fill_value: Fill value for the distances outside of objects.
+        sampling: The spacing of the distance transform. This is especially relevant for anisotropic data;
+            for which it is recommended to use a sampling of (ANISOTROPY_FACTOR, 1, 1).
     """
     eps = 1e-7
 
     def __init__(
         self,
-        distances=True,
-        boundary_distances=True,
-        directed_distances=False,
-        foreground=True,
-        instances=False,
-        apply_label=True,
-        correct_centers=True,
-        min_size=0,
-        distance_fill_value=1.0,
+        distances: bool = True,
+        boundary_distances: bool = True,
+        directed_distances: bool = False,
+        foreground: bool = True,
+        instances: bool = False,
+        apply_label: bool = True,
+        correct_centers: bool = True,
+        min_size: int = 0,
+        distance_fill_value: float = 1.0,
+        sampling: Optional[Tuple[float, ...]] = None
     ):
         if sum([distances, directed_distances, boundary_distances]) == 0:
             raise ValueError("At least one of distances or directed distances has to be passed.")
@@ -336,8 +494,11 @@ class PerObjectDistanceTransform:
         self.correct_centers = correct_centers
         self.min_size = min_size
         self.distance_fill_value = distance_fill_value
+        self.sampling = sampling
 
     def compute_normalized_object_distances(self, mask, boundaries, bb, center, distances):
+        """@private
+        """
         # Crop the mask and generate array with the correct center.
         cropped_mask = mask[bb]
         cropped_center = tuple(ce - b.start for ce, b in zip(center, bb))
@@ -352,7 +513,7 @@ class PerObjectDistanceTransform:
         if correct_center or self.boundary_distances:
             # Crop the boundary mask and compute the boundary distances.
             cropped_boundary_mask = boundaries[bb]
-            boundary_distances = vigra.filters.distanceTransform(cropped_boundary_mask)
+            boundary_distances = vigra.filters.distanceTransform(cropped_boundary_mask, pixel_pitch=self.sampling)
             boundary_distances[~cropped_mask] = 0
             max_dist_point = np.unravel_index(np.argmax(boundary_distances), boundary_distances.shape)
 
@@ -366,13 +527,13 @@ class PerObjectDistanceTransform:
 
         # Compute the directed distances,
         if self.distances or self.directed_distances:
-            this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask)
+            this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask, pixel_pitch=self.sampling)
         else:
             this_distances = None
 
         # Keep only the specified distances:
         if self.distances and self.directed_distances:  # all distances
-            # Compute the undirected ditacnes from directed distances and concatenate,
+            # Compute the undirected distances from directed distances and concatenate,
             undir = np.linalg.norm(this_distances, axis=-1, keepdims=True)
             this_distances = np.concatenate([undir, this_distances], axis=-1)
 
@@ -403,7 +564,15 @@ class PerObjectDistanceTransform:
 
         return distances
 
-    def __call__(self, labels):
+    def __call__(self, labels: np.ndarray) -> np.ndarray:
+        """Compute the per object distance transform.
+
+        Args:
+            labels: The segmentation
+
+        Returns:
+            The distances.
+        """
         # Apply label (connected components) if specified.
         if self.apply_label:
             labels = skimage.measure.label(labels).astype("uint32")
@@ -425,8 +594,7 @@ class PerObjectDistanceTransform:
         ndim = labels.ndim
         props = skimage.measure.regionprops(labels)
         bounding_boxes = {
-            prop.label: tuple(slice(prop.bbox[i], prop.bbox[i + ndim]) for i in range(ndim))
-            for prop in props
+            prop.label: tuple(slice(prop.bbox[i], prop.bbox[i + ndim]) for i in range(ndim)) for prop in props
         }
 
         # Compute the object centers from centroids.

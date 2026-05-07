@@ -4,3 +4,13 @@ logs/
 *.pyc
 *.egg-info/
 *.n5/
+*.ipynb_checkpoints
+*.ipynb
+*.png
+*.out
+*.sh
+*.pth
+*.pt
+*.DS_Store
+.claude/
+.codex

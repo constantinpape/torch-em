@@ -1,13 +1,21 @@
+"""The PLETHORA dataset contains annotations for thoracic organs and pleural effusion in CT.
+
+This dataset is from the publication https://doi.org/10.1002/mp.14424/.
+Please cite it if you use this dataset for your research.
+"""
+
 import os
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple
 from urllib.parse import urljoin
+from typing import Union, Tuple, Literal, List
 
 import numpy as np
 import pandas as pd
+
+from torch.utils.data import Dataset, DataLoader
 
 import torch_em
 
@@ -45,14 +53,26 @@ ZIPFILES = {
 }
 
 
-def get_plethora_data(path, task, download):
-    os.makedirs(path, exist_ok=True)
+def get_plethora_data(
+    path: Union[os.PathLike, str], task: Literal["thoracic", "pleural_effusion"], download: bool = False
+) -> Tuple[str, str, str]:
+    """Get the PLETHORA dataset.
 
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        task: The choice of task.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        Filepath where the data is downloaded.
+    """
     image_dir = os.path.join(path, "data", "images")
     gt_dir = os.path.join(path, "data", "gt", "Thoracic_Cavities" if task == "thoracic" else "Effusions")
     csv_path = os.path.join(path, "plethora_images")
     if os.path.exists(image_dir) and os.path.exists(gt_dir):
         return image_dir, gt_dir, Path(csv_path).with_suffix(".csv")
+
+    os.makedirs(path, exist_ok=True)
 
     # let's download dicom files from the tcia manifest
     tcia_path = os.path.join(path, "NSCLC-Radiomics-OriginalCTs.tcia")
@@ -132,21 +152,47 @@ def _assort_plethora_inputs(image_dir, gt_dir, task, csv_path):
     return image_paths, gt_paths
 
 
-def _get_plethora_paths(path, task, download):
-    image_dir, gt_dir, csv_path = get_plethora_data(path=path, task=task, download=download)
+def get_plethora_paths(
+    path: Union[os.PathLike, str], task: Literal["thoracic", "pleural_effusion"], download: bool = False
+) -> Tuple[List[str], List[str]]:
+    """Get paths to the PLETHORA data.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        task: The choice of task.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the image data.
+        List of filepaths for the label data.
+    """
+    image_dir, gt_dir, csv_path = get_plethora_data(path, task, download)
     image_paths, gt_paths = _assort_plethora_inputs(image_dir=image_dir, gt_dir=gt_dir, task=task, csv_path=csv_path)
     return image_paths, gt_paths
 
 
 def get_plethora_dataset(
     path: Union[os.PathLike, str],
-    task: str,
     patch_shape: Tuple[int, ...],
+    task: Literal["thoracic", "pleural_effusion"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
-    image_paths, gt_paths = _get_plethora_paths(path=path, task=task, download=download)
+) -> Dataset:
+    """Get the PLETHORA dataset.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        patch_shape: The patch shape to use for training.
+        task: The choice of task.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+
+    Returns:
+        The segmentation dataset.
+    """
+    image_paths, gt_paths = get_plethora_paths(path, task, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -154,7 +200,7 @@ def get_plethora_dataset(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
         )
 
-    dataset = torch_em.default_segmentation_dataset(
+    return torch_em.default_segmentation_dataset(
         raw_paths=image_paths,
         raw_key="data",
         label_paths=gt_paths,
@@ -163,21 +209,30 @@ def get_plethora_dataset(
         **kwargs
     )
 
-    return dataset
-
 
 def get_plethora_loader(
     path: Union[os.PathLike, str],
-    task: str,
-    patch_shape: Tuple[int, ...],
     batch_size: int,
+    patch_shape: Tuple[int, ...],
+    task: Literal["thoracic", "pleural_effusion"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
-):
+) -> DataLoader:
+    """Get the PLETHORA dataloader.
+
+    Args:
+        path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
+        patch_shape: The patch shape to use for training.
+        task: The choice of task.
+        resize_inputs: Whether to resize inputs to the desired patch shape.
+        download: Whether to download the data if it is not present.
+        kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+
+    Returns:
+        The DataLoader.
+    """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_plethora_dataset(
-        path=path, task=task, patch_shape=patch_shape, resize_inputs=resize_inputs, download=download, **ds_kwargs
-    )
-    loader = torch_em.get_data_loader(dataset=dataset, batch_size=batch_size, **loader_kwargs)
-    return loader
+    dataset = get_plethora_dataset(path, patch_shape, task, resize_inputs, download, **ds_kwargs)
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
