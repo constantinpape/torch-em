@@ -291,7 +291,7 @@ class ProbabilisticUNet(nn.Module):
     The following elements are initialized to get our desired network:
     input_channels: the number of channels in the image (1 for grayscale and 3 for RGB)
     output_channels: the number of channels to predict.
-    num_classes: the number of classes (raters) for the posterior
+    num_raters: the number of raters, i.e. the number of label channels the posterior sees.
     num_filters: is a list consisting of the amount of filters layer
     latent_dim: dimension of the latent space
     no_convs_per_block: no convs per block in the (convolutional) encoder of prior and posterior
@@ -302,7 +302,7 @@ class ProbabilisticUNet(nn.Module):
     Args:
         input_channels [int] - (default: 1)
         output_channels [int] - (default: 1)
-        num_classes [int] - (default: 1)
+        num_raters [int] - (default: 1)
         num_filters [list] - (default: [32, 64, 128, 192])
         latent_dim [int] - (default: 6)
         no_convs_fcomb [int] - (default: 4)
@@ -316,7 +316,7 @@ class ProbabilisticUNet(nn.Module):
         self,
         input_channels=1,
         output_channels=1,
-        num_classes=1,
+        num_raters=1,
         num_filters=[32, 64, 128, 192],
         latent_dim=6,
         no_convs_fcomb=4,
@@ -330,7 +330,7 @@ class ProbabilisticUNet(nn.Module):
 
         self.input_channels = input_channels
         self.output_channels = output_channels
-        self.num_classes = num_classes
+        self.num_raters = num_raters
         self.num_filters = num_filters
         self.latent_dim = latent_dim
         self.no_convs_per_block = 3
@@ -368,7 +368,7 @@ class ProbabilisticUNet(nn.Module):
             self.latent_dim,
             self.initializers,
             posterior=True,
-            num_classes=num_classes
+            num_classes=num_raters
         ).to(self.device)
 
         self.fcomb = Fcomb(
