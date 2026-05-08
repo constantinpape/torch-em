@@ -23,7 +23,8 @@ def init_weights(m: nn.Module) -> None:
     """
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
         nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
-        nn.init.trunc_normal_(m.bias, std=0.001)
+        if m.bias is not None:
+            nn.init.trunc_normal_(m.bias, std=0.001)
 
 
 def init_weights_orthogonal_normal(m: nn.Module) -> None:
@@ -31,14 +32,24 @@ def init_weights_orthogonal_normal(m: nn.Module) -> None:
     """
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
         nn.init.orthogonal_(m.weight)
-        nn.init.trunc_normal_(m.bias, std=0.001)
+        if m.bias is not None:
+            nn.init.trunc_normal_(m.bias, std=0.001)
 
 
 class Encoder(nn.Module):
-    """
-    A convolutional neural network, consisting of len(num_filters) times a block of no_convs_per_block
-    convolutional layers, after each block a pooling operation is performed.
-    And after each convolutional layer a non-linear (ReLU) activation function is applied.
+    """Convolutional encoder for the prior and posterior networks.
+
+    Stacks len(num_filters) blocks of no_convs_per_block Conv-Norm-ReLU layers with average
+    pooling between blocks. For the posterior, the segmentation mask is concatenated with the
+    image along the channel axis before encoding.
+
+    Args:
+        input_channels: Number of input image channels.
+        num_filters: Number of filters for each encoder block.
+        no_convs_per_block: Number of Conv-Norm-ReLU layers per block.
+        posterior: If True, expects a concatenated segmentation mask as input.
+        num_classes: Number of segmentation channels appended when posterior=True.
+        norm: Normalization type applied after each convolution. None disables normalisation.
     """
     def __init__(
         self,
@@ -84,12 +95,26 @@ class Encoder(nn.Module):
         self.layers = nn.Sequential(*layers)
         self.layers.apply(init_weights)
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return self.layers(input)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.layers(x)
 
 
 class AxisAlignedConvGaussian(nn.Module):
-    """A convolutional network that parametrizes a Gaussian distribution with axis aligned covariance matrix.
+    """Convolutional network that outputs a diagonal-covariance Gaussian distribution.
+
+    Encodes the input (and optionally a segmentation mask) into a global feature vector,
+    then predicts mu and log-sigma for each latent dimension. Returns an Independent(Normal)
+    distribution over the latent space.
+
+    Args:
+        input_channels: Number of input image channels.
+        num_filters: Number of filters per encoder block.
+        no_convs_per_block: Number of convolutions per encoder block.
+        latent_dim: Dimensionality of the latent space.
+        posterior: If True, encodes both image and segmentation (posterior q(z|x,y)).
+        num_classes: Number of segmentation channels when posterior=True.
+        use_onehot: If True, converts integer class labels to one-hot before concatenation.
+        norm: Normalization type passed to the encoder. None disables normalisation.
     """
     def __init__(
         self,
@@ -121,7 +146,7 @@ class AxisAlignedConvGaussian(nn.Module):
         nn.init.orthogonal_(self.conv_layer.weight, gain=1)
         nn.init.trunc_normal_(self.conv_layer.bias, std=0.001)
 
-    def forward(self, input: torch.Tensor, segm: Optional[torch.Tensor] = None) -> Independent:
+    def forward(self, patch: torch.Tensor, segm: Optional[torch.Tensor] = None) -> Independent:
         # Posterior: encode segm and concatenate with image along channel axis.
         # One-hot encodes class-index labels to remove spurious ordinal relationships.
         # Centering (- 0.5) keeps inputs zero-mean in both the one-hot and raw binary cases.
@@ -130,9 +155,9 @@ class AxisAlignedConvGaussian(nn.Module):
                 segm = F.one_hot(segm.squeeze(1).long(), self.num_classes).permute(0, 3, 1, 2).float() - 0.5
             else:
                 segm = segm.float() - 0.5
-            input = torch.cat((input, segm), dim=1)
+            patch = torch.cat((patch, segm), dim=1)
 
-        encoding = self.encoder(input)
+        encoding = self.encoder(patch)
 
         # Global average pool to (B, C, 1, 1), then squeeze spatial dims to (B, C).
         encoding = encoding.mean(dim=(2, 3), keepdim=True)
@@ -175,8 +200,12 @@ class Fcomb(nn.Module):
         self.last_layer.apply(init_weights_orthogonal_normal)
 
     def forward(self, feature_map: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
-        """Z is (batch_size x latent_dim) and feature_map is (batch_size x no_channels x H x W).
-        Broadcast Z to batch_size x latent_dim x H x W and concatenate with the feature map.
+        """Combine UNet feature map with a latent sample to produce a segmentation.
+
+        Args:
+            feature_map: UNet decoder output of shape (B, C, H, W).
+            z: Latent sample of shape (B, latent_dim), broadcast to (B, latent_dim, H, W)
+                before concatenation with feature_map.
         """
         H, W = feature_map.shape[2], feature_map.shape[3]
         z = z.view(z.shape[0], z.shape[1], 1, 1).expand(-1, -1, H, W)
@@ -249,7 +278,7 @@ class ProbabilisticUNet(nn.Module):
             depth=len(self.num_filters),
             initial_features=num_filters[0],
             norm=norm,
-        ).to(self.device)
+        )
 
         self.prior = AxisAlignedConvGaussian(
             self.input_channels,
@@ -257,7 +286,7 @@ class ProbabilisticUNet(nn.Module):
             self.no_convs_per_block,
             self.latent_dim,
             norm=norm,
-        ).to(self.device)
+        )
 
         # Multi-class: one-hot encode the class-index label with output_channels classes.
         # Binary: concatenate num_raters raw binary channels centered at -0.5.
@@ -272,17 +301,26 @@ class ProbabilisticUNet(nn.Module):
             num_classes=posterior_seg_channels,
             use_onehot=use_onehot,
             norm=norm,
-        ).to(self.device)
+        )
 
         self.fcomb = Fcomb(
             self.num_filters,
             self.latent_dim,
             self.output_channels,
             self.no_convs_fcomb,
-        ).to(self.device)
+        )
+
+        if rl_swap:
+            self._criterion = DiceLossWithLogits()
+        elif output_channels == 1:
+            self._criterion = nn.BCEWithLogitsLoss(reduction="none")
+        else:
+            self._criterion = nn.CrossEntropyLoss(reduction="none")
+
+        self.to(self.device)
 
     def _check_shape(self, patch: torch.Tensor) -> None:
-        spatial_shape = tuple(patch.shape)[2:]
+        spatial_shape = patch.shape[2:]
         depth = len(self.num_filters)
         factor = [2**depth] * len(spatial_shape)
         if any(sh % fac != 0 for sh, fac in zip(spatial_shape, factor)):
@@ -290,16 +328,16 @@ class ProbabilisticUNet(nn.Module):
             raise ValueError(msg)
 
     def forward(self, patch: torch.Tensor, segm: Optional[torch.Tensor] = None) -> None:
-        """Construct prior latent space for patch and run patch through UNet,
-        in case training is True also construct posterior latent space
+        """Run the image through the UNet and build the prior latent space.
+        If segm is provided (training), also builds the posterior latent space.
         """
         self._check_shape(patch)
 
         if segm is not None:
-            self.posterior_latent_space = self.posterior.forward(patch, segm)
+            self.posterior_latent_space = self.posterior(patch, segm)
 
-        self.prior_latent_space = self.prior.forward(patch)
-        self.unet_features = self.unet.forward(patch)
+        self.prior_latent_space = self.prior(patch)
+        self.unet_features = self.unet(patch)
 
     def sample(self) -> torch.Tensor:
         """Sample a segmentation from the prior and decode it through the UNet feature map.
@@ -309,7 +347,7 @@ class ProbabilisticUNet(nn.Module):
         yields N diverse hypotheses for the same input image.
         """
         z_prior = self.prior_latent_space.sample()
-        return self.fcomb.forward(self.unet_features, z_prior)
+        return self.fcomb(self.unet_features, z_prior)
 
     def reconstruct(
         self,
@@ -317,16 +355,21 @@ class ProbabilisticUNet(nn.Module):
         calculate_posterior: bool = False,
         z_posterior: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Reconstruct a segmentation from a posterior sample (decoding a posterior sample) and UNet feature map
-        use_posterior_mean: use posterior_mean instead of sampling z_q
-        calculate_posterior: use a provided sample or sample from posterior latent space
+        """Decode a posterior sample into a segmentation via fcomb.
+
+        Args:
+            use_posterior_mean: Use the posterior mean as z instead of sampling.
+            calculate_posterior: Draw a fresh reparametrized sample from the posterior.
+                Ignored when use_posterior_mean=True or z_posterior is provided.
+            z_posterior: Pre-computed posterior sample to decode. Used directly when
+                use_posterior_mean=False and calculate_posterior=False.
         """
         if use_posterior_mean:
             z_posterior = self.posterior_latent_space.mean
         else:
             if calculate_posterior:
                 z_posterior = self.posterior_latent_space.rsample()
-        return self.fcomb.forward(self.unet_features, z_posterior)
+        return self.fcomb(self.unet_features, z_posterior)
 
     def kl_divergence(
         self,
@@ -334,12 +377,17 @@ class ProbabilisticUNet(nn.Module):
         calculate_posterior: bool = False,
         z_posterior: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Calculate the KL divergence between the posterior and prior KL(Q||P)
-        analytic: calculate KL analytically or via sampling from the posterior
-        calculate_posterior: if we use samapling to approximate KL we can sample here or supply a sample
+        """Compute KL(posterior || prior).
+
+        Args:
+            analytic: If True, compute the KL in closed form. If False, estimate via
+                a posterior sample (log q(z) - log p(z)).
+            calculate_posterior: Draw a fresh reparametrized sample when analytic=False.
+                Ignored when z_posterior is provided.
+            z_posterior: Pre-computed posterior sample for the Monte Carlo estimate.
+                Only used when analytic=False.
         """
         if analytic:
-            # Neeed to add this to torch source code, see: https://github.com/pytorch/pytorch/issues/13545
             kl_div = kl.kl_divergence(self.posterior_latent_space, self.prior_latent_space)
         else:
             if calculate_posterior:
@@ -356,24 +404,26 @@ class ProbabilisticUNet(nn.Module):
         analytic_kl: bool = True,
         reconstruct_posterior_mean: bool = False,
     ) -> torch.Tensor:
-        """Calculate the evidence lower bound of the log-likelihood of P(Y|X)
-        consm: consensus response
+        """Compute the evidence lower bound -E[log p(y|x,z)] + beta * KL(q||p).
+
+        A reparametrized sample z is drawn from the posterior and used for both the
+        reconstruction loss and the KL term. The reconstruction criterion is selected
+        at construction time based on output_channels and rl_swap.
+
+        Args:
+            segm: Ground-truth segmentation of shape (B, output_channels, H, W).
+            consm: Optional consensus mask of the same shape as segm. Applied as a
+                multiplicative weight when consensus_masking=True.
+            analytic_kl: If True, compute the KL divergence in closed form.
+            reconstruct_posterior_mean: If True, decode the posterior mean instead of a sample.
         """
 
         # Reconstruction criterion:
         #   - DiceLossWithLogits when rl_swap=True (returns a scalar directly)
         #   - BCE for single output channel (Bernoulli log-likelihood)
         #   - CE for multi-class (Categorical log-likelihood)
-        if self.rl_swap:
-            criterion = DiceLossWithLogits()
-            use_bce, use_dice = False, True
-        else:
-            if self.output_channels == 1:
-                criterion = nn.BCEWithLogitsLoss(reduction="none")
-                use_bce, use_dice = True, False
-            else:
-                criterion = nn.CrossEntropyLoss(reduction="none")
-                use_bce, use_dice = False, False
+        use_dice = self.rl_swap
+        use_bce = isinstance(self._criterion, nn.BCEWithLogitsLoss)
 
         z_posterior = self.posterior_latent_space.rsample()
 
@@ -389,12 +439,12 @@ class ProbabilisticUNet(nn.Module):
 
         # Squeeze trailing channel dim: CE needs (B, H, W) long, BCE needs (B, 1, H, W) float.
         segm_t = segm.float() if use_bce else segm.squeeze(1).long()
-        if self.consensus_masking is True and consm is not None:
+        if self.consensus_masking and consm is not None:
             consm_t = consm if use_bce else consm.squeeze(1)
             target = (segm_t * consm_t) if use_bce else (segm_t * consm_t.long())
-            reconstruction_loss = criterion(reconstruction, target)
+            reconstruction_loss = self._criterion(reconstruction, target)
         else:
-            reconstruction_loss = criterion(reconstruction, segm_t)
+            reconstruction_loss = self._criterion(reconstruction, segm_t)
 
         if use_dice:
             # DiceLossWithLogits already returns a scalar
