@@ -5,6 +5,7 @@ from .cpm import get_cpm_loader, get_cpm_dataset
 from .cryonuseg import get_cryonuseg_loader, get_cryonuseg_dataset
 from .cytodark0 import get_cytodark0_loader, get_cytodark0_dataset
 from .glas import get_glas_loader, get_glas_dataset
+from .hest import get_hest_loader, get_hest_dataset
 from .janowczyk import get_janowczyk_loader, get_janowczyk_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset
 from .lynsec import get_lynsec_loader, get_lynsec_dataset

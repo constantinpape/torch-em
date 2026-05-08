@@ -9,8 +9,14 @@ import csv
 import gzip
 import os
 import tarfile
-from glob import glob
+from multiprocessing import Pool, cpu_count
+from pathlib import Path
+from shutil import rmtree
 from typing import List, Literal, Optional, Tuple, Union
+
+import h5py
+import imageio.v3 as imageio
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -72,6 +78,10 @@ URLS = {
 }
 
 
+def _get_data_name(cell_type):
+    return URLS[cell_type]["data_name"].split(".")[0]
+
+
 def _to_cell_types(cell_types):
     if cell_types is None:
         return list(URLS)
@@ -90,19 +100,49 @@ def _is_gzip(path):
         return f.read(2) == b"\x1f\x8b"
 
 
-def _extract_data(path):
-    data_folder = os.path.splitext(os.path.splitext(os.path.basename(path))[0])[0]
-    extract_path = os.path.join(os.path.dirname(path), data_folder)
-    if os.path.exists(extract_path):
-        return
+def _save_as_h5(sample_path):
+    img_path, mask_path, h5_path = sample_path
+    img = imageio.imread(img_path)
+    mask = imageio.imread(mask_path)
+    if img.ndim == 3 and img.shape[-1] == 4:
+        img = img[:, :, :-1]
+    img = img.transpose(2, 0, 1)  # (H, W, C) -> (C, H, W)
+    _, h, w = img.shape
+    chunk_hw = (min(256, h), min(256, w))
+    with h5py.File(h5_path, "w") as f:
+        f.create_dataset(name="images/raw", data=img, compression="gzip", chunks=(1,) + chunk_hw)
+        f.create_dataset(name="labels/mask", data=mask, compression="gzip", chunks=chunk_hw)
 
-    extract_root = os.path.dirname(path)
-    with tarfile.open(path) as f:
-        for member in f.getmembers():
-            member_path = os.path.abspath(os.path.join(extract_root, member.name))
-            if os.path.commonpath([os.path.abspath(extract_root), member_path]) != os.path.abspath(extract_root):
+
+def _extract_data(tar_path, extract_path):
+    extract_root = tar_path.parent.resolve() / "unprocessed"
+
+    with tarfile.open(tar_path) as f:
+        for member in tqdm(f.getmembers(), desc="Extracting data"):
+            member_path = (extract_root / member.name).resolve()
+            try:
+                member_path.relative_to(extract_root)
+            except ValueError:
                 raise RuntimeError(f"Unsafe path in tar archive: {member.name}")
         f.extractall(extract_root)
+
+    tar_path.unlink()
+
+    h5_dir = extract_path / "data"
+    h5_dir.mkdir(exist_ok=True, parents=True)
+    sample_paths = [
+        (p, p.with_name(p.name.replace("_HE.png", "_mask.png")), h5_dir / p.with_suffix(".h5").name)
+        for p in (extract_root / extract_path.name).glob("*_HE.png")
+    ]
+
+    with Pool(max(1, cpu_count() - 1)) as p:
+        list(tqdm(
+            p.imap_unordered(_save_as_h5, sample_paths),
+            total=len(sample_paths),
+            desc="Saving to H5"
+        ))
+
+    rmtree(extract_root)
 
 
 def get_segpath_data(
@@ -117,28 +157,29 @@ def get_segpath_data(
         cell_types: The cell types to download. By default all cell types are downloaded.
         download: Whether to download the data if it is not present.
     """
-    os.makedirs(path, exist_ok=True)
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
     if not download:
         return
 
     for cell_type in _to_cell_types(cell_types):
         source = URLS[cell_type]
-        data_path = os.path.join(path, source["data_name"])
-        metadata_path = os.path.join(path, source["metadata_name"])
-        data_folder = os.path.splitext(os.path.splitext(source["data_name"])[0])[0]
-        extracted_path = os.path.join(path, data_folder)
+        tar_path = path / source["data_name"]
+        metadata_path = path / source["metadata_name"]
+        extracted_path = path / _get_data_name(cell_type)
 
         util.download_source(metadata_path, source["metadata"], download, checksum=None)
 
-        if not os.path.exists(extracted_path):
-            util.download_source(data_path, source["data"], download, checksum=None)
-            _extract_data(data_path)
+        if not (extracted_path / "data").exists():
+            util.download_source(tar_path, source["data"], download, checksum=None)
+            _extract_data(tar_path, extracted_path)
 
 
 def _get_paths_from_metadata(path, cell_type, split):
     source = URLS[cell_type]
-    metadata_path = os.path.join(path, source["metadata_name"])
-    image_paths, label_paths = [], []
+    metadata_path = path / source["metadata_name"]
+    volume_paths = []
+    volume_dir = path / _get_data_name(cell_type) / "data"
 
     open_file = gzip.open if _is_gzip(metadata_path) else open
     with open_file(metadata_path, mode="rt") as f:
@@ -151,15 +192,14 @@ def _get_paths_from_metadata(path, cell_type, split):
             if not filename.endswith("_HE.png"):
                 continue
 
-            image_path = os.path.join(path, filename)
-            label_path = os.path.join(path, filename.replace("_HE.png", "_mask.png"))
-            if not os.path.exists(image_path) or not os.path.exists(label_path):
+            volume_path = volume_dir / Path(filename).name.replace(".png", ".h5")
+
+            if not volume_path.exists():
                 continue
 
-            image_paths.append(image_path)
-            label_paths.append(label_path)
+            volume_paths.append(volume_path)
 
-    return image_paths, label_paths
+    return volume_paths
 
 
 def _get_paths_from_files(path, cell_type, split):
@@ -169,18 +209,9 @@ def _get_paths_from_files(path, cell_type, split):
             "Please download the metadata with `download=True` or place it into the dataset folder."
         )
 
-    data_name = os.path.splitext(os.path.splitext(URLS[cell_type]["data_name"])[0])[0]
-    image_paths = sorted(glob(os.path.join(path, data_name, "*_HE.png")))
-    label_paths = [image_path.replace("_HE.png", "_mask.png") for image_path in image_paths]
-    paired_paths = [
-        (image_path, label_path) for image_path, label_path in zip(image_paths, label_paths)
-        if os.path.exists(label_path)
-    ]
-    if not paired_paths:
-        return [], []
+    data_name = _get_data_name(cell_type)
 
-    image_paths, label_paths = zip(*paired_paths)
-    return list(image_paths), list(label_paths)
+    return sorted((path / data_name / "data").glob("*.h5"))
 
 
 def get_segpath_paths(
@@ -188,7 +219,7 @@ def get_segpath_paths(
     cell_types: Optional[Union[str, List[str]]] = None,
     split: Optional[Literal["train", "val", "test"]] = None,
     download: bool = False,
-) -> Tuple[List[str], List[str]]:
+) -> List[str]:
     """Get paths to the SegPath data.
 
     Args:
@@ -198,30 +229,29 @@ def get_segpath_paths(
         download: Whether to download the data if it is not present.
 
     Returns:
-        List of filepaths for the image data.
-        List of filepaths for the label data.
+        List of filepaths to the preprocessed H5 files.
     """
+    path = Path(path)
     if split is not None and split not in ("train", "val", "test"):
         raise ValueError(f"'{split}' is not a valid split choice.")
 
     cell_types = _to_cell_types(cell_types)
     get_segpath_data(path, cell_types, download)
 
-    image_paths, label_paths = [], []
+    volume_paths = []
     for cell_type in cell_types:
-        metadata_path = os.path.join(path, URLS[cell_type]["metadata_name"])
-        if os.path.exists(metadata_path):
-            this_image_paths, this_label_paths = _get_paths_from_metadata(path, cell_type, split)
+        metadata_path = path / URLS[cell_type]["metadata_name"]
+        if metadata_path.exists():
+            this_volume_paths = _get_paths_from_metadata(path, cell_type, split)
         else:
-            this_image_paths, this_label_paths = _get_paths_from_files(path, cell_type, split)
+            this_volume_paths = _get_paths_from_files(path, cell_type, split)
 
-        image_paths.extend(this_image_paths)
-        label_paths.extend(this_label_paths)
+        volume_paths.extend(this_volume_paths)
 
-    if not image_paths:
+    if not volume_paths:
         raise RuntimeError("Could not find any SegPath images and masks for the requested settings.")
 
-    return image_paths, label_paths
+    return sorted(str(p) for p in volume_paths)
 
 
 def get_segpath_dataset(
@@ -249,7 +279,7 @@ def get_segpath_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, label_paths = get_segpath_paths(path, cell_types, split, download)
+    volume_paths = get_segpath_paths(path, cell_types, split, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": True}
@@ -258,13 +288,15 @@ def get_segpath_dataset(
         )
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths,
-        raw_key=None,
-        label_paths=label_paths,
-        label_key=None,
+        raw_paths=volume_paths,
+        raw_key="images/raw",
+        label_paths=volume_paths,
+        label_key="labels/mask",
         patch_shape=patch_shape,
         label_dtype=label_dtype,
-        is_seg_dataset=False,
+        is_seg_dataset=True,
+        with_channels=True,
+        ndim=2,
         **kwargs
     )
 

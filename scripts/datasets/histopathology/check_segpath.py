@@ -9,8 +9,7 @@ sys.path.append("..")
 
 
 def check_segpath():
-    # from util import ROOT
-    ROOT = "/mnt/vast-nhr/projects/cidas/cca/data"
+    from util import ROOT
 
     loader = get_segpath_loader(
         path=os.path.join(ROOT, "segpath"),
@@ -21,7 +20,7 @@ def check_segpath():
         download=True,
     )
 
-    check_loader(loader, 8, instance_labels=False, rgb=True, plt=True, save_path="segpath.png")
+    check_loader(loader, 8, instance_labels=False, rgb=True)
 
 
 if __name__ == "__main__":
