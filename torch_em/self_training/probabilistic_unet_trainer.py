@@ -1,8 +1,10 @@
 """@private
 """
 
+from typing import List, Optional
 import time
 import torch
+import torch.nn as nn
 import torch_em
 
 
@@ -11,51 +13,53 @@ class DummyLoss(torch.nn.Module):
 
 
 class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
-    """This trainer implements training for the 'Probabilistic UNet' of Kohl et al.: (https://arxiv.org/abs/1806.05034).
-    This approach combines the learnings from UNet and VAEs (Prior and Posterior networks) to obtain generative
-    segmentations. The heuristic trains by taking into account the feature maps from UNet and the samples from
-    the posterior distribution, estimating the loss and further sampling from the prior for validation.
+    """Trainer for the Probabilistic UNet (Kohl et al., https://arxiv.org/abs/1806.05034).
+
+    Combines a UNet encoder with VAE prior and posterior networks to produce generative
+    segmentations. Training uses the ELBO loss via the posterior; validation samples from
+    the prior.
 
     Args:
-        clipping_value [float] - (default: None)
-        prior_samples [int] - (default: 16)
-        loss [callable] - (default: None)
-        loss_and_metric [callable] - (default: None)
+        clipping_value: Maximum gradient norm for clipping. No clipping if None.
+        prior_samples: Number of prior samples drawn when logging segmentation outputs.
+        loss: Loss callable for training, e.g. ProbabilisticUNetLoss. Must not be None.
+        loss_and_metric: Loss and metric callable for validation. Must not be None.
     """
 
     def __init__(
         self,
-        clipping_value=None,
-        prior_samples=16,
-        loss=None,
-        loss_and_metric=None,
+        clipping_value: Optional[float] = None,
+        prior_samples: int = 16,
+        loss: Optional[nn.Module] = None,
+        loss_and_metric: Optional[nn.Module] = None,
         **kwargs
-    ):
+    ) -> None:
+        assert loss is not None and loss_and_metric is not None
         super().__init__(loss=loss, metric=DummyLoss(), **kwargs)
-        assert loss, loss_and_metric is not None
 
         self.loss_and_metric = loss_and_metric
-
         self.clipping_value = clipping_value
-
         self.prior_samples = prior_samples
-        self.sigmoid = torch.nn.Sigmoid()
 
-        self._kwargs = kwargs
+    def _backprop(self, loss: torch.Tensor) -> None:
+        loss.backward()
+        if self.clipping_value is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clipping_value)
+        self.optimizer.step()
 
-    #
-    # functionality for sampling from the network
-    #
+    def _backprop_mixed(self, loss: torch.Tensor) -> None:
+        self.scaler.scale(loss).backward()
+        if self.clipping_value is not None:
+            self.scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clipping_value)
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
 
-    def _sample(self):
+    def _sample(self) -> List[torch.Tensor]:
         samples = [self.model.sample() for _ in range(self.prior_samples)]
         return samples
 
-    #
-    # training and validation functionality
-    #
-
-    def _train_epoch_impl(self, progress, forward_context, backprop):
+    def _train_epoch_impl(self, progress, forward_context, backprop) -> float:
         self.model.train()
 
         n_iter = 0
@@ -67,19 +71,12 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
             self.optimizer.zero_grad()
 
             with forward_context():
-                # We pass the model, the input and the labels to the supervised loss function, so
-                # that's how the loss is calculated stays flexible, e.g. here to enable ELBO for PUNet.
                 loss = self.loss(self.model, x, y)
 
             backprop(loss)
 
-            # To counter the exploding gradients in the posterior net
-            if self.clipping_value is not None:
-                torch.nn.utils.clip_grad_norm_(self.model.posterior.encoder.layers.parameters(), self.clipping_value)
-
             if self.logger is not None:
                 lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
-                # We only sample if we log images in this iteration.
                 samples = self._sample() if self._iteration % self.log_image_interval == 0 else None
                 y = y[:, :self.model.output_channels, ...]
                 self.logger.log_train(self._iteration, loss, lr, x, y, samples)
@@ -93,7 +90,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
         t_per_iter = (time.time() - t_per_iter) / n_iter
         return t_per_iter
 
-    def _validate_impl(self, forward_context):
+    def _validate_impl(self, forward_context) -> float:
         self.model.eval()
 
         metric_val = 0.0
@@ -107,7 +104,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
                     loss, metric = self.loss_and_metric(self.model, x, y)
 
                 loss_val += loss.item()
-                metric_val += metric
+                metric_val += metric.item()
 
         metric_val /= len(self.val_loader)
         loss_val /= len(self.val_loader)
