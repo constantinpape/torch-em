@@ -59,7 +59,7 @@ class Encoder(nn.Module):
         posterior: bool = False,
         num_classes: Optional[int] = None,
         norm: Optional[str] = None,
-    ):
+    ) -> None:
         super().__init__()
 
         self.input_channels = input_channels
@@ -126,7 +126,7 @@ class AxisAlignedConvGaussian(nn.Module):
         num_classes: Optional[int] = None,
         use_onehot: bool = False,
         norm: Optional[str] = None,
-    ):
+    ) -> None:
         super().__init__()
         self.latent_dim = latent_dim
         self.num_classes = num_classes
@@ -173,8 +173,16 @@ class AxisAlignedConvGaussian(nn.Module):
 
 
 class Fcomb(nn.Module):
-    """A sequence of 1x1 convolutions that combines the UNet feature map with a sample from the latent space
-    by broadcasting z to spatial size and concatenating along the channel axis.
+    """A sequence of 1x1 convolutions that combines the UNet feature map with a latent sample.
+
+    Broadcasts z to the spatial size of the feature map, concatenates along the channel axis,
+    and applies no_convs_fcomb pointwise convolutions to produce segmentation logits.
+
+    Args:
+        num_filters: Filter counts from the UNet encoder; num_filters[0] sets the fcomb width.
+        latent_dim: Dimensionality of the latent sample z.
+        num_output_channels: Number of output segmentation channels.
+        no_convs_fcomb: Total number of 1x1 conv layers (including the final projection).
     """
     def __init__(
         self,
@@ -182,7 +190,7 @@ class Fcomb(nn.Module):
         latent_dim: int,
         num_output_channels: int,
         no_convs_fcomb: int,
-    ):
+    ) -> None:
         super().__init__()
 
         layers = []
@@ -214,7 +222,7 @@ class Fcomb(nn.Module):
 
 
 class ProbabilisticUNet(nn.Module):
-    """This network implementation for the Probabilistic UNet of Kohl et al. (https://arxiv.org/abs/1806.05034).
+    """Network implementation for the Probabilistic UNet of Kohl et al. (https://arxiv.org/abs/1806.05034).
     This generative segmentation heuristic uses UNet combined with a conditional variational
     autoencoder enabling to efficiently produce an unlimited number of plausible hypotheses.
 
@@ -257,7 +265,7 @@ class ProbabilisticUNet(nn.Module):
         consensus_masking: bool = False,
         rl_swap: bool = False,
         device: Optional[torch.device] = None,
-    ):
+    ) -> None:
         super().__init__()
 
         self.input_channels = input_channels
