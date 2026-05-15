@@ -20,7 +20,7 @@ def check_pcns(cancer_type=None):
         download=False,
     )
 
-    check_loader(loader, 8, instance_labels=True, rgb=True)
+    check_loader(loader, 8, instance_labels=True, rgb=True, plt=True, save_path="check_pcns.png")
 
 
 if __name__ == "__main__":
