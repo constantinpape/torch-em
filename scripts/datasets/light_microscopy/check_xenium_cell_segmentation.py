@@ -8,20 +8,22 @@ from torch_em.data.datasets import get_xenium_cell_segmentation_loader
 sys.path.append("..")
 
 
-def check_xenium_cell_segmentation():
+def check_xenium_cell_segmentation(label_kind):
     from util import ROOT
 
     loader = get_xenium_cell_segmentation_loader(
         path=os.path.join(ROOT, "xenium"),
         patch_shape=(512, 512),
         batch_size=1,
-        label_kind="cell",
-        raw_channel="all",
+        label_kind=label_kind,
+        raw_channel="dapi",
         download=False,
     )
 
+    print(f"Xenium | label_kind={label_kind} | #batches={len(loader)}")
     check_loader(loader, 8, instance_labels=True)
 
 
 if __name__ == "__main__":
-    check_xenium_cell_segmentation()
+    check_xenium_cell_segmentation(label_kind="nucleus")
+    check_xenium_cell_segmentation(label_kind="cell")

@@ -1,8 +1,10 @@
 """BCData contains point annotations for Ki-67 positive and negative tumor cells in breast cancer IHC.
 
-Note that BCData does not provide true semantic or instance segmentation masks. The original annotations are
-cell-center coordinates only. This loader rasterizes these point annotations into single-pixel labels or small
-disks, controlled by `cell_radius`, so they can be used with the torch-em segmentation dataset API.
+NOTE: BCData is a cell detection and counting dataset, not a segmentation dataset. It does not provide
+segmentation masks of any kind. The original annotations are cell-center point coordinates only.
+This loader rasterizes these coordinates into single-pixel labels or small disks (controlled by
+`cell_radius`) solely to fit the torch-em segmentation dataset API - the resulting labels do not
+represent cell boundaries or shapes.
 
 The dataset is located at https://sites.google.com/view/bcdataset.
 It is from the MICCAI 2020 publication "BCData: A Large-Scale Dataset and Benchmark for Cell Detection
