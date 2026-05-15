@@ -6,6 +6,7 @@ from .cpm import get_cpm_loader, get_cpm_dataset
 from .cryonuseg import get_cryonuseg_loader, get_cryonuseg_dataset
 from .cytodark0 import get_cytodark0_loader, get_cytodark0_dataset
 from .glas import get_glas_loader, get_glas_dataset
+from .hest import get_hest_loader, get_hest_dataset
 from .janowczyk import get_janowczyk_loader, get_janowczyk_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset
 from .lynsec import get_lynsec_loader, get_lynsec_dataset
@@ -16,6 +17,7 @@ from .nuinsseg import get_nuinsseg_loader, get_nuinsseg_dataset
 from .orion_crc import get_orion_crc_loader, get_orion_crc_dataset
 from .pannuke import get_pannuke_loader, get_pannuke_dataset
 from .panoptils import get_panoptils_loader, get_panoptils_dataset
+from .pcns import get_pcns_loader, get_pcns_dataset
 from .puma import get_puma_loader, get_puma_dataset
 from .segpath import get_segpath_loader, get_segpath_dataset
 from .srsanet import get_srsanet_loader, get_srsanet_dataset
