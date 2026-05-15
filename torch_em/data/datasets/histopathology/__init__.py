@@ -15,6 +15,7 @@ from .nuclick import get_nuclick_loader, get_nuclick_dataset
 from .nuinsseg import get_nuinsseg_loader, get_nuinsseg_dataset
 from .pannuke import get_pannuke_loader, get_pannuke_dataset
 from .panoptils import get_panoptils_loader, get_panoptils_dataset
+from .pcns import get_pcns_loader, get_pcns_dataset
 from .puma import get_puma_loader, get_puma_dataset
 from .segpath import get_segpath_loader, get_segpath_dataset
 from .srsanet import get_srsanet_loader, get_srsanet_dataset
