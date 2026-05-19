@@ -15,7 +15,7 @@ def check_orion_crc(modality, label_type):
         split="train",
         modality=modality,
         label_type=label_type,
-        patch_shape=(512, 512),
+        patch_shape=(256, 256),
         batch_size=2,
         download=True,
     )
