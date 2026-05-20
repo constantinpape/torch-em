@@ -43,7 +43,7 @@ class EMDefectAugmentation:
     Args:
         p_drop_slice: Probability for a missing slice.
         p_low_contrast: Probability for a low contrast slice.
-        p_deform_slice: Probaboloty for a deformed slice.
+        p_deform_slice: Probability for a deformed slice.
         p_paste_artifact: Probability for inserting an artifact from data source.
         contrast_scale: Scale of low contrast transformation.
         deformation_mode: Deformation mode that should be used.

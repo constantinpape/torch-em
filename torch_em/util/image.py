@@ -90,6 +90,15 @@ def load_data(
     have_single_file = isinstance(path, str)
     have_single_key = isinstance(key, str)
 
+    # mrc files require key="data"; set it automatically if no key was provided
+    if key is None:
+        if have_single_file and str(path).endswith(".mrc"):
+            key = "data"
+            have_single_key = True
+        elif not have_single_file and all(str(p).endswith(".mrc") for p in path):
+            key = "data"
+            have_single_key = True
+
     if key is None:
         if have_single_file:
             return load_image(path)
