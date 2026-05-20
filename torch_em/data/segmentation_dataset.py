@@ -9,7 +9,7 @@ import torch
 
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data, ensure_patch_shape
+from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data, ensure_patch_shape, validate_roi
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
@@ -96,9 +96,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self._with_label_channels = with_label_channels
 
         if roi is not None:
-            if isinstance(roi, slice):
-                roi = (roi,)
-
+            shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
+            roi = validate_roi(roi, shape, patch_shape)
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
             self.labels = RoiWrapper(self.labels, (slice(None),) + roi) if self._with_label_channels else\
                 RoiWrapper(self.labels, roi)

@@ -154,7 +154,7 @@ def _preprocess_inputs(path, annotations, split):
 
         # Extract class ids mapped to each class name.
         class_dict = CLASS_DICT[annotations]
-        class_ids = [class_dict[cls_entry["name"]] for cls_entry in gdf["classification"]]
+        class_ids = [class_dict[cls_entry["name"]] for cls_entry in gdf["classification"].apply(json.loads)]
         semantic_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, class_ids))
         semantic_mask = rasterize(
             semantic_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.uint8

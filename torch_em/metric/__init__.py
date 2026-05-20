@@ -4,3 +4,5 @@ from .instance_segmentation_metric import (EmbeddingMWSIOUMetric, EmbeddingMWSRa
                                            HDBScanIOUMetric, HDBScanRandMetric, HDBScanSBDMetric, HDBScanVOIMetric,
                                            MulticutRandMetric, MulticutVOIMetric,
                                            MWSIOUMetric, MWSSBDMetric, MWSRandMetric, MWSVOIMetric)
+
+from .cldice import cl_score, clDice

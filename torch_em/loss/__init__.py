@@ -2,6 +2,7 @@
 """
 
 from .affinity_side_loss import AffinitySideLoss
+from .cldice import SoftSkeletonize, cldice_score, SoftclDiceLoss, CombinedclDiceLoss
 from .combined_loss import CombinedLoss
 from .contrastive import ContrastiveLoss
 from .dice import DiceLoss, dice_score
