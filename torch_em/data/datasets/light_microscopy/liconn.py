@@ -80,10 +80,10 @@ def _download_ng_volume(vol, ds, name: str) -> None:
                 z1_ = min(z0_ + SHARD_SHAPE[0], shape[0])
                 y1_ = min(y0_ + SHARD_SHAPE[1], shape[1])
                 x1_ = min(x0_ + SHARD_SHAPE[2], shape[2])
-                tasks.append(
-                    ((z0_, z1_), (y0_, y1_), (x0_, x1_),
-                     (x0 + x0_, x0 + x1_, y0 + y0_, y0 + y1_, z0 + z0_, z0 + z1_))
-                )
+                tasks.append((
+                    (z0_, z1_), (y0_, y1_), (x0_, x1_),
+                    (x0 + x0_, x0 + x1_, y0 + y0_, y0 + y1_, z0 + z0_, z0 + z1_)
+                ))
 
     max_workers = max(8, (os.cpu_count() or 4) * 4)
 
@@ -143,9 +143,7 @@ def get_liconn_data(
 
     if not download:
         missing = [k for k, m in [("raw", raw_missing), (label_key, label_missing)] if m]
-        raise RuntimeError(
-            f"LICONN arrays {missing} not found in {zarr_path}. Pass download=True to download them."
-        )
+        raise RuntimeError(f"LICONN arrays {missing} not found in {zarr_path}. Pass download=True to download them.")
 
     root = zarr.open_group(zarr_path, mode="a")
 
@@ -266,7 +264,5 @@ def get_liconn_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_liconn_dataset(
-        path, patch_shape, segmentation, roi, download, offsets, boundaries, **ds_kwargs
-    )
+    dataset = get_liconn_dataset(path, patch_shape, segmentation, roi, download, offsets, boundaries, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
