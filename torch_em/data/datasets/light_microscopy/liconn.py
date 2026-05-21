@@ -1,9 +1,8 @@
 """The LICONN dataset contains a dense connectomic reconstruction of mouse hippocampal
 CA1 neuropil acquired by spinning-disk confocal microscopy of expansion-microscopy-processed
-tissue (~16x expansion), yielding an effective voxel resolution of approximately 20 nm
-laterally and 50 nm axially. All neuronal structures are densely annotated as instance
-segmentations: 18,268 axons (342 mm total length), 1,643 dendrites (119 mm total), and
-71,269 spines.
+tissue (~16x expansion), yielding a native voxel resolution of 9x9x12 nm (XYZ) at mip=0.
+All neuronal structures are densely annotated as instance segmentations: 18,268 axons
+(342 mm total length), 1,643 dendrites (119 mm total), and 71,269 spines.
 
 Two segmentation variants are provided:
 - 'proofread': manually proofread segmentation (higher accuracy).
@@ -89,13 +88,13 @@ def _download_ng_volume(vol, ds, name: str) -> None:
 
     def worker(item):
         (z0_, z1_), (y0_, y1_), (x0_, x1_), (gx0, gx1, gy0, gy1, gz0, gz1) = item
-        block = np.asarray(vol[gx0:gx1, gy0:gy1, gz0:gz1], copy=False)
+        block = np.asarray(vol[gx0:gx1, gy0:gy1, gz0:gz1])
         ds[z0_:z1_, y0_:y1_, x0_:x1_] = _to_zyx(block)
 
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = [ex.submit(worker, t) for t in tasks]
-        for _ in tqdm(as_completed(futures), total=len(futures), desc=f"Downloading '{name}'", smoothing=0.05):
-            pass
+        for fut in tqdm(as_completed(futures), total=len(futures), desc=f"Downloading '{name}'", smoothing=0.05):
+            fut.result()
 
 
 def get_liconn_data(
@@ -105,7 +104,7 @@ def get_liconn_data(
 ) -> None:
     """Download the LICONN image and segmentation into a single zarr v3 store with sharding.
 
-    The entire volume is always downloaded (image at mip=1, ~18x18x24 nm effective resolution;
+    The entire volume is always downloaded (image at mip=1, 18x18x24 nm resolution;
     segmentation at mip=0, same voxel grid). ROI-based sub-region selection is not supported
     at download time - use the roi parameter in get_liconn_dataset to restrict patch sampling
     to a sub-region after the full volume is on disk.
@@ -135,8 +134,12 @@ def get_liconn_data(
     zarr_path = os.path.join(str(path), ZARR_FNAME)
     label_key = f"seg_{segmentation}"
 
-    raw_missing = not os.path.isdir(os.path.join(zarr_path, "raw"))
-    label_missing = not os.path.isdir(os.path.join(zarr_path, label_key))
+    def _array_complete(arr_name):
+        d = os.path.join(zarr_path, arr_name)
+        return os.path.isdir(d) and len(os.listdir(d)) > 1
+
+    raw_missing = not _array_complete("raw")
+    label_missing = not _array_complete(label_key)
 
     if not raw_missing and not label_missing:
         return
@@ -148,7 +151,7 @@ def get_liconn_data(
     root = zarr.open_group(zarr_path, mode="a")
 
     if raw_missing:
-        img_cv = CloudVolume(IMG_URL, mip=1, progress=False, cache=True, fill_missing=True)
+        img_cv = CloudVolume(IMG_URL, mip=1, progress=False, cache=False, fill_missing=True)
         x0, y0, z0 = map(int, img_cv.bounds.minpt)
         x1, y1, z1 = map(int, img_cv.bounds.maxpt)
         shape = (z1 - z0, y1 - y0, x1 - x0)
@@ -157,7 +160,7 @@ def get_liconn_data(
 
     if label_missing:
         seg_url = SEG_PR_URL if segmentation == "proofread" else SEG_AGG_URL
-        seg_cv = CloudVolume(seg_url, mip=0, progress=False, cache=True, fill_missing=True)
+        seg_cv = CloudVolume(seg_url, mip=0, progress=False, cache=False, fill_missing=True)
         x0, y0, z0 = map(int, seg_cv.bounds.minpt)
         x1, y1, z1 = map(int, seg_cv.bounds.maxpt)
         shape = (z1 - z0, y1 - y0, x1 - x0)
