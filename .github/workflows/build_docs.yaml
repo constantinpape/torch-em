@@ -1,6 +1,11 @@
 name: Build and Deploy Docs
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/build_docs.yaml"
+      - "doc/*.md"   # Trigger on changes to any markdown file
+      - "torch_em/**/*.py"   # Optionally include changes in Python files
   push:
     paths:
       - "doc/*.md"   # Trigger on changes to any markdown file
@@ -56,6 +61,7 @@ jobs:
   deploy:
     name: Deploy Documentation
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       pages: write
