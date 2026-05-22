@@ -123,16 +123,9 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
     def log_ct(self, step, ct):
         self.tb.add_scalar(tag="train/confidence_threshold", scalar_value=ct, global_step=step)
 
-    def _add_augmented_images(
-        self, step, name, xu1, xu2, pseudo_labels, pred
-    ):
+    def _add_augmented_images(self, step, name, xu1, xu2, pseudo_labels, pred):
         if xu1.ndim == 5:
-            assert (
-                xu2.ndim
-                == pseudo_labels.ndim
-                == pred.ndim
-                == 5
-            )
+            assert xu2.ndim == pseudo_labels.ndim == pred.ndim == 5
             zindex = xu1.shape[2] // 2
             xu1 = xu1[:, :, zindex]
             xu2 = xu2[:, :, zindex]
@@ -145,37 +138,45 @@ class SelfTrainingTensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):
             pseudo_labels[0, 0:1],
             pred[0, 0:1],
         ]
-        im_name = (
-            f"{name}/unsupervised/aug1-aug2-pseudolabels-prediction"
-        )
         grid = make_grid(images, nrow=2, padding=8)
-        self.tb.add_image(tag=im_name, img_tensor=grid, global_step=step)
+        self.tb.add_image(tag=f"{name}/unsupervised/aug1-aug2-pseudolabels-prediction", img_tensor=grid, global_step=step)
 
-    def log_train_augmentations(
-        self, step, xu1, xu2, pseudo_labels, pred
-    ):
+    def log_train_augmentations(self, step, xu1, xu2, pseudo_labels, pred):
         if step % self.log_image_interval == 0:
-            self._add_augmented_images(
-                step,
-                "train_augmentations",
-                xu1,
-                xu2,
-                pseudo_labels,
-                pred,
-            )
+            self._add_augmented_images(step, "train_augmentations", xu1, xu2, pseudo_labels, pred)
 
-    def log_validation_augmentations(
-        self, step, xu1, xu2, pseudo_labels, pred
-    ):
+    def log_validation_augmentations(self, step, xu1, xu2, pseudo_labels, pred):
         if step % self.log_image_interval == 0:
-            self._add_augmented_images(
-                step,
-                "validation_augmentations",
-                xu1,
-                xu2,
-                pseudo_labels,
-                pred,
-            )
+            self._add_augmented_images(step, "validation_augmentations", xu1, xu2, pseudo_labels, pred)
+
+
+class ProbabilisticUNetTrainerLogger(torch_em.trainer.logger_base.TorchEmLogger):
+    def __init__(self, trainer, save_root, **unused_kwargs):
+        super().__init__(trainer, save_root)
+        self.log_dir = f"./logs/{trainer.name}" if save_root is None else\
+            os.path.join(save_root, "logs", trainer.name)
+        os.makedirs(self.log_dir, exist_ok=True)
+
+        self.tb = torch.utils.tensorboard.SummaryWriter(self.log_dir)
+        self.log_image_interval = trainer.log_image_interval
+
+    def add_image(self, x, y, samples, name, step):
+        # NOTE: we only show the first tensor per batch for all images
+        self.tb.add_image(tag=f"{name}/input", img_tensor=x[0], global_step=step)
+        self.tb.add_image(tag=f"{name}/target", img_tensor=y[0], global_step=step)
+        sample_grid = make_grid([sample[0] for sample in samples], nrow=4, padding=4)
+        self.tb.add_image(tag=f"{name}/samples", img_tensor=sample_grid, global_step=step)
+
+    def log_train(self, step, loss, lr, x, y, samples):
+        self.tb.add_scalar(tag="train/loss", scalar_value=loss, global_step=step)
+        self.tb.add_scalar(tag="train/learning_rate", scalar_value=lr, global_step=step)
+        if step % self.log_image_interval == 0:
+            self.add_image(x, y, samples, "train", step)
+
+    def log_validation(self, step, metric, loss, x, y, samples):
+        self.tb.add_scalar(tag="validation/loss", scalar_value=loss, global_step=step)
+        self.tb.add_scalar(tag="validation/metric", scalar_value=metric, global_step=step)
+        self.add_image(x, y, samples, "validation", step)
 
 
 class UniMatchv2TensorboardLogger(torch_em.trainer.logger_base.TorchEmLogger):

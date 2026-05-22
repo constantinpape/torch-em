@@ -1,7 +1,7 @@
 """Training procedures for unsupervised self training of neural networks.
 """
 
-from .logger import SelfTrainingTensorboardLogger, UniMatchv2TensorboardLogger
+from .logger import SelfTrainingTensorboardLogger, ProbabilisticUNetTrainerLogger, UniMatchv2TensorboardLogger
 from .loss import DefaultSelfTrainingLoss, DefaultSelfTrainingLossAndMetric, ProbabilisticUNetLoss, \
     ProbabilisticUNetLossAndMetric, SelfTrainingLossWithInvertibleAugmentations, \
     SelfTrainingLossAndMetricWithInvertibleAugmentations, \
