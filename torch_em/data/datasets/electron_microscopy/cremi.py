@@ -114,7 +114,6 @@ def get_cremi_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
     samples: Tuple[str, ...] = ("A", "B", "C"),
-    version: str = "cropped",
     use_realigned: bool = False,
     download: bool = False,
     offsets: Optional[List[List[int]]] = None,
@@ -134,7 +133,6 @@ def get_cremi_dataset(
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
-        version: The dataset version to use. Either 'cropped' (default) or 'padded'.
         use_realigned: Use the realigned instead of the original training data.
         download: Whether to download the data if it is not present.
         offsets: Offset values for affinity computation used as target.
@@ -150,7 +148,7 @@ def get_cremi_dataset(
     if rois is not None:
         assert isinstance(rois, dict)
 
-    data_paths = get_cremi_paths(path, samples, version, use_realigned, download)
+    data_paths = get_cremi_paths(path, samples, version="cropped", use_realigned=use_realigned, download=download)
     data_rois = [rois.get(name, np.s_[:, :, :]) for name in samples]
 
     if defect_augmentation_kwargs is not None and "artifact_source" not in defect_augmentation_kwargs:
@@ -202,7 +200,6 @@ def get_cremi_loader(
     patch_shape: Tuple[int, int, int],
     batch_size: int,
     samples: Tuple[str, ...] = ("A", "B", "C"),
-    version: str = "cropped",
     use_realigned: bool = False,
     download: bool = False,
     offsets: Optional[List[List[int]]] = None,
@@ -223,7 +220,6 @@ def get_cremi_loader(
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
         samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
-        version: The dataset version to use. Either 'cropped' (default) or 'padded'.
         use_realigned: Use the realigned instead of the original training data.
         download: Whether to download the data if it is not present.
         offsets: Offset values for affinity computation used as target.
@@ -240,7 +236,6 @@ def get_cremi_loader(
         path=path,
         patch_shape=patch_shape,
         samples=samples,
-        version=version,
         use_realigned=use_realigned,
         download=download,
         offsets=offsets,
