@@ -93,6 +93,9 @@ class UNETRBase(nn.Module):
             pretrained SAM / SAM2 / SAM3 model.
         use_dino_stats: Whether to normalize the input data with the statistics of the
             pretrained DINOv2 / DINOv3 model.
+        use_imagenet_stats: Whether to normalize with standard ImageNet statistics, i.e.
+            mean - (0.485, 0.456, 0.406) and std - (0.229, 0.224, 0.225), raw inputs between range [0, 1].
+            Use this with the 'torchvision' backbone when loading pretrained weights.
         use_mae_stats: Whether to normalize the input data with the statistics of the pretrained MAE model.
         resize_input: Whether to resize the input images to match `img_size`.
             By default, it resizes the inputs to match the `img_size`.
@@ -143,17 +146,27 @@ class UNETRBase(nn.Module):
             - 'scalemae' x 'vit_b'
             - 'scalemae' x 'vit_l'
             - 'scalemae' x 'vit_h'
+
+        torchvision_models:
+            - 'torchvision' x 'vit_b_16'
+            - 'torchvision' x 'vit_b_32'
+            - 'torchvision' x 'vit_l_16'
+            - 'torchvision' x 'vit_l_32'
+            - 'torchvision' x 'vit_h_14'
     """
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal[
+            "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3", "torchvision"
+        ] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
         use_sam_stats: bool = False,
         use_mae_stats: bool = False,
         use_dino_stats: bool = False,
+        use_imagenet_stats: bool = False,
         resize_input: bool = True,
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
@@ -169,6 +182,7 @@ class UNETRBase(nn.Module):
         self.use_sam_stats = use_sam_stats
         self.use_mae_stats = use_mae_stats
         self.use_dino_stats = use_dino_stats
+        self.use_imagenet_stats = use_imagenet_stats
         self.use_skip_connection = use_skip_connection
         self.resize_input = resize_input
         self.perform_range_checks = perform_range_checks
@@ -298,6 +312,13 @@ class UNETRBase(nn.Module):
             elif backbone in ["dinov2", "dinov3"]:  # Load the encoder state directly from a checkpoint.
                 encoder_state = torch.load(checkpoint)
 
+            elif backbone == "torchvision":
+                encoder_state = torch.load(checkpoint, weights_only=False)
+                if isinstance(encoder_state, dict) and "state_dict" in encoder_state:
+                    encoder_state = encoder_state["state_dict"]
+                # Strip classifier head keys not present in ViT_Torchvision
+                encoder_state = {k: v for k, v in encoder_state.items() if not k.startswith("heads.")}
+
             else:
                 raise ValueError(
                     f"We don't support either the '{backbone}' backbone or the '{encoder}' model combination (or both)."
@@ -380,6 +401,7 @@ class UNETRBase(nn.Module):
             backbone=self.backbone,
             use_mae_stats=self.use_mae_stats,
             use_dino_stats=self.use_dino_stats,
+            use_imagenet_stats=self.use_imagenet_stats,
             resize_input=self.resize_input,
             img_size=self.img_size,
             encoder_img_size=self.encoder.img_size,
@@ -423,6 +445,7 @@ def preprocess_vit_inputs(
     backbone: str = "sam",
     use_mae_stats: bool = False,
     use_dino_stats: bool = False,
+    use_imagenet_stats: bool = False,
     resize_input: bool = True,
     img_size: int = 1024,
     encoder_img_size: int = 1024,
@@ -439,6 +462,9 @@ def preprocess_vit_inputs(
         backbone: The backbone name - controls which SAM stats are used when `use_sam_stats=True`.
         use_mae_stats: Whether to normalize with MAE statistics.
         use_dino_stats: Whether to normalize with DINOv2/DINOv3 statistics.
+        use_imagenet_stats: Whether to normalize with standard ImageNet statistics
+            (mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), range [0, 1]).
+            Use this for torchvision pretrained backbones.
         resize_input: Whether to resize the input to the longest side before padding.
         img_size: The model image size, used for 3D resize.
         encoder_img_size: The encoder image size, used for 2D resize and padding.
@@ -467,7 +493,7 @@ def preprocess_vit_inputs(
             unit_scale_max = 1.0
     elif use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
         raise NotImplementedError
-    elif use_dino_stats:
+    elif use_dino_stats or use_imagenet_stats:
         mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
         expected_range = (0.0, 1.0)
     else:
@@ -508,13 +534,16 @@ class UNETR(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal[
+            "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3", "torchvision"
+        ] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
         use_sam_stats: bool = False,
         use_mae_stats: bool = False,
         use_dino_stats: bool = False,
+        use_imagenet_stats: bool = False,
         resize_input: bool = True,
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
@@ -534,6 +563,7 @@ class UNETR(UNETRBase):
             use_sam_stats=use_sam_stats,
             use_mae_stats=use_mae_stats,
             use_dino_stats=use_dino_stats,
+            use_imagenet_stats=use_imagenet_stats,
             resize_input=resize_input,
             encoder_checkpoint=encoder_checkpoint,
             final_activation=final_activation,
@@ -706,13 +736,16 @@ class UNETR3D(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal[
+            "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3", "torchvision"
+        ] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "hvit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
         use_sam_stats: bool = False,
         use_mae_stats: bool = False,
         use_dino_stats: bool = False,
+        use_imagenet_stats: bool = False,
         resize_input: bool = True,
         encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
@@ -740,6 +773,7 @@ class UNETR3D(UNETRBase):
             use_sam_stats=use_sam_stats,
             use_mae_stats=use_mae_stats,
             use_dino_stats=use_dino_stats,
+            use_imagenet_stats=use_imagenet_stats,
             resize_input=resize_input,
             encoder_checkpoint=encoder_checkpoint,
             final_activation=final_activation,
