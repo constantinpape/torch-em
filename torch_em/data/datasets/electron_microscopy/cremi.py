@@ -103,6 +103,10 @@ def get_cremi_paths(
 
     Returns:
         The filepaths to the training data.
+
+    Note:
+        The padded volumes are not available via the dataset and dataloader functions; use this function directly
+        if you need access to the padded data.
     """
     get_cremi_data(path, samples, version, use_realigned, download)
     suffix = "_padded" if version == "padded" else ""
