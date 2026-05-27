@@ -117,9 +117,9 @@ def _nisb_open_remote(setting: str, split: str, seed_idx: int):
 
     fs = s3fs.S3FileSystem(anon=True, endpoint_url=NISB_S3_ENDPOINT)
     s3_path = f"{NISB_S3_BUCKET}/{setting}/{split}/seed{seed_idx}/data.zarr"
-    store = zarr.storage.FsspecStore(fs=fs, path=s3_path)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=".*asynchronous.*")
+        store = zarr.storage.FsspecStore(fs=fs, path=s3_path)
         return zarr.open_group(store, mode="r", zarr_format=2)
 
 
