@@ -26,7 +26,7 @@ def check_wildenberg(label_choice="psd"):
 
 def main():
     check_wildenberg("psd")
-    check_wildenberg("vesicle")
+    check_wildenberg("vesicle_cloud")
     check_wildenberg("saturated")
 
 

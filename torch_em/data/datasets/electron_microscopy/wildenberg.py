@@ -4,7 +4,7 @@ The dataset contains two FIB-SEM volumes from mouse primary visual cortex (V1) l
 acquired at 6 x 6 x 40 nm native resolution. Synaptic structures are annotated at
 12 x 12 x 40 nm resolution across three auto-segmentation channels:
 - psd: postsynaptic density (binary, uint8)
-- vesicle: presynaptic vesicle cloud (binary, uint8)
+- vesicle_cloud: presynaptic vesicle cloud (binary, uint8)
 - saturated: saturated synapse mask (instance, uint32)
 
 Two experiments are available:
@@ -58,7 +58,7 @@ WILDENBERG_EXPERIMENTS: Dict[str, dict] = {
 # (channel_name, numpy_dtype, use_bitshuffle_for_compression)
 WILDENBERG_LABEL_CHANNELS: Dict[str, tuple] = {
     "psd": ("psd_autoseg", np.dtype("uint8"), False),
-    "vesicle": ("vesicle_autoseg", np.dtype("uint8"), False),
+    "vesicle_cloud": ("vesicle_autoseg", np.dtype("uint8"), False),
     "saturated": ("saturated_autoseg", np.dtype("uint32"), True),
 }
 
@@ -136,7 +136,7 @@ def _wildenberg_download_to_zarr(cv, ds, x0g, y0g, z0g, name, swap_xy=False):
 def get_wildenberg_data(
     path: Union[os.PathLike, str],
     experiment: Literal["p105", "p14"],
-    label_choice: Literal["psd", "vesicle", "saturated"],
+    label_choice: Literal["psd", "vesicle_cloud", "saturated"],
     bounding_box: Optional[Tuple[float, ...]] = None,
     em_mip: int = 1,
     seg_mip: int = 0,
@@ -146,12 +146,12 @@ def get_wildenberg_data(
 
     The zarr store contains:
       - raw: EM grayscale (uint8, z/y/x)
-      - labels: synaptic annotation (uint8 for psd/vesicle, uint32 for saturated, z/y/x)
+      - labels: synaptic annotation (uint8 for psd/vesicle_cloud, uint32 for saturated, z/y/x)
 
     Args:
         path: Filepath to a folder where the cached zarr store will be saved.
         experiment: Which experiment to load. Either 'p105' (adult) or 'p14' (developing).
-        label_choice: Which annotation channel to use. One of 'psd', 'vesicle', or 'saturated'.
+        label_choice: Which annotation channel to use. One of 'psd', 'vesicle_cloud', or 'saturated'.
         bounding_box: Region in nm as (x_min, x_max, y_min, y_max, z_min, z_max).
             Defaults to the full annotation extent of the chosen experiment.
         em_mip: MIP level for the EM image. Default mip=1 gives 12 x 12 x 40 nm resolution.
@@ -255,7 +255,7 @@ def get_wildenberg_data(
 def get_wildenberg_paths(
     path: Union[os.PathLike, str],
     experiments: Optional[Sequence[str]] = None,
-    label_choice: Literal["psd", "vesicle", "saturated"] = "psd",
+    label_choice: Literal["psd", "vesicle_cloud", "saturated"] = "psd",
     bounding_box: Optional[Tuple[float, ...]] = None,
     em_mip: int = 1,
     seg_mip: int = 0,
@@ -266,7 +266,7 @@ def get_wildenberg_paths(
     Args:
         path: Filepath to a folder where the cached zarr stores will be saved.
         experiments: Experiments to load. Defaults to both ('p105', 'p14').
-        label_choice: Which annotation channel to use. One of 'psd', 'vesicle', or 'saturated'.
+        label_choice: Which annotation channel to use. One of 'psd', 'vesicle_cloud', or 'saturated'.
         bounding_box: Region in nm as (x_min, x_max, y_min, y_max, z_min, z_max).
             Defaults to the full annotation extent per experiment.
         em_mip: MIP level for the EM image.
@@ -284,7 +284,7 @@ def get_wildenberg_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
     experiments: Optional[Sequence[str]] = None,
-    label_choice: Literal["psd", "vesicle", "saturated"] = "psd",
+    label_choice: Literal["psd", "vesicle_cloud", "saturated"] = "psd",
     bounding_box: Optional[Tuple[float, ...]] = None,
     em_mip: int = 1,
     seg_mip: int = 0,
@@ -300,7 +300,7 @@ def get_wildenberg_dataset(
         patch_shape: The patch shape (z, y, x) to use for training.
         experiments: Experiments to load. Defaults to both ('p105', 'p14').
         label_choice: Which annotation channel to use. 'psd' for postsynaptic density,
-            'vesicle' for presynaptic vesicle cloud, or 'saturated' for instance-labeled saturated synapses.
+            'vesicle_cloud' for presynaptic vesicle cloud, or 'saturated' for instance-labeled saturated synapses.
         bounding_box: Region in nm as (x_min, x_max, y_min, y_max, z_min, z_max).
             Defaults to the full annotation extent per experiment.
         em_mip: MIP level for the EM image. Default mip=1 gives 12 x 12 x 40 nm.
@@ -337,7 +337,7 @@ def get_wildenberg_loader(
     batch_size: int,
     patch_shape: Tuple[int, int, int],
     experiments: Optional[Sequence[str]] = None,
-    label_choice: Literal["psd", "vesicle", "saturated"] = "psd",
+    label_choice: Literal["psd", "vesicle_cloud", "saturated"] = "psd",
     bounding_box: Optional[Tuple[float, ...]] = None,
     em_mip: int = 1,
     seg_mip: int = 0,
@@ -354,7 +354,7 @@ def get_wildenberg_loader(
         patch_shape: The patch shape (z, y, x) to use for training.
         experiments: Experiments to load. Defaults to both ('p105', 'p14').
         label_choice: Which annotation channel to use. 'psd' for postsynaptic density,
-            'vesicle' for presynaptic vesicle cloud, or 'saturated' for instance-labeled saturated synapses.
+            'vesicle_cloud' for presynaptic vesicle cloud, or 'saturated' for instance-labeled saturated synapses.
         bounding_box: Region in nm as (x_min, x_max, y_min, y_max, z_min, z_max).
             Defaults to the full annotation extent per experiment.
         em_mip: MIP level for the EM image. Default mip=1 gives 12 x 12 x 40 nm.
