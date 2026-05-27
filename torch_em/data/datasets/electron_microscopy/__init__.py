@@ -24,6 +24,7 @@ from .microns import get_microns_loader, get_microns_dataset, get_microns_minnie
 from .microns_nuclei import get_microns_nuclei_loader, get_microns_nuclei_dataset
 from .mitoem import get_mitoem_loader, get_mitoem_dataset
 from .mitoemv2 import get_mitoemv2_loader, get_mitoemv2_dataset
+from .mousecc import get_mousecc_loader, get_mousecc_dataset
 from .nisb import get_nisb_loader, get_nisb_dataset
 from .nuc_mm import get_nuc_mm_loader, get_nuc_mm_dataset
 from .platynereis import (
