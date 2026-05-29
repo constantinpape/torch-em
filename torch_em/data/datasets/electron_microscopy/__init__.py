@@ -22,6 +22,7 @@ from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
 from .malecns import get_malecns_loader, get_malecns_dataset
+from .manc import get_manc_loader, get_manc_dataset
 from .microns import get_microns_loader, get_microns_dataset, get_microns_minnie65_loader, get_microns_minnie65_dataset
 from .microns_nuclei import get_microns_nuclei_loader, get_microns_nuclei_dataset
 from .mitoem import get_mitoem_loader, get_mitoem_dataset
