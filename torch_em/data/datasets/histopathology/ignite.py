@@ -110,7 +110,7 @@ def get_ignite_paths(
     img_dir = data_dir / "images" / "images" / "he"
 
     if split is not None:
-        split_filenames = get_split_samples(path, split)
+        split_filenames = get_split_samples(Path(path), split)
         img_paths = natsorted([str(img_dir / fn) for fn in split_filenames])
         annotation_paths = natsorted(
             [str(annotation_dir / fn) for fn in split_filenames]
