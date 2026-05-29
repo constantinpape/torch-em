@@ -97,7 +97,7 @@ def get_ignite_paths(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         split: The choice of data split.
-        choice: The choice of dataset.
+        annotation_type: The type of annotations.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -141,7 +141,7 @@ def get_ignite_dataset(
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
-        choice: The choice of dataset.
+        annotation_type: The type of annotations.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -188,7 +188,7 @@ def get_ignite_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         split: The choice of data split.
-        choice: The choice of dataset.
+        annotation_type: The type of annotations.
         resize_inputs: Whether to resize the inputs.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
