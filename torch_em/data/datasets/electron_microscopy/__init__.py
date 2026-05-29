@@ -13,6 +13,7 @@ from .emneuron import get_emneuron_loader, get_emneuron_dataset
 from .emps import get_emps_loader, get_emps_dataset
 from .fafb_nuclei import get_fafb_nuclei_loader, get_fafb_nuclei_dataset
 from .fib25 import get_fib25_loader, get_fib25_dataset
+from .hemibrain import get_hemibrain_loader, get_hemibrain_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
 from .hydra_vulgaris import get_hydra_loader, get_hydra_dataset
 from .humanneurons import get_humanneurons_loader, get_humanneurons_dataset
