@@ -1,8 +1,10 @@
 """ProbTEM dataset for mitochondria segmentation in 2D TEM images.
 
-The dataset contains TEM images of skeletal muscle with binary segmentation
-masks for mitochondria. Images are 2560 x 2560 pixels at 65 nm sample thickness
-acquired with a JEM-1011 microscope at 80 kV.
+The dataset contains TEM images of skeletal muscle with binary semantic segmentation
+masks for mitochondria (0=background, 1=mitochondria). Images are 2560 x 2560 pixels
+at 65 nm sample thickness acquired with a JEM-1011 microscope at 80 kV.
+
+The dataset has 21 training and 6 test images. There is no validation split.
 
 Masks are stored as grayscale PNGs (0=background, 255=mitochondria) with slight
 anti-aliased edges. They are thresholded to binary during preprocessing.
