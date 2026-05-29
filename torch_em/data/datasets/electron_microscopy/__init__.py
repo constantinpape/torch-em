@@ -28,6 +28,7 @@ from .mitoemv2 import get_mitoemv2_loader, get_mitoemv2_dataset
 from .mousecc import get_mousecc_loader, get_mousecc_dataset
 from .nisb import get_nisb_loader, get_nisb_dataset
 from .nuc_mm import get_nuc_mm_loader, get_nuc_mm_dataset
+from .probtem import get_probtem_loader, get_probtem_dataset
 from .platynereis import (
     get_platynereis_cell_loader, get_platynereis_cell_dataset,
     get_platynereis_cilia_loader, get_platynereis_cilia_dataset,
