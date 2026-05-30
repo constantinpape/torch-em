@@ -13,17 +13,24 @@ from .emneuron import get_emneuron_loader, get_emneuron_dataset
 from .emps import get_emps_loader, get_emps_dataset
 from .fafb_nuclei import get_fafb_nuclei_loader, get_fafb_nuclei_dataset
 from .fib25 import get_fib25_loader, get_fib25_dataset
+from .hemibrain import get_hemibrain_loader, get_hemibrain_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
+from .hydra_vulgaris import get_hydra_loader, get_hydra_dataset
 from .humanneurons import get_humanneurons_loader, get_humanneurons_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
 from .malecns import get_malecns_loader, get_malecns_dataset
+from .manc import get_manc_loader, get_manc_dataset
+from .microns import get_microns_loader, get_microns_dataset, get_microns_minnie65_loader, get_microns_minnie65_dataset
 from .microns_nuclei import get_microns_nuclei_loader, get_microns_nuclei_dataset
 from .mitoem import get_mitoem_loader, get_mitoem_dataset
 from .mitoemv2 import get_mitoemv2_loader, get_mitoemv2_dataset
+from .mousecc import get_mousecc_loader, get_mousecc_dataset
+from .nisb import get_nisb_loader, get_nisb_dataset
 from .nuc_mm import get_nuc_mm_loader, get_nuc_mm_dataset
+from .probtem import get_probtem_loader, get_probtem_dataset
 from .platynereis import (
     get_platynereis_cell_loader, get_platynereis_cell_dataset,
     get_platynereis_cilia_loader, get_platynereis_cilia_dataset,
@@ -35,3 +42,5 @@ from .sponge_em import get_sponge_em_loader, get_sponge_em_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
 from .vnc import get_vnc_mito_loader, get_vnc_mito_dataset
 from .waenet import get_waenet_loader, get_waenet_dataset
+from .wildenberg import get_wildenberg_loader, get_wildenberg_dataset
+from .zebrafinch import get_zebrafinch_loader, get_zebrafinch_dataset

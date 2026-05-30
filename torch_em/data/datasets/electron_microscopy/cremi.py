@@ -21,54 +21,72 @@ from ....transform.raw import standardize
 
 
 CREMI_URLS = {
-    "original": {
+    "cropped": {
         "A": "https://cremi.org/static/data/sample_A_20160501.hdf",
         "B": "https://cremi.org/static/data/sample_B_20160501.hdf",
         "C": "https://cremi.org/static/data/sample_C_20160501.hdf",
+    },
+    "padded": {
+        "A": "https://cremi.org/static/data/sample_A_padded_20160501.hdf",
+        "B": "https://cremi.org/static/data/sample_B_padded_20160501.hdf",
+        "C": "https://cremi.org/static/data/sample_C_padded_20160501.hdf",
     },
     "realigned": {},
     "defects": "https://zenodo.org/record/5767036/files/sample_ABC_padded_defects.h5"
 }
 CHECKSUMS = {
-    "original": {
+    "cropped": {
         "A": "4c563d1b78acb2bcfb3ea958b6fe1533422f7f4a19f3e05b600bfa11430b510d",
         "B": "887e85521e00deead18c94a21ad71f278d88a5214c7edeed943130a1f4bb48b8",
         "C": "2874496f224d222ebc29d0e4753e8c458093e1d37bc53acd1b69b19ed1ae7052",
+    },
+    "padded": {
+        "A": "c95dc4497ce0f0e7b70507c7253230fda95325ee91ea0d3253c9ef94b197050a",
+        "B": "22917a25092d0b80175012c152da33e1a1d82e049c4a96dc747145d5ca5d1b87",
+        "C": "aba27b165ef005d5fbebe0e3f8775ac903cf273b7e20381dff664d45065a3314",
     },
     "realigned": {},
     "defects": "7b06ffa34733b2c32956ea5005e0cf345e7d3a27477f42f7c905701cdc947bd0"
 }
 
 
-def get_cremi_data(path: Union[os.PathLike, str], samples: Tuple[str], download: bool, use_realigned: bool = False):
+def get_cremi_data(
+    path: Union[os.PathLike, str],
+    samples: Tuple[str, ...] = ("A", "B", "C"),
+    version: str = "cropped",
+    use_realigned: bool = False,
+    download: bool = False,
+):
     """Download the CREMI training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
-        download: Whether to download the data if it is not present.
+        version: The dataset version to use. Either 'cropped' (default) or 'padded'.
         use_realigned: Use the realigned instead of the original training data.
+        download: Whether to download the data if it is not present.
     """
     if use_realigned:
         # we need to sample batches in this case
         # sampler = torch_em.data.MinForegroundSampler(min_fraction=0.05, p_reject=.75)
         raise NotImplementedError
-    else:
-        urls = CREMI_URLS["original"]
-        checksums = CHECKSUMS["original"]
+    if version not in CREMI_URLS:
+        raise ValueError(f"Unknown version '{version}'. Choose from {list(CREMI_URLS.keys())}.")
 
+    urls = CREMI_URLS[version]
+    checksums = CHECKSUMS[version]
+    suffix = "_padded" if version == "padded" else ""
     os.makedirs(path, exist_ok=True)
     for name in samples:
-        url = urls[name]
-        checksum = checksums[name]
-        data_path = os.path.join(path, f"sample{name}.h5")
+        data_path = os.path.join(path, f"sample{name}{suffix}.h5")
         # CREMI SSL certificates expired, so we need to disable verification
-        util.download_source(data_path, url, download, checksum, verify=False)
+        util.download_source(data_path, urls[name], download, checksums[name], verify=False)
 
 
 def get_cremi_paths(
     path: Union[os.PathLike, str],
     samples: Tuple[str, ...] = ("A", "B", "C"),
+    version: str = "cropped",
     use_realigned: bool = False,
     download: bool = False
 ) -> List[str]:
@@ -77,14 +95,22 @@ def get_cremi_paths(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        version: The dataset version to use. Either 'cropped' (default) or 'padded'.
+            The padded volumes contain the same data with additional zero-padded borders;
+            label regions outside the original bounds are zero.
         use_realigned: Use the realigned instead of the original training data.
         download: Whether to download the data if it is not present.
 
     Returns:
         The filepaths to the training data.
+
+    Note:
+        The padded volumes are not available via the dataset and dataloader functions; use this function directly
+        if you need access to the padded data.
     """
-    get_cremi_data(path, samples, download, use_realigned)
-    data_paths = [os.path.join(path, f"sample{name}.h5") for name in samples]
+    get_cremi_data(path, samples, version, use_realigned, download)
+    suffix = "_padded" if version == "padded" else ""
+    data_paths = [os.path.join(path, f"sample{name}{suffix}.h5") for name in samples]
     return data_paths
 
 
@@ -126,7 +152,7 @@ def get_cremi_dataset(
     if rois is not None:
         assert isinstance(rois, dict)
 
-    data_paths = get_cremi_paths(path, samples, use_realigned, download)
+    data_paths = get_cremi_paths(path, samples, version="cropped", use_realigned=use_realigned, download=download)
     data_rois = [rois.get(name, np.s_[:, :, :]) for name in samples]
 
     if defect_augmentation_kwargs is not None and "artifact_source" not in defect_augmentation_kwargs:
