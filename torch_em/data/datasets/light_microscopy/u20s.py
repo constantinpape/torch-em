@@ -15,7 +15,7 @@ from natsort import natsorted
 from typing import List, Union, Tuple
 
 import imageio.v3 as imageio
-from skimage.measure import label as connected_components
+from bioimage_cpp.segmentation import label as connected_components
 
 from torch.utils.data import Dataset, DataLoader
 

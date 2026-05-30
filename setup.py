@@ -8,7 +8,8 @@ __version__ = runpy.run_path("torch_em/__version__.py")["__version__"]
 # see 'environment_gpu.yaml' / 'environment_cpu.yaml'
 requires = [
     "torch",
-    "h5py"
+    "h5py",
+    "bioimage-cpp",
 ]
 
 

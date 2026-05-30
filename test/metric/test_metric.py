@@ -122,6 +122,28 @@ class TestMetric(unittest.TestCase):
         metric = HDBScanVOIMetric(min_size=50, eps=1.0e-4)
         self._test_metric(embed, gt, metric)
 
+    def test_merge_background(self):
+        # Directly exercise merge_background, which uses regionprops (mean embedding per segment)
+        # and relabel_sequential after the vigra -> bioimage-cpp migration.
+        from torch_em.metric.instance_segmentation_metric import EmbeddingMWS
+
+        seg = np.zeros((64, 64), dtype="int64")
+        seg[10:20, 10:20] = 1
+        seg[40:50, 40:50] = 2
+
+        # Background embedding is far from both objects, so it is identified and merged to 0.
+        embeddings = np.zeros((2, 64, 64), dtype="float32")
+        embeddings[:, 10:20, 10:20] = 10.0
+        embeddings[:, 40:50, 40:50] = 20.0
+
+        metric = EmbeddingMWS(delta=2.0, offsets=self.offsets, with_background=True, min_seg_size=0)
+        out = metric.merge_background(seg.copy(), embeddings)
+
+        # The dominant background region is merged into label 0.
+        self.assertEqual(out[0, 0], 0)
+        # The two foreground objects remain and are relabeled consecutively.
+        self.assertEqual(sorted(np.unique(out).tolist()), [0, 1, 2])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -44,7 +44,8 @@ def _contours_to_instances(contour_mask: np.ndarray) -> np.ndarray:
     each assigned a unique integer label.
     """
     from skimage.morphology import binary_dilation, disk
-    from skimage.measure import label, regionprops
+    from skimage.measure import regionprops
+    from bioimage_cpp.segmentation import label
 
     boundaries = contour_mask > 0
 

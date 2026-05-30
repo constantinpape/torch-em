@@ -26,7 +26,7 @@ from .. import util
 def _create_h5_data(path, split):
     """Create h5 files with raw images, semantic masks and instance labels."""
     import h5py
-    from skimage.measure import label
+    from bioimage_cpp.segmentation import label
     from tqdm import tqdm
 
     data_dir = os.path.join(path, "data", "BCCD Dataset with mask")

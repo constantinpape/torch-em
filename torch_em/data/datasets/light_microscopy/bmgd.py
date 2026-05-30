@@ -84,7 +84,7 @@ def get_bmgd_data(
 def _create_bmgd_h5(path, stiffness):
     """Create processed h5 files with instance labels from semantic masks."""
     import h5py
-    from skimage.measure import label
+    from bioimage_cpp.segmentation import label
     from tqdm import tqdm
     import tifffile
 
