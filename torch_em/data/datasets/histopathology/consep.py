@@ -22,7 +22,7 @@ import torch_em
 
 from elf.segmentation.stitching import stitch_tiled_segmentation
 from scipy.io import loadmat
-from skimage.measure import label as connected_components
+from bioimage_cpp.segmentation import label as connected_components
 from torch.utils.data import Dataset, DataLoader
 
 from .. import util

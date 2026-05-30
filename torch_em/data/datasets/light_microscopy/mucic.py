@@ -122,7 +122,7 @@ def _create_mucic_h5(path, cell_line, variant):
 
         # Convert semantic labels to instance labels if needed
         if needs_connected_components:
-            from skimage.measure import label
+            from bioimage_cpp.segmentation import label
             instances = label(labels > 0).astype("int64")
         else:
             instances = labels.astype("int64")
@@ -143,9 +143,9 @@ def _semantic_to_instances_watershed(semantic_mask, erosion_iterations=2):
     2. Run connected components on eroded mask to get seed labels
     3. Use watershed to expand seeds back to original mask boundaries
     """
-    from scipy.ndimage import binary_erosion, distance_transform_edt
-    from skimage.measure import label
-    from skimage.segmentation import watershed
+    from scipy.ndimage import binary_erosion
+    from bioimage_cpp.distance import distance_transform
+    from bioimage_cpp.segmentation import label, watershed
 
     binary_mask = semantic_mask > 0
 
@@ -157,7 +157,7 @@ def _semantic_to_instances_watershed(semantic_mask, erosion_iterations=2):
 
     # Use watershed to expand seeds to fill original mask
     # Distance transform gives us the "landscape" for watershed
-    distance = distance_transform_edt(binary_mask)
+    distance = distance_transform(binary_mask)
     instances = watershed(-distance, seeds, mask=binary_mask)
 
     return instances.astype("int64")

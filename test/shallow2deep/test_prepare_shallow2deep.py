@@ -98,6 +98,29 @@ class TestPrepareShallow2Deep(unittest.TestCase):
             n_rfs = len(glob(os.path.join(rf_folder, "*.pkl")))
             self.assertEqual(n_rfs, n_forests)
 
+    def test_filter_machinery(self):
+        from torch_em.shallow2deep.prepare_shallow2deep import (
+            _get_filters, _apply_filters, _calculate_response,
+        )
+
+        # Default config: 5 filters x 4 sigmas. Per sigma there are 3 scalar filters (1 column each)
+        # and 2 eigenvalue filters (ndim columns each), i.e. (3 + 2 * ndim) columns per sigma.
+        for ndim, shape in [(2, (48, 48)), (3, (16, 24, 24))]:
+            raw = np.random.rand(*shape).astype("float32")
+            filters_and_sigmas = _get_filters(ndim, None)
+            self.assertEqual(len(filters_and_sigmas), 20)
+
+            features = _apply_filters(raw, filters_and_sigmas)
+            expected_columns = 4 * (3 + 2 * ndim)
+            self.assertEqual(features.shape, (raw.size, expected_columns))
+
+            # The string-based path must resolve CamelCase names and handle the structure tensor.
+            scalar = _calculate_response(raw, "gaussianSmoothing", 1.6)
+            self.assertEqual(scalar.shape, shape)
+            for sigma in (1.6, tuple([1.6] * ndim)):
+                eigvals = _calculate_response(raw, "structureTensorEigenvalues", sigma)
+                self.assertEqual(eigvals.shape, shape + (ndim,))
+
 
 if __name__ == "__main__":
     unittest.main()

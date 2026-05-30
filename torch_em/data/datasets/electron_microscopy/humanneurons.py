@@ -113,7 +113,7 @@ def get_humanneurons_data(
     labels = _fetch(seg_vol, x_min, x_max, y_min, y_max, z_min, z_max)
 
     # Relabel to consecutive integers so IDs fit in uint32 (required for napari and float32 training).
-    from skimage.segmentation import relabel_sequential
+    from bioimage_cpp.segmentation import relabel_sequential
     labels, _, _ = relabel_sequential(labels)
 
     resolution_nm = em_vol.mip_resolution(1).tolist()  # [8, 8, 33] nm

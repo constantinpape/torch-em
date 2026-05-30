@@ -15,11 +15,20 @@ from sklearn.ensemble import RandomForestClassifier
 from torch_em.segmentation import check_paths, is_segmentation_dataset, samples_to_datasets
 from tqdm import tqdm
 
-import vigra
-try:
-    import fastfilters as filter_impl
-except ImportError:
-    import vigra.filters as filter_impl
+import bioimage_cpp as bic
+
+# Map legacy vigra/fastfilters CamelCase filter names to bioimage_cpp.filters functions.
+_FILTER_NAMES = {
+    "gaussianSmoothing": "gaussian_smoothing",
+    "laplacianOfGaussian": "laplacian_of_gaussian",
+    "gaussianGradientMagnitude": "gaussian_gradient_magnitude",
+    "hessianOfGaussianEigenvalues": "hessian_of_gaussian_eigenvalues",
+    "structureTensorEigenvalues": "structure_tensor_eigenvalues",
+}
+
+
+def _resolve_filter(name):
+    return getattr(bic.filters, _FILTER_NAMES.get(name, name))
 
 
 class RFSegmentationDataset(torch_em.data.SegmentationDataset):
@@ -196,21 +205,21 @@ def _load_rf_image_collection_dataset(
 def _get_filters(ndim, filters_and_sigmas):
     # subset of ilastik default features
     if filters_and_sigmas is None:
-        filters = [filter_impl.gaussianSmoothing,
-                   filter_impl.laplacianOfGaussian,
-                   filter_impl.gaussianGradientMagnitude,
-                   filter_impl.hessianOfGaussianEigenvalues,
-                   filter_impl.structureTensorEigenvalues]
+        filters = [bic.filters.gaussian_smoothing,
+                   bic.filters.laplacian_of_gaussian,
+                   bic.filters.gaussian_gradient_magnitude,
+                   bic.filters.hessian_of_gaussian_eigenvalues,
+                   bic.filters.structure_tensor_eigenvalues]
         sigmas = [0.7, 1.6, 3.5, 5.0]
         filters_and_sigmas = [
-            (filt, sigma) if i != len(filters) - 1 else (partial(filt, outerScale=0.5*sigma), sigma)
+            (filt, sigma) if i != len(filters) - 1 else (partial(filt, outer_sigma=0.5*sigma), sigma)
             for i, filt in enumerate(filters) for sigma in sigmas
         ]
     # validate the filter config
     assert isinstance(filters_and_sigmas, (list, tuple))
     for filt_and_sig in filters_and_sigmas:
         filt, sig = filt_and_sig
-        assert callable(filt) or (isinstance(filt, str) and hasattr(filter_impl, filt))
+        assert callable(filt) or (isinstance(filt, str) and hasattr(bic.filters, _FILTER_NAMES.get(filt, filt)))
         assert isinstance(sig, (float, tuple))
         if isinstance(sig, tuple):
             assert ndim is not None and len(sig) == ndim
@@ -222,15 +231,15 @@ def _calculate_response(raw, filter_, sigma):
     if callable(filter_):
         return filter_(raw, sigma)
 
-    # filter_ is still string, convert it to function
-    # fastfilters does not support passing sigma as tuple
-    func = getattr(vigra.filters, filter_) if isinstance(sigma, tuple) else getattr(filter_impl, filter_)
+    # filter_ is still a string, convert it to a bioimage_cpp.filters function.
+    # bioimage_cpp.filters supports passing sigma as a scalar or as a per-axis tuple.
+    func = _resolve_filter(filter_)
 
-    # special case since additional argument outerScale
-    # is needed for structureTensorEigenvalues functions
-    if filter_ == "structureTensorEigenvalues":
-        outerScale = tuple([s*2 for s in sigma]) if isinstance(sigma, tuple) else 2*sigma
-        return func(raw, sigma, outerScale=outerScale)
+    # special case since the additional argument outer_sigma
+    # is needed for the structure tensor eigenvalues filter
+    if filter_ in ("structureTensorEigenvalues", "structure_tensor_eigenvalues"):
+        outer_sigma = tuple(s*2 for s in sigma) if isinstance(sigma, tuple) else 2*sigma
+        return func(raw, sigma, outer_sigma=outer_sigma)
 
     return func(raw, sigma)
 

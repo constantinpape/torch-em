@@ -79,7 +79,7 @@ def get_e11bio_data(
     """
     import h5py
     import zarr
-    from skimage.segmentation import relabel_sequential
+    from bioimage_cpp.segmentation import relabel_sequential
 
     if split not in SPLIT_NUM_CROPS:
         raise ValueError(f"split must be one of {list(SPLIT_NUM_CROPS)}, got {split!r}")
