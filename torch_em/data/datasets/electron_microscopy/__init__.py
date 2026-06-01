@@ -19,7 +19,6 @@ from .human_cortex_h01 import get_human_cortex_h01_loader, get_human_cortex_h01_
 from .hemibrain import get_hemibrain_loader, get_hemibrain_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
 from .hydra_vulgaris import get_hydra_loader, get_hydra_dataset
-from .humanneurons import get_humanneurons_loader, get_humanneurons_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
