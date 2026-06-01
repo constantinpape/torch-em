@@ -47,7 +47,8 @@ EM_MIP = 1
 # At 8x8x33 nm this gives ~16.4x16.4x16.9 um physically isotropic subvolumes.
 # Full volume: (515892, 356400, 5293) voxels at 8x8x33 nm.
 DEFAULT_BOUNDING_BOXES = [
-    (50000, 52048, 50000, 52048, 500, 1012),       # lower-left, low z
+    (271360, 273408, 201728, 203776, 2614, 2678),  # original humanneurons.py crop
+    (50000, 52048, 50000, 52048, 500, 1012),  # lower-left, low z
     (257000, 259048, 178000, 180048, 2500, 3012),  # central
     (460000, 462048, 300000, 302048, 4500, 5012),  # upper-right, high z
     (150000, 152048, 250000, 252048, 3500, 4012),  # mid-volume
