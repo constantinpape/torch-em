@@ -3,21 +3,16 @@ channels:
 name:
     torch-em-dev
 dependencies:
+    - bioimage-cpp
     - bioimageio.spec
     - bioimageio.core >=0.8.0
     - imagecodecs
+    - kornia
     - natsort
-    # nifty and python-elf are only needed until python-elf is migrated to bioimage-cpp.
-    - nifty >=1.2.3
     - python-elf
     - pytorch
+    - requests
     - tensorboard
     - tifffile >=2024
     - torchvision
     - tqdm
-    - kornia
-    - requests
-    - pip
-    - pip:
-        # bioimage-cpp replaces the direct vigra/nifty/affogato usage and is currently PyPI-only.
-        - bioimage-cpp
