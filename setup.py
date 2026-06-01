@@ -6,11 +6,14 @@ __version__ = runpy.run_path("torch_em/__version__.py")["__version__"]
 
 requires = [
     "bioimage-cpp",
-    "bioimage.core",
+    "bioimageio.core",
     "h5py",
+    "imageio",
+    "kornia",
     "natsort",
     "python-elf",
     "requests",
+    "scikit-image",
     "tensorboard",
     "tifffile",
     "torch",
