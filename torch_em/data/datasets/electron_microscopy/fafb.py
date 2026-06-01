@@ -6,19 +6,12 @@ placeholder with no data - the finest available EM is at mip=2 (16 x 16 x 40 nm)
 which matches the FlyWire neuron segmentation (materialization v783, Nature 2024 paper)
 resolution exactly. Both are stored at 16 x 16 x 40 nm.
 
-Two label types are available via the `label_choice` parameter:
-- "neurons": FlyWire proofread neuron instance segmentation (16 x 16 x 40 nm).
-  Dense, ~139k neurons, relabeled to consecutive integers per crop.
-- "nuclei": Nucleus segmentation (native 32 x 32 x 40 nm, upsampled to 16 x 16 x 40 nm
-  in xy via nearest-neighbour rescaling to match the EM).
-
 Bounding boxes are specified in 16 x 16 x 40 nm voxel coordinates
 (x_min, x_max, y_min, y_max, z_min, z_max).
 Valid coordinate overlap between EM (mip=2) and seg: x=[5100,59200], y=[1440,29600], z=[16,7062].
 
-The EM is at gs://microns-seunglab/drosophila_v0/alignment/image_rechunked (mip=2),
-the neuron segmentation (v783) is at gs://flywire_v141_m783, and
-the nuclei segmentation is at neuroglancer/drosophila_v0/nucleus/v5_z_intp_intp/seg.
+The EM is at gs://microns-seunglab/drosophila_v0/alignment/image_rechunked (mip=2) and
+the neuron segmentation (v783) is at gs://flywire_v141_m783.
 
 This dataset is from the publication https://doi.org/10.1038/s41586-024-07558-y.
 Please cite it if you use this dataset in your research.
@@ -37,7 +30,7 @@ resolution is too low. If we wanna use it, we should go one resolution higher
 
 import hashlib
 import os
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
@@ -48,24 +41,16 @@ from .. import util
 
 EM_URL = "gs://microns-seunglab/drosophila_v0/alignment/image_rechunked"
 SEG_URL = "gs://flywire_v141_m783"
-NUCLEI_URL = (
-    "precomputed://https://storage.googleapis.com"
-    "/neuroglancer/drosophila_v0/nucleus/v5_z_intp_intp/seg"
-)
 # mip=2 gives 16x16x40nm, matching the seg resolution; mip=0 is a placeholder with no data.
 EM_MIP = 2
-# Nuclei native resolution is 32x32x40nm (2x coarser than EM/seg in xy).
-NUCLEI_XY_FACTOR = 2
-
-LABEL_URLS = {"neurons": SEG_URL, "nuclei": NUCLEI_URL}
 
 # Four 2048x2048x819-voxel crops sampling different brain regions.
 # At 16x16x40 nm this gives ~32x32x32 um physically isotropic subvolumes.
 DEFAULT_BOUNDING_BOXES = [
-    (6000, 8048, 2000, 4048, 500, 1319),       # anterior-left, low z
+    (6000, 8048, 2000, 4048, 500, 1319),  # anterior-left, low z
     (31000, 33048, 14500, 16548, 3200, 4019),  # central brain
     (56000, 58048, 26500, 28548, 5800, 6619),  # posterior-right, high z
-    (15000, 17048, 8000, 10048, 6100, 6919),   # mid-left, high z
+    (15000, 17048, 8000, 10048, 6100, 6919),  # mid-left, high z
 ]
 DEFAULT_BOUNDING_BOX = DEFAULT_BOUNDING_BOXES[1]
 
@@ -91,7 +76,6 @@ def _create_array(root, name, shape, dtype, is_label):
 def get_fafb_data(
     path: Union[os.PathLike, str],
     bounding_box: Tuple[int, int, int, int, int, int] = DEFAULT_BOUNDING_BOX,
-    label_choice: Literal["neurons", "nuclei"] = "neurons",
     download: bool = False,
 ) -> str:
     """Stream a subvolume from the FAFB dataset and cache it as a zarr v3 store.
@@ -100,7 +84,6 @@ def get_fafb_data(
         path: Filepath to a folder where the cached zarr store will be saved.
         bounding_box: The region to fetch as (x_min, x_max, y_min, y_max, z_min, z_max)
             in 16 nm voxel coordinates. Defaults to a 2048x2048x819 central brain crop.
-        label_choice: Which labels to cache. Either "neurons" or "nuclei".
         download: Whether to stream and cache the data if it is not present.
 
     Returns:
@@ -109,7 +92,7 @@ def get_fafb_data(
     import zarr
 
     os.makedirs(str(path), exist_ok=True)
-    zarr_path = os.path.join(str(path), f"{label_choice}_{_bbox_to_str(bounding_box)}.zarr")
+    zarr_path = os.path.join(str(path), f"{_bbox_to_str(bounding_box)}.zarr")
 
     root = zarr.open_group(zarr_path, mode="a")
     if "raw" in root and "labels" in root:
@@ -126,34 +109,23 @@ def get_fafb_data(
         raise ImportError("The 'cloud-volume' package is required: pip install cloud-volume")
 
     x_min, x_max, y_min, y_max, z_min, z_max = bounding_box
-    print(f"Streaming FAFB EM + {label_choice} for bbox {bounding_box} ...")
+    print(f"Streaming FAFB EM + FlyWire segmentation for bbox {bounding_box} ...")
 
     em_vol = cloudvolume.CloudVolume(EM_URL, use_https=True, mip=EM_MIP, progress=True)
-    raw = np.array(em_vol[x_min:x_max, y_min:y_max, z_min:z_max])[..., 0].transpose(2, 1, 0)
+    seg_vol = cloudvolume.CloudVolume(SEG_URL, use_https=True, mip=0, progress=True)
 
-    if label_choice == "nuclei":
-        from skimage.transform import rescale
-        lx0, lx1 = x_min // NUCLEI_XY_FACTOR, x_max // NUCLEI_XY_FACTOR
-        ly0, ly1 = y_min // NUCLEI_XY_FACTOR, y_max // NUCLEI_XY_FACTOR
-        lbl_vol = cloudvolume.CloudVolume(NUCLEI_URL, use_https=True, mip=0, progress=True)
-        labels_coarse = np.array(lbl_vol[lx0:lx1, ly0:ly1, z_min:z_max])[..., 0].transpose(2, 1, 0)
-        labels = rescale(
-            labels_coarse, (1, NUCLEI_XY_FACTOR, NUCLEI_XY_FACTOR),
-            order=0, anti_aliasing=False, preserve_range=True
-        ).astype("uint64")
-    else:
-        lbl_vol = cloudvolume.CloudVolume(SEG_URL, use_https=True, mip=0, progress=True)
-        labels = np.array(lbl_vol[x_min:x_max, y_min:y_max, z_min:z_max])[..., 0].transpose(2, 1, 0)
-        # FlyWire IDs are large uint64 values - relabel to consecutive integers.
-        _, labels = np.unique(labels, return_inverse=True)
-        labels = labels.reshape(raw.shape).astype("uint64")
+    raw = np.array(em_vol[x_min:x_max, y_min:y_max, z_min:z_max])[..., 0].transpose(2, 1, 0)
+    labels = np.array(seg_vol[x_min:x_max, y_min:y_max, z_min:z_max])[..., 0].transpose(2, 1, 0)
+
+    # FlyWire IDs are large uint64 values - relabel to consecutive integers.
+    _, labels = np.unique(labels, return_inverse=True)
+    labels = labels.reshape(raw.shape).astype("uint64")
 
     shape = tuple(min(r, l) for r, l in zip(raw.shape, labels.shape))
     raw = raw[:shape[0], :shape[1], :shape[2]]
     labels = labels[:shape[0], :shape[1], :shape[2]]
 
     root.attrs["bounding_box"] = list(bounding_box)
-    root.attrs["label_choice"] = label_choice
     root.attrs["resolution_nm"] = [16, 16, 40]
 
     if "raw" not in root:
@@ -170,7 +142,6 @@ def get_fafb_data(
 def get_fafb_paths(
     path: Union[os.PathLike, str],
     bounding_boxes: Optional[List[Tuple[int, int, int, int, int, int]]] = None,
-    label_choice: Literal["neurons", "nuclei"] = "neurons",
     download: bool = False,
 ) -> List[str]:
     """Get paths to FAFB zarr stores.
@@ -180,7 +151,6 @@ def get_fafb_paths(
         bounding_boxes: List of regions to fetch, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 16 nm voxel coordinates.
             Defaults to DEFAULT_BOUNDING_BOXES (4 crops).
-        label_choice: Which labels to use. Either "neurons" or "nuclei".
         download: Whether to stream and cache the data if it is not present.
 
     Returns:
@@ -188,20 +158,19 @@ def get_fafb_paths(
     """
     if bounding_boxes is None:
         bounding_boxes = DEFAULT_BOUNDING_BOXES
-    return [get_fafb_data(path, bbox, label_choice, download) for bbox in bounding_boxes]
+    return [get_fafb_data(path, bbox, download) for bbox in bounding_boxes]
 
 
 def get_fafb_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
     bounding_boxes: Optional[List[Tuple[int, int, int, int, int, int]]] = None,
-    label_choice: Literal["neurons", "nuclei"] = "neurons",
     download: bool = False,
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     **kwargs,
 ) -> Dataset:
-    """Get the FAFB dataset for neuron or nuclei segmentation.
+    """Get the FAFB dataset for neuron instance segmentation.
 
     Args:
         path: Filepath to a folder where the cached zarr stores will be saved.
@@ -209,7 +178,6 @@ def get_fafb_dataset(
         bounding_boxes: List of subvolumes to use, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 16 nm voxel coordinates.
             Defaults to DEFAULT_BOUNDING_BOXES - four 2048x2048x819 isotropic crops.
-        label_choice: Which labels to use. Either "neurons" or "nuclei".
         download: Whether to stream and cache data if not already present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
@@ -220,7 +188,7 @@ def get_fafb_dataset(
     """
     assert len(patch_shape) == 3
 
-    paths = get_fafb_paths(path, bounding_boxes, label_choice, download)
+    paths = get_fafb_paths(path, bounding_boxes, download)
 
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
     kwargs, _ = util.add_instance_label_transform(
@@ -242,13 +210,12 @@ def get_fafb_loader(
     patch_shape: Tuple[int, int, int],
     batch_size: int,
     bounding_boxes: Optional[List[Tuple[int, int, int, int, int, int]]] = None,
-    label_choice: Literal["neurons", "nuclei"] = "neurons",
     download: bool = False,
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     **kwargs,
 ) -> DataLoader:
-    """Get the DataLoader for neuron or nuclei segmentation in the FAFB dataset.
+    """Get the DataLoader for neuron instance segmentation in the FAFB dataset.
 
     Args:
         path: Filepath to a folder where the cached zarr stores will be saved.
@@ -257,7 +224,6 @@ def get_fafb_loader(
         bounding_boxes: List of subvolumes to use, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 16 nm voxel coordinates.
             Defaults to DEFAULT_BOUNDING_BOXES - four 2048x2048x819 isotropic crops.
-        label_choice: Which labels to use. Either "neurons" or "nuclei".
         download: Whether to stream and cache data if not already present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
@@ -269,7 +235,7 @@ def get_fafb_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_fafb_dataset(
-        path, patch_shape, bounding_boxes=bounding_boxes, label_choice=label_choice,
+        path, patch_shape, bounding_boxes=bounding_boxes,
         download=download, offsets=offsets, boundaries=boundaries, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
