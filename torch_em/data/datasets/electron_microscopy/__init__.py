@@ -11,6 +11,7 @@ from .densecell import get_densecell_loader, get_densecell_dataset
 from .deepict import get_deepict_actin_loader, get_deepict_actin_dataset
 from .emneuron import get_emneuron_loader, get_emneuron_dataset
 from .emps import get_emps_loader, get_emps_dataset
+from .fafb import get_fafb_loader, get_fafb_dataset
 from .fafb_nuclei import get_fafb_nuclei_loader, get_fafb_nuclei_dataset
 from .fib25 import get_fib25_loader, get_fib25_dataset
 from .hemibrain import get_hemibrain_loader, get_hemibrain_dataset
