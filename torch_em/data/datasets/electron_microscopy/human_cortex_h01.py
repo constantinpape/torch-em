@@ -19,6 +19,10 @@ Please cite it if you use this dataset in your research.
 The dataset is publicly available at https://h01-release.storage.googleapis.com.
 Requires cloud-volume: pip install cloud-volume.
 
+NOTE (on annotations): the c3 segmentation is sparse - ~70-78% of voxels are labeled
+in tissue regions, with the remainder being extracellular space or unassigned processes.
+Use MinInstanceSampler to avoid empty patches during training.
+
 NOTE (on data size): the full volume is (515892, 356400, 5293) voxels at 8 x 8 x 33 nm.
 Data is streamed from GCS and cached locally as zarr v3 stores by specifying bounding boxes.
 """
