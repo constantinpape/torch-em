@@ -9,7 +9,7 @@ dependencies:
     - imagecodecs
     - kornia
     - natsort
-    - python-elf
+    - python-elf >=0.9.1
     - pytorch
     - requests
     - tensorboard

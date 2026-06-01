@@ -70,6 +70,9 @@ class MWS:
         if self.with_background:
             assert len(affinities) == len(self.offsets) + 1
             mask, affinities = affinities[0], affinities[1:]
+            # bioimage_cpp's mutex_watershed requires a boolean mask; treat the foreground
+            # channel as a probability and threshold it (matching torch_em.util.segmentation).
+            mask = mask >= 0.5
         else:
             assert len(affinities) == len(self.offsets)
             mask = None
@@ -149,11 +152,11 @@ class Multicut:
                                                              sigma_seeds=self.sigma_seeds,
                                                              sigma_weights=self.sigma_seeds)
         rag = elfseg.compute_rag(ws, max_id + 1, n_threads=1)
-        feats = elfseg.compute_boundary_mean_and_length(rag, boundaries, n_threads=1)[:, 0]
+        feats = elfseg.compute_boundary_mean_and_length(rag, ws, boundaries, n_threads=1)[:, 0]
         costs = elfseg.compute_edge_costs(feats)
         solver = elfseg.get_multicut_solver(self.solver)
         node_labels = solver(rag, costs, n_threads=1)
-        seg = elfseg.project_node_labels_to_pixels(rag, node_labels, n_threads=1).astype("uint32")
+        seg = elfseg.project_node_labels_to_pixels(rag, ws, node_labels, n_threads=1).astype("uint32")
         if self.min_seg_size > 0:
             seg = filter_sizes(seg, self.min_seg_size, hmap=boundaries)
         return seg
