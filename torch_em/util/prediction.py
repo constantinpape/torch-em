@@ -3,7 +3,7 @@ from concurrent import futures
 from typing import Tuple, Union, Callable, Any, List, Optional
 
 import numpy as np
-import nifty.tools as nt
+import bioimage_cpp as bic
 import torch
 from numpy.typing import ArrayLike
 
@@ -222,12 +222,12 @@ def predict_with_halo(
 
     # blocking (on the padded input)
     if roi is None:
-        blocking = nt.blocking([0] * ndim, shape_spatial_eff, block_shape)
+        blocking = bic.utils.Blocking([0] * ndim, list(shape_spatial_eff), block_shape)
     else:
         assert len(roi) == ndim
         blocking_start = [0 if ro.start is None else ro.start for ro in roi]
         blocking_stop = [sh if ro.stop is None else ro.stop for ro, sh in zip(roi, shape_spatial_eff)]
-        blocking = nt.blocking(blocking_start, blocking_stop, block_shape)
+        blocking = bic.utils.Blocking(blocking_start, blocking_stop, block_shape)
 
     # output allocation (for padded shape)
     if output is None:
@@ -246,7 +246,7 @@ def predict_with_halo(
         net, device = models[worker_id]
 
         with torch.no_grad():
-            block = blocking.getBlock(block_id)
+            block = blocking.get_block(block_id)
             offset = [beg for beg in block.begin]
             inner_bb = tuple(slice(ha, ha + bs) for ha, bs in zip(halo, block.shape))
 
@@ -303,7 +303,7 @@ def predict_with_halo(
                     bb = (slice(None),) + bb
                 output[bb] = prediction
 
-    n_blocks = blocking.numberOfBlocks
+    n_blocks = blocking.number_of_blocks
     iteration_ids = range(n_blocks) if iter_list is None else np.array(iter_list)
 
     with futures.ThreadPoolExecutor(n_workers) as tp:

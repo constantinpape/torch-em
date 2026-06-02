@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 import torch
-import vigra
+from skimage.measure import regionprops
 
 from torch_em.loss.contrastive_impl import (_compute_cluster_means,
                                             _compute_cluster_means_scatter,
@@ -32,9 +32,12 @@ class TestContrastiveImpl(unittest.TestCase):
 
         x = x.detach().cpu().numpy().astype("float32")[0]
         y = y.detach().cpu().numpy().astype("uint32")[0, 0]
-        exp = np.concatenate([
-            vigra.analysis.extractRegionFeatures(chan, y, features=["mean"])["mean"][None] for chan in x
-        ], axis=0).T
+        # Offset labels by 1 so that the original label 0 is treated as a foreground region
+        # (regionprops skips label 0). Relabeling does not change the per-region means.
+        intensity = np.moveaxis(x, 0, -1)  # (H, W, C) so each region mean is per-channel.
+        exp = np.stack(
+            [region.intensity_mean for region in regionprops(y + 1, intensity_image=intensity)], axis=0
+        )
         self.assertEqual(exp.shape, exp_shape)
 
         self.assertTrue(np.allclose(mean_emb, exp))
