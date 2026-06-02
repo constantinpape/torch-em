@@ -3,12 +3,12 @@ from typing import Callable, List, Optional, Sequence, Union, Tuple
 import numpy as np
 import skimage.measure
 import skimage.segmentation
-import vigra
+import bioimage_cpp as bic
 
 from ..util import ensure_array, ensure_spatial_array
 
 try:
-    from affogato.affinities import compute_affinities
+    from bioimage_cpp.affinities import compute_affinities
 except ImportError:
     compute_affinities = None
 
@@ -25,7 +25,7 @@ def connected_components(labels: np.ndarray, ndim: Optional[int] = None, ensure_
         The segmentation after connected components.
     """
     labels = ensure_array(labels) if ndim is None else ensure_spatial_array(labels, ndim)
-    labels = skimage.measure.label(labels)
+    labels = bic.segmentation.label(labels)
     if ensure_zero and 0 not in labels:
         labels -= 1
     return labels
@@ -55,11 +55,11 @@ def label_consecutive(labels: np.ndarray, with_background: bool = True) -> np.nd
         The consecutively labeled segmentation.
     """
     if with_background:
-        seg = skimage.segmentation.relabel_sequential(labels)[0]
+        seg = bic.segmentation.relabel_sequential(labels)[0]
     else:
         if 0 in labels:
             labels += 1
-        seg = skimage.segmentation.relabel_sequential(labels)[0]
+        seg = bic.segmentation.relabel_sequential(labels)[0]
         assert seg.min() == 1
         seg -= 1
     return seg
@@ -92,7 +92,7 @@ class MinSizeLabelTransform:
             ids, sizes = np.unique(components, return_counts=True)
             filter_ids = ids[sizes < self.min_size]
             components[np.isin(components, filter_ids)] = 0
-            components, _, _ = skimage.segmentation.relabel_sequential(components)
+            components, _, _ = bic.segmentation.relabel_sequential(components)
         return components
 
 
@@ -280,7 +280,7 @@ class AffinityTransform:
         ignore_seg = (labels == self.ignore_label).astype(labels.dtype)
         ignore_transitions, invalid_mask = compute_affinities(ignore_seg, self.offsets)
         invalid_mask = np.logical_not(invalid_mask)
-        # NOTE affinity convention returned by affogato: transitions are marked by 0
+        # NOTE affinity convention returned by compute_affinities: transitions are marked by 0
         ignore_transitions = ignore_transitions == 0
         ignore_transitions[invalid_mask] = 0
         affs[ignore_transitions] = 1
@@ -300,9 +300,7 @@ class AffinityTransform:
         if np.dtype(labels.dtype) in (np.dtype("int16"), np.dtype("int32"), np.dtype("int64")):
             dtype = "int64"
         labels = ensure_spatial_array(labels, self.ndim, dtype=dtype)
-        affs, mask = compute_affinities(labels, self.offsets,
-                                        have_ignore_label=self.ignore_label is not None,
-                                        ignore_label=0 if self.ignore_label is None else self.ignore_label)
+        affs, mask = compute_affinities(labels, self.offsets, ignore_label=self.ignore_label)
         # we use the "disaffinity" convention for training; i.e. 1 means repulsive, 0 attractive
         affs = 1. - affs
 
@@ -435,7 +433,9 @@ class DistanceTransform:
         else:
             ndim = distance_mask.ndim
             to_channel_first = (ndim,) + tuple(range(ndim))
-            directed_distances = vigra.filters.vectorDistanceTransform(distance_mask).transpose(to_channel_first)
+            directed_distances = bic.distance.vector_difference_transform(
+                distance_mask == 0
+            ).transpose(to_channel_first)
 
         if self.distances:
             distances = self._compute_distances(directed_distances)
@@ -513,7 +513,7 @@ class PerObjectDistanceTransform:
         if correct_center or self.boundary_distances:
             # Crop the boundary mask and compute the boundary distances.
             cropped_boundary_mask = boundaries[bb]
-            boundary_distances = vigra.filters.distanceTransform(cropped_boundary_mask, pixel_pitch=self.sampling)
+            boundary_distances = bic.distance.distance_transform(cropped_boundary_mask == 0, sampling=self.sampling)
             boundary_distances[~cropped_mask] = 0
             max_dist_point = np.unravel_index(np.argmax(boundary_distances), boundary_distances.shape)
 
@@ -527,7 +527,7 @@ class PerObjectDistanceTransform:
 
         # Compute the directed distances,
         if self.distances or self.directed_distances:
-            this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask, pixel_pitch=self.sampling)
+            this_distances = bic.distance.vector_difference_transform(cropped_center_mask == 0, sampling=self.sampling)
         else:
             this_distances = None
 
@@ -575,16 +575,16 @@ class PerObjectDistanceTransform:
         """
         # Apply label (connected components) if specified.
         if self.apply_label:
-            labels = skimage.measure.label(labels).astype("uint32")
+            labels = bic.segmentation.label(labels).astype("uint32")
         else:  # Otherwise just relabel the segmentation.
-            labels = vigra.analysis.relabelConsecutive(labels)[0].astype("uint32")
+            labels = bic.segmentation.relabel_sequential(labels)[0].astype("uint32")
 
         # Filter out small objects if min_size is specified.
         if self.min_size > 0:
             ids, sizes = np.unique(labels, return_counts=True)
             discard_ids = ids[sizes < self.min_size]
             labels[np.isin(labels, discard_ids)] = 0
-            labels = vigra.analysis.relabelConsecutive(labels)[0].astype("uint32")
+            labels = bic.segmentation.relabel_sequential(labels)[0].astype("uint32")
 
         # Compute the boundaries. They will be used to determine the most central point,
         # and if 'self.boundary_distances is True' to add the boundary distances.

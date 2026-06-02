@@ -6,22 +6,21 @@ import h5py
 import numpy as np
 import torch
 
-from scipy.ndimage import distance_transform_edt
-from skimage.measure import label
-from skimage.segmentation import watershed
+import bioimage_cpp as bic
 
 
 def make_gt(spatial_shape, n_batches=None, with_channels=False, with_background=False, dtype=None):
     def _make_gt():
         seeds = np.random.rand(*spatial_shape)
-        seeds = label(seeds > 0.99)
-        hmap = distance_transform_edt(seeds == 0)
+        seeds = bic.segmentation.label(seeds > 0.99)
+        hmap = bic.distance.distance_transform(seeds == 0)
         if with_background:
             mask = np.random.rand(*spatial_shape) > 0.5
             assert mask.shape == hmap.shape
         else:
             mask = None
-        return watershed(hmap, markers=seeds, mask=mask)
+        # bic returns uint64 labels; cast to uint32 which torch.from_numpy supports.
+        return bic.segmentation.watershed(hmap, markers=seeds, mask=mask).astype("uint32")
 
     if n_batches is None and not with_channels:
         seg = _make_gt()
