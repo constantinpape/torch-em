@@ -110,7 +110,7 @@ def _channels_to_instances(labels):
     Returns:
         - instance labels of dimensions -> (C x H x W)
     """
-    import vigra
+    import bioimage_cpp as bic
 
     labels = labels.transpose(0, 3, 1, 2)  # to access with the shape S x 6 x H x W
     list_of_instances = []
@@ -119,10 +119,11 @@ def _channels_to_instances(labels):
         segmentation = np.zeros(labels.shape[2:])
         max_ids = []
         for label_channel in label_slice[:-1]:  # access the channels
-            # the 'start_label' takes care of where to start allocating the instance ids from
-            this_labels, max_id, _ = vigra.analysis.relabelConsecutive(
+            # the 'offset' takes care of where to start allocating the instance ids from
+            this_labels, _, _ = bic.segmentation.relabel_sequential(
                 label_channel.astype("uint64"),
-                start_label=max_ids[-1] + 1 if len(max_ids) > 0 else 1)
+                offset=max_ids[-1] + 1 if len(max_ids) > 0 else 1)
+            max_id = int(this_labels.max())
 
             # some trailing channels might not have labels, hence appending only for elements with RoIs
             if max_id > 0:

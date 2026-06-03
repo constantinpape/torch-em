@@ -1,7 +1,16 @@
 [torch_em](https://github.com/constantinpape/torch-em) is a library for deep learning in microscopy images.
 It supports segmentation and other relevant image analysis tasks. It is based on [PyTorch](https://pytorch.org/).
 
+**Important:** We recently migrated `torch_em` to [bioimage-cpp](https://github.com/computational-cell-analytics/bioimage-cpp). This enables installing `torch_em` via pip (in addition to conda) but changes dependencies and may still lead to some bugs. Please report any problems you encounter in an issue; you can pin `torch_em < 0.9` to install a version based on previous dependencies.
+
 # Installation
+
+## From pip
+
+You can install `torch_em` from pip:
+```bash
+pip install torch_em
+```
 
 ## From conda
 
