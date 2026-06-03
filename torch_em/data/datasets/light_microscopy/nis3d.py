@@ -149,8 +149,8 @@ def get_nis3d_loader(
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
-        The DataLoader
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_nis3d_dataset(path, patch_shape, split, split_type, download, **ds_kwargs)
+    dataset = get_nis3d_dataset(path, patch_shape, split=split, split_type=split_type, download=download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

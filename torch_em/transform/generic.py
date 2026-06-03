@@ -64,7 +64,7 @@ class Rescale:
     def __call__(self, *inputs):
 
         if self.is_label:  # kwargs needed for int data
-                kwargs = {"order": 0,  "anti_aliasing": False}
+            kwargs = {"order": 0, "anti_aliasing": False}
         else:  # we use the default settings for float data
             kwargs = {}
 

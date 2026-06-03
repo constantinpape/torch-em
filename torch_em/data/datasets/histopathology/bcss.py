@@ -237,6 +237,7 @@ def get_bcss_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_bcss_dataset(
-        path, patch_shape, split, val_fraction, download=download, label_dtype=label_dtype, **ds_kwargs
+        path, patch_shape, split=split, val_fraction=val_fraction, download=download,
+        label_dtype=label_dtype, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

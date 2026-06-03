@@ -1,6 +1,6 @@
 """This dataset contains crops of EM data with annotated nuclei from the adult fruit fly brain.
 
-The data is extracted from https://doi.org/10.1101/2021.11.04.46719, which contains a segmentation
+The data is extracted from https://doi.org/10.1101/2021.11.04.467197, which contains a segmentation
 of all nuclei in the fruit fly brain. Please cite it if you use this dataset for a publication.
 """
 

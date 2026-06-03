@@ -234,7 +234,7 @@ class UNetBase(nn.Module):
             msg = f"Invalid shape for U-Net: {spatial_shape} is not divisible by {factor}"
             raise ValueError(msg)
 
-    def forward(self, x: torch.Tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply U-Net to input data.
 
         Args:

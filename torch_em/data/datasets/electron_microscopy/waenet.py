@@ -2,13 +2,13 @@
 for multi-class semantic segmentation of cellular structures.
 
 The seven sub-datasets cover different cell types and imaging modalities:
-    - Dataset 1: Human pancreatic carcinoid cell line (FIB-SEM) — background, cytoplasm, nucleus
-    - Dataset 2: BON cell during interphase (ssTEM) — background, cytoplasm, chromosomes
-    - Dataset 3: BON cell during mitosis (ssTEM) — background, cytoplasm, nucleus, mitochondria
-    - Dataset 4: Human T-cell line Jurkat (TEM) — background, cytoplasm, nucleus
-    - Dataset 5: Primary human T-cell blood (TEM) — background, cytoplasm, nucleus
-    - Dataset 6: Murine B-cell line J558L (TEM) — background, cytoplasm, nucleus
-    - Dataset 7: Phytohemagglutinin/IL-2 expanded human T cells (TEM) — background, cytoplasm, nucleus
+    - Dataset 1: Human pancreatic carcinoid cell line (FIB-SEM) - background, cytoplasm, nucleus
+    - Dataset 2: BON cell during interphase (ssTEM) - background, cytoplasm, chromosomes
+    - Dataset 3: BON cell during mitosis (ssTEM) - background, cytoplasm, nucleus, mitochondria
+    - Dataset 4: Human T-cell line Jurkat (TEM) - background, cytoplasm, nucleus
+    - Dataset 5: Primary human T-cell blood (TEM) - background, cytoplasm, nucleus
+    - Dataset 6: Murine B-cell line J558L (TEM) - background, cytoplasm, nucleus
+    - Dataset 7: Phytohemagglutinin/IL-2 expanded human T cells (TEM) - background, cytoplasm, nucleus
 
 The data is available at https://doi.org/10.17632/9rdmnn2x4x.1.
 The dataset was published in https://doi.org/10.1007/s00418-022-02148-3.

@@ -182,7 +182,7 @@ class AdditiveGaussianNoise:
 
     Args:
         scale: Scale for the noise.
-        clip_kwargs: Keyword arguments for clipping the data after the tranformation.
+        clip_kwargs: Keyword arguments for clipping the data after the transformation.
     """
     def __init__(self, scale: Tuple[float, float] = (0.0, 0.3), clip_kwargs: Dict = {"a_min": 0, "a_max": 1}):
         self.scale = scale
@@ -211,7 +211,7 @@ class AdditivePoissonNoise:
 
     Args:
         lam: Lambda value for the Poisson transformation.
-        clip_kwargs: Keyword arguments for clipping the data after the tranformation.
+        clip_kwargs: Keyword arguments for clipping the data after the transformation.
     """
     # Not sure if Poisson noise like this does make sense for data that is already normalized
     def __init__(self, lam: Tuple[float, float] = (0.0, 0.1), clip_kwargs: Dict = {"a_min": 0, "a_max": 1}):
@@ -240,7 +240,7 @@ class PoissonNoise:
     Args:
         multiplier: Multiplicative factors for deriving the lambda factor from the data.
             The factor used for the transformation will be uniformly sampled form the range of this parameter.
-        clip_kwargs: Keyword arguments for clipping the data after the tranformation.
+        clip_kwargs: Keyword arguments for clipping the data after the transformation.
     """
     def __init__(self, multiplier: Tuple[float, float] = (5.0, 10.0), clip_kwargs: Dict = {"a_min": 0, "a_max": 1}):
         self.multiplier = multiplier

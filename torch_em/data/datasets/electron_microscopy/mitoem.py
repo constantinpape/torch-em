@@ -267,5 +267,8 @@ def get_mitoem_loader(
        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_mitoem_dataset(path, splits, patch_shape, samples, download, offsets, boundaries, binary, **ds_kwargs)
+    dataset = get_mitoem_dataset(
+        path, splits, patch_shape, samples=samples, download=download,
+        offsets=offsets, boundaries=boundaries, binary=binary, **ds_kwargs
+    )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

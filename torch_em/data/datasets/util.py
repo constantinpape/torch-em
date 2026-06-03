@@ -347,14 +347,36 @@ def unzip_rarfile(rar_path: str, dst: str, remove: bool = True, use_rarfile: boo
         remove: Whether to remove the tar file after unpacking.
         use_rarfile: Whether to use the rarfile library or aspose.zip.
     """
-    if use_rarfile:
+    def _extract_with_rarfile():
         import rarfile
-        with rarfile.RarFile(rar_path) as f:
-            f.extractall(path=dst)
-    else:
+        with rarfile.RarFile(rar_path) as archive:
+            archive.extractall(path=dst)
+
+    def _extract_with_aspose():
         import aspose.zip as az
         with az.rar.RarArchive(rar_path) as archive:
             archive.extract_to_directory(dst)
+
+    extractors = [
+        ('rarfile', _extract_with_rarfile), ('aspose.zip', _extract_with_aspose),
+    ] if use_rarfile else [('aspose.zip', _extract_with_aspose)]
+
+    errors = []
+    for name, extractor in extractors:
+        try:
+            extractor()
+            break
+        except Exception as err:
+            errors.append((name, err))
+            if len(errors) < len(extractors):
+                next_name = extractors[len(errors)][0]
+                warn(f"Extraction with '{name}' failed for {rar_path} ({err}). Falling back to '{next_name}'.")
+    else:
+        backends = ', '.join(f"'{name}'" for name, _ in extractors)
+        raise RuntimeError(
+            f"Failed to extract rar archive {rar_path} with {backends}. "
+            "Please ensure one of the supported backends is installed and can read this archive."
+        ) from errors[-1][1]
 
     if remove:
         os.remove(rar_path)

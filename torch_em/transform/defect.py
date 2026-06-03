@@ -6,7 +6,8 @@ import torch
 from scipy.ndimage import binary_dilation, map_coordinates
 from skimage.draw import line
 from skimage.filters import gaussian
-from skimage.measure import label
+
+import bioimage_cpp as bic
 
 from .augmentation import get_augmentations
 from .raw import standardize
@@ -43,7 +44,7 @@ class EMDefectAugmentation:
     Args:
         p_drop_slice: Probability for a missing slice.
         p_low_contrast: Probability for a low contrast slice.
-        p_deform_slice: Probaboloty for a deformed slice.
+        p_deform_slice: Probability for a deformed slice.
         p_paste_artifact: Probability for inserting an artifact from data source.
         contrast_scale: Scale of low contrast transformation.
         deformation_mode: Deformation mode that should be used.
@@ -142,7 +143,7 @@ class EMDefectAugmentation:
 
         # find the 2 components where coordinates are bigger / smaller than the line
         # to apply normal vector in the correct direction
-        components = label(np.logical_not(line_mask))
+        components = bic.segmentation.label(np.logical_not(line_mask))
         assert len(np.unique(components)) == 3, "%i" % len(np.unique(components))
         neg_val = components[0, 0] if fixed_x else components[-1, -1]
         pos_val = components[-1, -1] if fixed_x else components[0, 0]

@@ -199,7 +199,7 @@ def get_cpm_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the CPM dataset for nucleus segmentation.
+    """Get the CPM dataloader for nucleus segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
@@ -211,8 +211,11 @@ def get_cpm_loader(
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
-        The DataLoader
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cpm_dataset(path, patch_shape, data_choice, split, resize_inputs, download, **ds_kwargs)
+    dataset = get_cpm_dataset(
+        path, patch_shape, data_choice=data_choice, split=split, resize_inputs=resize_inputs,
+        download=download, **ds_kwargs
+    )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

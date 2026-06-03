@@ -26,7 +26,6 @@ def _default_chunks(shape):
     return tuple(min(64, int(s)) for s in shape)
 
 
-
 def _merge_to_single_h5(raw_path: Union[os.PathLike, str], label_path: Union[os.PathLike, str], out_path: str):
     if os.path.exists(out_path):
         return out_path
