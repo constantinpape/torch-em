@@ -16,11 +16,13 @@ from .fafb_nuclei import get_fafb_nuclei_loader, get_fafb_nuclei_dataset
 from .fib25 import get_fib25_loader, get_fib25_dataset
 from .fafb import get_fafb_loader, get_fafb_dataset
 from .human_cortex_h01 import get_human_cortex_h01_loader, get_human_cortex_h01_dataset
+from .human_liver_em import get_human_liver_em_loader, get_human_liver_em_dataset
 from .hemibrain import get_hemibrain_loader, get_hemibrain_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
 from .hydra_vulgaris import get_hydra_loader, get_hydra_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
+from .parlakgul_liver import get_parlakgul_liver_loader, get_parlakgul_liver_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
 from .malecns import get_malecns_loader, get_malecns_dataset
