@@ -103,7 +103,7 @@ def _convert_to_h5(data_dir: str, split: str) -> str:
         seg_dir = os.path.join(sample_dir, "SegCell")
 
         for raw_path in raw_files:
-            # e.g. Sample01_030_rawMemb.nii.gz → Sample01_030
+            # e.g. Sample01_030_rawMemb.nii.gz -> Sample01_030
             basename = os.path.basename(raw_path)
             tp_stem = basename.replace("_rawMemb.nii.gz", "")
             h5_path = os.path.join(h5_dir, f"{tp_stem}.h5")
