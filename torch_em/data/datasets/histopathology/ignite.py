@@ -1,5 +1,5 @@
 """The IGNITE dataset contains semantic tissue segmentations in H&E-stained NSCLC
-and centroid annotations in IHC-stained NSCLC
+and centroid annotations in IHC-stained NSCLC.
 
 The dataset is located at https://doi.org/10.5281/zenodo.15674784.
 This dataset is from the publication https://doi.org/10.48550/arXiv.2507.16855.
@@ -32,15 +32,13 @@ CHECKSUMS = {
 
 
 def get_split_samples(path: Path, split: str):
-    df = pd.read_csv(
-        path / "data_overview.csv", index_col="image_path", compression="gzip"
-    )
+    df = pd.read_csv(path / "data_overview.csv", index_col="image_path")
     split_paths = df[(df["split"] == split) & (df["stain"] == "H&E")].index.tolist()
     return [Path(p).name for p in split_paths]
 
 
 def get_ignite_data(
-    path: Path,
+    path: Union[os.PathLike, str],
     download: bool = False,
     annotation_type: str = "tissue_annotations",
 ) -> str:
@@ -49,15 +47,15 @@ def get_ignite_data(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         download: Whether to download the data if it is not present.
+        annotation_type: The type of annotations. Only "tissue_annotations" is currently supported.
 
     Returns:
         The filepath to the downloaded data.
     """
+    path = Path(path)
 
     if annotation_type != "tissue_annotations":
-        raise NotImplementedError(
-            f"Annotation loading for {annotation_type} is not implemented."
-        )
+        raise NotImplementedError(f"Annotation loading for {annotation_type} is not implemented.")
 
     for data_entity in [annotation_type, "images"]:
         data_dir = path / "data" / data_entity
@@ -67,23 +65,17 @@ def get_ignite_data(
         data_dir.mkdir(parents=True, exist_ok=True)
 
         zip_path = path / f"{data_entity}.zip"
-        util.download_source(
-            path=zip_path,
-            url=URLS[data_entity],
-            download=download,
-            checksum=CHECKSUMS[data_entity],
-        )
-
+        util.download_source(path=zip_path, url=URLS[data_entity], download=download, checksum=CHECKSUMS[data_entity])
         util.unzip(zip_path=zip_path, dst=data_dir)
 
     util.download_source(
-        path=data_dir.parent.parent / "data_overview.csv",
+        path=path / "data_overview.csv",
         url=URLS["data_overview"],
         download=download,
         checksum=CHECKSUMS["data_overview"],
     )
 
-    return data_dir.parent
+    return path / "data"
 
 
 def get_ignite_paths(
@@ -92,7 +84,7 @@ def get_ignite_paths(
     annotation_type: Optional[Literal["tissue_annotations"]] = "tissue_annotations",
     download: bool = False,
 ) -> Tuple[List[str], List[str]]:
-    """Get paths to the LyNSec data.
+    """Get paths to the IGNITE data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -112,16 +104,12 @@ def get_ignite_paths(
     if split is not None:
         split_filenames = get_split_samples(Path(path), split)
         img_paths = natsorted([str(img_dir / fn) for fn in split_filenames])
-        annotation_paths = natsorted(
-            [str(annotation_dir / fn) for fn in split_filenames]
-        )
+        annotation_paths = natsorted([str(annotation_dir / fn) for fn in split_filenames])
     else:
-        img_paths = natsorted(
-            [str(p) for p in img_dir.iterdir() if not p.stem.endswith("context")]
-        )
-        annotation_paths = natsorted(
-            [str(p) for p in annotation_dir.iterdir() if not p.stem.endswith("context")]
-        )
+        img_paths = natsorted([str(p) for p in img_dir.iterdir() if not p.stem.endswith("context")])
+        annotation_paths = natsorted([str(p) for p in annotation_dir.iterdir() if not p.stem.endswith("context")])
+
+    assert len(img_paths) == len(annotation_paths) and len(img_paths) > 0, "The inputs are not of expected length."
 
     return img_paths, annotation_paths
 
@@ -135,7 +123,7 @@ def get_ignite_dataset(
     download: bool = False,
     **kwargs,
 ) -> Dataset:
-    """Get the LyNSeC dataset for nucleus segmentation.
+    """Get the IGNITE dataset for tissue segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -181,7 +169,7 @@ def get_ignite_loader(
     download: bool = False,
     **kwargs,
 ) -> DataLoader:
-    """Get the LyNSeC dataloader for nucleus segmentation.
+    """Get the IGNITE dataloader for tissue segmentation.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -196,10 +184,6 @@ def get_ignite_loader(
     Returns:
         The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
-    dataset = get_ignite_dataset(
-        path, patch_shape, split, annotation_type, resize_inputs, download, **ds_kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
+    dataset = get_ignite_dataset(path, patch_shape, split, annotation_type, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
