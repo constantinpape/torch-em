@@ -4,10 +4,7 @@ import torch
 
 class TestLossWrapper(unittest.TestCase):
     def test_ApplyAndRemove_grad_masking(self):
-        from torch_em.loss import ( ApplyAndRemoveMask,
-                                    ApplyMask,
-                                    DiceLoss,
-                                    LossWrapper)
+        from torch_em.loss import ApplyAndRemoveMask, ApplyMask, DiceLoss, LossWrapper
         shape = (1, 1, 128, 128)
         for masking_func in ApplyMask.MASKING_FUNCS:
             transform = ApplyAndRemoveMask(
@@ -35,12 +32,9 @@ class TestLossWrapper(unittest.TestCase):
             self.assertFalse((grad[mask] == 0).all())
             # print((grad[~mask] == 0).sum())
             self.assertTrue((grad[~mask] == 0).all())
-    
+
     def test_MaskIgnoreLabel_grad_masking(self):
-        from torch_em.loss import ( MaskIgnoreLabel,
-                                    ApplyMask,
-                                    DiceLoss,
-                                    LossWrapper)
+        from torch_em.loss import MaskIgnoreLabel, ApplyMask, DiceLoss, LossWrapper
         shape = (1, 1, 128, 128)
         ignore_label = -1
         for masking_func in ApplyMask.MASKING_FUNCS:
@@ -68,9 +62,7 @@ class TestLossWrapper(unittest.TestCase):
             self.assertTrue((grad[mask] == 0).all())
 
     def test_ApplyMask_grad_masking(self):
-        from torch_em.loss import ( ApplyMask,
-                                    DiceLoss,
-                                    LossWrapper)
+        from torch_em.loss import ApplyMask, DiceLoss, LossWrapper
         shape = (1, 1, 128, 128)
         for masking_func in ApplyMask.MASKING_FUNCS:
             transform = ApplyMask(

@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 
+
 class TestclDiceMetric(unittest.TestCase):
 
     def _test_perfect_overlap(self, skeletonize_method):
@@ -8,7 +9,7 @@ class TestclDiceMetric(unittest.TestCase):
 
         shape = (32, 32)
 
-         # 4-pixel wide overlapping lines
+        # 4-pixel wide overlapping lines
         x = np.zeros(shape)
         x[14:18, :] = 1.0
         y = np.zeros(shape)
@@ -30,7 +31,7 @@ class TestclDiceMetric(unittest.TestCase):
 
         score = clDice(x, y, skeletonize_method=skeletonize_method)
         self.assertAlmostEqual(score, 0.0, places=1)
-    
+
     def test_perfect_overlap_skimage(self):
         self._test_perfect_overlap("skimage")
 
@@ -42,6 +43,7 @@ class TestclDiceMetric(unittest.TestCase):
 
     def test_no_overlap_soft(self):
         self._test_no_overlap("soft")
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -80,7 +80,6 @@ class TestInvertibleAugmenter(unittest.TestCase):
 
         self.assertEqual(x.shape, x_aug.shape)
 
-
     def test_flip_only_3d(self):
         geo = AugmentationSequential3D(
             K.RandomHorizontalFlip(p=1.0),
