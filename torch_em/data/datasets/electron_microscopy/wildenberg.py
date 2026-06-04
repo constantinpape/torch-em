@@ -107,7 +107,7 @@ def _wildenberg_download_to_zarr(cv, ds, x0g, y0g, z0g, name, swap_xy=False):
                 x1_ = min(x0_ + sx, shape[2])
                 gz0, gz1 = z0g + z0_, z0g + z1_
                 if swap_xy:
-                    # em cv_x=physical_y, cv_y=physical_x: map physical y→cv_x, physical x→cv_y
+                    # em cv_x=physical_y, cv_y=physical_x: map physical y->cv_x, physical x->cv_y
                     gx0, gx1 = y0g + y0_, y0g + y1_
                     gy0, gy1 = x0g + x0_, x0g + x1_
                 else:
@@ -116,8 +116,8 @@ def _wildenberg_download_to_zarr(cv, ds, x0g, y0g, z0g, name, swap_xy=False):
                 tasks.append(((z0_, z1_), (y0_, y1_), (x0_, x1_), (gx0, gx1, gy0, gy1, gz0, gz1)))
 
     target_dtype = np.dtype(ds.dtype)
-    # swap_xy: block axes are (phys_y, phys_x, phys_z) → transpose(2,0,1) → (z,y,x)
-    # normal:  block axes are (phys_x, phys_y, phys_z) → transpose(2,1,0) → (z,y,x)
+    # swap_xy: block axes are (phys_y, phys_x, phys_z) -> transpose(2,0,1) -> (z,y,x)
+    # normal: block axes are (phys_x, phys_y, phys_z) -> transpose(2,1,0) -> (z,y,x)
     transpose_order = (2, 0, 1) if swap_xy else (2, 1, 0)
 
     def worker(item):

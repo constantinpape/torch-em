@@ -87,13 +87,13 @@ class TestRawDataset(TestRawDatasetBase, unittest.TestCase):
 class TestRawDatasetWithMasks(TestRawDatasetBase, unittest.TestCase):
     dataset_class = RawDatasetWithMasks
     mrc_path = "./mask.mrc"
-    
+
     def tearDown(self):
         super().tearDown()
 
         if os.path.exists(self.mrc_path):
             os.remove(self.mrc_path)
-    
+
     def create_default_mrc_data(self, data):
         import mrcfile
         with mrcfile.new(self.mrc_path, overwrite=True) as f:
@@ -106,7 +106,7 @@ class TestRawDatasetWithMasks(TestRawDatasetBase, unittest.TestCase):
         raw_key, mask_key = "raw", "mask"
         shape = (128, 128, 128)
         chunks = (32, 32, 32)
-        
+
         # define central z slices 40:80 as the sample ROI, above and below is empty
         sample_mask = np.zeros(shape, dtype=np.float32)
         sample_mask[40:80, :, :] = 1.0
@@ -120,8 +120,10 @@ class TestRawDatasetWithMasks(TestRawDatasetBase, unittest.TestCase):
         min_fraction = 0.95
         sampler = MinForegroundSampler(min_fraction=min_fraction)
 
-        ds = self.dataset_class(self.path, raw_key, patch_shape=patch_shape, sampler=sampler, 
-                                sample_mask_path=self.path, sample_mask_key=mask_key)
+        ds = self.dataset_class(
+            self.path, raw_key, patch_shape=patch_shape, sampler=sampler,
+            sample_mask_path=self.path, sample_mask_key=mask_key,
+        )
 
         self.assertEqual(ds.raw.shape, shape)
         self.assertEqual(ds.sample_mask.shape, shape)
@@ -144,8 +146,9 @@ class TestRawDatasetWithMasks(TestRawDatasetBase, unittest.TestCase):
         self.create_default_data(mask_key)
 
         patch_shape = chunks
-        ds = self.dataset_class(self.path, raw_key, patch_shape=patch_shape, 
-                                bg_mask_path=self.path, bg_mask_key=mask_key)
+        ds = self.dataset_class(
+            self.path, raw_key, patch_shape=patch_shape, bg_mask_path=self.path, bg_mask_key=mask_key,
+        )
 
         self.assertEqual(ds.raw.shape, shape)
         self.assertEqual(ds.bg_mask.shape, shape)
@@ -158,16 +161,18 @@ class TestRawDatasetWithMasks(TestRawDatasetBase, unittest.TestCase):
             self.assertEqual(patch.shape, expected_shape)
 
     def test_bg_mask_mrc(self):
-        raw_key, mask_key = "raw", None
+        raw_key = "raw"
 
         shape, chunks = self.create_default_data(raw_key)
         self.create_default_mrc_data(np.zeros(shape))
 
         patch_shape = chunks
-        ds = self.dataset_class(self.path, raw_key, patch_shape=patch_shape, 
-                                bg_mask_path=self.mrc_path, bg_mask_key=None)
-        
+        ds = self.dataset_class(
+            self.path, raw_key, patch_shape=patch_shape, bg_mask_path=self.mrc_path, bg_mask_key=None,
+        )
+
         self.assertEqual(ds.bg_mask.shape, shape)
-        
+
+
 if __name__ == "__main__":
     unittest.main()
