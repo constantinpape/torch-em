@@ -41,6 +41,7 @@ from .livecell import get_livecell_loader, get_livecell_dataset
 from .liconn import get_liconn_loader, get_liconn_dataset
 from .lpc_nucseg import get_lpc_nucseg_loader, get_lpc_nucseg_dataset
 from .lsm_mouse_embryo import get_lsm_mouse_embryo_loader, get_lsm_mouse_embryo_dataset
+from .mcellseg import get_mcellseg_loader, get_mcellseg_dataset
 from .microbeseg import get_microbeseg_loader, get_microbeseg_dataset
 from .morphonet import get_morphonet_loader, get_morphonet_dataset
 from .morphoseg import get_morphoseg_loader, get_morphoseg_dataset
