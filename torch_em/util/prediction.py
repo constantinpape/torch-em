@@ -180,6 +180,7 @@ def predict_with_halo(
         tqdm_desc: Fescription shown by the tqdm output.
         prediction_function: A wrapper function for prediction to enable custom prediction procedures.
         roi: A region of interest of the input for which to run prediction.
+        iter_list: Optional list of block ids to iterate over.
         grid_shift: Per-axis fractional shift of the grid in units of the block size. E.g. (0, 0.25, 0).
     Returns:
         The model output.
