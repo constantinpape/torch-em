@@ -21,4 +21,5 @@ from .pcns import get_pcns_loader, get_pcns_dataset
 from .puma import get_puma_loader, get_puma_dataset
 from .segpath import get_segpath_loader, get_segpath_dataset
 from .srsanet import get_srsanet_loader, get_srsanet_dataset
+from .tissueseg import get_tissueseg_loader, get_tissueseg_dataset
 from .tnbc import get_tnbc_loader, get_tnbc_dataset
