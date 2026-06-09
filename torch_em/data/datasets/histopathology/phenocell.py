@@ -13,7 +13,7 @@ following layout:
     - 'raw/histopathology/h&e': the (3, H, W) H&E image.
     - 'raw/codex/all': the (58, H, W) stack of co-registered CODEX channels.
     - 'raw/codex/<marker>_<target>': each individual CODEX channel (H, W), e.g.
-      'raw/codex/CD20_B_cells' (see 'IHC_channels.txt' shipped with the data).
+      'raw/codex/CD20_B_cells' (see `CODEX_CHANNELS` for the full list of 58 channels).
     - 'labels/instances': the instance segmentation.
     - 'labels/semantic_coarse': the coarse 15-class cell type map (the benchmark labels).
     - 'labels/semantic_fine': the fine-grained 30-class cell type map.
