@@ -101,14 +101,17 @@ def _rasterize_into(label_dataset, annotations, downsample):
             label_dataset[y0:y1, x0:x1] = block
 
 
-def _convert_slide(series_uid, patient_id, images, annotations, level, output_path, tmp_dir, tile=4096):
+def _convert_slide(series_uid, file_name, images, annotations, level, output_path, tmp_dir, tile=4096):
     import h5py
     from idc_index import IDCClient
     from wsidicom import WsiDicom
 
-    slide_dir = os.path.join(tmp_dir, patient_id)
+    # Download into a per-series folder, since several slides of the same patient share a PatientID.
+    slide_dir = os.path.join(tmp_dir, series_uid)
     if not os.path.exists(slide_dir):
-        IDCClient().download_dicom_series(seriesInstanceUID=series_uid, downloadDir=tmp_dir, dirTemplate="%PatientID")
+        IDCClient().download_dicom_series(
+            seriesInstanceUID=series_uid, downloadDir=tmp_dir, dirTemplate="%SeriesInstanceUID"
+        )
 
     slide = WsiDicom.open(slide_dir)
     try:
@@ -119,7 +122,7 @@ def _convert_slide(series_uid, patient_id, images, annotations, level, output_pa
         width, height = wsi_level.size.width, wsi_level.size.height
         downsample = base_width / width
 
-        image_id = images[f"{patient_id}_1.svs"][0]
+        image_id = images[file_name][0]
         tmp_path = output_path + ".tmp"
         with h5py.File(tmp_path, "w") as f:
             raw = f.create_dataset(
@@ -185,18 +188,25 @@ def get_catch_data(
     except ImportError:
         raise ImportError("'idc-index' is required to download CATCH. Install it via conda/pip.")
 
-    index = IDCClient().index
-    catch = index[index["collection_id"] == IDC_COLLECTION]
+    # The slide microscopy index provides the 'ContainerIdentifier', which matches the COCO file name
+    # ('<ContainerIdentifier>.svs') and is unique per slide (unlike PatientID, where one patient may have
+    # several slides).
+    client = IDCClient()
+    client.fetch_index("sm_index")
+    catch = client.index[client.index["collection_id"] == IDC_COLLECTION]
+    catch = catch.merge(client.sm_index[["SeriesInstanceUID", "ContainerIdentifier"]], on="SeriesInstanceUID")
 
-    to_convert = catch[catch["PatientID"].str.startswith(tuple(tumor_types))]
+    to_convert = catch[catch["ContainerIdentifier"].str.startswith(tuple(tumor_types))]
     for _, row in tqdm(list(to_convert.iterrows()), desc="Converting CATCH slides"):
-        patient_id = row["PatientID"]
-        output_path = os.path.join(preprocessed_dir, f"{patient_id}.h5")
+        container_id = row["ContainerIdentifier"]
+        output_path = os.path.join(preprocessed_dir, f"{container_id}.h5")
         if os.path.exists(output_path):
             continue
         if not download:
             raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
-        _convert_slide(row["SeriesInstanceUID"], patient_id, images, annotations, level, output_path, tmp_dir)
+        _convert_slide(
+            row["SeriesInstanceUID"], f"{container_id}.svs", images, annotations, level, output_path, tmp_dir
+        )
 
     return preprocessed_dir
 
