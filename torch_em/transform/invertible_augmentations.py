@@ -48,15 +48,17 @@ def get_intensity_augmentations(ndim, aug_name: str = None, aug_dict: dict = Non
         return AugmentationSequential3D(*transforms_list)
 
 
-def get_geometrical_augmentations(ndim, aug_name, p: float = 0.75) -> callable:
+def get_geometrical_augmentations(ndim, aug_name: str = None, aug_dict: dict = None, p: float = 0.75) -> callable:
     assert ndim == 2 or ndim == 3, f"Number of dimensions must be 2 or 3, got ndim={ndim}"
+    assert aug_name is not None or aug_dict is not None, "Either aug_name or aug_dict must be provided."
 
-    if aug_name == "weak":
-        aug_dict = DEFAULT_WEAK_AUGMENTATIONS["geometrical"]
-    elif aug_name == "strong":
-        aug_dict = DEFAULT_STRONG_AUGMENTATIONS["geometrical"]
-    else:
-        raise ValueError(f"Augmentation name needs to be \"weak\" or \"strong\", got aug_name={aug_name}")
+    if aug_dict is None:
+        if aug_name == "weak":
+            aug_dict = DEFAULT_WEAK_AUGMENTATIONS["geometrical"]
+        elif aug_name == "strong":
+            aug_dict = DEFAULT_STRONG_AUGMENTATIONS["geometrical"]
+        else:
+            raise ValueError(f"Augmentation name needs to be \"weak\" or \"strong\", got aug_name={aug_name}")
 
     transforms_list = []
     for trafo, kwargs in aug_dict.items():
@@ -69,7 +71,7 @@ def get_geometrical_augmentations(ndim, aug_name, p: float = 0.75) -> callable:
         return AugmentationSequential3D(*transforms_list)
 
 
-def get_augmentations(aug_name: str, ndim: int, p: float = 0.75):
+def get_default_augmentations(aug_name: str, ndim: int, p: float = 0.75):
     assert ndim == 2 or ndim == 3, f"Number of dimensions must be 2 or 3, got ndim={ndim}"
 
     if aug_name == "weak":
@@ -171,8 +173,8 @@ class MeanTeacherAugmenters:
         student=None,
         clip_max=None,
     ):
-        self.teacher = teacher or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim), clip_max=clip_max)
-        self.student = student or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.teacher = teacher or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.student = student or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.teacher.reset()
@@ -187,8 +189,8 @@ class FixMatchAugmenters:
         student=None,
         clip_max=None,
     ):
-        self.teacher = teacher or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim), clip_max=clip_max)
-        self.student = student or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim), clip_max=clip_max)
+        self.teacher = teacher or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.student = student or InvertibleAugmenter(*get_default_augmentations("strong", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.teacher.reset()
@@ -204,9 +206,9 @@ class UniMatchv2Augmenters:
         strong2=None,
         clip_max=None,
     ):
-        self.weak = weak or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim), clip_max=clip_max)
-        self.strong1 = strong1 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim), clip_max=clip_max)
-        self.strong2 = strong2 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim), clip_max=clip_max)
+        self.weak = weak or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.strong1 = strong1 or InvertibleAugmenter(*get_default_augmentations("strong", ndim=ndim), clip_max=clip_max)
+        self.strong2 = strong2 or InvertibleAugmenter(*get_default_augmentations("strong", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.weak.reset()
