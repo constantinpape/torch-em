@@ -25,13 +25,17 @@ DEFAULT_STRONG_AUGMENTATIONS = {
 }
 
 
-def get_intensity_augmentations(aug_name, ndim, p: float = 0.75) -> callable:
-    if aug_name == "weak":
-        aug_dict = DEFAULT_WEAK_AUGMENTATIONS["intensity"]
-    elif aug_name == "strong":
-        aug_dict = DEFAULT_STRONG_AUGMENTATIONS["intensity"]
-    else:
-        raise ValueError(f"Number of dimensions must be 2 or 3, got ndim={ndim}")
+def get_intensity_augmentations(ndim, aug_name: str = None, aug_dict: dict = None, p: float = 0.75) -> callable:
+    assert ndim == 2 or ndim == 3, f"Number of dimensions must be 2 or 3, got ndim={ndim}"
+    assert aug_name is not None or aug_dict is not None, "Either aug_name or aug_dict must be provided."
+
+    if aug_dict is None:
+        if aug_name == "weak":
+            aug_dict = DEFAULT_WEAK_AUGMENTATIONS["intensity"]
+        elif aug_name == "strong":
+            aug_dict = DEFAULT_STRONG_AUGMENTATIONS["intensity"]
+        else:
+            raise ValueError(f"Augmentation name needs to be \"weak\" or \"strong\", got aug_name={aug_name}")
 
     transforms_list = []
     for trafo, kwargs in aug_dict.items():
@@ -44,13 +48,15 @@ def get_intensity_augmentations(aug_name, ndim, p: float = 0.75) -> callable:
         return AugmentationSequential3D(*transforms_list)
 
 
-def get_geometrical_augmentations(aug_name, ndim, p: float = 0.75) -> callable:
+def get_geometrical_augmentations(ndim, aug_name, p: float = 0.75) -> callable:
+    assert ndim == 2 or ndim == 3, f"Number of dimensions must be 2 or 3, got ndim={ndim}"
+
     if aug_name == "weak":
         aug_dict = DEFAULT_WEAK_AUGMENTATIONS["geometrical"]
     elif aug_name == "strong":
         aug_dict = DEFAULT_STRONG_AUGMENTATIONS["geometrical"]
     else:
-        raise ValueError(f"Number of dimensions must be 2 or 3, got ndim={ndim}")
+        raise ValueError(f"Augmentation name needs to be \"weak\" or \"strong\", got aug_name={aug_name}")
 
     transforms_list = []
     for trafo, kwargs in aug_dict.items():
@@ -64,14 +70,16 @@ def get_geometrical_augmentations(aug_name, ndim, p: float = 0.75) -> callable:
 
 
 def get_augmentations(aug_name: str, ndim: int, p: float = 0.75):
+    assert ndim == 2 or ndim == 3, f"Number of dimensions must be 2 or 3, got ndim={ndim}"
+
     if aug_name == "weak":
-        intensity_transforms = get_intensity_augmentations(aug_name, ndim=ndim, p=p)
-        geometrical_transforms = get_geometrical_augmentations(aug_name, ndim=ndim, p=p)
+        intensity_transforms = get_intensity_augmentations(ndim, aug_name=aug_name, p=p)
+        geometrical_transforms = get_geometrical_augmentations(ndim, aug_name=aug_name, p=p)
     elif aug_name == "strong":
-        intensity_transforms = get_intensity_augmentations(aug_name, ndim=ndim, p=p)
-        geometrical_transforms = get_geometrical_augmentations(aug_name, ndim=ndim, p=p)
+        intensity_transforms = get_intensity_augmentations(ndim, aug_name=aug_name, p=p)
+        geometrical_transforms = get_geometrical_augmentations(ndim, aug_name=aug_name, p=p)
     else:
-        raise ValueError(f"aug_name must be 'weak' or 'strong', got {aug_name}")
+        raise ValueError(f"Augmentation name needs to be \"weak\" or \"strong\", got aug_name={aug_name}")
 
     return intensity_transforms, geometrical_transforms
 
