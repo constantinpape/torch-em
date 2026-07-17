@@ -143,10 +143,11 @@ def normalize_percentile(
 class RandomPercentileNormalization:
     """Normalize inputs with randomly sampled percentile bounds.
 
-    By default, the lower percentile is sampled uniformly from ``lower_percentile_bounds``.
-    Normal (Gaussian) sampling can be enabled explicitly with ``distribution="normal"`` and
-    ``distribution_kwargs={"mean": ..., "std": ...}``. The upper percentile is always mirrored
-    around 50, so a draw of ``p`` gives ``(p, 100 - p)``. The sampled percentile intensities are
+    By default, the lower and upper percentiles are sampled uniformly from
+    ``lower_percentile_bounds`` and ``upper_percentile_bounds``. If no upper bounds are given,
+    they are inferred by mirroring the lower bounds around 50. Normal (Gaussian) sampling can be
+    enabled explicitly with ``distribution="normal"`` and
+    ``distribution_kwargs={"mean": ..., "std": ...}``. The sampled percentile intensities are
     mapped to 0 and 1, and values outside them are clipped, so the output is always in ``[0, 1]``.
 
     Examples:
@@ -168,10 +169,13 @@ class RandomPercentileNormalization:
 
     Args:
         lower_percentile_bounds: Inclusive clipping bounds for the lower percentile.
-        distribution: Sampling distribution for the lower percentile. Supported values are
+        upper_percentile_bounds: Inclusive clipping bounds for the upper percentile. If None, the
+            bounds are inferred by mirroring ``lower_percentile_bounds`` around 50.
+        distribution: Sampling distribution for the percentiles. Supported values are
             ``"uniform"`` and ``"normal"``.
         distribution_kwargs: Parameters for normal sampling, which must contain exactly
-            ``{"mean": ..., "std": ...}``. Uniform sampling does not take additional parameters.
+            ``{"mean": ..., "std": ...}``. The upper percentile uses the mirrored normal
+            distribution. Uniform sampling does not take additional parameters.
         rounding_decimals: Number of decimal places used to round sampled percentiles. Set to None
             to disable rounding.
         axis: Axes over which to compute the intensity percentiles.
@@ -184,6 +188,7 @@ class RandomPercentileNormalization:
     def __init__(
         self,
         lower_percentile_bounds: Tuple[float, float] = (0.0, 5.0),
+        upper_percentile_bounds: Optional[Tuple[float, float]] = None,
         distribution: str = "uniform",
         distribution_kwargs: Optional[Dict[str, float]] = None,
         rounding_decimals: Optional[int] = 1,
@@ -191,7 +196,10 @@ class RandomPercentileNormalization:
         seed: Optional[int] = None,
         eps: float = 1e-7,
     ):
-        lower_percentile_bounds = self._validate_bounds(lower_percentile_bounds)
+        lower_percentile_bounds = self._validate_bounds(lower_percentile_bounds, upper=False)
+        if upper_percentile_bounds is None:
+            upper_percentile_bounds = tuple(100.0 - bound for bound in reversed(lower_percentile_bounds))
+        upper_percentile_bounds = self._validate_bounds(upper_percentile_bounds, upper=True)
         if distribution not in ("uniform", "normal"):
             raise ValueError("distribution must be 'uniform' or 'normal'.")
 
@@ -222,6 +230,7 @@ class RandomPercentileNormalization:
             seed = int(seed)
 
         self.lower_percentile_bounds = lower_percentile_bounds
+        self.upper_percentile_bounds = upper_percentile_bounds
         self.distribution = distribution
         self.distribution_kwargs = distribution_kwargs
         self.rounding_decimals = rounding_decimals
@@ -232,13 +241,21 @@ class RandomPercentileNormalization:
         self._random_generator_worker_id = None
 
     @staticmethod
-    def _validate_bounds(values):
+    def _validate_bounds(values, upper):
+        name = "upper_percentile_bounds" if upper else "lower_percentile_bounds"
         if not isinstance(values, (tuple, list)) or len(values) != 2:
-            raise ValueError("lower_percentile_bounds must contain exactly two values.")
-        lower, upper = (float(value) for value in values)
-        if not np.isfinite(lower) or not np.isfinite(upper) or not 0.0 <= lower <= upper < 50.0:
-            raise ValueError("lower_percentile_bounds must be a finite interval within [0, 50).")
-        return lower, upper
+            raise ValueError(f"{name} must contain exactly two values.")
+        lower_bound, upper_bound = (float(value) for value in values)
+        finite = np.isfinite(lower_bound) and np.isfinite(upper_bound)
+        if upper:
+            valid = 50.0 < lower_bound <= upper_bound <= 100.0
+            interval = "(50, 100]"
+        else:
+            valid = 0.0 <= lower_bound <= upper_bound < 50.0
+            interval = "[0, 50)"
+        if not finite or not valid:
+            raise ValueError(f"{name} must be a finite interval within {interval}.")
+        return lower_bound, upper_bound
 
     def _round(self, value):
         return float(value) if self.rounding_decimals is None else round(float(value), self.rounding_decimals)
@@ -260,15 +277,16 @@ class RandomPercentileNormalization:
         random_generator = self._get_random_generator()
         if self.distribution == "uniform":
             lower = random_generator.uniform(*self.lower_percentile_bounds)
+            upper = random_generator.uniform(*self.upper_percentile_bounds)
         else:
             mean = self.distribution_kwargs["mean"]
             std = self.distribution_kwargs["std"]
             lower = mean if std == 0.0 else random_generator.normal(mean, std)
+            upper = 100.0 - (mean if std == 0.0 else random_generator.normal(mean, std))
 
         # Normal distribution tails may leave the configured percentile interval.
         lower = float(np.clip(self._round(lower), *self.lower_percentile_bounds))
-        # Mirror one draw instead of sampling both bounds independently, preserving symmetry.
-        upper = 100.0 - lower
+        upper = float(np.clip(self._round(upper), *self.upper_percentile_bounds))
         return lower, upper
 
     def __call__(self, raw: Union[np.ndarray, torch.tensor]) -> Union[np.ndarray, torch.tensor]:

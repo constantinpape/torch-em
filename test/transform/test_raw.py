@@ -104,16 +104,20 @@ class TestRaw(unittest.TestCase):
         from torch_em.transform.raw import RandomPercentileNormalization
 
         transform = RandomPercentileNormalization()
-        with patch("torch_em.transform.raw.np.random.uniform", return_value=3.26) as sample:
+        with patch("torch_em.transform.raw.np.random.uniform", side_effect=(3.26, 96.74)) as sample:
             lower, upper = transform.sample_percentiles()
 
-        sample.assert_called_once_with(0.0, 5.0)
+        self.assertEqual(sample.call_args_list[0].args, (0.0, 5.0))
+        self.assertEqual(sample.call_args_list[1].args, (95.0, 100.0))
         self.assertEqual((lower, upper), (3.3, 96.7))
-        self.assertEqual(lower + upper, 100.0)
 
-        with patch("torch_em.transform.raw.np.random.uniform", return_value=-10.0):
+        asymmetric = RandomPercentileNormalization(upper_percentile_bounds=(80.0, 90.0))
+        with patch("torch_em.transform.raw.np.random.uniform", side_effect=(3.26, 84.44)):
+            self.assertEqual(asymmetric.sample_percentiles(), (3.3, 84.4))
+
+        with patch("torch_em.transform.raw.np.random.uniform", side_effect=(-10.0, 110.0)):
             self.assertEqual(transform.sample_percentiles(), (0.0, 100.0))
-        with patch("torch_em.transform.raw.np.random.uniform", return_value=70.0):
+        with patch("torch_em.transform.raw.np.random.uniform", side_effect=(70.0, 0.0)):
             self.assertEqual(transform.sample_percentiles(), (5.0, 95.0))
 
     def test_random_percentile_normalization_normal_sampling(self):
@@ -122,12 +126,13 @@ class TestRaw(unittest.TestCase):
         from torch_em.transform.raw import RandomPercentileNormalization
 
         transform = RandomPercentileNormalization(
+            upper_percentile_bounds=(90.0, 95.0),
             distribution="normal",
             distribution_kwargs={"mean": 2.0, "std": 1.0},
         )
-        with patch("torch_em.transform.raw.np.random.normal", return_value=2.74) as sample:
-            self.assertEqual(transform.sample_percentiles(), (2.7, 97.3))
-        sample.assert_called_once_with(2.0, 1.0)
+        with patch("torch_em.transform.raw.np.random.normal", side_effect=(2.74, 7.26)) as sample:
+            self.assertEqual(transform.sample_percentiles(), (2.7, 92.7))
+        self.assertEqual([call.args for call in sample.call_args_list], [(2.0, 1.0), (2.0, 1.0)])
 
         deterministic = RandomPercentileNormalization(
             distribution="normal",
@@ -158,8 +163,10 @@ class TestRaw(unittest.TestCase):
         worker_transform = RandomPercentileNormalization(seed=42)
         with patch("torch_em.transform.raw.torch.utils.data.get_worker_info", return_value=SimpleNamespace(id=1)):
             worker_sample = worker_transform.sample_percentiles()
-        expected_lower = round(np.random.default_rng(np.random.SeedSequence([42, 1])).uniform(0.0, 5.0), 1)
-        self.assertEqual(worker_sample, (expected_lower, 100.0 - expected_lower))
+        expected_generator = np.random.default_rng(np.random.SeedSequence([42, 1]))
+        expected_lower = round(expected_generator.uniform(0.0, 5.0), 1)
+        expected_upper = round(expected_generator.uniform(95.0, 100.0), 1)
+        self.assertEqual(worker_sample, (expected_lower, expected_upper))
 
     def test_random_percentile_normalization_values(self):
         from torch_em.transform.raw import RandomPercentileNormalization, normalize_percentile
@@ -211,6 +218,8 @@ class TestRaw(unittest.TestCase):
             {"distribution": "normal", "distribution_kwargs": {"mean": 2.0, "std": -1.0}},
             {"distribution": "uniform", "distribution_kwargs": {"mean": 2.0, "std": 1.0}},
             {"lower_percentile_bounds": (0.0, 50.0)},
+            {"upper_percentile_bounds": (50.0, 100.0)},
+            {"upper_percentile_bounds": (90.0, 101.0)},
             {"rounding_decimals": -1},
             {"seed": -1},
             {"eps": 0.0},
