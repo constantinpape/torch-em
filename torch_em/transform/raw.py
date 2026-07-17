@@ -140,6 +140,163 @@ def normalize_percentile(
     return normalize(raw, v_lower, v_upper, eps=eps)
 
 
+class RandomPercentileNormalization:
+    """Normalize inputs with randomly sampled percentile bounds.
+
+    By default, the lower and upper percentiles are sampled uniformly from
+    ``lower_percentile_bounds`` and ``upper_percentile_bounds``. If no upper bounds are given,
+    they are inferred by mirroring the lower bounds around 50. Normal (Gaussian) sampling can be
+    enabled explicitly with ``distribution="normal"`` and
+    ``distribution_kwargs={"mean": ..., "std": ...}``. The sampled percentile intensities are
+    mapped to 0 and 1, and values outside them are clipped, so the output is always in ``[0, 1]``.
+
+    Examples:
+        Uniform sampling with the default percentile bounds and reproducible random draws:
+
+        ```python
+        normalization = RandomPercentileNormalization(seed=42)
+        ```
+
+        Normal sampling with explicit distribution parameters:
+
+        ```python
+        normalization = RandomPercentileNormalization(
+            distribution="normal",
+            distribution_kwargs={"mean": 2.0, "std": 1.0},
+            seed=42,
+        )
+        ```
+
+    Args:
+        lower_percentile_bounds: Inclusive clipping bounds for the lower percentile.
+        upper_percentile_bounds: Inclusive clipping bounds for the upper percentile. If None, the
+            bounds are inferred by mirroring ``lower_percentile_bounds`` around 50.
+        distribution: Sampling distribution for the percentiles. Supported values are
+            ``"uniform"`` and ``"normal"``.
+        distribution_kwargs: Parameters for normal sampling, which must contain exactly
+            ``{"mean": ..., "std": ...}``. The upper percentile uses the mirrored normal
+            distribution. Uniform sampling does not take additional parameters.
+        rounding_decimals: Number of decimal places used to round sampled percentiles. Set to None
+            to disable rounding.
+        axis: Axes over which to compute the intensity percentiles.
+        seed: Optional non-negative integer seed for reproducible sampling. NumPy integer types
+            are also supported. Each DataLoader worker derives a distinct stream from this seed.
+            By default, the global NumPy random state is used, which respects DataLoader worker seeding.
+        eps: Epsilon used for numerical stability during normalization.
+    """
+
+    def __init__(
+        self,
+        lower_percentile_bounds: Tuple[float, float] = (0.0, 5.0),
+        upper_percentile_bounds: Optional[Tuple[float, float]] = None,
+        distribution: str = "uniform",
+        distribution_kwargs: Optional[Dict[str, float]] = None,
+        rounding_decimals: Optional[int] = 1,
+        axis: Optional[Union[int, Tuple[int, ...]]] = None,
+        seed: Optional[int] = None,
+        eps: float = 1e-7,
+    ):
+        lower_percentile_bounds = self._validate_bounds(lower_percentile_bounds, upper=False)
+        if upper_percentile_bounds is None:
+            upper_percentile_bounds = tuple(100.0 - bound for bound in reversed(lower_percentile_bounds))
+        upper_percentile_bounds = self._validate_bounds(upper_percentile_bounds, upper=True)
+        if distribution not in ("uniform", "normal"):
+            raise ValueError("distribution must be 'uniform' or 'normal'.")
+
+        if distribution == "uniform":
+            if distribution_kwargs is not None:
+                raise ValueError("Uniform sampling does not accept distribution_kwargs.")
+        else:
+            if not isinstance(distribution_kwargs, dict) or set(distribution_kwargs) != {"mean", "std"}:
+                raise ValueError("Normal sampling requires exactly the distribution_kwargs 'mean' and 'std'.")
+            mean, std = float(distribution_kwargs["mean"]), float(distribution_kwargs["std"])
+            if not np.isfinite(mean) or not lower_percentile_bounds[0] <= mean <= lower_percentile_bounds[1]:
+                raise ValueError("The normal distribution mean must be finite and within lower_percentile_bounds.")
+            if not np.isfinite(std) or std < 0.0:
+                raise ValueError("The normal distribution std must be finite and non-negative.")
+            distribution_kwargs = {"mean": mean, "std": std}
+
+        if rounding_decimals is not None and (
+            not isinstance(rounding_decimals, int) or isinstance(rounding_decimals, bool) or rounding_decimals < 0
+        ):
+            raise ValueError("rounding_decimals must be a non-negative integer or None.")
+        if not np.isfinite(eps) or eps <= 0.0:
+            raise ValueError("eps must be finite and greater than zero.")
+        if seed is not None:
+            if not isinstance(seed, (int, np.integer)) or isinstance(seed, bool):
+                raise TypeError("seed must be an integer or None.")
+            if seed < 0:
+                raise ValueError("seed must be non-negative.")
+            seed = int(seed)
+
+        self.lower_percentile_bounds = lower_percentile_bounds
+        self.upper_percentile_bounds = upper_percentile_bounds
+        self.distribution = distribution
+        self.distribution_kwargs = distribution_kwargs
+        self.rounding_decimals = rounding_decimals
+        self.axis = axis
+        self.seed = seed
+        self.eps = float(eps)
+        self._random_generator = None
+        self._random_generator_worker_id = None
+
+    @staticmethod
+    def _validate_bounds(values, upper):
+        name = "upper_percentile_bounds" if upper else "lower_percentile_bounds"
+        if not isinstance(values, (tuple, list)) or len(values) != 2:
+            raise ValueError(f"{name} must contain exactly two values.")
+        lower_bound, upper_bound = (float(value) for value in values)
+        finite = np.isfinite(lower_bound) and np.isfinite(upper_bound)
+        if upper:
+            valid = 50.0 < lower_bound <= upper_bound <= 100.0
+            interval = "(50, 100]"
+        else:
+            valid = 0.0 <= lower_bound <= upper_bound < 50.0
+            interval = "[0, 50)"
+        if not finite or not valid:
+            raise ValueError(f"{name} must be a finite interval within {interval}.")
+        return lower_bound, upper_bound
+
+    def _round(self, value):
+        return float(value) if self.rounding_decimals is None else round(float(value), self.rounding_decimals)
+
+    def _get_random_generator(self):
+        if self.seed is None:
+            return np.random
+
+        worker_info = torch.utils.data.get_worker_info()
+        worker_id = None if worker_info is None else worker_info.id
+        if self._random_generator is None or self._random_generator_worker_id != worker_id:
+            seed_sequence = np.random.SeedSequence([self.seed, 0 if worker_id is None else worker_id])
+            self._random_generator = np.random.default_rng(seed_sequence)
+            self._random_generator_worker_id = worker_id
+        return self._random_generator
+
+    def sample_percentiles(self) -> Tuple[float, float]:
+        """Sample and return a valid ``(lower, upper)`` percentile pair."""
+        random_generator = self._get_random_generator()
+        if self.distribution == "uniform":
+            lower = random_generator.uniform(*self.lower_percentile_bounds)
+            upper = random_generator.uniform(*self.upper_percentile_bounds)
+        else:
+            mean = self.distribution_kwargs["mean"]
+            std = self.distribution_kwargs["std"]
+            lower = mean if std == 0.0 else random_generator.normal(mean, std)
+            upper = 100.0 - (mean if std == 0.0 else random_generator.normal(mean, std))
+
+        # Normal distribution tails may leave the configured percentile interval.
+        lower = float(np.clip(self._round(lower), *self.lower_percentile_bounds))
+        upper = float(np.clip(self._round(upper), *self.upper_percentile_bounds))
+        return lower, upper
+
+    def __call__(self, raw: Union[np.ndarray, torch.tensor]) -> Union[np.ndarray, torch.tensor]:
+        lower, upper = self.sample_percentiles()
+        normalized = normalize_percentile(raw, lower=lower, upper=upper, axis=self.axis, eps=self.eps)
+        if torch.is_tensor(normalized):
+            return torch.clamp(normalized, min=0.0, max=1.0)
+        return np.clip(normalized, 0.0, 1.0)
+
+
 #
 # Intensity Augmentations / Noise Augmentations.
 #
