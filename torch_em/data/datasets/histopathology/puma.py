@@ -72,15 +72,10 @@ CLASS_DICT = {
 
 
 def _get_classes_per_image(path, annotations):
-    """Map each ROI image id to the set of class ids present in its annotation.
-
-    Returns None if the geojson annotations for *annotations* haven't been downloaded yet
-    (coverage w.r.t. that level can't be checked in that case).
-    """
+    "Maps each ROI image id to the set of class ids present in its annotation"
     ann_dir = os.path.join(path, "annotations", annotations, f"01_training_dataset_geojson_{annotations}")
     ann_paths = glob(os.path.join(ann_dir, "*.geojson"))
-    if not ann_paths:
-        return None
+    assert ann_paths, f"Could not find any '{annotations}' annotations in '{ann_dir}'."
 
     class_dict = CLASS_DICT[annotations]
     classes_per_image = {}
@@ -96,7 +91,7 @@ def _get_classes_per_image(path, annotations):
 
 
 def _split_covers_all_classes(split_ids, classes_per_image, all_classes):
-    """Check that every class in *all_classes* is present in at least one image of every split."""
+    "Checks that every class is present in at least one image of every split"
     for ids in split_ids.values():
         covered = set()
         for image_id in ids:
@@ -107,12 +102,10 @@ def _split_covers_all_classes(split_ids, classes_per_image, all_classes):
 
 
 def _make_random_split(metastatic_ids, primary_ids, random_state):
-    # Create random splits per dataset.
-    train_ids, test_ids = train_test_split(metastatic_ids, test_size=0.2, random_state=random_state)  # 20% for test.
-    train_ids, val_ids = train_test_split(
-        train_ids, test_size=0.15, random_state=random_state
-    )  # 15% of the train set for val.
-    # do same as above for 'primary' samples.
+    # Create random splits per dataset: 20% for test, then 15% of the train set for val.
+    train_ids, test_ids = train_test_split(metastatic_ids, test_size=0.2, random_state=random_state)
+    train_ids, val_ids = train_test_split(train_ids, test_size=0.15, random_state=random_state)
+    # Do same as above for 'primary' samples.
     ptrain_ids, ptest_ids = train_test_split(primary_ids, test_size=0.2, random_state=random_state)
     ptrain_ids, pval_ids = train_test_split(ptrain_ids, test_size=0.15, random_state=random_state)
     train_ids = train_ids + ptrain_ids
@@ -131,26 +124,24 @@ def _create_split_csv(path, annotations, split, random_state=42, max_split_attem
         split_list = df.iloc[0][split]
     else:
         print(f"Creating a new split file at '{csv_path}'.")
-        metastatic_ids = [
+        # NOTE: The ids are sorted, as 'train_test_split' is order sensitive and 'glob' does not
+        # guarantee a stable order, i.e. the fixed 'random_state' alone does not reproduce the split.
+        metastatic_ids = natsorted(
             os.path.basename(image).split(".")[0]
             for image in glob(os.path.join(path, "data", "01_training_dataset_tif_ROIs", "*metastatic*"))
-        ]
-        primary_ids = [
+        )
+        primary_ids = natsorted(
             os.path.basename(image).split(".")[0]
             for image in glob(os.path.join(path, "data", "01_training_dataset_tif_ROIs", "*primary*"))
-        ]
+        )
 
-        # Raw ROIs (and hence this split) are shared across annotation levels (nuclei / tissue), so
-        # check coverage against every level whose annotations are already downloaded -- otherwise a
-        # rare class (e.g. tissue_white_background) can silently end up absent from an entire split.
-        coverage_checks = [
-            (set(class_dict.values()), classes_per_image)
-            for level, class_dict in CLASS_DICT.items()
-            for classes_per_image in [_get_classes_per_image(path, level)]
-            if classes_per_image is not None
-        ]
+        # The ROIs (and hence this split) are shared across annotation levels, so a split validated
+        # for one level can still drop a rare class (e.g. 'tissue_white_background') from the other.
+        coverage_checks = []
+        for level, class_dict in CLASS_DICT.items():
+            coverage_checks.append((set(class_dict.values()), _get_classes_per_image(path, level)))
 
-        split_ids = None
+        split_ids, candidate = None, None
         for attempt in range(max_split_attempts):
             candidate = _make_random_split(metastatic_ids, primary_ids, random_state=random_state + attempt)
             if all(
@@ -159,12 +150,12 @@ def _create_split_csv(path, annotations, split, random_state=42, max_split_attem
             ):
                 split_ids = candidate
                 break
+
         if split_ids is None:
             print(
                 f"Warning: could not find a split covering all classes within {max_split_attempts} attempts "
-                "(seeds "
-                f"{random_state}-{random_state + max_split_attempts - 1}); using the last candidate anyway. "
-                "Check rare classes manually."
+                f"(seeds {random_state}-{random_state + max_split_attempts - 1}). Using the last candidate "
+                "anyway, please check rare classes manually."
             )
             split_ids = candidate
 
@@ -297,15 +288,21 @@ def get_puma_data(
         util.download_source(path=zip_path, url=URL["data"], download=download, checksum=CHECKSUM["data"])
         util.unzip(zip_path=zip_path, dst=os.path.join(path, "data"))
 
-    # Download the annotations.
-    zip_path = os.path.join(path, "annotations.zip")
-    util.download_source(
-        path=zip_path,
-        url=URL["annotations"][annotations],
-        download=download,
-        checksum=CHECKSUM["annotations"][annotations]
-    )
-    util.unzip(zip_path=zip_path, dst=os.path.join(path, "annotations", annotations))
+    # Download the annotations. All levels are fetched, as the split is shared across them and is
+    # validated against each level (the geojson files are small).
+    for level in CLASS_DICT:
+        annotation_dir = os.path.join(path, "annotations", level)
+        if os.path.exists(annotation_dir):
+            continue
+
+        zip_path = os.path.join(path, "annotations.zip")
+        util.download_source(
+            path=zip_path,
+            url=URL["annotations"][level],
+            download=download,
+            checksum=CHECKSUM["annotations"][level]
+        )
+        util.unzip(zip_path=zip_path, dst=annotation_dir)
 
     _preprocess_inputs(path, annotations, split)
 
