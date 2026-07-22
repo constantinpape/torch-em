@@ -71,7 +71,66 @@ CLASS_DICT = {
 }
 
 
-def _create_split_csv(path, annotations, split):
+def _parse_classification(value):
+    """Parse a geopandas 'classification' property value.
+
+    Depending on the geopandas/pyogrio backend and version, this GeoJSON property is returned either
+    as a JSON-encoded string or already parsed into a dict -- handle both.
+    """
+    return json.loads(value) if isinstance(value, str) else value
+
+
+def _get_classes_per_image(path, annotations):
+    """Map each ROI image id to the set of class ids present in its annotation.
+
+    Returns None if the geojson annotations for *annotations* haven't been downloaded yet
+    (coverage w.r.t. that level can't be checked in that case).
+    """
+    ann_dir = os.path.join(path, "annotations", annotations, f"01_training_dataset_geojson_{annotations}")
+    ann_paths = glob(os.path.join(ann_dir, "*.geojson"))
+    if not ann_paths:
+        return None
+
+    import geopandas as gpd
+
+    class_dict = CLASS_DICT[annotations]
+    classes_per_image = {}
+    for ann_path in ann_paths:
+        image_id = os.path.basename(ann_path).replace(f"_{annotations}.geojson", "")
+        gdf = gpd.read_file(ann_path)
+        classes_per_image[image_id] = {
+            class_dict[cls_entry["name"]] for cls_entry in gdf["classification"].apply(_parse_classification)
+        }
+    return classes_per_image
+
+
+def _split_covers_all_classes(split_ids, classes_per_image, all_classes):
+    """Check that every class in *all_classes* is present in at least one image of every split."""
+    for ids in split_ids.values():
+        covered = set()
+        for image_id in ids:
+            covered.update(classes_per_image.get(image_id, set()))
+        if not all_classes.issubset(covered):
+            return False
+    return True
+
+
+def _make_random_split(metastatic_ids, primary_ids, random_state):
+    # Create random splits per dataset.
+    train_ids, test_ids = train_test_split(metastatic_ids, test_size=0.2, random_state=random_state)  # 20% for test.
+    train_ids, val_ids = train_test_split(
+        train_ids, test_size=0.15, random_state=random_state
+    )  # 15% of the train set for val.
+    # do same as above for 'primary' samples.
+    ptrain_ids, ptest_ids = train_test_split(primary_ids, test_size=0.2, random_state=random_state)
+    ptrain_ids, pval_ids = train_test_split(ptrain_ids, test_size=0.15, random_state=random_state)
+    train_ids = train_ids + ptrain_ids
+    val_ids = val_ids + pval_ids
+    test_ids = test_ids + ptest_ids
+    return {"train": train_ids, "val": val_ids, "test": test_ids}
+
+
+def _create_split_csv(path, annotations, split, random_state=42, max_split_attempts=200):
     "This creates a split saved to a .csv file in the dataset directory"
     csv_path = os.path.join(path, "puma_split.csv")
 
@@ -90,16 +149,33 @@ def _create_split_csv(path, annotations, split):
             for image in glob(os.path.join(path, "data", "01_training_dataset_tif_ROIs", "*primary*"))
         ]
 
-        # Create random splits per dataset.
-        train_ids, test_ids = train_test_split(metastatic_ids, test_size=0.2)  # 20% for test.
-        train_ids, val_ids = train_test_split(train_ids, test_size=0.15)  # 15% of the train set for val.
-        ptrain_ids, ptest_ids = train_test_split(primary_ids, test_size=0.2)  # do same as above for 'primary' samples.
-        ptrain_ids, pval_ids = train_test_split(ptrain_ids, test_size=0.15)  # do same as above for 'primary' samples.
-        train_ids.extend(ptrain_ids)
-        val_ids.extend(pval_ids)
-        test_ids.extend(ptest_ids)
+        # Raw ROIs (and hence this split) are shared across annotation levels (nuclei / tissue), so
+        # check coverage against every level whose annotations are already downloaded -- otherwise a
+        # rare class (e.g. tissue_white_background) can silently end up absent from an entire split.
+        coverage_checks = [
+            (set(class_dict.values()), classes_per_image)
+            for level, class_dict in CLASS_DICT.items()
+            for classes_per_image in [_get_classes_per_image(path, level)]
+            if classes_per_image is not None
+        ]
 
-        split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
+        split_ids = None
+        for attempt in range(max_split_attempts):
+            candidate = _make_random_split(metastatic_ids, primary_ids, random_state=random_state + attempt)
+            if all(
+                _split_covers_all_classes(candidate, classes_per_image, all_classes)
+                for all_classes, classes_per_image in coverage_checks
+            ):
+                split_ids = candidate
+                break
+        if split_ids is None:
+            print(
+                f"Warning: could not find a split covering all classes within {max_split_attempts} attempts "
+                "(seeds "
+                f"{random_state}-{random_state + max_split_attempts - 1}); using the last candidate anyway. "
+                "Check rare classes manually."
+            )
+            split_ids = candidate
 
         df = pd.DataFrame.from_dict([split_ids])
         df.to_csv(csv_path, index=False)
@@ -154,7 +230,7 @@ def _preprocess_inputs(path, annotations, split):
 
         # Extract class ids mapped to each class name.
         class_dict = CLASS_DICT[annotations]
-        class_ids = [class_dict[cls_entry["name"]] for cls_entry in gdf["classification"].apply(json.loads)]
+        class_ids = [class_dict[cls_entry["name"]] for cls_entry in gdf["classification"].apply(_parse_classification)]
         semantic_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, class_ids))
         semantic_mask = rasterize(
             semantic_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.uint8
