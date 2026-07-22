@@ -71,15 +71,6 @@ CLASS_DICT = {
 }
 
 
-def _parse_classification(value):
-    """Parse a geopandas 'classification' property value.
-
-    Depending on the geopandas/pyogrio backend and version, this GeoJSON property is returned either
-    as a JSON-encoded string or already parsed into a dict -- handle both.
-    """
-    return json.loads(value) if isinstance(value, str) else value
-
-
 def _get_classes_per_image(path, annotations):
     """Map each ROI image id to the set of class ids present in its annotation.
 
@@ -91,15 +82,15 @@ def _get_classes_per_image(path, annotations):
     if not ann_paths:
         return None
 
-    import geopandas as gpd
-
     class_dict = CLASS_DICT[annotations]
     classes_per_image = {}
     for ann_path in ann_paths:
         image_id = os.path.basename(ann_path).replace(f"_{annotations}.geojson", "")
-        gdf = gpd.read_file(ann_path)
+        with open(ann_path) as f:
+            feature_collection = json.load(f)
         classes_per_image[image_id] = {
-            class_dict[cls_entry["name"]] for cls_entry in gdf["classification"].apply(_parse_classification)
+            class_dict[feat["properties"]["classification"]["name"]]
+            for feat in feature_collection["features"]
         }
     return classes_per_image
 
@@ -228,9 +219,11 @@ def _preprocess_inputs(path, annotations, split):
         width, height = 1024, 1024  # roi shape
         transform = from_bounds(minx, miny, maxx, maxy, width, height)
 
-        # Extract class ids mapped to each class name.
+        # Extract class ids mapped to each class name. Depending on the geopandas/pyogrio version,
+        # this property comes back either as a JSON-encoded string or already parsed into a dict.
         class_dict = CLASS_DICT[annotations]
-        class_ids = [class_dict[cls_entry["name"]] for cls_entry in gdf["classification"].apply(_parse_classification)]
+        classification = gdf["classification"].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
+        class_ids = [class_dict[cls_entry["name"]] for cls_entry in classification]
         semantic_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, class_ids))
         semantic_mask = rasterize(
             semantic_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.uint8
