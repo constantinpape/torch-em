@@ -46,6 +46,7 @@ from .microbeseg import get_microbeseg_loader, get_microbeseg_dataset
 from .morphonet import get_morphonet_loader, get_morphonet_dataset
 from .morphoseg import get_morphoseg_loader, get_morphoseg_dataset
 from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
+from .myofuse import get_myofuse_loader, get_myofuse_dataset
 from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
