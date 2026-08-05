@@ -21,6 +21,7 @@ from typing import Union, Tuple, List
 import numpy as np
 import imageio.v3 as imageio
 from skimage.draw import polygon
+from skimage.segmentation import relabel_sequential
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -87,25 +88,41 @@ def _get_download_url(share_id):
 
 
 def _get_outlines(json_path):
-    """Return the nucleus outlines, which come in the labelme format, or in the darwin format."""
+    """Return the nucleus outlines, which come in the labelme format, or in the darwin format.
+
+    Some tiles annotate the same nucleus twice, so this drops the repeated outlines.
+    """
     with open(json_path) as f:
         content = json.load(f)
 
     if "annotations" in content:  # darwin
-        outlines = [path for a in content["annotations"] for path in a.get("polygon", {}).get("paths", [])]
-        return [np.array([[p["y"], p["x"]] for p in outline]) for outline in outlines]
+        paths = [path for a in content["annotations"] for path in a.get("polygon", {}).get("paths", [])]
+        outlines = [np.array([[p["y"], p["x"]] for p in path]) for path in paths]
+    else:
+        shapes = [s for s in content["shapes"] if s.get("shape_type") == "polygon"]
+        outlines = [np.array([[p[1], p[0]] for p in s["points"]]) for s in shapes]
 
-    shapes = [s for s in content["shapes"] if s.get("shape_type") == "polygon"]
-    return [np.array([[p[1], p[0]] for p in s["points"]]) for s in shapes]
+    seen, unique = set(), []
+    for outline in outlines:
+        key = np.round(outline, 4).tobytes()
+        if key not in seen:
+            seen.add(key)
+            unique.append(outline)
+    return unique
 
 
 def _get_instances(json_path, shape):
+    """Paint the outlines into a label image.
+
+    Nuclei that the annotators drew on top of each other cannot all survive this, so the labels
+    are made consecutive afterwards.
+    """
     outlines = _get_outlines(json_path)
     instances = np.zeros(shape, dtype="uint16")
     for label, outline in enumerate(outlines, start=1):
         rr, cc = polygon(outline[:, 0], outline[:, 1], shape=shape)
         instances[rr, cc] = label
-    return instances
+    return relabel_sequential(instances)[0]
 
 
 def _preprocess_data(input_dir, data_dir):
