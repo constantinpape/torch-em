@@ -61,6 +61,7 @@ from .orgaextractor import get_orgaextractor_loader, get_orgaextractor_dataset
 from .orgasegment import get_orgasegment_loader, get_orgasegment_dataset
 from .organoid import get_organoid_loader, get_organoid_dataset
 from .organoidnet import get_organoidnet_loader, get_organoidnet_dataset
+from .pan_multiplex import get_pan_multiplex_loader, get_pan_multiplex_dataset
 from .parhyale_regen import get_parhyale_regen_loader, get_parhyale_regen_dataset
 from .phmamm import get_phmamm_loader, get_phmamm_dataset
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
