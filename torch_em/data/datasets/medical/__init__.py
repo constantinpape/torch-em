@@ -50,6 +50,7 @@ from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
 from .psfhs import get_psfhs_dataset, get_psfhs_loader
 from .ravir import get_ravir_dataset, get_ravir_loader
+from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .sega import get_sega_dataset, get_sega_loader
 from .segthy import get_segthy_dataset, get_segthy_loader
