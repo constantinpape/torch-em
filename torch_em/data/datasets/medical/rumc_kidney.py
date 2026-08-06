@@ -34,19 +34,18 @@ from .. import util
 
 URL = "https://zenodo.org/records/8014290/files/{}?download=1"
 
-# Zenodo publishes md5 only, whereas 'util.download_source' verifies sha256, so we can only check
-# the segmentations. The md5 of the image archives is listed in the record linked above.
 CHECKSUMS = {
-    "images1.zip": None,
-    "images2.zip": None,
-    "images3.zip": None,
-    "images4.zip": None,
+    "images1.zip": "5b7af2786d0b2281c73a6e0c69eb4982998786a964dc9256fa7fee931a035d7a",
+    "images2.zip": "2f4e3ebfb1f0aeeffd85c84bccbcae33cd8623193e839cc12a5cd58abb6e8a9e",
+    "images3.zip": "c7df9dc1cb017e2ca77f74c7f7d90f5f1e2dbb4a16eb7c7b49393bdc65107eed",
+    "images4.zip": "73aa389b54791a5abd722051b9a0ea2337aa1098f6b87b59e2aa1486a89157f1",
     "segmentations.zip": "7d711e306e52fe37216c126c3b282935f916db594193a2d1e3fdf13a2757c163",
 }
 
 IMAGE_DIRS = ("images1", "images2", "images3", "images4")
 LABEL_IDS = {"kidney": 1, "abnormality": 2}
 VALID_SPLITS = ("train", "val", "test")
+SUFFIX = ".nii.gz"
 METAIMAGE_EXTS = (".mha", ".mhd")
 
 # The NIfTI extension code for free-form text, which we use to store the original header as json.
@@ -162,11 +161,9 @@ def _find_image_path(path, case_id):
     raise FileNotFoundError(f"Could not find the image for case '{case_id}'.")
 
 
-def _preprocess_inputs(path, compress):
+def _preprocess_inputs(path):
     # The volumes are converted to nifti, because elf has no file wrapper for MetaImage and would
     # have to load each volume into memory as a whole.
-    suffix = ".nii.gz" if compress else ".nii"
-
     image_dir = os.path.join(path, "preprocessed", "images")
     label_dir = os.path.join(path, "preprocessed", "labels")
     os.makedirs(image_dir, exist_ok=True)
@@ -179,8 +176,8 @@ def _preprocess_inputs(path, compress):
     for label_path in tqdm(label_paths, desc="Preprocessing inputs"):
         case_id = os.path.basename(label_path)[:-len("_segmentations.mha")]
 
-        target_image_path = os.path.join(image_dir, f"{case_id}{suffix}")
-        target_label_path = os.path.join(label_dir, f"{case_id}{suffix}")
+        target_image_path = os.path.join(image_dir, f"{case_id}{SUFFIX}")
+        target_label_path = os.path.join(label_dir, f"{case_id}{SUFFIX}")
         if os.path.exists(target_image_path) and os.path.exists(target_label_path):
             continue
 
@@ -188,20 +185,14 @@ def _preprocess_inputs(path, compress):
         _convert_mha_to_nifti(label_path, target_label_path)
 
 
-def get_rumc_kidney_data(
-    path: Union[os.PathLike, str], download: bool = False, compress: bool = False
-) -> str:
+def get_rumc_kidney_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Download the RUMC Kidney dataset.
 
-    The download is roughly 38 GB. The volumes are converted to nifti for lazy loading, which needs
-    about 137 GB more when uncompressed. Set `compress` to trade disk space for loading speed:
-    compressed volumes take up roughly 40 GB, but nifti cannot memory-map them, so sampling a random
-    patch is more than an order of magnitude slower.
+    The download is roughly 38 GB, and the volumes converted to nifti take up roughly 40 GB more.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         download: Whether to download the data if it is not present.
-        compress: Whether to store the converted volumes as '.nii.gz' instead of '.nii'.
 
     Returns:
         The folder where the dataset is downloaded and preprocessed.
@@ -217,7 +208,7 @@ def get_rumc_kidney_data(
         util.download_source(path=zip_path, url=URL.format(fname), download=download, checksum=checksum)
         util.unzip(zip_path=zip_path, dst=path)
 
-    _preprocess_inputs(path, compress)
+    _preprocess_inputs(path)
 
     return data_dir
 
@@ -228,7 +219,7 @@ def _get_split_map(path, data_dir):
         with open(split_path) as f:
             return json.load(f)
 
-    case_ids = [os.path.basename(p).split(".")[0] for p in glob(os.path.join(data_dir, "images", "*.nii*"))]
+    case_ids = [os.path.basename(p).split(".")[0] for p in glob(os.path.join(data_dir, "images", f"*{SUFFIX}"))]
     train_ids, test_ids = train_test_split(natsorted(case_ids), test_size=0.25, random_state=42)
     train_ids, val_ids = train_test_split(train_ids, test_size=0.1, random_state=42)
 
@@ -243,7 +234,6 @@ def get_rumc_kidney_paths(
     path: Union[os.PathLike, str],
     split: Literal["train", "val", "test"],
     download: bool = False,
-    compress: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the RUMC Kidney data.
 
@@ -251,7 +241,6 @@ def get_rumc_kidney_paths(
         path: Filepath to a folder where the data is downloaded for further processing.
         split: Which data split to use.
         download: Whether to download the data if it is not present.
-        compress: Whether the converted volumes are stored as '.nii.gz' instead of '.nii'.
 
     Returns:
         List of filepaths for the image data.
@@ -260,12 +249,11 @@ def get_rumc_kidney_paths(
     if split not in VALID_SPLITS:
         raise ValueError(f"Invalid split '{split}'. Must be one of {VALID_SPLITS}.")
 
-    data_dir = get_rumc_kidney_data(path, download, compress)
+    data_dir = get_rumc_kidney_data(path, download)
     split_map = _get_split_map(path, data_dir)
 
-    suffix = ".nii.gz" if compress else ".nii"
-    raw_paths = [os.path.join(data_dir, "images", f"{case_id}{suffix}") for case_id in split_map[split]]
-    label_paths = [os.path.join(data_dir, "labels", f"{case_id}{suffix}") for case_id in split_map[split]]
+    raw_paths = [os.path.join(data_dir, "images", f"{case_id}{SUFFIX}") for case_id in split_map[split]]
+    label_paths = [os.path.join(data_dir, "labels", f"{case_id}{SUFFIX}") for case_id in split_map[split]]
 
     missing = [p for p in raw_paths + label_paths if not os.path.exists(p)]
     if missing:
@@ -281,7 +269,6 @@ def get_rumc_kidney_dataset(
     label_choice: Literal["all", "kidney", "abnormality"] = "all",
     resize_inputs: bool = False,
     download: bool = False,
-    compress: bool = False,
     **kwargs
 ) -> Dataset:
     """Get the RUMC Kidney dataset for kidney and kidney abnormality segmentation.
@@ -294,13 +281,12 @@ def get_rumc_kidney_dataset(
             binary mask for that class alone.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
-        compress: Whether the converted volumes are stored as '.nii.gz' instead of '.nii'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_rumc_kidney_paths(path, split, download, compress)
+    raw_paths, label_paths = get_rumc_kidney_paths(path, split, download)
 
     if label_choice != "all":
         if label_choice not in LABEL_IDS:
@@ -328,7 +314,6 @@ def get_rumc_kidney_loader(
     label_choice: Literal["all", "kidney", "abnormality"] = "all",
     resize_inputs: bool = False,
     download: bool = False,
-    compress: bool = False,
     **kwargs
 ) -> DataLoader:
     """Get the RUMC Kidney dataloader for kidney and kidney abnormality segmentation.
@@ -342,7 +327,6 @@ def get_rumc_kidney_loader(
             binary mask for that class alone.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
-        compress: Whether the converted volumes are stored as '.nii.gz' instead of '.nii'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
@@ -350,6 +334,6 @@ def get_rumc_kidney_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_rumc_kidney_dataset(
-        path, patch_shape, split, label_choice, resize_inputs, download, compress, **ds_kwargs
+        path, patch_shape, split, label_choice, resize_inputs, download, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
