@@ -8,6 +8,7 @@ from .cellmap import get_cellmap_loader, get_cellmap_dataset
 from .cem import get_mitolab_loader
 from .cremi import get_cremi_loader, get_cremi_dataset
 from .densecell import get_densecell_loader, get_densecell_dataset
+from .deepcontact import get_deepcontact_loader, get_deepcontact_dataset
 from .deepict import get_deepict_actin_loader, get_deepict_actin_dataset
 from .emneuron import get_emneuron_loader, get_emneuron_dataset
 from .emps import get_emps_loader, get_emps_dataset
