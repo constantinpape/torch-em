@@ -82,10 +82,12 @@ def get_checksum(filename: str) -> str:
     Returns:
         The checksum.
     """
+    # The file is hashed in chunks, so that datasets with multi-GB archives do not run out of memory.
+    hasher = hashlib.sha256()
     with open(filename, "rb") as f:
-        file_ = f.read()
-        checksum = hashlib.sha256(file_).hexdigest()
-    return checksum
+        for chunk in iter(lambda: f.read(64 * 1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def _check_checksum(path, checksum):
@@ -118,16 +120,20 @@ def download_source(path: str, url: str, download: bool, checksum: Optional[str]
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False")
 
+    # The data is downloaded to a temporary path and only moved to `path` once it is complete and verified.
+    # Otherwise an interrupted download would be mistaken for a complete one by the check above.
+    tmp_path = f"{path}.incomplete"
     with requests.get(url, stream=True, allow_redirects=True, verify=verify) as r:
         r.raise_for_status()  # check for error
         file_size = int(r.headers.get("Content-Length", 0))
         desc = f"Download {url} to {path}"
         if file_size == 0:
             desc += " (unknown file size)"
-        with tqdm.wrapattr(r.raw, "read", total=file_size, desc=desc) as r_raw, open(path, "wb") as f:
+        with tqdm.wrapattr(r.raw, "read", total=file_size, desc=desc) as r_raw, open(tmp_path, "wb") as f:
             copyfileobj(r_raw, f)
 
-    _check_checksum(path, checksum)
+    _check_checksum(tmp_path, checksum)
+    os.replace(tmp_path, path)
 
 
 def download_source_gdrive(
