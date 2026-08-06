@@ -1,14 +1,11 @@
 """DeepLIIF contains annotations for nucleus segmentation and classification in IHC images
 of lung, bladder and breast cancer tissue.
 
-NOTE: The cell segmentations are a bit enlarged, since they grow over the full boundary that
-the mask draws around each cell.
-
 The lung and bladder tissue shares one archive per split. The breast cancer tissue, which is
 stained for Ki67, stems from an earlier release of the data and has its own archives. It only
 covers the train and the val split.
 
-Every image comes as six co-registered 512x512 panels, which are stitched next to each other:
+Every image comes as six 512x512 panels of the same region, which are stitched next to each other:
 the IHC input, the hematoxylin channel and the multiplex immunofluorescence modalities
 (mpIF DAPI, mpIF Lap2 and the mpIF marker), followed by the segmentation mask.
 The mask marks cells with positive protein expression in red and negative cells in blue.
@@ -16,6 +13,8 @@ A green boundary surrounds each cell, so that this module can separate touching 
 and derive instance labels from the mask.
 NOTE: The labels keep every cell of the mask. A few cells are only a few pixels large,
 since saving the masks as png introduced compression artifacts.
+NOTE: The segmentations align with the mpIF DAPI channel. They are slightly misaligned with
+all other modalities.
 
 The data is hosted at https://zenodo.org/records/4751737 and licensed under CC-BY-4.0.
 This dataset is from the publication https://doi.org/10.1038/s42256-022-00471-x.
@@ -30,7 +29,7 @@ from typing import Union, Tuple, List, Literal, Optional
 import numpy as np
 import imageio.v3 as imageio
 from skimage.measure import label as connected_components
-from skimage.segmentation import watershed
+from skimage.segmentation import watershed, find_boundaries, relabel_sequential
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -68,6 +67,10 @@ FILE_PREFIXES = {"lung": "Lung_", "bladder": "Bladder_"}
 # The image panels, in the order in which they are stitched together. The mask follows them.
 MODALITIES = ["ihc", "hematoxylin", "dapi", "lap2", "marker"]
 
+# Half of the boundary that the mask draws around each cell, measured per archive. The watershed
+# grows the cells over the full boundary, so shrinking them by this puts their edge in its middle.
+EROSION = {"lung_bladder": 2, "breast": 3}
+
 
 def _get_archive(tissue, split):
     """Map a tissue to the archive that holds it for a split."""
@@ -77,13 +80,14 @@ def _get_archive(tissue, split):
     return key
 
 
-def _get_labels(mask):
+def _get_labels(mask, n_erode):
     """Derive the instance and the semantic labels from the segmentation panel.
 
     The panel paints cells with positive expression red and negative cells blue, and draws a
     green boundary around every cell. The cell interiors are separate already, so they seed a
     watershed that grows them back over the boundary. This recovers the full extent of a cell,
-    which taking the interiors alone would shrink by the width of the boundary.
+    which taking the interiors alone would shrink by the width of the boundary. Eroding the
+    result afterwards moves the edge of a cell from the outside of the boundary to its middle.
 
     The class of a cell follows from the color of its interior, so that the semantic labels
     and the instances agree on where a cell ends.
@@ -93,7 +97,14 @@ def _get_labels(mask):
     foreground = interior | (mask[..., 1] > 127)
 
     seeds = connected_components(interior)
-    instances = watershed(mask[..., 1], markers=seeds, mask=foreground).astype("uint16")
+    instances = watershed(mask[..., 1], markers=seeds, mask=foreground)
+
+    # Erode every cell on its own, so that cells which touch stay apart.
+    for _ in range(n_erode):
+        instances[find_boundaries(instances, mode="inner")] = 0
+
+    # The erosion removes the smallest cells, so make the labels consecutive again.
+    instances = relabel_sequential(instances)[0].astype("uint16")
 
     # A cell is positive if its interior holds more red than blue pixels.
     n_labels = int(instances.max()) + 1
@@ -108,7 +119,7 @@ def _get_labels(mask):
     return instances, semantic
 
 
-def _preprocess_data(input_dir, data_dir):
+def _preprocess_data(input_dir, data_dir, n_erode):
     import h5py
 
     os.makedirs(data_dir, exist_ok=True)
@@ -123,7 +134,7 @@ def _preprocess_data(input_dir, data_dir):
             continue
 
         panels = np.split(imageio.imread(image_path)[..., :3], len(MODALITIES) + 1, axis=1)
-        instances, semantic = _get_labels(panels[-1])
+        instances, semantic = _get_labels(panels[-1], n_erode)
 
         with h5py.File(out_path, "a") as f:
             for modality, panel in zip(MODALITIES, panels):
@@ -184,7 +195,7 @@ def get_deepliif_data(
             )
             util.unzip(zip_path=zip_path, dst=archive_dir)
 
-        _preprocess_data(input_dir, data_dir)
+        _preprocess_data(input_dir, data_dir, EROSION[archive[0]])
 
     return data_dirs
 
