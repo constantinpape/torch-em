@@ -5,6 +5,7 @@ from .consep import get_consep_loader, get_consep_dataset
 from .cpm import get_cpm_loader, get_cpm_dataset
 from .cryonuseg import get_cryonuseg_loader, get_cryonuseg_dataset
 from .cytodark0 import get_cytodark0_loader, get_cytodark0_dataset
+from .deepliif import get_deepliif_loader, get_deepliif_dataset
 from .glas import get_glas_loader, get_glas_dataset
 from .hest import get_hest_loader, get_hest_dataset
 from .ignite import get_ignite_loader, get_ignite_dataset
