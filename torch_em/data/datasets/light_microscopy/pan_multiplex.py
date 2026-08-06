@@ -17,6 +17,7 @@ import gzip
 import json
 import shutil
 from glob import glob
+from warnings import warn
 from natsort import natsorted
 from typing import Union, Tuple, List, Literal, Optional
 
@@ -26,6 +27,7 @@ import tifffile
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
+from torch_em.data import MinInstanceSampler
 
 from .. import util
 
@@ -120,11 +122,15 @@ def _download_subset(path, subset, download):
 
     # The parts are a plain byte split, so joining them yields the original archive.
     # Each part is removed right after it is joined to limit the peak disk usage.
-    with open(zip_path, "wb") as dst:
+    # The archive is joined under a temporary name, so that an interrupted join is not
+    # mistaken for a complete archive by the check above.
+    tmp_path = f"{zip_path}.incomplete"
+    with open(tmp_path, "wb") as dst:
         for part_path in part_paths:
             with open(part_path, "rb") as src:
                 shutil.copyfileobj(src, dst, length=32 * 1024 * 1024)
             os.remove(part_path)
+    os.replace(tmp_path, zip_path)
 
     return zip_path
 
@@ -223,6 +229,7 @@ def _preprocess_data(input_dir, data_dir, subset):
 
     image_dirs = natsorted(os.path.join(image_root, name) for name in os.listdir(image_root))
 
+    n_without_mask = 0
     for image_dir in image_dirs:
         if not os.path.isdir(image_dir):
             continue
@@ -234,6 +241,7 @@ def _preprocess_data(input_dir, data_dir, subset):
 
         instance_path = _find_instance_path(input_dir, subset, fov)
         if instance_path is None:
+            n_without_mask += 1
             continue
 
         markers = _get_marker_paths(image_dir)
@@ -248,16 +256,21 @@ def _preprocess_data(input_dir, data_dir, subset):
             membrane = np.zeros_like(nuclei)
 
         instances = np.squeeze(tifffile.imread(instance_path)).astype("uint32")
-        stacked = np.stack([nuclei, membrane])
 
-        with h5py.File(out_path, "a") as f:
+        # The volume is written under a temporary name and renamed once it is complete, so that an
+        # interrupted write does not leave a partial file that the check above would skip forever.
+        tmp_path = f"{out_path}.incomplete"
+        with h5py.File(tmp_path, "w") as f:
             # A field of view that the split config does not list stays out of all three splits.
             f.attrs["split"] = assignment.get(fov, "unassigned")
             f.attrs["subset"] = subset
             f.create_dataset("raw/nuclei", data=nuclei, compression="gzip")
             f.create_dataset("raw/membrane", data=membrane, compression="gzip")
-            f.create_dataset("raw/stacked", data=stacked, compression="gzip")
             f.create_dataset("labels/cell", data=instances, compression="gzip")
+        os.replace(tmp_path, out_path)
+
+    if n_without_mask > 0:
+        warn(f"{n_without_mask} fields of view of '{subset}' have no cell mask and are not part of the dataset.")
 
 
 def get_pan_multiplex_data(
@@ -278,19 +291,30 @@ def get_pan_multiplex_data(
     if subset not in SUBSET_PARTS:
         raise ValueError(f"'{subset}' is not a valid subset. Choose one of {list(SUBSET_PARTS.keys())}.")
 
-    data_dir = os.path.join(path, subset, "data")
-    if glob(os.path.join(data_dir, "*.h5")):
+    subset_dir = os.path.join(path, subset)
+    data_dir = os.path.join(subset_dir, "data")
+
+    # The preprocessing writes this marker once it has converted every field of view. Checking for
+    # converted volumes instead would treat an interrupted run as a complete dataset.
+    done_path = os.path.join(subset_dir, "preprocessing_done")
+    if os.path.exists(done_path):
         return data_dir
 
-    subset_dir = os.path.join(path, subset)
     os.makedirs(subset_dir, exist_ok=True)
 
     input_dir = os.path.join(subset_dir, subset)
     if not os.path.exists(input_dir):
+        # The data may have been prepared before this marker was introduced, in which case the
+        # input data can already have been removed. Then the converted volumes are all there is.
+        if glob(os.path.join(data_dir, "*.h5")):
+            open(done_path, "w").close()
+            return data_dir
+
         zip_path = _download_subset(subset_dir, subset, download)
         util.unzip(zip_path=zip_path, dst=subset_dir, remove=True)
 
     _preprocess_data(input_dir, data_dir, subset)
+    open(done_path, "w").close()
 
     return data_dir
 
@@ -324,12 +348,23 @@ def get_pan_multiplex_paths(
         volume_paths.extend(natsorted(glob(os.path.join(data_dir, "*.h5"))))
 
     if split is not None:
-        selected = []
+        selected, n_unassigned = [], 0
         for volume_path in volume_paths:
             with h5py.File(volume_path, "r") as f:
-                if f.attrs.get("split") == split:
-                    selected.append(volume_path)
+                this_split = f.attrs.get("split")
+            if this_split == split:
+                selected.append(volume_path)
+            elif this_split == "unassigned":
+                n_unassigned += 1
         volume_paths = selected
+
+        # The upstream split configs do not cover every field of view, e.g. 53 of the 432 fields of
+        # view of 'vectra_pancreas' are missing from theirs. Those are not part of any split.
+        if n_unassigned > 0:
+            warn(
+                f"{n_unassigned} fields of view are not listed in the split config of '{subset}' and are "
+                "left out of all splits. Load the data without a split to also use these fields of view."
+            )
 
     assert len(volume_paths) > 0, f"Could not find data for the subset '{subset}' and split '{split}'."
     return volume_paths
@@ -340,7 +375,7 @@ def get_pan_multiplex_dataset(
     patch_shape: Tuple[int, int],
     subset: Union[str, List[str]],
     split: Optional[Literal["train", "val", "test"]] = None,
-    raw_channel: Literal["stacked", "nuclei", "membrane"] = "stacked",
+    raw_channel: Literal["both", "nuclei", "membrane"] = "both",
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -351,23 +386,33 @@ def get_pan_multiplex_dataset(
         patch_shape: The patch shape to use for training.
         subset: One subset or a list of subsets. See `SUBSET_PARTS` for the valid choices.
         split: The data split. The function uses all fields of view by default.
-        raw_channel: The input channels. Use 'stacked' for the nuclei and the membrane composite,
+        raw_channel: The input channels. Use 'both' for the nuclei and the membrane composite,
             or one of 'nuclei' and 'membrane' for a single channel.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
+            This uses a `MinInstanceSampler` by default, to avoid patches without any cell.
 
     Returns:
         The segmentation dataset.
     """
-    if raw_channel not in ("stacked", "nuclei", "membrane"):
-        raise ValueError(f"'{raw_channel}' is not a valid raw channel. Choose 'stacked', 'nuclei' or 'membrane'.")
+    if raw_channel not in ("both", "nuclei", "membrane"):
+        raise ValueError(f"'{raw_channel}' is not a valid raw channel. Choose 'both', 'nuclei' or 'membrane'.")
 
     volume_paths = get_pan_multiplex_paths(path, subset, split, download)
-    kwargs = util.update_kwargs(kwargs, "with_channels", raw_channel == "stacked")
+
+    # The two composites are stacked into channels on the fly, so that the combined input does not
+    # have to be stored a second time.
+    raw_key = ["raw/nuclei", "raw/membrane"] if raw_channel == "both" else f"raw/{raw_channel}"
+    kwargs = util.update_kwargs(kwargs, "with_channels", raw_channel == "both")
+
+    # The fields of view of some subsets are much larger than the patch shape and contain empty
+    # regions, e.g. 7.5% of the random patches of 'codex_colon' do not contain a single cell.
+    # This is only a default, so that it can be overridden with a different sampler.
+    kwargs.setdefault("sampler", MinInstanceSampler())
 
     return torch_em.default_segmentation_dataset(
         raw_paths=volume_paths,
-        raw_key=f"raw/{raw_channel}",
+        raw_key=raw_key,
         label_paths=volume_paths,
         label_key="labels/cell",
         patch_shape=patch_shape,
@@ -383,7 +428,7 @@ def get_pan_multiplex_loader(
     patch_shape: Tuple[int, int],
     subset: Union[str, List[str]],
     split: Optional[Literal["train", "val", "test"]] = None,
-    raw_channel: Literal["stacked", "nuclei", "membrane"] = "stacked",
+    raw_channel: Literal["both", "nuclei", "membrane"] = "both",
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -395,10 +440,11 @@ def get_pan_multiplex_loader(
         patch_shape: The patch shape to use for training.
         subset: One subset or a list of subsets. See `SUBSET_PARTS` for the valid choices.
         split: The data split. The function uses all fields of view by default.
-        raw_channel: The input channels. Use 'stacked' for the nuclei and the membrane composite,
+        raw_channel: The input channels. Use 'both' for the nuclei and the membrane composite,
             or one of 'nuclei' and 'membrane' for a single channel.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
+            This uses a `MinInstanceSampler` by default, to avoid patches without any cell.
 
     Returns:
         The DataLoader.
