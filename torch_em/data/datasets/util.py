@@ -125,6 +125,8 @@ def download_source(path: str, url: str, download: bool, checksum: Optional[str]
     tmp_path = f"{path}.incomplete"
     with requests.get(url, stream=True, allow_redirects=True, verify=verify) as r:
         r.raise_for_status()  # check for error
+        # Compute checksums on the file content rather than its HTTP transfer encoding.
+        r.raw.decode_content = True
         file_size = int(r.headers.get("Content-Length", 0))
         desc = f"Download {url} to {path}"
         if file_size == 0:

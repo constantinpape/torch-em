@@ -34,6 +34,9 @@ from .medussa import get_medussa_loader, get_medussa_dataset
 from .mndino import get_mndino_loader, get_mndino_dataset
 from .glioma_c6 import get_glioma_c6_loader, get_glioma_c6_dataset
 from .gonuclear import get_gonuclear_loader, get_gonuclear_dataset
+from .hela_cytonuc import (
+    get_hela_cytonuc_data, get_hela_cytonuc_paths, get_hela_cytonuc_loader, get_hela_cytonuc_dataset,
+)
 from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
 from .ifnuclei import get_ifnuclei_loader, get_ifnuclei_dataset
 from .idr0095 import get_idr0095_loader, get_idr0095_dataset
