@@ -23,6 +23,7 @@ from .phenocell import get_phenocell_loader, get_phenocell_dataset
 from .pcns import get_pcns_loader, get_pcns_dataset
 from .puma import get_puma_loader, get_puma_dataset
 from .segpath import get_segpath_loader, get_segpath_dataset
+from .sinus import get_sinus_loader, get_sinus_dataset
 from .spatch import get_spatch_loader, get_spatch_dataset
 from .srsanet import get_srsanet_loader, get_srsanet_dataset
 from .tissueseg import get_tissueseg_loader, get_tissueseg_dataset
