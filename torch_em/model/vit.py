@@ -4,6 +4,7 @@ from typing import Tuple, List
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 # we catch ImportErrors here because segment_anything, micro_sam, scale_mae and timm should
 # only be optional dependencies for torch_em
@@ -53,6 +54,13 @@ try:
 except ImportError:
     SAM3ViT = object
     _sam3_import_success = False
+
+try:
+    import torchvision.models as _tv_models
+    _torchvision_import_success = True
+except ImportError:
+    _tv_models = None
+    _torchvision_import_success = False
 
 
 class ViT_Sam(ImageEncoderViT):
@@ -790,12 +798,109 @@ class ViT_DINOv3(DinoV3VisionTransformer):
         return x, list_of_encoder[:3]
 
 
+class ViT_Torchvision(nn.Module):
+    """Vision Transformer from torchvision (https://arxiv.org/abs/2010.11929).
+
+    Wraps torchvision ViT models for use as UNETR encoders. Intermediate patch-token grids
+    are collected at quarter-depth intervals and returned as spatial feature maps alongside
+    the final encoder output, matching the `(x, list_from_encoder)` contract of other ViT classes.
+
+    Supported models: vit_b_16, vit_b_32, vit_l_16, vit_l_32, vit_h_14.
+
+    All five models can be used with UNETR. vit_b_16 and vit_l_16 (patch_size=16) work with
+    any skip-connection setting. vit_b_32, vit_l_32, and vit_h_14 require use_skip_connection=False
+    in UNETR; the decoder's internal cropping handles the spatial size difference, and postprocess_masks
+    resizes the output back to the input resolution.
+
+    Args:
+        model_name: Torchvision ViT model name (e.g. 'vit_b_16').
+        img_size: Expected input image size used by UNETR preprocessing.
+        in_chans: Number of input channels. If != 3, a 1x1 conv projects to 3 channels.
+        pretrained: Whether to load ImageNet-pretrained weights.
+    """
+    def __init__(
+        self,
+        model_name: str,
+        img_size: int = 224,
+        in_chans: int = 3,
+        pretrained: bool = True,
+    ):
+        super().__init__()
+        if not _torchvision_import_success:
+            raise RuntimeError(
+                "The vision transformer backend can only be initialized if torchvision is installed. "
+                "Please install torchvision from https://github.com/pytorch/vision and then rerun your code."
+            )
+
+        fn = getattr(_tv_models, model_name)
+        backbone = fn(weights="DEFAULT" if pretrained else None)
+
+        self.conv_proj = backbone.conv_proj
+        self.class_token = backbone.class_token
+        self.encoder = backbone.encoder  # pos_embedding, dropout, layers, ln
+
+        self.img_size = img_size
+        self.in_chans = in_chans
+        self.embed_dim = backbone.hidden_dim
+
+        depth = len(backbone.encoder.layers)
+        _c = depth // 4
+        self.chunks_for_projection = [_c - 1, 2 * _c - 1, 3 * _c - 1]
+
+        self.input_proj = nn.Conv2d(in_chans, 3, kernel_size=1) if in_chans != 3 else None
+
+    def _interpolate_pos_embed(self, pos_embed: torch.Tensor, H_p: int, W_p: int) -> torch.Tensor:
+        cls_pos, patch_pos = pos_embed[:, :1], pos_embed[:, 1:]
+        N = patch_pos.shape[1]
+        H_t = W_t = int(N ** 0.5)
+        patch_pos = patch_pos.reshape(1, H_t, W_t, -1).permute(0, 3, 1, 2)
+        patch_pos = F.interpolate(patch_pos, size=(H_p, W_p), mode="bicubic", align_corners=False)
+        patch_pos = patch_pos.permute(0, 2, 3, 1).reshape(1, H_p * W_p, -1)
+        return torch.cat([cls_pos, patch_pos], dim=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the vision transformer to input data.
+
+        Args:
+            x: The input data.
+
+        Returns:
+            The vision transformer output.
+        """
+        if self.input_proj is not None:
+            x = self.input_proj(x)
+
+        x = self.conv_proj(x)  # (B, D, H_p, W_p)
+        B, D, H_p, W_p = x.shape
+        x = x.reshape(B, D, H_p * W_p).permute(0, 2, 1)  # (B, N, D)
+
+        cls = self.class_token.expand(B, -1, -1)
+        x = torch.cat([cls, x], dim=1)  # (B, 1+N, D)
+
+        pos = self.encoder.pos_embedding
+        if pos.shape[1] != x.shape[1]:
+            pos = self._interpolate_pos_embed(pos, H_p, W_p)
+        x = x + pos
+        x = self.encoder.dropout(x)
+
+        list_from_encoder = []
+        for i, blk in enumerate(self.encoder.layers):
+            x = blk(x)
+            if i in self.chunks_for_projection:
+                feat = x[:, 1:].reshape(B, H_p, W_p, D).permute(0, 3, 1, 2).contiguous()
+                list_from_encoder.append(feat)
+
+        x = self.encoder.ln(x)
+        x = x[:, 1:].reshape(B, H_p, W_p, D).permute(0, 3, 1, 2).contiguous()
+        return x, list_from_encoder
+
+
 def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kwargs) -> nn.Module:
     """Get vision transformer encoder.
 
     Args:
         backbone: The name of the vision transformer implementation.
-            One of "sam" / "cellpose_sam" / "sam2" / "sam3" / "mae" / "scalemae" / "dinov2" / "dinov3".
+            One of "sam" / "cellpose_sam" / "sam2" / "sam3" / "mae" / "scalemae" / "dinov2" / "dinov3" / "torchvision".
         model: The name of the model. One of "vit_b", "vit_l" or "vit_h".
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
         kwargs: Additional kwargs which can be expected by the vision transformer,
@@ -1008,10 +1113,16 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
                 " 'vit_s', 'vit_s+', 'vit_b', 'vit_l', 'vit_l+', 'vit_h+'. 'vit_7b' are supported."
             )
 
+    elif backbone == "torchvision":
+        supported = ["vit_b_16", "vit_b_32", "vit_l_16", "vit_l_32", "vit_h_14"]
+        if model not in supported:
+            raise ValueError(f"'{model}' is not supported by the torchvision backbone. Choose from: {supported}.")
+        encoder = ViT_Torchvision(model_name=model, img_size=img_size, **kwargs)
+
     else:
         raise ValueError(
             "The 'UNETR' supported backbones are 'sam', 'cellpose_sam', 'sam2', 'sam3', "
-            "'mae', 'scalemae', 'dinov2' or 'dinov3'. Please choose one of them."
+            "'mae', 'scalemae', 'dinov2', 'dinov3' or 'torchvision'. Please choose one of them."
         )
 
     return encoder
