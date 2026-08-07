@@ -21,6 +21,10 @@ from .cshaper import get_cshaper_loader, get_cshaper_dataset
 from .covid_if import get_covid_if_loader, get_covid_if_dataset
 from .ctc import get_ctc_segmentation_loader, get_ctc_segmentation_dataset
 from .cvz_fluo import get_cvz_fluo_loader, get_cvz_fluo_dataset
+from .dcis_com_nuclei import (
+    get_dcis_com_nuclei_data, get_dcis_com_nuclei_paths,
+    get_dcis_com_nuclei_loader, get_dcis_com_nuclei_dataset,
+)
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
 from .deepseas import get_deepseas_loader, get_deepseas_dataset
 from .dic_hepg2 import get_dic_hepg2_loader, get_dic_hepg2_dataset
