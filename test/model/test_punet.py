@@ -6,8 +6,8 @@ class TestPUnet(unittest.TestCase):
     def _test_net(self, net, shape):
         x = torch.rand(*shape, requires_grad=True)
         net.forward(x)
-        y = net.sample(x)
-        expected_shape = shape[:1] + (net.num_classes,) + shape[2:]
+        y = net.sample()
+        expected_shape = shape[:1] + (net.num_raters,) + shape[2:]
         self.assertEqual(y.shape, expected_shape)
         loss = y.sum()
         loss.backward()
@@ -16,7 +16,7 @@ class TestPUnet(unittest.TestCase):
         from torch_em.model import ProbabilisticUNet
         net = ProbabilisticUNet(
                     input_channels=1,
-                    num_classes=1,
+                    num_raters=1,
                     num_filters=[64, 128, 256, 512],
                     latent_dim=6,
                     no_convs_fcomb=3,
@@ -29,7 +29,7 @@ class TestPUnet(unittest.TestCase):
         from torch_em.model import ProbabilisticUNet
         net = ProbabilisticUNet(
                     input_channels=1,
-                    num_classes=1,
+                    num_raters=1,
                     num_filters=[64, 128, 256, 512],
                     latent_dim=6,
                     no_convs_fcomb=3,
@@ -43,7 +43,7 @@ class TestPUnet(unittest.TestCase):
         from torch_em.model import ProbabilisticUNet
         net = ProbabilisticUNet(
                     input_channels=1,
-                    num_classes=1,
+                    num_raters=1,
                     num_filters=[64, 128, 256, 512],
                     latent_dim=6,
                     no_convs_fcomb=3,
