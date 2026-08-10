@@ -47,5 +47,6 @@ from .tumor_spheroid_em import get_tumor_spheroid_loader, get_tumor_spheroid_dat
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
 from .vnc import get_vnc_mito_loader, get_vnc_mito_dataset
 from .waenet import get_waenet_loader, get_waenet_dataset
+from .wafer4 import get_wafer4_loader, get_wafer4_dataset
 from .wildenberg import get_wildenberg_loader, get_wildenberg_dataset
 from .zebrafinch import get_zebrafinch_loader, get_zebrafinch_dataset
