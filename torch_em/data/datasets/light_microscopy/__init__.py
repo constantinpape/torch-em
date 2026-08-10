@@ -31,6 +31,7 @@ from .dcis_com_nuclei import (
 )
 from .deepbacs import get_deepbacs_loader, get_deepbacs_dataset
 from .deepseas import get_deepseas_loader, get_deepseas_dataset
+from .dememseg import get_dememseg_loader, get_dememseg_dataset
 from .dic_hepg2 import get_dic_hepg2_loader, get_dic_hepg2_dataset
 from .dsb import get_dsb_loader, get_dsb_dataset
 from .dynamicnuclearnet import get_dynamicnuclearnet_loader, get_dynamicnuclearnet_dataset
