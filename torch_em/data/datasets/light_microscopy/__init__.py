@@ -93,6 +93,7 @@ from .synthmt import get_synthmt_loader, get_synthmt_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .toiam import get_toiam_loader, get_toiam_dataset
 from .u20s import get_u20s_loader, get_u20s_dataset
+from .urinary_tract import get_urinary_tract_loader, get_urinary_tract_dataset
 from .usiigaci import get_usiigaci_loader, get_usiigaci_dataset
 from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
 from .vibrio_cholerae import get_vibrio_cholerae_loader, get_vibrio_cholerae_dataset
