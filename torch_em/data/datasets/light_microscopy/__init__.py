@@ -17,6 +17,7 @@ from .cardioblast_nuclei import (
 from .cartocell import get_cartocell_loader, get_cartocell_dataset
 from .mucic import get_mucic_loader, get_mucic_dataset
 from .celegans_atlas import get_celegans_atlas_loader, get_celegans_atlas_dataset
+from .cellapp import get_cellapp_loader, get_cellapp_dataset
 from .cellbindb import get_cellbindb_loader, get_cellbindb_dataset
 from .cellpose import get_cellpose_loader, get_cellpose_dataset
 from .cellseg_3d import get_cellseg_3d_loader, get_cellseg_3d_dataset
