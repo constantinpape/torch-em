@@ -11,7 +11,7 @@ sys.path.append("..")
 def check_cshaper():
     from util import ROOT
 
-    # NOTE: Download the CShaper zip manually from:
+    # NOTE: Download the CShaper zip manually from the Google Drive folder linked at:
     # https://doi.org/10.6084/m9.figshare.12839315
     # Place the downloaded zip inside the path below. It will be extracted automatically.
     # Requires: pip install nibabel
