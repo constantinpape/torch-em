@@ -91,6 +91,7 @@ from .selma3d import get_selma3d_data, get_selma3d_paths, get_selma3d_loader, ge
 from .scaffold_a549 import get_scaffold_a549_loader, get_scaffold_a549_dataset
 from .slimia import get_slimia_loader, get_slimia_dataset
 from .spheroids_hepg2 import get_spheroids_hepg2_loader, get_spheroids_hepg2_dataset
+from .svia import get_svia_loader, get_svia_dataset
 from .synthmt import get_synthmt_loader, get_synthmt_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
 from .toiam import get_toiam_loader, get_toiam_dataset
