@@ -2,6 +2,7 @@ from .aisegcell import get_aisegcell_loader, get_aisegcell_dataset
 from .alfi import get_alfi_loader, get_alfi_dataset
 from .bbbc030 import get_bbbc030_loader, get_bbbc030_dataset
 from .bbbc034 import get_bbbc034_loader, get_bbbc034_dataset
+from .apacs23 import get_apacs23_loader, get_apacs23_dataset
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bac_mother import get_bac_mother_loader, get_bac_mother_dataset
 from .balf import get_balf_loader, get_balf_dataset
