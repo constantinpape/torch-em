@@ -34,12 +34,17 @@ Please cite the corresponding dataset page if you use this data in your research
 
 import os
 import json
+import zlib
 import shutil
+import struct
+import hashlib
 import zipfile
 from glob import glob
 from natsort import natsorted
 from contextlib import contextmanager
-from typing import List, Literal, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, Union
+
+import requests
 
 from torch.utils.data import DataLoader, Dataset
 
@@ -57,13 +62,39 @@ URLS = {
     "human_breast": "https://cf.10xgenomics.com/samples/xenium/4.0.0/Human_Breast_Biomarkers_S1_Top/Human_Breast_Biomarkers_S1_Top_xe_outs.zip",  # noqa
 }
 
+# The sha256 of the two members that every download reads, keyed by the member name.
+# The optional stain channels carry no entry here and rest on their crc32 alone.
 CHECKSUMS = {
-    "human_pancreas": "b4b1905083ebcd4dad2cbf18be939acef023d591a99b37402be9eeb62c2f1188",
-    "human_lung_cancer": "ce56e1023afe4b1b5d54aebb8af6780f25f24cf7cc06fe9ac92df87a280555cc",
-    "mouse_colon": "0f1439ac7cfb61ec9e34af942fe20a4352c647811b3d1849c5f351454b2a9370",
-    "human_skin": "468173141e7e4f3c626e94583857fa5838e18ec8f52f5af7f51fd8066103fbaa",
-    "human_prostate": "dafc459016ffc8ed5cb097959e3958c72c9e404d640b61d4feab4d3374aa9d7a",
-    "human_breast": "b9fa810ff8a28864691835a5ee2aea11105679fabcaeb0de2ffd05b9f0b10ef7",
+    "human_pancreas": {
+        "cells.zarr.zip": "5747730a532f130b41f83e970784302623a784dfc9fe571dbd11e9179366387c",
+        "morphology_focus/morphology_focus_0000.ome.tif":
+            "3a7c669ebe6cbbd7e90ebab790bc8e666b9165e972bc528e134037eef632b3bd",
+    },
+    "human_lung_cancer": {
+        "cells.zarr.zip": "f274590902f9162295d292e540b631ba37c03574a8db754a5c27f101c8c94ef1",
+        "morphology_focus/morphology_focus_0000.ome.tif":
+            "eb0ef6aa2c7adfa5e70323b4b9530771f8679bd9c0eb6dbd1af40faabc2ca398",
+    },
+    "mouse_colon": {
+        "cells.zarr.zip": "cc5f811511d349955b15b6e4ebb4205a4208418f900ada5853231918d929a17e",
+        "morphology_focus/morphology_focus_0000.ome.tif":
+            "2a723a59b01c943d98a31aa47fc0297e6e9414b391c1d4d3949df0b27e510ef2",
+    },
+    "human_skin": {
+        "cells.zarr.zip": "ef805ec5c7e733f7c82a0e88652a04550abfd9f7a6c60c52339aa34ff780316d",
+        "morphology_focus/morphology_focus_0000.ome.tif":
+            "435caf0d766d6226ab8a8c3be551c9a87ad2be1997d37767c992aa36bd7d09f3",
+    },
+    "human_prostate": {
+        "cells.zarr.zip": "7ce2e92b1b085b35051f8568a983c8f8a8622e73bfae6060efdf7b47de6371e4",
+        "morphology_focus/morphology_focus_0000.ome.tif":
+            "a095080cc946f734545db51300d7ba24700c03b02cba48204e680c556dd867ed",
+    },
+    "human_breast": {
+        "cells.zarr.zip": "61d09dd84509a09cf2f6c1252e7d12772f6b3d6f33dd02ea25555f8ad84b6758",
+        "morphology_focus/ch0000_dapi.ome.tif":
+            "75476f9be2b0f936022611d79717cb77356e90ec40902531098b984a54d9c4a0",
+    },
 }
 
 # The tissue of every sample, for the h5 attributes.
@@ -78,37 +109,141 @@ TISSUES = {
 
 LABEL_CHANNELS = {"nuclei": "0", "cells": "1"}
 
-# The members of the bundle that this loader reads. The bundle also holds the transcripts
-# and the expression matrix, which take most of its size and which segmentation does not need.
-BUNDLE_MEMBERS = ("experiment.xenium", "cells.zarr.zip", "morphology_focus/")
-
 BLOCK = 4096
 
 
-def _extract_bundle(zip_path: str, bundle_dir: str, with_stains: bool) -> str:
-    """Extract the images, the masks and the manifest, and leave the transcripts in the archive.
+def _read_range(url: str, start: int, end: int) -> bytes:
+    """Read the bytes from `start` to `end`, both included."""
+    response = requests.get(url, headers={"Range": f"bytes={start}-{end}"}, stream=True)
+    response.raise_for_status()
+    return response.content
 
-    Without the stains only the DAPI channel comes out, which saves about a gigabyte of
-    transient disk space per sample.
+
+def _read_zip64_extra(extra: bytes, uncompressed: int, compressed: int, offset: int) -> Tuple[int, int, int]:
+    """Replace the fields that overflowed the 32 bit form with their zip64 values."""
+    position = 0
+    while position + 4 <= len(extra):
+        tag, size = struct.unpack("<HH", extra[position:position + 4])
+        if tag == 0x0001:
+            values = list(struct.unpack(f"<{size // 8}Q", extra[position + 4:position + 4 + size]))
+            if uncompressed == 0xFFFFFFFF:
+                uncompressed = values.pop(0)
+            if compressed == 0xFFFFFFFF:
+                compressed = values.pop(0)
+            if offset == 0xFFFFFFFF:
+                offset = values.pop(0)
+            break
+        position += 4 + size
+    return uncompressed, compressed, offset
+
+
+def _remote_zip_index(url: str) -> Dict[str, Dict[str, int]]:
+    """Read the central directory of a remote zip, which lists every member and where it sits.
+
+    This turns the bundle into a set of files that can be read one by one, so that a download
+    can skip the transcripts and the expression matrix, which segmentation never touches.
     """
+    response = requests.head(url)
+    response.raise_for_status()
+    size = int(response.headers["Content-Length"])
+
+    tail = _read_range(url, max(0, size - 262144), size - 1)
+    position = tail.rfind(b"PK\x06\x06")
+    if position == -1:
+        position = tail.rfind(b"PK\x05\x06")
+        if position == -1:
+            raise RuntimeError(f"Could not find the central directory of the zip at {url}.")
+        directory_size, directory_offset = struct.unpack("<II", tail[position + 12:position + 20])
+    else:
+        directory_size, directory_offset = struct.unpack("<QQ", tail[position + 40:position + 56])
+
+    directory = _read_range(url, directory_offset, directory_offset + directory_size + 128)
+    index, position = {}, 0
+    while position + 46 <= len(directory) and directory[position:position + 4] == b"PK\x01\x02":
+        method = struct.unpack("<H", directory[position + 10:position + 12])[0]
+        crc = struct.unpack("<I", directory[position + 16:position + 20])[0]
+        compressed, uncompressed = struct.unpack("<II", directory[position + 20:position + 28])
+        name_length, extra_length, comment_length = struct.unpack("<HHH", directory[position + 28:position + 34])
+        offset = struct.unpack("<I", directory[position + 42:position + 46])[0]
+        name = directory[position + 46:position + 46 + name_length].decode("utf-8", errors="replace")
+        extra = directory[position + 46 + name_length:position + 46 + name_length + extra_length]
+        uncompressed, compressed, offset = _read_zip64_extra(extra, uncompressed, compressed, offset)
+        index[name] = {"method": method, "crc": crc, "compressed": compressed, "offset": offset}
+        position += 46 + name_length + extra_length + comment_length
+    return index
+
+
+def _download_member(url: str, name: str, entry: Dict[str, int], output_path: str, expected_sha: Optional[str]) -> None:
+    """Read one member out of a remote zip and write it, checking its crc32 and its sha256."""
+    from tqdm import tqdm
+
+    # The local header repeats the name and carries its own extra field, so the data of the
+    # member starts behind a header whose length only the header itself gives.
+    header = _read_range(url, entry["offset"], entry["offset"] + 29)
+    if header[:4] != b"PK\x03\x04":
+        raise RuntimeError(f"The member '{name}' does not start with a local header.")
+    name_length, extra_length = struct.unpack("<HH", header[26:30])
+    start = entry["offset"] + 30 + name_length + extra_length
+
+    if entry["method"] not in (0, 8):
+        raise RuntimeError(f"The member '{name}' uses the unsupported compression method {entry['method']}.")
+    decompressor = zlib.decompressobj(-zlib.MAX_WBITS) if entry["method"] == 8 else None
+
+    crc, digest = 0, hashlib.sha256()
+    temporary_path = f"{output_path}.incomplete"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    headers = {"Range": f"bytes={start}-{start + entry['compressed'] - 1}"}
+    with requests.get(url, headers=headers, stream=True) as response:
+        response.raise_for_status()
+        description = f"Download {name}"
+        with open(temporary_path, "wb") as f:
+            with tqdm(total=entry["compressed"], unit="B", unit_scale=True, desc=description) as progress:
+                for chunk in response.iter_content(chunk_size=1 << 20):
+                    progress.update(len(chunk))
+                    block = decompressor.decompress(chunk) if decompressor is not None else chunk
+                    crc = zlib.crc32(block, crc)
+                    digest.update(block)
+                    f.write(block)
+            if decompressor is not None:
+                block = decompressor.flush()
+                crc = zlib.crc32(block, crc)
+                digest.update(block)
+                f.write(block)
+
+    if crc != entry["crc"]:
+        os.remove(temporary_path)
+        raise RuntimeError(f"The member '{name}' has the crc32 {crc}, but the zip lists {entry['crc']}.")
+    if expected_sha is not None and digest.hexdigest() != expected_sha:
+        os.remove(temporary_path)
+        raise RuntimeError(f"The member '{name}' has the sha256 {digest.hexdigest()}, expected {expected_sha}.")
+    os.replace(temporary_path, output_path)
+
+
+def _download_bundle(url: str, bundle_dir: str, sample: str, download: bool, with_stains: bool) -> str:
+    """Download the members that this loader reads, and skip the rest of the bundle."""
     if os.path.exists(bundle_dir):
         return bundle_dir
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {bundle_dir}, but download was set to False")
+
+    index = _remote_zip_index(url)
+    channels = natsorted(n for n in index if n.startswith("morphology_focus/") and n.endswith(".ome.tif"))
+    if not channels:
+        raise RuntimeError(f"The bundle for '{sample}' holds no morphology channel.")
+    if not with_stains:
+        channels = channels[:1]
+
+    names = ["experiment.xenium", "cells.zarr.zip"] + channels
+    missing = [n for n in names if n not in index]
+    if missing:
+        raise RuntimeError(f"The bundle for '{sample}' is missing {missing}.")
 
     temporary_dir = f"{bundle_dir}.tmp"
     if os.path.exists(temporary_dir):
         shutil.rmtree(temporary_dir)
-
-    with zipfile.ZipFile(zip_path) as archive:
-        names = archive.namelist()
-        missing = [m for m in BUNDLE_MEMBERS if not any(n.startswith(m) for n in names)]
-        if missing:
-            raise RuntimeError(f"The bundle {os.path.basename(zip_path)} is missing {missing}.")
-
-        channels = natsorted(n for n in names if n.startswith("morphology_focus/") and n.endswith(".ome.tif"))
-        if not with_stains:
-            channels = channels[:1]
-        members = [n for n in names if n in ("experiment.xenium", "cells.zarr.zip")] + channels
-        archive.extractall(temporary_dir, members=members)
+    for name in names:
+        _download_member(url, name, index[name], os.path.join(temporary_dir, name), CHECKSUMS[sample].get(name))
 
     os.replace(temporary_dir, bundle_dir)
     return bundle_dir
@@ -244,9 +379,10 @@ def get_xenium_data(
 ) -> str:
     """Download one Xenium sample.
 
-    The loader reads the Xenium Explorer subset of the output bundle, which holds the masks
-    and the morphology images but not the transcripts. It is around ten times smaller than
-    the full bundle. The bundles of the six samples take 19 GB together.
+    The source is the Xenium Explorer subset of the output bundle, which holds the masks and
+    the morphology images but not the transcripts. This function does not fetch the whole
+    archive. It reads the central directory of the remote zip, then reads only the members
+    that it needs, which cuts the download by about four times without the stains.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -266,11 +402,7 @@ def get_xenium_data(
         return output_path
 
     os.makedirs(os.path.join(path, "preprocessed"), exist_ok=True)
-    zip_path = os.path.join(path, "downloads", f"{sample}.zip")
-    os.makedirs(os.path.join(path, "downloads"), exist_ok=True)
-    util.download_source(zip_path, URLS[sample], download, CHECKSUMS[sample])
-
-    bundle_dir = _extract_bundle(zip_path, os.path.join(path, "bundles", sample), with_stains)
+    bundle_dir = _download_bundle(URLS[sample], os.path.join(path, "bundles", sample), sample, download, with_stains)
     _create_h5(bundle_dir, output_path, sample, with_stains)
     shutil.rmtree(bundle_dir, ignore_errors=True)
 
