@@ -37,11 +37,11 @@ FILES = {
 }
 
 SOURCES = {
-    "synthetic_cell_segmentation": ("burgess", "cell"),
-    "synthetic_nucleus_segmentation": ("burgess", "nucleus"),
-    "h2b_fluorescence_nucleus_segmentation": ("cellcognition", "instances"),
-    "protein_localization_nucleus_segmentation": ("opencell", "instances"),
-    "electron_microscopy_mitochondria_segmentation": ("wu", "instances"),
+    "synthetic_cells": ("burgess", "cell"),
+    "synthetic_nuclei": ("burgess", "nucleus"),
+    "fluo_nuclei": ("cellcognition", "instances"),
+    "protein_localization_nuclei": ("opencell", "instances"),
+    "em_mitochondria": ("wu", "instances"),
 }
 
 
@@ -157,12 +157,12 @@ def _validate_source(source: str) -> Tuple[str, str]:
 def get_micro_bench_paths(
     path: Union[os.PathLike, str],
     source: Literal[
-        "synthetic_cell_segmentation",
-        "synthetic_nucleus_segmentation",
-        "h2b_fluorescence_nucleus_segmentation",
-        "protein_localization_nucleus_segmentation",
-        "electron_microscopy_mitochondria_segmentation",
-    ] = "synthetic_cell_segmentation",
+        "synthetic_cells",
+        "synthetic_nuclei",
+        "fluo_nuclei",
+        "protein_localization_nuclei",
+        "em_mitochondria",
+    ] = "synthetic_cells",
     download: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to one segmentation source in Micro-Bench.
@@ -170,10 +170,9 @@ def get_micro_bench_paths(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         source: The source named by imaging modality and segmentation task. Choose from
-            'synthetic_cell_segmentation', 'synthetic_nucleus_segmentation',
-            'h2b_fluorescence_nucleus_segmentation', 'protein_localization_nucleus_segmentation', or
-            'electron_microscopy_mitochondria_segmentation'. These correspond to Burgess et al.,
-            Burgess et al., CellCognition, OpenCell, and Wu et al., respectively.
+            'synthetic_cells', 'synthetic_nuclei', 'fluo_nuclei', 'protein_localization_nuclei', or
+            'em_mitochondria'. These correspond to Burgess et al., Burgess et al., CellCognition,
+            OpenCell, and Wu et al., respectively.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -196,12 +195,12 @@ def get_micro_bench_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     source: Literal[
-        "synthetic_cell_segmentation",
-        "synthetic_nucleus_segmentation",
-        "h2b_fluorescence_nucleus_segmentation",
-        "protein_localization_nucleus_segmentation",
-        "electron_microscopy_mitochondria_segmentation",
-    ] = "synthetic_cell_segmentation",
+        "synthetic_cells",
+        "synthetic_nuclei",
+        "fluo_nuclei",
+        "protein_localization_nuclei",
+        "em_mitochondria",
+    ] = "synthetic_cells",
     download: bool = False,
     **kwargs,
 ) -> Dataset:
@@ -237,12 +236,12 @@ def get_micro_bench_loader(
     batch_size: int,
     patch_shape: Tuple[int, int],
     source: Literal[
-        "synthetic_cell_segmentation",
-        "synthetic_nucleus_segmentation",
-        "h2b_fluorescence_nucleus_segmentation",
-        "protein_localization_nucleus_segmentation",
-        "electron_microscopy_mitochondria_segmentation",
-    ] = "synthetic_cell_segmentation",
+        "synthetic_cells",
+        "synthetic_nuclei",
+        "fluo_nuclei",
+        "protein_localization_nuclei",
+        "em_mitochondria",
+    ] = "synthetic_cells",
     download: bool = False,
     **kwargs,
 ) -> DataLoader:
