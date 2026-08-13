@@ -22,5 +22,9 @@ def check_micro_bench():
         check_loader(loader, 4, instance_labels=True, rgb=True)
 
 
-if __name__ == "__main__":
+def main():
     check_micro_bench()
+
+
+if __name__ == "__main__":
+    main()

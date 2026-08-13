@@ -1,15 +1,8 @@
-"""Micro-Bench is a vision-language benchmark assembled from microscopy datasets.
+"""Micro-Bench contains microscopy images for vision-language understanding.
 
-This loader exposes the polygon segmentation annotations redistributed with Micro-Bench for
-synthetic cells from Burgess et al., CellCognition H2B images, OpenCell nuclei and mitochondria
-from Wu et al. The GlaS subset is not included because torch-em already provides the original
-data via ``get_glas_loader``.
-
-The Micro-Bench release is available under CC BY-SA 4.0 at
-https://huggingface.co/datasets/jnirschl/uBench. The source metadata reports CC BY 4.0 for the
-Burgess and OpenCell samples and CC BY-SA 4.0 for the Wu samples, but does not specify a license
-for CellCognition. The benchmark is from the publication https://doi.org/10.52202/079017-0965.
-Please cite it and the corresponding source dataset if you use these data in your research.
+This loader exposes polygon annotations from Burgess et al., CellCognition, OpenCell and Wu et al.
+The dataset is located at https://huggingface.co/datasets/jnirschl/uBench and is from the publication
+https://doi.org/10.52202/079017-0965. Please cite it if you use this dataset in your research.
 """
 
 import os
