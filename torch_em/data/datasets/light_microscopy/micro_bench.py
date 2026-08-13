@@ -36,7 +36,13 @@ FILES = {
     "ubench-test-00006-of-00007.arrow": "534beca2084a250d4436340c78accc9fe7cc2d6063d4884302e7e7f141edad6c",
 }
 
-SOURCES = ("burgess", "cellcognition", "opencell", "wu")
+SOURCES = {
+    "synthetic_cell_segmentation": ("burgess", "cell"),
+    "synthetic_nucleus_segmentation": ("burgess", "nucleus"),
+    "h2b_fluorescence_nucleus_segmentation": ("cellcognition", "instances"),
+    "protein_localization_nucleus_segmentation": ("opencell", "instances"),
+    "electron_microscopy_mitochondria_segmentation": ("wu", "instances"),
+}
 
 
 def _get_source(row) -> Optional[str]:
@@ -142,34 +148,32 @@ def get_micro_bench_data(path: Union[os.PathLike, str], download: bool = False) 
     return str(path)
 
 
-def _validate_source(source: str, label_choice: Optional[str]) -> str:
+def _validate_source(source: str) -> Tuple[str, str]:
     if source not in SOURCES:
         raise ValueError(f"'{source}' is not a valid source. Choose from {list(SOURCES)}.")
-
-    if source == "burgess":
-        label_choice = "cell" if label_choice is None else label_choice
-        if label_choice not in ("cell", "nucleus"):
-            raise ValueError("Burgess annotations support label_choice 'cell' or 'nucleus'.")
-    elif label_choice is not None:
-        raise ValueError("label_choice is only supported for source='burgess'.")
-    else:
-        label_choice = "instances"
-    return label_choice
+    return SOURCES[source]
 
 
 def get_micro_bench_paths(
     path: Union[os.PathLike, str],
-    source: Literal["burgess", "cellcognition", "opencell", "wu"] = "burgess",
-    label_choice: Optional[Literal["cell", "nucleus"]] = None,
+    source: Literal[
+        "synthetic_cell_segmentation",
+        "synthetic_nucleus_segmentation",
+        "h2b_fluorescence_nucleus_segmentation",
+        "protein_localization_nucleus_segmentation",
+        "electron_microscopy_mitochondria_segmentation",
+    ] = "synthetic_cell_segmentation",
     download: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to one segmentation source in Micro-Bench.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        source: The source dataset. Choose from 'burgess', 'cellcognition', 'opencell' or 'wu'.
-        label_choice: The Burgess target, either 'cell' or 'nucleus'. The two targets are kept
-            separate because their polygons overlap. This argument is only valid for Burgess.
+        source: The source named by imaging modality and segmentation task. Choose from
+            'synthetic_cell_segmentation', 'synthetic_nucleus_segmentation',
+            'h2b_fluorescence_nucleus_segmentation', 'protein_localization_nucleus_segmentation', or
+            'electron_microscopy_mitochondria_segmentation'. These correspond to Burgess et al.,
+            Burgess et al., CellCognition, OpenCell, and Wu et al., respectively.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -178,11 +182,11 @@ def get_micro_bench_paths(
     """
     from natsort import natsorted
 
-    label_choice = _validate_source(source, label_choice)
+    dataset_source, label_choice = _validate_source(source)
     get_micro_bench_data(path, download)
 
-    image_paths = natsorted(glob(os.path.join(path, "images", source, "*.tif")))
-    label_paths = natsorted(glob(os.path.join(path, "labels", source, label_choice, "*.tif")))
+    image_paths = natsorted(glob(os.path.join(path, "images", dataset_source, "*.tif")))
+    label_paths = natsorted(glob(os.path.join(path, "labels", dataset_source, label_choice, "*.tif")))
     if not image_paths or len(image_paths) != len(label_paths):
         raise RuntimeError(f"Could not find matching Micro-Bench images and labels for source '{source}' in {path}.")
     return image_paths, label_paths
@@ -191,8 +195,13 @@ def get_micro_bench_paths(
 def get_micro_bench_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    source: Literal["burgess", "cellcognition", "opencell", "wu"] = "burgess",
-    label_choice: Optional[Literal["cell", "nucleus"]] = None,
+    source: Literal[
+        "synthetic_cell_segmentation",
+        "synthetic_nucleus_segmentation",
+        "h2b_fluorescence_nucleus_segmentation",
+        "protein_localization_nucleus_segmentation",
+        "electron_microscopy_mitochondria_segmentation",
+    ] = "synthetic_cell_segmentation",
     download: bool = False,
     **kwargs,
 ) -> Dataset:
@@ -201,15 +210,14 @@ def get_micro_bench_dataset(
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
-        source: The source dataset. Choose from 'burgess', 'cellcognition', 'opencell' or 'wu'.
-        label_choice: The Burgess target, either 'cell' or 'nucleus'. This is only valid for Burgess.
+        source: The source named by imaging modality and segmentation task. See ``get_micro_bench_paths``.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for ``torch_em.default_segmentation_dataset``.
 
     Returns:
         The segmentation dataset.
     """
-    image_paths, label_paths = get_micro_bench_paths(path, source, label_choice, download)
+    image_paths, label_paths = get_micro_bench_paths(path, source, download)
     kwargs, _ = util.add_instance_label_transform(kwargs, add_binary_target=True)
     kwargs = util.update_kwargs(kwargs, "ndim", 2)
 
@@ -228,8 +236,13 @@ def get_micro_bench_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, int],
-    source: Literal["burgess", "cellcognition", "opencell", "wu"] = "burgess",
-    label_choice: Optional[Literal["cell", "nucleus"]] = None,
+    source: Literal[
+        "synthetic_cell_segmentation",
+        "synthetic_nucleus_segmentation",
+        "h2b_fluorescence_nucleus_segmentation",
+        "protein_localization_nucleus_segmentation",
+        "electron_microscopy_mitochondria_segmentation",
+    ] = "synthetic_cell_segmentation",
     download: bool = False,
     **kwargs,
 ) -> DataLoader:
@@ -239,8 +252,7 @@ def get_micro_bench_loader(
         path: Filepath to a folder where the downloaded data will be saved.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
-        source: The source dataset. Choose from 'burgess', 'cellcognition', 'opencell' or 'wu'.
-        label_choice: The Burgess target, either 'cell' or 'nucleus'. This is only valid for Burgess.
+        source: The source named by imaging modality and segmentation task. See ``get_micro_bench_paths``.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for the dataset or PyTorch DataLoader.
 
@@ -249,6 +261,6 @@ def get_micro_bench_loader(
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_micro_bench_dataset(
-        path, patch_shape, source, label_choice, download, **ds_kwargs,
+        path, patch_shape, source, download, **ds_kwargs,
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
