@@ -5,14 +5,27 @@ The dataset holds 84 embryos with 506 timepoints each, so 42504 volumes in total
 the data by embryo, and no embryo appears in more than one split. The images are label-free, which
 makes the nuclei much harder to see than in a fluorescence image.
 
-NOTE: The whole dataset needs about 68 GB for the annotations and a similar amount for the images,
-because one volume takes about 1.6 MB and the archives compress well. The loader therefore extracts
-only the timepoints that you request. Use `stride` to set how many timepoints it skips, or pass
-`timepoints` to select them.
+NOTE: Every volume holds 51 z-slices, but each embryo was cropped to its own field of view, so the
+xy shape differs between embryos. It ranges from (92, 102) to (158, 158), and is not square for most
+embryos. Volumes smaller than `patch_shape` are padded, so keep the last two entries of your
+`patch_shape` at 92 or below to train on unpadded data.
 
-NOTE: You must download both archives manually from the links in
-https://github.com/funalab/FL2-Net and place them in `path`. Google Drive limits how often it
-serves them, so an automatic download fails once too many users have fetched the file.
+NOTE: The volumes are stored as uncompressed uint16 tif files of about 1.8 MB each, so extracted in
+full each of the two archives needs about 76 GB. The loader therefore extracts only the timepoints
+that you request. Use `stride` to set how many timepoints it skips, or pass `timepoints` to select
+them. The default stride of 25 keeps 21 of the 506 timepoints, which comes out at about 2 GB for the
+train split.
+
+NOTE: The archives store their files in an arbitrary order, so extracting even a few timepoints
+reads through the whole archive once. This takes about a minute for the annotations and much longer
+for the images. The files are cached on disk, so this cost is only paid the first time.
+
+NOTE: The images take up 64 GiB as a single archive, so expect the download to run for a while.
+Google Drive refuses that archive to anonymous callers with a 'quota exceeded' html page, which it
+serves under HTTP 200 rather than as an error. It does answer ranged requests though, so this module
+downloads the archives range by range, which also lets an interrupted download resume. If the
+download fails anyway, fetch both archives manually from the links in
+https://github.com/funalab/FL2-Net and place them in `path` as 'raw.tar.gz' and 'gt.tar.gz'.
 
 The dataset is located at https://github.com/funalab/FL2-Net.
 This dataset is from the publication https://doi.org/10.1016/j.compbiomed.2025.111179.
@@ -20,9 +33,12 @@ Please cite it if you use this dataset in your research.
 """
 
 import os
+import re
 import tarfile
-from natsort import natsorted
+from tqdm import tqdm
 from typing import List, Literal, Optional, Sequence, Tuple, Union
+
+import requests
 
 from torch.utils.data import DataLoader, Dataset
 
@@ -31,15 +47,30 @@ import torch_em
 from .. import util
 
 
+# These are the links from the dataset section of the FL2-Net README. Google Drive answers them with
+# a 'quota exceeded' html page rather than the file, so the download below addresses the files by id
+# instead. The urls are kept for reference and for the manual download instructions.
 URLS = {
     "images": "https://drive.usercontent.google.com/download?id=1OAMmFM76TputGnU6nell6LU81N0hDmRc&confirm=xxx",
     "labels": "https://drive.usercontent.google.com/download?id=1hdSnCthLtyKMCahFLHUz36Awtj2-OC6T&confirm=xxx",
 }
 
+FILE_IDS = {"images": "1OAMmFM76TputGnU6nell6LU81N0hDmRc", "labels": "1hdSnCthLtyKMCahFLHUz36Awtj2-OC6T"}
+
 CHECKSUMS = {
-    "images": None,  # The archive was not reachable yet, so the checksum is still unknown.
+    "images": None,  # Filled in once the 64 GiB download has completed and been verified.
     "labels": "9c12b70978f3995662f377dac8fc173abdc0a350ee3c38e6367096c87c2d2200",
 }
+
+# The size of the archives in bytes, as reported by Google Drive. The download checks against these,
+# because a truncated transfer is otherwise only caught by the much slower checksum.
+ARCHIVE_SIZES = {"images": 69032222254, "labels": 456938451}
+
+MANUAL_DOWNLOAD_MESSAGE = (
+    "Google Drive refused to serve the FL2-Net archives, because too many users have downloaded them "
+    "recently. Please download '{name}' manually from the dataset links in "
+    "https://github.com/funalab/FL2-Net, save it as '{path}', and run this function again."
+)
 
 ARCHIVE_NAMES = {"images": "raw.tar.gz", "labels": "gt.tar.gz"}
 
@@ -78,13 +109,83 @@ SPLITS = {
 }
 
 
+def _get_download_url(session: requests.Session, file_id: str) -> str:
+    """Get a download url for a large Google Drive file, and store the matching cookie in `session`.
+
+    Google cannot virus scan files of this size, so it answers with an interstitial page that holds a
+    confirmation token. That token, together with the cookie, is what makes the file downloadable.
+    """
+    response = session.get(f"https://drive.google.com/uc?export=download&id={file_id}", timeout=120)
+    response.raise_for_status()
+    token = re.search(r'name="uuid" value="([^"]+)"', response.text)
+    if token is None:
+        raise RuntimeError(
+            "Google Drive did not return a download token for the FL2-Net archive. "
+            f"It answered with: {response.text[:200]!r}"
+        )
+    return (
+        f"https://drive.usercontent.google.com/download?id={file_id}"
+        f"&export=download&confirm=t&uuid={token.group(1)}"
+    )
+
+
+def _download_from_gdrive(path: str, file_id: str, total: int, checksum: Optional[str], desc: str) -> None:
+    """Download a large public Google Drive file in chunks, and resume an interrupted download.
+
+    Google refuses these files to anonymous callers with a 'quota exceeded' html page under HTTP 200,
+    so a plain download writes that page to disk instead of the file. A ranged request for the same
+    url is served normally, so this reads the file range by range. That also makes the download
+    resumable, which matters for an archive of this size.
+
+    Ranges of more than 512 MiB are refused the same way as an unranged request, so the chunk size
+    stays well below that, and halves whenever a chunk is refused in case the limit is lowered.
+    """
+    chunk_size = 256 * 1024**2
+    min_chunk_size = 32 * 1024**2
+    tmp_path = f"{path}.incomplete"
+    session = requests.Session()
+    url = _get_download_url(session, file_id)
+
+    with tqdm(total=total, unit="B", unit_scale=True, desc=desc) as progress:
+        offset = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
+        progress.update(offset)
+
+        while offset < total:
+            end = min(offset + chunk_size, total) - 1
+            expected = end - offset + 1
+            response = session.get(url, headers={"Range": f"bytes={offset}-{end}"}, stream=True, timeout=3600)
+
+            # A refusal comes back as HTTP 200 with an html body rather than as an error code, so the
+            # status and the length are both checked before anything is written.
+            if response.status_code != 206 or int(response.headers.get("Content-Length", 0)) != expected:
+                response.close()
+                if chunk_size > min_chunk_size:
+                    chunk_size //= 2
+                url = _get_download_url(session, file_id)
+                continue
+
+            with open(tmp_path, "ab") as f:
+                for chunk in response.iter_content(chunk_size=1024**2):
+                    f.write(chunk)
+                    progress.update(len(chunk))
+            offset = os.path.getsize(tmp_path)
+
+    if offset != total:
+        raise RuntimeError(f"Downloaded {offset} bytes of {path}, but expected {total}.")
+
+    util._check_checksum(tmp_path, checksum)
+    os.replace(tmp_path, path)
+
+
 def _get_archive_root(archive_path: str) -> str:
     """Read the name of the top level folder of an archive.
 
-    The annotation archive stores its files under 'qcanet'. The name of the image archive is not
-    documented, so the loader reads it instead of assuming it.
+    The two archives do not agree on this name: the images sit under 'raw' and the annotations under
+    'qcanet'. Neither is documented, so it is read here rather than assumed.
     """
-    with tarfile.open(archive_path, "r:gz") as archive:
+    # 'r|gz' reads the archive as a stream. That is all this needs, and it avoids the seeks that
+    # 'r:gz' performs for every member, which are expensive on a gzip stream of this size.
+    with tarfile.open(archive_path, "r|gz") as archive:
         for member in archive:
             root = member.name.split("/")[0]
             if root:
@@ -93,7 +194,11 @@ def _get_archive_root(archive_path: str) -> str:
 
 
 def _extract_members(archive_path: str, relative_names: Sequence[str], destination: str) -> None:
-    """Extract the given files from an archive in one pass, and drop the top level folder."""
+    """Extract the given files from an archive in one pass, and drop the top level folder.
+
+    The archives store their files in an arbitrary order, so the whole archive has to be read to
+    find the requested ones. Files that were extracted before are skipped.
+    """
     missing = {name for name in relative_names if not os.path.exists(os.path.join(destination, name))}
     if not missing:
         return
@@ -102,19 +207,35 @@ def _extract_members(archive_path: str, relative_names: Sequence[str], destinati
     wanted = {f"{root}/{name}": name for name in missing}
 
     found = set()
-    with tarfile.open(archive_path, "r:gz") as archive:
-        for member in archive:
-            target = wanted.get(member.name)
-            if target is None:
-                continue
-            output_path = os.path.join(destination, target)
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            source = archive.extractfile(member)
-            with open(output_path, "wb") as f:
-                f.write(source.read())
-            found.add(target)
-            if len(found) == len(wanted):
-                break
+    desc = f"Extract {len(missing)} files from {os.path.basename(archive_path)}"
+    with tarfile.open(archive_path, "r|gz") as archive:
+        with tqdm(total=len(wanted), desc=desc) as progress:
+            try:
+                for member in archive:
+                    target = wanted.get(member.name)
+                    if target is None:
+                        continue
+                    output_path = os.path.join(destination, target)
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    # Write to a temporary path first, so that an interrupted extraction is not
+                    # mistaken for a complete one when this function is called again.
+                    tmp_path = f"{output_path}.incomplete"
+                    with archive.extractfile(member) as source, open(tmp_path, "wb") as f:
+                        f.write(source.read())
+                    os.replace(tmp_path, output_path)
+                    found.add(target)
+                    progress.update(1)
+                    if len(found) == len(wanted):
+                        break
+            except (tarfile.ReadError, EOFError) as e:
+                # An incomplete download ends mid-stream. Everything up to that point was extracted,
+                # so say what happened rather than letting a bare gzip error surface.
+                raise RuntimeError(
+                    f"The archive {archive_path} ends before its end-of-stream marker, so the "
+                    f"download is incomplete. {len(found)} of {len(missing)} requested files were "
+                    f"found before it broke off. Delete the archive to download it again, or fetch "
+                    f"it manually from https://github.com/funalab/FL2-Net. The original error was: {e}"
+                ) from e
 
     if found != missing:
         raise RuntimeError(
@@ -126,7 +247,9 @@ def _extract_members(archive_path: str, relative_names: Sequence[str], destinati
 def _get_timepoints(timepoints: Optional[Sequence[int]], stride: int) -> List[int]:
     """Resolve the requested timepoints. The timepoint index starts at one."""
     if timepoints is not None:
-        selected = [int(t) for t in timepoints]
+        selected = sorted({int(t) for t in timepoints})
+        if not selected:
+            raise ValueError("You have to request at least one timepoint.")
         for timepoint in selected:
             if not 1 <= timepoint <= N_TIMEPOINTS:
                 raise ValueError(f"The timepoint {timepoint} is outside the range 1 to {N_TIMEPOINTS}.")
@@ -140,9 +263,9 @@ def _get_timepoints(timepoints: Optional[Sequence[int]], stride: int) -> List[in
 def get_fl2net_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Download the FL2-Net dataset.
 
-    NOTE: Google Drive limits how often it serves the archives. Download them manually from the
-    links in https://github.com/funalab/FL2-Net and place them in `path` as 'raw.tar.gz' and
-    'gt.tar.gz' when the automatic download fails.
+    NOTE: The image archive is 64 GiB, so this runs for a while. It can be interrupted and resumed.
+    Download the archives manually from the links in https://github.com/funalab/FL2-Net and place
+    them in `path` as 'raw.tar.gz' and 'gt.tar.gz' if the download fails.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
@@ -157,7 +280,22 @@ def get_fl2net_data(path: Union[os.PathLike, str], download: bool = False) -> st
         archive_path = os.path.join(path, archive_name)
         if os.path.exists(archive_path):
             continue
-        util.download_source(archive_path, URLS[key], download, CHECKSUMS[key])
+        if not download:
+            raise RuntimeError(f"Cannot find the data at {archive_path}, but download was set to False")
+
+        _download_from_gdrive(
+            path=archive_path,
+            file_id=FILE_IDS[key],
+            total=ARCHIVE_SIZES[key],
+            checksum=CHECKSUMS[key],
+            desc=f"Download {archive_name}",
+        )
+
+        # The download only ever writes ranges that Google served as file content, but a corrupt
+        # archive would otherwise not surface until the extraction fails with a confusing error.
+        if not tarfile.is_tarfile(archive_path):
+            os.remove(archive_path)
+            raise RuntimeError(MANUAL_DOWNLOAD_MESSAGE.format(name=archive_name, path=archive_path))
 
     return path
 
@@ -196,7 +334,8 @@ def get_fl2net_paths(
 
     get_fl2net_data(path, download)
     selected = _get_timepoints(timepoints, stride)
-    relative_names = [f"{embryo}/{timepoint:03d}.tif" for embryo in embryos for timepoint in selected]
+    # The names are sorted here, so that the images and the labels stay paired up below.
+    relative_names = [f"{embryo}/{timepoint:03d}.tif" for embryo in sorted(embryos) for timepoint in selected]
 
     image_dir = os.path.join(path, "images")
     label_dir = os.path.join(path, "labels")
@@ -205,7 +344,8 @@ def get_fl2net_paths(
 
     image_paths = [os.path.join(image_dir, name) for name in relative_names]
     label_paths = [os.path.join(label_dir, name) for name in relative_names]
-    return natsorted(image_paths), natsorted(label_paths)
+    assert len(image_paths) == len(label_paths)
+    return image_paths, label_paths
 
 
 def get_fl2net_dataset(
