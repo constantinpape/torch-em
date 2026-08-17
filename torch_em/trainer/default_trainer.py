@@ -72,6 +72,8 @@ class DefaultTrainer:
         lr_scheduler: The learning rate scheduler.
         log_image_interval: The interval for saving images during logging, in training iterations.
         mixed_precision: Whether to train with mixed precision.
+        mixed_precision_dtype: The dtype for autocast in mixed precision training, 'float16' or 'bfloat16'.
+            The default is 'float16' on the GPU and 'bfloat16' on the CPU. Use 'bfloat16' to avoid overflows.
         early_stopping: The patience for early stopping in epochs. If None, early stopping will not be used.
         logger: The logger class. Will be instantiated for logging.
             By default uses `torch_em.training.tensorboard_logger.TensorboardLogger`.
@@ -94,6 +96,7 @@ class DefaultTrainer:
         lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
         log_image_interval: int = 100,
         mixed_precision: bool = True,
+        mixed_precision_dtype: Optional[str] = None,
         early_stopping: Optional[int] = None,
         logger=TensorboardLogger,
         logger_kwargs: Optional[Dict[str, Any]] = None,
@@ -120,17 +123,21 @@ class DefaultTrainer:
         self.save_root = save_root
         self.compile_model = compile_model
         self.rank = rank
+        self._device_type = "cpu" if self.device.type == "cpu" else "cuda"
 
         self._iteration = 0
         self._epoch = 0
         self._best_epoch = 0
 
         self.mixed_precision = mixed_precision
+        # These are the defaults of torch.autocast for each device type.
+        self.mixed_precision_dtype = mixed_precision_dtype or ("bfloat16" if self._device_type == "cpu" else "float16")
         self.early_stopping = early_stopping
         self.train_time = 0.0
 
         if mixed_precision:
-            self.scaler = torch.GradScaler("cpu" if self.device.type == "cpu" else "cuda")
+            # Only float16 needs gradient scaling. bfloat16 has the same range as float32.
+            self.scaler = torch.GradScaler(self._device_type, enabled=self.mixed_precision_dtype == "float16")
         else:
             self.scaler = None
 
@@ -780,7 +787,8 @@ class DefaultTrainer:
 
     def _train_epoch_mixed(self, progress):
         return self._train_epoch_impl(
-            progress, partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda"),
+            progress,
+            partial(torch.autocast, device_type=self._device_type, dtype=getattr(torch, self.mixed_precision_dtype)),
             self._backprop_mixed
         )
 
@@ -826,7 +834,7 @@ class DefaultTrainer:
 
     def _validate_mixed(self):
         return self._validate_impl(
-            partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda")
+            partial(torch.autocast, device_type=self._device_type, dtype=getattr(torch, self.mixed_precision_dtype))
         )
 
     def _validate_impl(self, forward_context):
