@@ -72,8 +72,6 @@ class DefaultTrainer:
         lr_scheduler: The learning rate scheduler.
         log_image_interval: The interval for saving images during logging, in training iterations.
         mixed_precision: Whether to train with mixed precision.
-        mixed_precision_dtype: The dtype for autocast in mixed precision training, 'float16' or 'bfloat16'.
-            The default is 'float16' on the GPU and 'bfloat16' on the CPU. Use 'bfloat16' to avoid overflows.
         early_stopping: The patience for early stopping in epochs. If None, early stopping will not be used.
         logger: The logger class. Will be instantiated for logging.
             By default uses `torch_em.training.tensorboard_logger.TensorboardLogger`.
@@ -82,6 +80,8 @@ class DefaultTrainer:
         save_root: The root folder for saving the checkpoint and logs.
         compile_model: Whether to compile the model before training.
         rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+        mixed_precision_dtype: The dtype for autocast in mixed precision training, 'float16' or 'bfloat16'.
+            The default is 'float16' on the GPU and 'bfloat16' on the CPU. Use 'bfloat16' to avoid overflows.
     """
     def __init__(
         self,
@@ -96,7 +96,6 @@ class DefaultTrainer:
         lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
         log_image_interval: int = 100,
         mixed_precision: bool = True,
-        mixed_precision_dtype: Optional[str] = None,
         early_stopping: Optional[int] = None,
         logger=TensorboardLogger,
         logger_kwargs: Optional[Dict[str, Any]] = None,
@@ -104,6 +103,7 @@ class DefaultTrainer:
         save_root: Optional[str] = None,
         compile_model: Optional[Union[bool, str]] = None,
         rank: Optional[int] = None,
+        mixed_precision_dtype: Optional[str] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
@@ -633,8 +633,9 @@ class DefaultTrainer:
         self.model.to(self.device)
 
         self.optimizer.load_state_dict(save_dict["optimizer_state"])
-        if self.scaler is not None:
-            self.scaler.load_state_dict(save_dict["scaler_state"])
+        scaler_state = save_dict.get("scaler_state")
+        if self.scaler is not None and scaler_state:
+            self.scaler.load_state_dict(scaler_state)
         if self.lr_scheduler is not None:
             self.lr_scheduler.load_state_dict(save_dict["scheduler_state"])
 
