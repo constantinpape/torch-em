@@ -105,6 +105,8 @@ class UNETRBase(nn.Module):
             By default, it uses resampling for upsampling.
         perform_range_checks: Whether to validate the input value range before normalization on each forward pass.
             You can disable the checks to avoid GPU sync overhead during training when inputs are known to be correct.
+        initial_features: The number of features of the finest decoder level. The features per level are
+            'initial_features * gain ** i', so this scales the decoder parameters quadratically.
 
         NOTE: The currently supported combinations of 'backbone' x 'encoder' are the following:
 
@@ -161,6 +163,7 @@ class UNETRBase(nn.Module):
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
         perform_range_checks: bool = True,
+        initial_features: int = 64,
         **kwargs
     ) -> None:
         super().__init__()
@@ -173,6 +176,7 @@ class UNETRBase(nn.Module):
         self.resize_input = resize_input
         self.perform_range_checks = perform_range_checks
         self.use_conv_transpose = use_conv_transpose
+        self.initial_features = initial_features
         self.backbone = backbone
 
         if isinstance(encoder, str):  # e.g. "vit_b" / "hvit_b" / "vit_pe"
@@ -558,9 +562,8 @@ class UNETR(UNETRBase):
 
         # parameters for the decoder network
         depth = 3
-        initial_features = 64
         gain = 2
-        features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
+        features_decoder = [self.initial_features * gain ** i for i in range(depth + 1)][::-1]
         scale_factors = depth * [2]
         self.out_channels = out_channels
 
@@ -753,9 +756,8 @@ class UNETR3D(UNETRBase):
         # The 3d convolutional decoder.
         # First, get the important parameters for the decoder.
         depth = 3
-        initial_features = 64
         gain = 2
-        features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
+        features_decoder = [self.initial_features * gain ** i for i in range(depth + 1)][::-1]
         scale_factors = [1, 2, 2]
         self.out_channels = out_channels
 
