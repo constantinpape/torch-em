@@ -69,6 +69,7 @@ from .morphoseg import get_morphoseg_loader, get_morphoseg_dataset
 from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
 from .mrose_bacteria import get_mrose_bacteria_loader, get_mrose_bacteria_dataset
 from .myofuse import get_myofuse_loader, get_myofuse_dataset
+from .neisseria_meningitidis import get_neisseria_meningitidis_loader, get_neisseria_meningitidis_dataset
 from .neurips_cell_seg import (
     get_neurips_cellseg_supervised_loader, get_neurips_cellseg_supervised_dataset,
     get_neurips_cellseg_unsupervised_loader, get_neurips_cellseg_unsupervised_dataset
