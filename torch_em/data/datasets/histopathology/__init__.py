@@ -26,6 +26,7 @@ from .puma import get_puma_loader, get_puma_dataset
 from .segpath import get_segpath_loader, get_segpath_dataset
 from .sinus import get_sinus_loader, get_sinus_dataset
 from .spatch import get_spatch_loader, get_spatch_dataset
+from .spatialproteomics_bnhl import get_spatialproteomics_bnhl_loader, get_spatialproteomics_bnhl_dataset
 from .srsanet import get_srsanet_loader, get_srsanet_dataset
 from .tissueseg import get_tissueseg_loader, get_tissueseg_dataset
 from .tnbc import get_tnbc_loader, get_tnbc_dataset
