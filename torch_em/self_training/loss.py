@@ -85,13 +85,7 @@ class DefaultSelfTrainingLossAndMetric(nn.Module):
         return loss, metric
 
 
-# TODO: The probabilistic U-Net related code should be refactored to `torch_em.loss`
-# and should be documented properly.
-
-
-def l2_regularisation(m):
-    """@private
-    """
+def _l2_regularisation(m):
     l2_reg = None
     for W in m.parameters():
         if l2_reg is None:
@@ -102,67 +96,90 @@ def l2_regularisation(m):
 
 
 class ProbabilisticUNetLoss(nn.Module):
-    """@private
-    """
-    # """Loss function for Probabilistic UNet
+    """Training loss for ProbabilisticUNet.
 
-    # Args:
-    #     # TODO : Implement a generic utility function for all Probabilistic UNet schemes (ELBO, GECO, etc.)
-    #     loss [nn.Module] - the loss function to be used. (default: None)
-    # """
-    def __init__(self, loss=None):
+    Computes the ELBO loss: reconstruction term plus beta-weighted KL divergence,
+    with L2 regularisation on the posterior, prior, and fcomb weights.
+    Labels are sliced to model.output_channels to support multi-rater inputs.
+
+    Args:
+        loss: Reserved. Must be None; the ELBO objective is always used.
+    """
+    def __init__(self, loss: Optional[nn.Module] = None) -> None:
         super().__init__()
         self.loss = loss
 
-    def __call__(self, model, input_, labels, label_filter=None):
-        model.forward(input_, labels)
+    def __call__(
+        self, model: nn.Module, input_: torch.Tensor, labels: torch.Tensor, label_filter: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        model(input_, labels)
+        labels = labels[:, :model.output_channels, ...]
 
         if self.loss is None:
             elbo = model.elbo(labels, label_filter)
-            reg_loss = l2_regularisation(model.posterior) + l2_regularisation(model.prior) + \
-                l2_regularisation(model.fcomb.layers)
+            reg_loss = (
+                _l2_regularisation(model.posterior)
+                + _l2_regularisation(model.prior)
+                + _l2_regularisation(model.fcomb.layers)
+            )
             loss = -elbo + 1e-5 * reg_loss
+        else:
+            raise NotImplementedError("Custom loss is not supported; pass loss=None to use the ELBO.")
 
         return loss
 
 
 class ProbabilisticUNetLossAndMetric(nn.Module):
-    """@private
+    """Training loss and validation metric for ProbabilisticUNet.
+
+    Computes the ELBO loss and a sample-averaged Dice metric in a single forward pass.
+    Draws prior_samples segmentation hypotheses, averages them, and evaluates against labels.
+    Labels are sliced to model.output_channels to support multi-rater inputs.
+
+    Args:
+        loss: Reserved. Must be None; the ELBO objective is always used.
+        metric: Metric function applied to averaged prior samples vs. labels.
+        activation: Activation applied to prior samples before metric computation.
+        prior_samples: Number of prior samples to average for the metric.
     """
-    # """Loss and metric function for Probabilistic UNet.
-
-    # Args:
-    #     # TODO : Implement a generic utility function for all Probabilistic UNet schemes (ELBO, GECO, etc.)
-    #     loss [nn.Module] - the loss function to be used. (default: None)
-
-    #     metric [nn.Module] - the metric function to be used. (default: torch_em.loss.DiceLoss)
-    #     activation [nn.Module, callable] - the activation function to be applied to the prediction
-    #         before evaluating the average predictions. (default: None)
-    # """
-    def __init__(self, loss=None, metric=DiceLoss(), activation=torch.nn.Sigmoid(), prior_samples=16):
+    def __init__(
+        self,
+        loss: Optional[nn.Module] = None,
+        metric: nn.Module = DiceLoss(),
+        activation: Optional[nn.Module] = torch.nn.Sigmoid(),
+        prior_samples: int = 16,
+    ) -> None:
         super().__init__()
         self.activation = activation
         self.metric = metric
         self.loss = loss
         self.prior_samples = prior_samples
 
-    def __call__(self, model, input_, labels, label_filter=None):
-        model.forward(input_, labels)
+    def __call__(
+        self, model: nn.Module, input_: torch.Tensor, labels: torch.Tensor, label_filter: Optional[torch.Tensor] = None
+    ):
+        model(input_, labels)
+        labels = labels[:, :model.output_channels, ...]
 
         if self.loss is None:
             elbo = model.elbo(labels, label_filter)
-            reg_loss = l2_regularisation(model.posterior) + l2_regularisation(model.prior) + \
-                l2_regularisation(model.fcomb.layers)
+            reg_loss = (
+                _l2_regularisation(model.posterior)
+                + _l2_regularisation(model.prior)
+                + _l2_regularisation(model.fcomb.layers)
+            )
             loss = -elbo + 1e-5 * reg_loss
+        else:
+            raise NotImplementedError("Custom loss is not supported; pass loss=None to use the ELBO.")
 
         samples_per_distribution = []
         for _ in range(self.prior_samples):
-            samples = model.sample(testing=False)
+            samples = model.sample()
             if self.activation is not None:
                 samples = self.activation(samples)
             samples_per_distribution.append(samples)
 
-        avg_samples = torch.stack(samples_per_distribution, dim=0).sum(dim=0) / len(samples_per_distribution)
+        avg_samples = torch.stack(samples_per_distribution, dim=0).mean(dim=0)
         metric = self.metric(avg_samples, labels)
 
         return loss, metric
