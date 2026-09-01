@@ -15,6 +15,7 @@ from .hest import get_hest_loader, get_hest_dataset
 from .icc import get_icc_loader, get_icc_dataset
 from .ignite import get_ignite_loader, get_ignite_dataset
 from .janowczyk import get_janowczyk_loader, get_janowczyk_dataset
+from .khoshdeli import get_khoshdeli_loader, get_khoshdeli_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset
 from .lynsec import get_lynsec_loader, get_lynsec_dataset
 from .monuseg import get_monuseg_loader, get_monuseg_dataset
