@@ -1,4 +1,7 @@
 from .bcss import get_bcss_loader, get_bcss_dataset
+from .camelyon import (
+    get_camelyon16_loader, get_camelyon16_dataset, get_camelyon17_loader, get_camelyon17_dataset
+)
 from .catch import get_catch_loader, get_catch_dataset
 from .conic import get_conic_loader, get_conic_dataset
 from .consep import get_consep_loader, get_consep_dataset
