@@ -36,3 +36,4 @@ from .srsanet import get_srsanet_loader, get_srsanet_dataset
 from .tiger import get_tiger_loader, get_tiger_dataset
 from .tissueseg import get_tissueseg_loader, get_tissueseg_dataset
 from .tnbc import get_tnbc_loader, get_tnbc_dataset
+from .tnbc_celltype import get_tnbc_celltype_loader, get_tnbc_celltype_dataset
