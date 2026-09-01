@@ -97,10 +97,17 @@ def _convert_slide(image_path, mask_path, output_path, resolution_level, tile=40
     image_series = tifffile.TiffFile(image_path).series[0]
     mask_series = tifffile.TiffFile(mask_path).series[0]
 
-    height, width = image_series.levels[resolution_level].shape[:2]
-    if mask_series.levels[resolution_level].shape[:2] != (height, width):
+    # Some scanners (e.g. Philips) round the declared level shape slightly differently between the raw
+    # slide and the independently rasterized mask, so tolerate a small mismatch and crop to the overlap.
+    image_height, image_width = image_series.levels[resolution_level].shape[:2]
+    mask_height, mask_width = mask_series.levels[resolution_level].shape[:2]
+    height, width = min(image_height, mask_height), min(image_width, mask_width)
+    tolerance = 0.02
+    if abs(image_height - mask_height) > tolerance * image_height or \
+            abs(image_width - mask_width) > tolerance * image_width:
         raise RuntimeError(
-            f"The mask '{mask_path}' does not match the raw shape ({height}, {width}) at level {resolution_level}."
+            f"The mask '{mask_path}' does not match the raw shape ({image_height}, {image_width}) "
+            f"at level {resolution_level}: got ({mask_height}, {mask_width})."
         )
 
     image = _open_level(image_series, resolution_level)
