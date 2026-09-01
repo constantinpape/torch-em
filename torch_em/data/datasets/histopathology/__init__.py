@@ -23,6 +23,7 @@ from .panoptils import get_panoptils_loader, get_panoptils_dataset
 from .phenocell import get_phenocell_loader, get_phenocell_dataset
 from .pcns import get_pcns_loader, get_pcns_dataset
 from .puma import get_puma_loader, get_puma_dataset
+from .rings import get_rings_loader, get_rings_dataset
 from .segpath import get_segpath_loader, get_segpath_dataset
 from .sinus import get_sinus_loader, get_sinus_dataset
 from .spatch import get_spatch_loader, get_spatch_dataset
