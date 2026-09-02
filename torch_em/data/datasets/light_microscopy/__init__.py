@@ -114,6 +114,7 @@ from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
 from .vibrio_cholerae import get_vibrio_cholerae_loader, get_vibrio_cholerae_dataset
 from .vicar import get_vicar_loader, get_vicar_dataset
 from .wing_disc import get_wing_disc_loader, get_wing_disc_dataset
+from .xenium import get_xenium_loader, get_xenium_dataset
 from .xpress import get_xpress_loader, get_xpress_dataset
 from .yeastcellseg import get_yeastcellseg_loader, get_yeastcellseg_dataset
 from .yeastms import get_yeastms_loader, get_yeastms_dataset
