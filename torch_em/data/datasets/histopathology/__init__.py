@@ -1,4 +1,5 @@
 from .bcss import get_bcss_loader, get_bcss_dataset
+from .beetle import get_beetle_loader, get_beetle_dataset
 from .camelyon import (
     get_camelyon16_loader, get_camelyon16_dataset, get_camelyon17_loader, get_camelyon17_dataset
 )
