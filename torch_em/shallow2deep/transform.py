@@ -2,7 +2,7 @@ from typing import Optional
 
 import numpy as np
 import skimage.segmentation
-from scipy.ndimage.morphology import distance_transform_edt
+import bioimage_cpp as bic
 from torch_em.util import ensure_array, ensure_spatial_array
 
 
@@ -32,7 +32,7 @@ class ForegroundTransform:
         labels = ensure_array(labels) if self.ndim is None else ensure_spatial_array(labels, self.ndim)
         target = labels > 0 if self.label_id is None else labels == self.label_id
         if self.ignore_radius > 0:
-            dist = distance_transform_edt(target == 0)
+            dist = bic.distance.distance_transform(target == 0)
             ignore_mask = np.logical_and(dist <= self.ignore_radius, target == 0)
             target[ignore_mask] = -1
         return target[None]
@@ -72,7 +72,7 @@ class BoundaryTransform:
         target = skimage.segmentation.find_boundaries(labels, mode=self.mode).astype("int8")
 
         if self.ignore_radius > 0:
-            dist = distance_transform_edt(target == 0)
+            dist = bic.distance.distance_transform(target == 0)
             ignore_mask = np.logical_and(dist <= self.ignore_radius, target == 0)
             target[ignore_mask] = -1
 

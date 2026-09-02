@@ -66,7 +66,7 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
 
     NOTE: The EVICAN annotations lack the 'area' field, so we compute it from the masks.
     """
-    import vigra
+    import bioimage_cpp as bic
 
     annotation_ids = coco.getAnnIds(imgIds=image_metadata["id"], catIds=category_ids)
     annotations = coco.loadAnns(annotation_ids)
@@ -94,7 +94,7 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
     seg_ids, sizes = np.unique(seg, return_counts=True)
     seg[np.isin(seg, seg_ids[sizes < min_size])] = 0
 
-    vigra.analysis.relabelConsecutive(seg, out=seg)
+    seg, _, _ = bic.segmentation.relabel_sequential(seg)
 
     return seg.astype("uint16")
 

@@ -11,7 +11,7 @@ from tqdm import tqdm
 from natsort import natsorted
 from typing import Union, Tuple, List, Literal, Optional
 
-from skimage.measure import label as connected_components
+from bioimage_cpp.segmentation import label as connected_components
 
 from torch.utils.data import Dataset, DataLoader
 

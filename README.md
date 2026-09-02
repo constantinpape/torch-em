@@ -2,11 +2,13 @@
 [![Build Status](https://github.com/constantinpape/torch-em/workflows/test/badge.svg)](https://github.com/constantinpape/torch-em/actions)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5108853.svg)](https://doi.org/10.5281/zenodo.5108853)
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/torch_em/badges/version.svg)](https://anaconda.org/conda-forge/torch_em)
+[![PyPI](https://img.shields.io/pypi/v/torch-em)](https://pypi.org/project/torch-em/)
 
 # torch-em
 
-Deep-learning based semantic and instance segmentation for 3D Electron Microscopy and other bioimage analysis problems based on PyTorch.
-Any feedback is highly appreciated, just open an issue!
+Deep-learning based semantic and instance segmentation for 3D Electron Microscopy and other bioimage analysis problems based on PyTorch. Any feedback is highly appreciated, just open an issue!
+
+**Important:** We recently migrated `torch_em` to [bioimage-cpp](https://github.com/computational-cell-analytics/bioimage-cpp). This enables installing `torch_em` via pip (in addition to conda) but changes dependencies and may still lead to some bugs. Please report any problems you encounter in an issue; you can pin `torch_em < 0.9` to install a version based on previous dependencies.
 
 Highlights:
 - Functional API with sensible defaults to train a state-of-the-art segmentation model with a few lines of code.

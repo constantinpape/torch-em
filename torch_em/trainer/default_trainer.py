@@ -80,6 +80,8 @@ class DefaultTrainer:
         save_root: The root folder for saving the checkpoint and logs.
         compile_model: Whether to compile the model before training.
         rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+        mixed_precision_dtype: The dtype for autocast in mixed precision training, 'float16' or 'bfloat16'.
+            The default is 'float16' on the GPU and 'bfloat16' on the CPU. Use 'bfloat16' to avoid overflows.
     """
     def __init__(
         self,
@@ -101,6 +103,7 @@ class DefaultTrainer:
         save_root: Optional[str] = None,
         compile_model: Optional[Union[bool, str]] = None,
         rank: Optional[int] = None,
+        mixed_precision_dtype: Optional[str] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
@@ -120,17 +123,21 @@ class DefaultTrainer:
         self.save_root = save_root
         self.compile_model = compile_model
         self.rank = rank
+        self._device_type = "cpu" if self.device.type == "cpu" else "cuda"
 
         self._iteration = 0
         self._epoch = 0
         self._best_epoch = 0
 
         self.mixed_precision = mixed_precision
+        # These are the defaults of torch.autocast for each device type.
+        self.mixed_precision_dtype = mixed_precision_dtype or ("bfloat16" if self._device_type == "cpu" else "float16")
         self.early_stopping = early_stopping
         self.train_time = 0.0
 
         if mixed_precision:
-            self.scaler = torch.GradScaler("cpu" if self.device.type == "cpu" else "cuda")
+            # Only float16 needs gradient scaling. bfloat16 has the same range as float32.
+            self.scaler = torch.GradScaler(self._device_type, enabled=self.mixed_precision_dtype == "float16")
         else:
             self.scaler = None
 
@@ -626,8 +633,9 @@ class DefaultTrainer:
         self.model.to(self.device)
 
         self.optimizer.load_state_dict(save_dict["optimizer_state"])
-        if self.scaler is not None:
-            self.scaler.load_state_dict(save_dict["scaler_state"])
+        scaler_state = save_dict.get("scaler_state")
+        if self.scaler is not None and scaler_state:
+            self.scaler.load_state_dict(scaler_state)
         if self.lr_scheduler is not None:
             self.lr_scheduler.load_state_dict(save_dict["scheduler_state"])
 
@@ -780,7 +788,8 @@ class DefaultTrainer:
 
     def _train_epoch_mixed(self, progress):
         return self._train_epoch_impl(
-            progress, partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda"),
+            progress,
+            partial(torch.autocast, device_type=self._device_type, dtype=getattr(torch, self.mixed_precision_dtype)),
             self._backprop_mixed
         )
 
@@ -826,7 +835,7 @@ class DefaultTrainer:
 
     def _validate_mixed(self):
         return self._validate_impl(
-            partial(torch.autocast, device_type="cpu" if self.device.type == "cpu" else "cuda")
+            partial(torch.autocast, device_type=self._device_type, dtype=getattr(torch, self.mixed_precision_dtype))
         )
 
     def _validate_impl(self, forward_context):
