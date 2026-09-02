@@ -375,6 +375,42 @@ class UNETRBase(nn.Module):
         """
         _check_input_normalization_range(x, expected_range)
 
+    def encode(self, x: torch.Tensor):
+        """Preprocess the input and run the image encoder.
+
+        Args:
+            x: The input tensor.
+
+        Returns:
+            The encoder features to pass to `decode` and the spatial shape after preprocessing.
+        """
+        raise NotImplementedError
+
+    def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
+        """Run the convolutional decoder on the encoder features.
+
+        Args:
+            features: The encoder features returned by `encode`.
+            input_shape: The spatial shape after preprocessing, returned by `encode`.
+            original_shape: The spatial shape of the original input.
+
+        Returns:
+            The UNETR output, resized to `original_shape`.
+        """
+        raise NotImplementedError
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the UNETR to the input data.
+
+        Args:
+            x: The input tensor.
+
+        Returns:
+            The UNETR output.
+        """
+        features, input_shape = self.encode(x)
+        return self.decode(features, input_shape, tuple(x.shape[2:]))
+
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         """@private
         """
@@ -642,17 +678,17 @@ class UNETR(UNETRBase):
         )
         self.decoder_head = ConvBlock2d(2 * features_decoder[-1], features_decoder[-1])
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply the UNETR to the input data.
+    def encode(self, x: torch.Tensor):
+        """Preprocess the input and run the image encoder.
 
         Args:
-            x: The input tensor.
+            x: The input tensor of shape (B, C, Y, X).
 
         Returns:
-            The UNETR output.
+            The features as a tuple of the image embeddings, the list of intermediate encoder outputs
+            (None if the encoder returns only the embeddings) and the preprocessed input, which the
+            skip connections consume, and the spatial shape after preprocessing.
         """
-        original_shape = x.shape[-2:]
-
         # Reshape the inputs to the shape expected by the encoder
         # and normalize the inputs if normalization is part of the model.
         x, input_shape = self.preprocess(x)
@@ -665,7 +701,22 @@ class UNETR(UNETRBase):
             #   - or, we return the image embeddings and the "list" of global attention layers
             z12, from_encoder = encoder_outputs
         else:
-            z12 = encoder_outputs
+            z12, from_encoder = encoder_outputs, None
+
+        return (z12, from_encoder, x), input_shape
+
+    def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
+        """Run the convolutional decoder on the encoder features.
+
+        Args:
+            features: The tuple returned by `encode`.
+            input_shape: The spatial shape (Y, X) after preprocessing.
+            original_shape: The spatial shape (Y, X) of the original input.
+
+        Returns:
+            The UNETR output, resized to `original_shape`.
+        """
+        z12, from_encoder, x = features
 
         if self.use_skip_connection:
             from_encoder = from_encoder[::-1]
@@ -693,8 +744,7 @@ class UNETR(UNETRBase):
         if self.final_activation is not None:
             x = self.final_activation(x)
 
-        x = self.postprocess_masks(x, input_shape, original_shape)
-        return x
+        return self.postprocess_masks(x, input_shape, original_shape)
 
 
 class UNETR2D(UNETR):
@@ -818,27 +868,34 @@ class UNETR3D(UNETRBase):
         )
         self.out_conv = nn.Conv3d(features_decoder[-1], out_channels, 1)
 
-    def forward(self, x: torch.Tensor):
-        """Forward pass of the UNETR-3D model.
+    def encode(self, x: torch.Tensor):
+        """Preprocess the input and run the image encoder on every z-slice.
 
         Args:
             x: Inputs of expected shape (B, C, Z, Y, X), where Z considers flexible inputs.
 
         Returns:
-            The UNETR output.
+            The encoder features of shape (B, D, Z, Y', X') and the spatial shape after preprocessing.
         """
-        B, C, Z, H, W = x.shape
-        original_shape = (Z, H, W)
-
-        # Preprocessing step
+        Z = x.shape[2]
         x, input_shape = self.preprocess(x)
+        features = torch.stack([self.encoder(x[:, :, i])[0] for i in range(Z)], dim=2)
+        return features, input_shape
 
-        # Run the image encoder.
-        curr_features = torch.stack([self.encoder(x[:, :, i])[0] for i in range(Z)], dim=2)
+    def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
+        """Run the convolutional decoder on the encoder features.
 
+        Args:
+            features: Encoder features of shape (B, D, Z, Y', X'), see `encode`.
+            input_shape: The spatial shape (Z, Y, X) after preprocessing.
+            original_shape: The spatial shape (Z, Y, X) of the original input.
+
+        Returns:
+            The UNETR output, resized to `original_shape`.
+        """
         # Prepare the counterparts for the decoder.
         # NOTE: The section below is sequential, there's no skip connections atm.
-        z9 = self.deconv1(curr_features)
+        z9 = self.deconv1(features)
         z6 = self.deconv2(z9)
         z3 = self.deconv3(z6)
         z0 = self.deconv4(z3)
@@ -846,7 +903,7 @@ class UNETR3D(UNETRBase):
         updated_from_encoder = [z9, z6, z3]
 
         # Align the features through the base block.
-        x = self.base(curr_features)
+        x = self.base(features)
         # Run the decoder
         x = self.decoder(x, encoder_inputs=updated_from_encoder)
         x = self.deconv_out(x)  # NOTE before `end_up`
@@ -859,8 +916,7 @@ class UNETR3D(UNETRBase):
             x = self.final_activation(x)
 
         # Postprocess the output back to original size.
-        x = self.postprocess_masks(x, input_shape, original_shape)
-        return x
+        return self.postprocess_masks(x, input_shape, original_shape)
 
 #
 #  ADDITIONAL FUNCTIONALITIES
@@ -902,8 +958,10 @@ class DepthStripPooling(nn.Module):
         if Z == 1:  # i.e. always the case of all 2d.
             return x  # We simply do nothing there.
 
-        # We pool only along the depth dimension: i.e. target shape (B, C, 1, H, W)
-        feat = F.adaptive_avg_pool3d(x, output_size=(1, H, W))
+        # We pool only along the depth dimension: i.e. target shape (B, C, 1, H, W).
+        # A plain mean over Z is the same operation as adaptive_avg_pool3d to (1, H, W), but its
+        # reduction kernel is several times faster at full resolution.
+        feat = x.mean(dim=2, keepdim=True)
         feat = self.conv1(feat)
         feat = self.bn1(feat)
         feat = self.relu(feat)
