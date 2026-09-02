@@ -1,9 +1,11 @@
-from typing import Any, Dict, Optional, Sequence, Union
+"""@private
+"""
+from math import ceil, floor
+from typing import Any, Dict, Tuple, Optional, Sequence, Union
 
 import numpy as np
-from skimage.transform import rescale, resize
-
 import torch
+from skimage.transform import rescale, resize
 
 
 class Tile(torch.nn.Module):
@@ -34,28 +36,40 @@ class Tile(torch.nn.Module):
 
 # a simple way to compose transforms
 class Compose:
-    def __init__(self, *transforms):
+    def __init__(self, *transforms, is_multi_tensor=True):
         self.transforms = transforms
+        self.is_multi_tensor = is_multi_tensor
 
     def __call__(self, *inputs):
         outputs = self.transforms[0](*inputs)
         for trafo in self.transforms[1:]:
-            outputs = trafo(*outputs)
+            if self.is_multi_tensor:
+                outputs = trafo(*outputs)
+            else:
+                outputs = trafo(outputs)
+
         return outputs
 
 
 class Rescale:
-    def __init__(self, scale, with_channels=None):
+    def __init__(self, scale, with_channels=None, is_label=False):
         self.scale = scale
         self.with_channels = with_channels
+        self.is_label = is_label
 
     def _rescale_with_channels(self, input_, **kwargs):
         out = [rescale(inp, **kwargs)[None] for inp in input_]
         return np.concatenate(out, axis=0)
 
     def __call__(self, *inputs):
+
+        if self.is_label:  # kwargs needed for int data
+            kwargs = {"order": 0, "anti_aliasing": False}
+        else:  # we use the default settings for float data
+            kwargs = {}
+
         if self.with_channels is None:
-            outputs = tuple(rescale(inp, scale=self.scale, preserve_range=True) for inp in inputs)
+            outputs = tuple(rescale(inp, scale=self.scale, preserve_range=True, **kwargs) for inp in inputs)
         else:
             if isinstance(self.with_channels, (tuple, list)):
                 assert len(self.with_channels) == len(inputs)
@@ -63,8 +77,8 @@ class Rescale:
             else:
                 with_channels = [self.with_channels] * len(inputs)
             outputs = tuple(
-                self._rescale_with_channels(inp, scale=self.scale, preserve_range=True) if wc else
-                rescale(inp, scale=self.scale, preserve_range=True)
+                self._rescale_with_channels(inp, scale=self.scale, preserve_range=True, **kwargs) if wc else
+                rescale(inp, scale=self.scale, preserve_range=True, **kwargs)
                 for inp, wc in zip(inputs, with_channels)
             )
         if len(outputs) == 1:
@@ -100,9 +114,102 @@ class ResizeInputs:
         return inputs
 
 
+class ResizeLongestSideInputs:
+    def __init__(
+        self,
+        target_shape: Tuple[int, int],
+        is_label: bool = False,
+        is_rgb: bool = False,
+        padding_mode: str = "constant"
+    ):
+        self.target_shape = target_shape
+        self.is_label = is_label
+        self.is_rgb = is_rgb
+        self.padding_mode = padding_mode
+
+        h, w = self.target_shape[-2], self.target_shape[-1]
+        if h != w:  # We currently support resize feature for square-shaped target shape only.
+            raise ValueError("'ResizeLongestSideInputs' does not support non-square shaped target shapes.")
+
+        self.target_length = self.target_shape[-1]
+
+        if self.is_label:  # kwargs needed for int data
+            self.kwargs = {"order": 0,  "anti_aliasing": False}
+        else:  # we use the default settings for float data
+            self.kwargs = {}
+
+    def _get_preprocess_shape(self, oldh, oldw):
+        """Inspired from Segment Anything.
+
+        - https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/utils/transforms.py
+        """
+        scale = self.target_length * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        neww = int(neww + 0.5)
+        newh = int(newh + 0.5)
+        return (newh, neww)
+
+    def convert_transformed_inputs_to_original_shape(self, resized_inputs, resize_kwargs=None):
+        if not hasattr(self, "pre_pad_shape"):
+            raise RuntimeError(
+                "'convert_transformed_inputs_to_original_shape' is only valid after the '__call__' method has run."
+            )
+
+        # First step is to remove the padded region
+        inputs = resized_inputs[tuple(self.pre_pad_shape)]
+        # Next, we resize the inputs to original shape
+
+        if resize_kwargs is None:  # This allows the user to change resize parameters, eg. for labels, if desired.
+            resize_kwargs = self.kwargs
+        else:
+            if not isinstance(resize_kwargs, dict):
+                raise RuntimeError("If the 'resize_kwargs' are provided, it must be a dictionary.")
+
+        inputs = resize(
+            image=inputs, output_shape=self.original_shape, preserve_range=True, **resize_kwargs
+        )
+        return inputs
+
+    def __call__(self, inputs):
+        # NOTE: We store this in case we would like to transform the inputs back to original shape.
+        self.original_shape = inputs.shape
+
+        # Let's get the new shape with the longest side equal to the target length.
+        new_shape = self._get_preprocess_shape(inputs.shape[-2], inputs.shape[-1])
+
+        if self.is_rgb:  # for rgb inputs, we assume channels first
+            assert inputs.ndim == 3 and inputs.shape[0] == 3
+            patch_shape = (3, *new_shape)
+        elif inputs.ndim == 3:  # for 3d inputs, we do not resize along the first (=z) axis
+            patch_shape = (inputs.shape[0], *new_shape)
+        else:
+            patch_shape = new_shape
+
+        # Next, we resize the input image along the longest side.
+        inputs = resize(
+            image=inputs, output_shape=patch_shape, preserve_range=True, **self.kwargs
+        ).astype(inputs.dtype)
+
+        # Finally, we pad the remaining height to match the expected target shape.
+        pad_width = [(sh - dsh) / 2 for sh, dsh in zip(self.target_shape, new_shape)]
+        pad_width = (
+            (ceil(pad_width[0]), floor(pad_width[0])), (ceil(pad_width[1]), floor(pad_width[1]))
+        )
+        # we do not pad across the first axis (= channel or z-axis) for rgb or 3d inputs
+        if self.is_rgb or inputs.ndim == 3:
+            pad_width = ((0, 0), *pad_width)
+
+        # NOTE: We store this in case we would like to unpad the inputs.
+        self.pre_pad_shape = [slice(pw[0], -pw[1] if pw[1] > 0 else None) for pw in pad_width]
+
+        inputs = np.pad(array=inputs, pad_width=pad_width, mode=self.padding_mode)
+        return inputs
+
+
 class PadIfNecessary:
-    def __init__(self, shape):
+    def __init__(self, shape, padding_mode="reflect"):
         self.shape = tuple(shape)
+        self.padding_mode = padding_mode
 
     def _pad_if_necessary(self, data):
         if data.ndim == len(self.shape):
@@ -110,7 +217,7 @@ class PadIfNecessary:
         else:
             dim_diff = data.ndim - len(self.shape)
             pad_shape = data.shape[:dim_diff] + self.shape
-            assert len(pad_shape) == data.ndim
+            assert len(pad_shape) == data.ndim, f"{pad_shape}, {data.shape}"
 
         data_shape = data.shape
         if all(dsh == sh for dsh, sh in zip(data_shape, pad_shape)):
@@ -119,7 +226,7 @@ class PadIfNecessary:
         pad_width = [sh - dsh for dsh, sh in zip(data_shape, pad_shape)]
         assert all(pw >= 0 for pw in pad_width)
         pad_width = [(0, pw) for pw in pad_width]
-        return np.pad(data, pad_width, mode="reflect")
+        return np.pad(data, pad_width, mode=self.padding_mode)
 
     def __call__(self, *inputs):
         outputs = tuple(self._pad_if_necessary(input_) for input_ in inputs)

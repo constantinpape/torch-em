@@ -2,32 +2,48 @@
 
 It contains three annotated volumes from the adult fruit-fly brain.
 It was held as a challenge at MICCAI 2016. For details on the dataset check out https://cremi.org/.
+Please cite the challenge if you use the dataset in your research.
 """
 # TODO add support for realigned volumes
 
 import os
+import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import torch_em
+
 from torch.utils.data import Dataset, DataLoader
 
+import torch_em
+
 from .. import util
+from ....transform.raw import standardize
+
 
 CREMI_URLS = {
-    "original": {
+    "cropped": {
         "A": "https://cremi.org/static/data/sample_A_20160501.hdf",
         "B": "https://cremi.org/static/data/sample_B_20160501.hdf",
         "C": "https://cremi.org/static/data/sample_C_20160501.hdf",
+    },
+    "padded": {
+        "A": "https://cremi.org/static/data/sample_A_padded_20160501.hdf",
+        "B": "https://cremi.org/static/data/sample_B_padded_20160501.hdf",
+        "C": "https://cremi.org/static/data/sample_C_padded_20160501.hdf",
     },
     "realigned": {},
     "defects": "https://zenodo.org/record/5767036/files/sample_ABC_padded_defects.h5"
 }
 CHECKSUMS = {
-    "original": {
+    "cropped": {
         "A": "4c563d1b78acb2bcfb3ea958b6fe1533422f7f4a19f3e05b600bfa11430b510d",
         "B": "887e85521e00deead18c94a21ad71f278d88a5214c7edeed943130a1f4bb48b8",
         "C": "2874496f224d222ebc29d0e4753e8c458093e1d37bc53acd1b69b19ed1ae7052",
+    },
+    "padded": {
+        "A": "c95dc4497ce0f0e7b70507c7253230fda95325ee91ea0d3253c9ef94b197050a",
+        "B": "22917a25092d0b80175012c152da33e1a1d82e049c4a96dc747145d5ca5d1b87",
+        "C": "aba27b165ef005d5fbebe0e3f8775ac903cf273b7e20381dff664d45065a3314",
     },
     "realigned": {},
     "defects": "7b06ffa34733b2c32956ea5005e0cf345e7d3a27477f42f7c905701cdc947bd0"
@@ -36,38 +52,65 @@ CHECKSUMS = {
 
 def get_cremi_data(
     path: Union[os.PathLike, str],
-    samples: Tuple[str],
-    download: bool,
+    samples: Tuple[str, ...] = ("A", "B", "C"),
+    version: str = "cropped",
     use_realigned: bool = False,
-) -> List[str]:
+    download: bool = False,
+):
     """Download the CREMI training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
-        download: Whether to download the data if it is not present.
+        version: The dataset version to use. Either 'cropped' (default) or 'padded'.
         use_realigned: Use the realigned instead of the original training data.
-
-    Returns:
-        The filepaths to the training data.
+        download: Whether to download the data if it is not present.
     """
     if use_realigned:
         # we need to sample batches in this case
         # sampler = torch_em.data.MinForegroundSampler(min_fraction=0.05, p_reject=.75)
         raise NotImplementedError
-    else:
-        urls = CREMI_URLS["original"]
-        checksums = CHECKSUMS["original"]
+    if version not in CREMI_URLS:
+        raise ValueError(f"Unknown version '{version}'. Choose from {list(CREMI_URLS.keys())}.")
 
+    urls = CREMI_URLS[version]
+    checksums = CHECKSUMS[version]
+    suffix = "_padded" if version == "padded" else ""
     os.makedirs(path, exist_ok=True)
-    data_paths = []
     for name in samples:
-        url = urls[name]
-        checksum = checksums[name]
-        data_path = os.path.join(path, f"sample{name}.h5")
+        data_path = os.path.join(path, f"sample{name}{suffix}.h5")
         # CREMI SSL certificates expired, so we need to disable verification
-        util.download_source(data_path, url, download, checksum, verify=False)
-        data_paths.append(data_path)
+        util.download_source(data_path, urls[name], download, checksums[name], verify=False)
+
+
+def get_cremi_paths(
+    path: Union[os.PathLike, str],
+    samples: Tuple[str, ...] = ("A", "B", "C"),
+    version: str = "cropped",
+    use_realigned: bool = False,
+    download: bool = False
+) -> List[str]:
+    """Get paths to the CREMI data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        samples: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        version: The dataset version to use. Either 'cropped' (default) or 'padded'.
+            The padded volumes contain the same data with additional zero-padded borders;
+            label regions outside the original bounds are zero.
+        use_realigned: Use the realigned instead of the original training data.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepaths to the training data.
+
+    Note:
+        The padded volumes are not available via the dataset and dataloader functions; use this function directly
+        if you need access to the padded data.
+    """
+    get_cremi_data(path, samples, version, use_realigned, download)
+    suffix = "_padded" if version == "padded" else ""
+    data_paths = [os.path.join(path, f"sample{name}{suffix}.h5") for name in samples]
     return data_paths
 
 
@@ -109,7 +152,7 @@ def get_cremi_dataset(
     if rois is not None:
         assert isinstance(rois, dict)
 
-    data_paths = get_cremi_data(path, samples, download, use_realigned)
+    data_paths = get_cremi_paths(path, samples, version="cropped", use_realigned=use_realigned, download=download)
     data_rois = [rois.get(name, np.s_[:, :, :]) for name in samples]
 
     if defect_augmentation_kwargs is not None and "artifact_source" not in defect_augmentation_kwargs:
@@ -119,18 +162,24 @@ def get_cremi_dataset(
         defect_path = os.path.join(path, "cremi_defects.h5")
         util.download_source(defect_path, url, download, checksum)
         defect_patch_shape = (1,) + tuple(patch_shape[1:])
-        artifact_source = torch_em.transform.get_artifact_source(defect_path, defect_patch_shape,
-                                                                 min_mask_fraction=0.75,
-                                                                 raw_key="defect_sections/raw",
-                                                                 mask_key="defect_sections/mask")
+        artifact_source = torch_em.transform.get_artifact_source(
+            defect_path, defect_patch_shape,
+            min_mask_fraction=0.75,
+            raw_key="defect_sections/raw",
+            mask_key="defect_sections/mask"
+        )
         defect_augmentation_kwargs.update({"artifact_source": artifact_source})
-
-    raw_key = "volumes/raw"
-    label_key = "volumes/labels/neuron_ids"
 
     # defect augmentations
     if defect_augmentation_kwargs is not None:
+        if "raw_transform" in kwargs:
+            warnings.warn(
+                "'raw_transform' was found in kwargs. It will be used as the "
+                "normalizer for the defect augmentation pipeline, which may lead to incorrect results"
+                "if the normalizer maps to an unexpected data range."
+            )
         raw_transform = torch_em.transform.get_raw_transform(
+            normalizer=kwargs.pop("raw_transform", standardize),
             augmentation1=torch_em.transform.EMDefectAugmentation(**defect_augmentation_kwargs)
         )
         kwargs = util.update_kwargs(kwargs, "raw_transform", raw_transform)
@@ -140,7 +189,13 @@ def get_cremi_dataset(
     )
 
     return torch_em.default_segmentation_dataset(
-        data_paths, raw_key, data_paths, label_key, patch_shape, rois=data_rois, **kwargs
+        raw_paths=data_paths,
+        raw_key="volumes/raw",
+        label_paths=data_paths,
+        label_key="volumes/labels/neuron_ids",
+        patch_shape=patch_shape,
+        rois=data_rois,
+        **kwargs
     )
 
 
@@ -180,9 +235,7 @@ def get_cremi_loader(
     Returns:
         The DataLoader.
     """
-    dataset_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    dataset_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     ds = get_cremi_dataset(
         path=path,
         patch_shape=patch_shape,

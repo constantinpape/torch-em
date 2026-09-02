@@ -1,16 +1,51 @@
 import os
 import numpy as np
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Callable
 
 import torch
 
-from ..util import (ensure_spatial_array, ensure_tensor_with_channels,
-                    load_image, supports_memmap)
+from ..util import (
+    ensure_spatial_array, ensure_tensor_with_channels, load_image, supports_memmap, ensure_patch_shape
+)
 
 
 class ImageCollectionDataset(torch.utils.data.Dataset):
+    """Dataset that provides raw data and labels stored in a regular image data format for segmentation training.
+
+    The dataset returns patches loaded from the images and labels as sample for a batch.
+    The raw data and labels are expected to be images of the same shape, except for possible channels.
+    It supports all file formats that can be loaded with the imageio or tiffile library, such as tif, png or jpeg files.
+
+    Args:
+        raw_image_paths: The file paths to the raw data.
+        label_image_paths: The file path to the label data.
+        patch_shape: The patch shape for a training sample.
+        raw_transform: Transformation applied to the raw data of a sample.
+        label_transform: Transformation applied to the label data of a sample,
+            before applying augmentations via `transform`.
+        label_transform2: Transformation applied to the label data of a sample,
+            after applying augmentations via `transform`.
+        transform: Transformation applied to both the raw data and label data of a sample.
+            This can be used to implement data augmentations.
+        dtype: The return data type of the raw data.
+        label_dtype: The return data type of the label data.
+        n_samples: The length of this dataset. If None, the length will be set to `len(raw_image_paths)`.
+        sampler: Sampler for rejecting samples according to a defined criterion.
+            The sampler must be a callable that accepts the raw data and label data (as numpy arrays) as input.
+        full_check: Whether to check that the input data is valid for all image paths.
+            This will ensure that the data is valid, but will take longer for creating the dataset.
+        with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
+        pre_label_transform: Transformation applied to the label data of a chosen random sample,
+            before applying the sample validity via the `sampler`.
+    """
     max_sampling_attempts = 500
+    """The maximal number of sampling attempts, for loading a sample via `__getitem__`.
+    This is used when `sampler` rejects a sample, to avoid an infinite loop if no valid sample can be found.
+    """
     max_sampling_attempts_image = 50
+    """The maximal number of sampling attempts for a single image, for loading a sample via `__getitem__`.
+    This is used when `sampler` rejects a sample, to avoid an infinite loop if no valid sample can be found.
+    """
 
     def _check_inputs(self, raw_images, label_images, full_check):
         if len(raw_images) != len(label_images):
@@ -53,16 +88,18 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         raw_image_paths: List[Union[str, os.PathLike]],
         label_image_paths: List[Union[str, os.PathLike]],
         patch_shape: Tuple[int, ...],
-        raw_transform=None,
-        label_transform=None,
-        label_transform2=None,
-        transform=None,
+        raw_transform: Optional[Callable] = None,
+        label_transform: Optional[Callable] = None,
+        label_transform2: Optional[Callable] = None,
+        transform: Optional[Callable] = None,
         dtype: torch.dtype = torch.float32,
         label_dtype: torch.dtype = torch.float32,
         n_samples: Optional[int] = None,
-        sampler=None,
+        sampler: Optional[Callable] = None,
         full_check: bool = False,
-    ):
+        with_padding: bool = True,
+        pre_label_transform: Optional[Callable] = None,
+    ) -> None:
         self._check_inputs(raw_image_paths, label_image_paths, full_check=full_check)
         self.raw_images = raw_image_paths
         self.label_images = label_image_paths
@@ -77,6 +114,8 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         self.label_transform2 = label_transform2
         self.transform = transform
         self.sampler = sampler
+        self.with_padding = with_padding
+        self.pre_label_transform = pre_label_transform
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -108,31 +147,15 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
         return tuple(slice(start, start + psh) for start, psh in zip(bb_start, patch_shape_for_bb))
 
-    def _ensure_patch_shape(self, raw, labels, have_raw_channels, have_label_channels, channel_first):
-        shape = raw.shape
-        if have_raw_channels and channel_first:
-            shape = shape[1:]
-        if any(sh < psh for sh, psh in zip(shape, self.patch_shape)):
-            pw = [(0, max(0, psh - sh)) for sh, psh in zip(shape, self.patch_shape)]
-
-            if have_raw_channels and channel_first:
-                pw_raw = [(0, 0), *pw]
-            elif have_raw_channels and not channel_first:
-                pw_raw = [*pw, (0, 0)]
-            else:
-                pw_raw = pw
-
-            # TODO: ensure padding for labels with channels, when supported (see `_get_sample` below)
-
-            raw, labels = np.pad(raw, pw_raw), np.pad(labels, pw)
-        return raw, labels
-
     def _load_data(self, raw_path, label_path):
-        raw = load_image(raw_path, memmap=False)
-        label = load_image(label_path, memmap=False)
+        if getattr(self, "have_tensor_data", False):
+            raw, label = raw_path, label_path
+        else:
+            raw = load_image(raw_path, memmap=False)
+            label = load_image(label_path, memmap=False)
 
-        have_raw_channels = raw.ndim == 3
-        have_label_channels = label.ndim == 3
+        have_raw_channels = getattr(self, "with_channels", raw.ndim == 3)
+        have_label_channels = getattr(self, "with_label_channels", label.ndim == 3)
         if have_label_channels:
             raise NotImplementedError("Multi-channel labels are not supported.")
 
@@ -144,8 +167,16 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         if have_raw_channels:
             channel_first = raw.shape[-1] > 16
 
-        if self.patch_shape is not None:
-            raw, label = self._ensure_patch_shape(raw, label, have_raw_channels, have_label_channels, channel_first)
+        if self.patch_shape is not None and self.with_padding:
+            raw, label = ensure_patch_shape(
+                raw=raw,
+                labels=label,
+                patch_shape=self.patch_shape,
+                have_raw_channels=have_raw_channels,
+                have_label_channels=have_label_channels,
+                channel_first=channel_first
+            )
+
         shape = raw.shape
 
         prefix_box = tuple()
@@ -158,6 +189,19 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
 
         return raw, label, shape, prefix_box, have_raw_channels
 
+    def _get_desired_raw_and_labels(self, raw, label, shape, prefix_box):
+        bb = self._sample_bounding_box(shape)
+        raw_patch = np.array(raw[prefix_box + bb])
+        label_patch = np.array(label[bb])
+
+        # Additional label transform on top to make sampler consider expected labels
+        # (eg. run connected components on disconnected semantic labels)
+        pre_label_transform = getattr(self, "pre_label_transform", None)
+        if pre_label_transform is not None:
+            label_patch = pre_label_transform(label_patch)
+
+        return raw_patch, label_patch
+
     def _get_sample(self, index):
         if self.sample_random_index:
             index = np.random.randint(0, len(self.raw_images))
@@ -169,19 +213,15 @@ class ImageCollectionDataset(torch.utils.data.Dataset):
         raw, label, shape, prefix_box, have_raw_channels = self._load_data(raw_path, label_path)
 
         # Sample random bounding box for this image.
-        bb = self._sample_bounding_box(shape)
-        raw_patch = np.array(raw[prefix_box + bb])
-        label_patch = np.array(label[bb])
+        raw_patch, label_patch = self._get_desired_raw_and_labels(raw, label, shape, prefix_box)
 
         if self.sampler is not None:
             sample_id = 0
             while not self.sampler(raw_patch, label_patch):
-                bb = self._sample_bounding_box(shape)
-                raw_patch = np.array(raw[prefix_box + bb])
-                label_patch = np.array(label[bb])
+                raw_patch, label_patch = self._get_desired_raw_and_labels(raw, label, shape, prefix_box)
                 sample_id += 1
 
-                # We need to avoid sampling from the same image over and over agagin,
+                # We need to avoid sampling from the same image over and over again,
                 # otherwise this will fail just because of one or a few empty images.
                 # Hence we update the image from which we sample sometimes.
                 if sample_id % self.max_sampling_attempts_image == 0:

@@ -7,11 +7,15 @@ Please cite it if you use this dataset in your research.
 
 import os
 from glob import glob
+from tqdm import tqdm
 from typing import List, Optional, Tuple, Union
 
-import torch_em
 from torch.utils.data import Dataset, DataLoader
+
+import torch_em
+
 from .. import util
+
 
 URLS = {
     "root": {
@@ -48,6 +52,27 @@ CHECKSUMS = {
         # "test": "a7272f6ad1d765af6d121e20f436ac4f3609f1a90b1cb2346aa938d8c52800b9",
     }
 }
+
+CROPPING_VOLUMES = {
+    # root (train)
+    "Movie2_T00006_crop_gt.h5": slice(4, None),
+    "Movie2_T00008_crop_gt.h5": slice(None, -18),
+    "Movie2_T00010_crop_gt.h5": slice(None, -32),
+    "Movie2_T00012_crop_gt.h5": slice(None, -39),
+    "Movie2_T00014_crop_gt.h5": slice(None, -40),
+    "Movie2_T00016_crop_gt.h5": slice(None, -42),
+    # root (test)
+    "Movie2_T00020_crop_gt.h5": slice(None, -50),
+    # ovules (train)
+    "N_487_ds2x.h5": slice(17, None),
+    "N_535_ds2x.h5": slice(None, -1),
+    "N_534_ds2x.h5": slice(None, -1),
+    "N_451_ds2x.h5": slice(None, -1),
+    "N_425_ds2x.h5": slice(None, -1),
+    # ovules (val)
+    "N_420_ds2x.h5": slice(None, -1),
+}
+
 # The resolution previous used for the resizing
 # I have removed this feature since it was not reliable,
 # but leaving this here for reference
@@ -56,14 +81,46 @@ CHECKSUMS = {
 # NATIVE_RESOLUTION = (0.235, 0.075, 0.075)
 
 
-def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, split: str) -> str:
+def _fix_inconsistent_volumes(data_path, name, split):
+    import h5py
+
+    file_paths = glob(os.path.join(data_path, "*.h5"))
+    if name not in ["root", "ovules"] and split not in ["train", "val"]:
+        return
+
+    for vol_path in tqdm(file_paths, desc="Fixing inconsistencies in volumes"):
+        fname = os.path.basename(vol_path)
+
+        # avoid duplicated volumes in 'train' and 'test'.
+        if fname == "Movie1_t00045_crop_gt.h5" and (name == "root" and split == "train"):
+            os.remove(vol_path)
+            continue
+
+        if fname not in CROPPING_VOLUMES:
+            continue
+
+        with h5py.File(vol_path, "r+") as f:
+            raw, labels = f["raw"], f["label"]
+
+            crop_slices = CROPPING_VOLUMES[fname]
+            resized_raw, resized_labels = raw[:][crop_slices], labels[:][crop_slices]
+
+            cropped_shape = resized_raw.shape
+            raw.resize(cropped_shape)
+            labels.resize(cropped_shape)
+
+            raw[...] = resized_raw
+            labels[...] = resized_labels
+
+
+def get_plantseg_data(path: Union[os.PathLike, str], name: str, split: str, download: bool = False) -> str:
     """Download the PlantSeg training data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        download: Whether to download the data if it is not present.
         name: The name of the data to load. Either 'root', 'nuclei' or 'ovules'.
         split: The split to download. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
 
     Returns:
         The filepath to the training data.
@@ -77,7 +134,30 @@ def get_plantseg_data(path: Union[os.PathLike, str], download: bool, name: str, 
     tmp_path = os.path.join(path, f"{name}_{split}.zip")
     util.download_source(tmp_path, url, download, checksum)
     util.unzip(tmp_path, out_path, remove=True)
+    _fix_inconsistent_volumes(out_path, name, split)
     return out_path
+
+
+def get_plantseg_paths(
+    path: Union[os.PathLike, str],
+    name: str,
+    split: str,
+    download: bool = False
+) -> List[str]:
+    """Get paths to the PlantSeg data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        name: The name of the data to load. Either 'root', 'nuclei' or 'ovules'.
+        split: The split to download. Either 'train', 'val' or 'test'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths for the data.
+    """
+    data_path = get_plantseg_data(path, name, split, download)
+    file_paths = sorted(glob(os.path.join(data_path, "*.h5")))
+    return file_paths
 
 
 def get_plantseg_dataset(
@@ -108,18 +188,22 @@ def get_plantseg_dataset(
        The segmentation dataset.
     """
     assert len(patch_shape) == 3
-    data_path = get_plantseg_data(path, download, name, split)
 
-    file_paths = glob(os.path.join(data_path, "*.h5"))
-    file_paths.sort()
+    file_paths = get_plantseg_paths(path, name, split, download)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=binary, binary=binary, boundaries=boundaries,
         offsets=offsets, binary_is_exclusive=False
     )
 
-    raw_key, label_key = "raw", "label"
-    return torch_em.default_segmentation_dataset(file_paths, raw_key, file_paths, label_key, patch_shape, **kwargs)
+    return torch_em.default_segmentation_dataset(
+        raw_paths=file_paths,
+        raw_key="raw",
+        label_paths=file_paths,
+        label_key="label",
+        patch_shape=patch_shape,
+        **kwargs
+    )
 
 
 # TODO add support for ignore label, key: "/label_with_ignore"
@@ -152,13 +236,9 @@ def get_plantseg_loader(
     Returns:
        The DataLoader.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_plantseg_dataset(
-        path, name, split, patch_shape,
-        download=download, offsets=offsets, boundaries=boundaries, binary=binary,
-        **ds_kwargs
+        path, name, split, patch_shape, download=download, offsets=offsets,
+        boundaries=boundaries, binary=binary, **ds_kwargs
     )
-    loader = torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
-    return loader
+    return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

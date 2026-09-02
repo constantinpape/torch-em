@@ -1,7 +1,9 @@
+"""Implementations of Datasets and Samplers for training neural networks with PyTorch.
+"""
 from .concat_dataset import ConcatDataset
 from .dataset_wrapper import DatasetWrapper
 from .image_collection_dataset import ImageCollectionDataset
-from .raw_dataset import RawDataset
+from .raw_dataset import RawDataset, RawDatasetWithMasks
 from .pseudo_label_dataset import PseudoLabelDataset
 from .raw_image_collection_dataset import RawImageCollectionDataset
 from .segmentation_dataset import SegmentationDataset
@@ -13,3 +15,4 @@ from .sampler import (
     MinTwoInstanceSampler,
     MinSemanticLabelForegroundSampler,
 )
+from .tensor_dataset import TensorDataset

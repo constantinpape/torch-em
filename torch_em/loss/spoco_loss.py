@@ -13,40 +13,48 @@ from .affinity_side_loss import AffinitySideLoss
 from .dice import DiceLoss
 
 
-def compute_cluster_means(embeddings, target, n_instances):
-    """
-    Computes mean embeddings per instance.
-    E - embedding dimension
+def compute_cluster_means(embeddings: torch.Tensor, target: torch.Tensor, n_instances: int) -> torch.Tensor:
+    """Compute mean embeddings per instance.
 
     Args:
-        embeddings: tensor of pixel embeddings, shape: ExSPATIAL
-        target: one-hot encoded target instances, shape: SPATIAL
-        n_instances: number of instances
+        embeddings: The tensor of pixel embeddings with shape: ExSPATIAL. E is the embedding dimension.
+        target: One-hot encoded target instances with shape: SPATIAL.
+        n_instances: The number of instances.
+
+    Returns:
+        The cluster means.
     """
     assert scatter_mean is not None, "torch_scatter is required"
     embeddings = embeddings.flatten(1)
     target = target.flatten()
-    assert target.min() == 0,\
-        "The target min value has to be zero, otherwise this will lead to errors in scatter"
+    assert target.min() == 0, \
+        "The target min value has to be zero, otherwise this will lead to errors in scatter."
     mean_embeddings = scatter_mean(embeddings, target, dim_size=n_instances)
     return mean_embeddings.transpose(1, 0)
 
 
-def select_stable_anchor(embeddings, mean_embedding, object_mask, delta_var, norm="fro"):
-    """
-    Anchor sampling procedure. Given a binary mask of an object (`object_mask`) and a `mean_embedding` vector within
-    the mask, the function selects a pixel from the mask at random and returns its embedding only if it"s closer than
+def select_stable_anchor(
+    embeddings: torch.Tensor,
+    mean_embedding: torch.Tensor,
+    object_mask: torch.Tensor,
+    delta_var: float,
+    norm: str = "fro"
+) -> torch.Tensor:
+    """Sample anchor embeddings from the object mask.
+
+    Given a binary mask of an object (`object_mask`) and a `mean_embedding` vector within the mask,
+    the function selects a pixel from the mask at random and returns its embedding only if it's closer than
     `delta_var` from the `mean_embedding`.
 
     Args:
-        embeddings (torch.Tensor): ExSpatial vector field of an image
-        mean_embedding (torch.Tensor): E-dimensional mean of embeddings lying within the `object_mask`
-        object_mask (torch.Tensor): binary image of a selected object
-        delta_var (float): contrastive loss, pull force margin
-        norm (str): vector norm used, default: Frobenius norm
+        embeddings: The embeddings, a ExSPATIAL vector field of an image.
+        mean_embedding: The E-dimensional mean of embeddings lying within the `object_mask`.
+        object_mask: Binary image of a selected object.
+        delta_var: The pull force margin of the contrastive loss.
+        norm: The vector norm used. By default the frobenius norm is used.
 
     Returns:
-        embedding of a selected pixel within the mask or the mean embedding if stable anchor could be found
+        Embedding of a selected pixel within the mask or the mean embedding if stable anchor could be found.
     """
     indices = torch.nonzero(object_mask, as_tuple=True)
     # convert to numpy
@@ -75,6 +83,8 @@ def select_stable_anchor(embeddings, mean_embedding, object_mask, delta_var, nor
 
 
 class GaussianKernel(nn.Module):
+    """@private
+    """
     def __init__(self, delta_var, pmaps_threshold):
         super().__init__()
         self.delta_var = delta_var
@@ -86,6 +96,8 @@ class GaussianKernel(nn.Module):
 
 
 class CombinedAuxLoss(nn.Module):
+    """@private
+    """
     def __init__(self, losses, weights):
         super().__init__()
         self.losses = losses
@@ -103,9 +115,8 @@ class CombinedAuxLoss(nn.Module):
 
 
 class ContrastiveLossBase(nn.Module):
-    """Base class for the spoco losses.
+    """@private
     """
-
     def __init__(self, delta_var, delta_dist,
                  norm="fro", alpha=1., beta=1., gamma=0.001, unlabeled_push_weight=0.0,
                  instance_term_weight=1.0, impl=None):
@@ -291,22 +302,45 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
     """Contrastive loss extended with instance-based loss term and background push term.
 
     Based on:
-    "Sparse Object-level Supervision for Instance Segmentation with Pixel Embeddings": https://arxiv.org/abs/2103.14572
+    "Sparse Object-level Supervision for Instance Segmentation with Pixel Embeddings":
+    https://arxiv.org/abs/2103.14572
+
+    Args:
+        delta_var: The hinge distance for the variance term in the discriminative loss.
+        delta_dist: The hinge distance for the distance term in the discriminative loss.
+        norm: The norm to use.
+        alpha: Weight for the variance term of the discrimantive loss.
+        beta: Weight for the distance term of the discriminative loss.
+        gamma: Weight for the regularization term of the discriminative loss.
+        unlabeled_push_weight: The weight term for the unlabeled loss term.
+        instance_term_weight: The weight term for the instance loss term.
+        aux_loss: The auxiliary loss term to use. One of 'dice', 'affinity', 'dice_aff'.
+        pmaps_threshold: The probabilit threshold for the background push term.
+        kwargs: Additional keyword arguments for other loss terms.
     """
-
-    def __init__(self, delta_var, delta_dist, norm="fro", alpha=1.0, beta=1.0, gamma=0.001,
-                 unlabeled_push_weight=1.0, instance_term_weight=1.0, aux_loss="dice", pmaps_threshold=0.9, **kwargs):
-
+    def __init__(
+        self,
+        delta_var: float,
+        delta_dist: float,
+        norm: str = "fro",
+        alpha: float = 1.0,
+        beta: float = 1.0,
+        gamma: float = 0.001,
+        unlabeled_push_weight: float = 1.0,
+        instance_term_weight: float = 1.0,
+        aux_loss: str = "dice",
+        pmaps_threshold: float = 0.9,
+        **kwargs,
+    ):
         super().__init__(delta_var, delta_dist, norm=norm, alpha=alpha, beta=beta, gamma=gamma,
                          unlabeled_push_weight=unlabeled_push_weight,
                          instance_term_weight=instance_term_weight)
-
-        # init auxiliary loss
+        # Init auxiliary loss.
         assert aux_loss in ["dice", "affinity", "dice_aff"]
         if aux_loss == "dice":
             self.aff_loss = None
             self.dice_loss = DiceLoss()
-        # additional auxiliary losses
+        # Additional auxiliary losses.
         elif aux_loss == "affinity":
             self.aff_loss = AffinitySideLoss(
                 delta=delta_dist,
@@ -326,7 +360,7 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
             )
             self.dice_loss = DiceLoss()
 
-        # init dist_to_mask kernel which maps distance to the cluster center to instance probability map
+        # Init dist_to_mask kernel which maps distance to the cluster center to instance probability map.
         self.dist_to_mask = GaussianKernel(delta_var=self.delta_var, pmaps_threshold=pmaps_threshold)
         self.init_kwargs = {
             "delta_var": delta_var, "delta_dist": delta_dist, "norm": norm, "alpha": alpha, "beta": beta,
@@ -350,6 +384,8 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
         return inst_pmaps, inst_masks
 
     def compute_instance_term(self, embeddings, cluster_means, target):
+        """@private
+        """
         assert embeddings.size()[1:] == target.size()
 
         if self.aff_loss is None:
@@ -397,17 +433,45 @@ class ExtendedContrastiveLoss(ContrastiveLossBase):
 class SPOCOLoss(ExtendedContrastiveLoss):
     """The full SPOCO Loss for instance segmentation training with sparse instance labels.
 
-    Extends the "classic" contrastive loss with an instance-based term and a embedding consistency term.
-    (The unlabeled push term is turned off by default, since we assume sparse instance labels).
+    Extends the "classic" contrastive loss with an instance-based term and a unsupervised embedding consistency term.
+    An additional background push term can be added. It is disabled by default because we assume sparse instance labels.
 
     Based on:
-    "Sparse Object-level Supervision for Instance Segmentation with Pixel Embeddings": https://arxiv.org/abs/2103.14572
+    "Sparse Object-level Supervision for Instance Segmentation with Pixel Embeddings":
+    https://arxiv.org/abs/2103.14572
+
+    Args:
+        delta_var: The hinge distance for the variance term in the discriminative loss.
+        delta_dist: The hinge distance for the distance term in the discriminative loss.
+        norm: The norm to use.
+        alpha: Weight for the variance term of the discrimantive loss.
+        beta: Weight for the distance term of the discriminative loss.
+        gamma: Weight for the regularization term of the discriminative loss.
+        unlabeled_push_weight: The weight term for the unlabeled loss term.
+        instance_term_weight: The weight term for the instance loss term.
+        aux_loss: The auxiliary loss term to use. One of 'dice', 'affinity', 'dice_aff'.
+        pmaps_threshold: The probabilit threshold for the background push term.
+        max_anchors: The number of anchors to sample for the consistency term.
+        volume_threshold:
+        kwargs: Additional keyword arguments for other loss terms.
     """
-
-    def __init__(self, delta_var, delta_dist, norm="fro", alpha=1.0, beta=1.0, gamma=0.001,
-                 unlabeled_push_weight=0.0, instance_term_weight=1.0, consistency_term_weight=1.0,
-                 aux_loss="dice", pmaps_threshold=0.9, max_anchors=20, volume_threshold=0.05, **kwargs):
-
+    def __init__(
+        self,
+        delta_var: float,
+        delta_dist: float,
+        norm: str = "fro",
+        alpha: float = 1.0,
+        beta: float = 1.0,
+        gamma: float = 0.001,
+        unlabeled_push_weight: float = 0.0,
+        instance_term_weight: float = 1.0,
+        consistency_term_weight: float = 1.0,
+        aux_loss: str = "dice",
+        pmaps_threshold: float = 0.9,
+        max_anchors: int = 20,
+        volume_threshold: float = 0.05,
+        **kwargs,
+    ):
         super().__init__(delta_var, delta_dist, norm=norm, alpha=alpha, beta=beta, gamma=gamma,
                          unlabeled_push_weight=unlabeled_push_weight,
                          instance_term_weight=instance_term_weight,
@@ -437,6 +501,8 @@ class SPOCOLoss(ExtendedContrastiveLoss):
         return self.dist_to_mask(distance_map)
 
     def emb_consistency(self, emb_q, emb_k, mask):
+        """@private
+        """
         inst_q = []
         inst_k = []
         for i in range(self.max_anchors):
@@ -472,15 +538,24 @@ class SPOCOLoss(ExtendedContrastiveLoss):
 
         return self._inst_pmap(emb, anchor)
 
-    def forward(self, input, target):
-        assert len(input) == 2
-        emb_q, emb_k = input
+    def forward(self, input_: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """Compute the SPOCO loss.
 
-        # compute extended contrastive loss only on the embeddings coming from q
+        Args:
+            input_: The predicted embeddings.
+            target: The segmentation target.
+
+        Returns:
+            The SPOCO loss.
+        """
+        assert len(input_) == 2
+        emb_q, emb_k = input_
+
+        # Compute extended contrastive loss only on the embeddings coming from q.
         contrastive_loss = super().forward(emb_q, target)
 
         # TODO enable computing the consistency on all pixels!
-        # compute consistency term
+        # Compute consistency term.
         for e_q, e_k, t in zip(emb_q, emb_k, target):
             unlabeled_mask = (t[0] == 0).int()
             if unlabeled_mask.sum() < self.volume_threshold * unlabeled_mask.numel():
@@ -491,9 +566,16 @@ class SPOCOLoss(ExtendedContrastiveLoss):
         return contrastive_loss
 
 
-# FIXME clarify what this is!
 class SPOCOConsistencyLoss(nn.Module):
-    def __init__(self, delta_var, pmaps_threshold, max_anchors=30, norm="fro"):
+    """Unsupervised consistency term computed between embeddings.
+
+    Args:
+        delta_var: Hinge distance of the distance loss term.
+        pmaps_threshold:
+        max_anchors: The maximum number of anchors to compute for the consistency loss.
+        norm: The vector norm used. By default the frobenius norm is used.
+    """
+    def __init__(self, delta_var: float, pmaps_threshold: float, max_anchors: int = 30, norm: str = "fro"):
         super().__init__()
         self.max_anchors = max_anchors
         self.consistency_loss = DiceLoss()
@@ -509,6 +591,8 @@ class SPOCOConsistencyLoss(nn.Module):
         return self.dist_to_mask(distance_map)
 
     def emb_consistency(self, emb_q, emb_k):
+        """@private
+        """
         inst_q = []
         inst_k = []
         mask = torch.ones(emb_q.shape[1:])
@@ -542,7 +626,16 @@ class SPOCOConsistencyLoss(nn.Module):
 
         return self._inst_pmap(emb, anchor)
 
-    def forward(self, emb_q, emb_k):
+    def forward(self, emb_q: torch.Tensor, emb_k: torch.Tensor) -> torch.Tensor:
+        """Compute the consistency loss term between embeddings.
+
+        Args:
+            emb_q: The first embedding predictions.
+            emb_k: The second embedding predictions.
+
+        Returns:
+            The consistency loss.
+        """
         contrastive_loss = 0.0
         # compute consistency term
         for e_q, e_k in zip(emb_q, emb_k):

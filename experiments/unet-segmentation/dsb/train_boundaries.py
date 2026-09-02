@@ -9,11 +9,16 @@ def train_boundaries(args):
 
     patch_shape = (1, 256, 256)
     train_loader = get_dsb_loader(
-        args.input, patch_shape, split="train",
+        args.input, patch_shape=patch_shape, split="train",
         download=True, boundaries=True, batch_size=args.batch_size
     )
+
+    # Uncomment this for checking the loader.
+    # from torch_em.util.debug import check_loader
+    # check_loader(train_loader, 4)
+
     val_loader = get_dsb_loader(
-        args.input, patch_shape, split="test",
+        args.input, patch_shape=patch_shape, split="test",
         boundaries=True, batch_size=args.batch_size
     )
     loss = torch_em.loss.DiceLoss()
