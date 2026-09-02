@@ -46,6 +46,7 @@ from .ecoli_microcolony_lineage import get_ecoli_microcolony_lineage_loader, get
 from .embedseg_data import get_embedseg_loader, get_embedseg_dataset
 from .enseg import get_enseg_loader, get_enseg_dataset
 from .evican import get_evican_loader, get_evican_dataset
+from .fl2net import get_fl2net_loader, get_fl2net_dataset
 from .fluo_neuronal_cells import get_fluo_neuronal_cells_loader, get_fluo_neuronal_cells_dataset
 from .flywing import get_flywing_data, get_flywing_paths, get_flywing_loader, get_flywing_dataset
 from .medussa import get_medussa_loader, get_medussa_dataset
