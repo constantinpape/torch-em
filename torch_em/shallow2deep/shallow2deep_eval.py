@@ -3,27 +3,36 @@ import pickle
 from concurrent import futures
 from glob import glob
 from multiprocessing import cpu_count
+from typing import Callable, Dict, Optional, Tuple, Union
 
+import bioimageio.core
+import elf.io as io
 import numpy as np
 import pandas as pd
-import elf.io as io
+import xarray
 from tqdm import tqdm, trange
 
 from .prepare_shallow2deep import _apply_filters, _get_filters
 from .shallow2deep_model import IlastikPredicter
 
 
-def visualize_pretrained_rfs(checkpoint, raw, n_forests,
-                             sample_random=False, filter_config=None, n_threads=None):
+def visualize_pretrained_rfs(
+    checkpoint: str,
+    raw: np.ndarray,
+    n_forests: int,
+    sample_random: bool = False,
+    filter_config: Optional[Dict] = None,
+    n_threads: Optional[int] = None,
+) -> None:
     """Visualize pretrained random forests from a shallow2depp checkpoint.
 
-    Arguments:
-        checkpoint [str] - path to the checkpoint folder
-        raw [np.ndarray] - the raw data for prediction
-        n_forests [int] - the number of forests to use
-        sample_random [bool] - whether to subsample forests randomly or regularly (default: False)
-        filter_config [list] - the filter configuration (default: None)
-        n_threads [int] - number of threads for parallel prediction of forests (default: None)
+    Args:
+        checkpoint: Path to the checkpoint folder.
+        raw: The input raw data for prediction.
+        n_forests: The number of forests to use for visualization.
+        sample_random: Whether to subsample forests randomly or regularly.
+        filter_config: The filter configuration.
+        n_threads: The number of threads for parallel prediction of forests.
     """
     import napari
 
@@ -66,32 +75,35 @@ def visualize_pretrained_rfs(checkpoint, raw, n_forests,
     napari.run()
 
 
-def evaluate_enhancers(data, labels, enhancers, ilastik_projects, metric,
-                       prediction_function=None, rf_channel=1, is2d=False, save_path=None):
+def evaluate_enhancers(
+    data: np.ndarray,
+    labels: np.ndarray,
+    enhancers: Dict[str, str],
+    ilastik_projects: Dict[str, str],
+    metric: Callable,
+    prediction_function: Optional[Callable] = None,
+    rf_channel: Union[int, Tuple[int, ...]] = 1,
+    is2d: bool = False,
+    save_path: Optional[str] = None
+) -> pd.DataFrame:
     """Evaluate enhancers on ilastik random forests from multiple projects.
 
-    Arguments:
-        data [np.ndarray] - the data for evaluation
-        labels [np.ndarray] - the labels for evaluation
-        enhancers [dict[str, str] - map of enhancer names to filepath with enhancer
-            models saved in the biomage.io model format
-        ilastik_projects [dict[str, str]] - map of names to ilastik project paths
-        metric [callable] - the metric used for evaluation
-        prediction_function [callable] - function to run prediction with the enhancer.
+    Args:
+        data: The data for evaluation.
+        labels: The labels for evaluation.
+        enhancers: Mapping of enhancer names to filepath with enhancer models saved in the biomage.io model format.
+        ilastik_projects: Mapping of names to ilastik project paths.
+        metric: The metric used for evaluation.
+        prediction_function: Function to run prediction with the enhancer.
             By default the bioimageio.prediction pipeline is called directly.
-            If given, needs to take the prediction pipeline and data (as xarray)
-            as input (default: None)
-        rf_channel [int, list[int]] - the channel(s) of the random forest to be passed
-            as input to the enhancer (default: 1)
-        is2d [bool] - whether to process 3d data as individual slices and average the scores.
-            Is ignored if the data is 2d (default: False)
-        save_path [str] -
+            If given, needs to take the prediction pipeline and data (as xarray) as input.
+        rf_channel: The channel(s) of the random forest to be passed as input to the enhancer.
+        is2d: Whether to process 3d data as individual slices and average the scores. Is ignored if the data is 2d.
+        save_path: Save path for caching the random forest predictions.
+
     Returns:
-        [pd.DataFrame] - a table with the scores of the enhancers for the different forests
-            and scores of the raw forest predictions
+        A table with the scores of the enhancers for the different forests and scores of the raw forest predictions.
     """
-    import bioimageio.core
-    import xarray
 
     assert data.shape == labels.shape
     ndim = data.ndim
@@ -179,8 +191,15 @@ def evaluate_enhancers(data, labels, enhancers, ilastik_projects, metric,
     return scores
 
 
-def load_predictions(save_path, n_threads=1):
-    """Helper functions to load predictions from a save_path created by evaluate_enhancers
+def load_predictions(save_path: str, n_threads: int = 1) -> Dict[str, np.ndarray]:
+    """Load predictions from a save_path created by evaluate_enhancers.
+
+    Args:
+        save_path: The path where the predictions were saved.
+        n_threads: The number of threads for loading data.
+
+    Returns:
+        A mapping of random forest names to the predictions.
     """
     predictions = {}
 
@@ -209,6 +228,4 @@ def load_predictions(save_path, n_threads=1):
         pred = dict(sorted(pred.items()))
         return np.concatenate([pz[None] for pz in pred.values()], axis=0)
 
-    predictions = {name: to_vol(pred) for name, pred in predictions.items()}
-
-    return predictions
+    return {name: to_vol(pred) for name, pred in predictions.items()}

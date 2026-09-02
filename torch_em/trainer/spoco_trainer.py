@@ -1,5 +1,6 @@
 import time
 from copy import deepcopy
+from typing import Optional
 
 import torch
 from .default_trainer import DefaultTrainer
@@ -7,12 +8,25 @@ from .tensorboard_logger import TensorboardLogger
 
 
 class SPOCOTrainer(DefaultTrainer):
+    """Trainer for a SPOCO model.
+
+    For details check out "Sparse Object-level Supervision for Instance Segmentation with Pixel Embeddings":
+    https://arxiv.org/abs/2103.14572
+
+    Args:
+        model: The model to train.
+        momentum: The momementum value for exponential moving weight averaging.
+        semisupervised_loss: Optional loss for semi-supervised learning.
+        semisupervised_loader: Optional data loader for semi-supervised learning.
+        logger: The logger.
+        kwargs: Additional keyord arguments for `torch_em.trainer.DefaultTrainer`.
+    """
     def __init__(
         self,
-        model,
-        momentum=0.999,
-        semisupervised_loss=None,
-        semisupervised_loader=None,
+        model: torch.nn.Module,
+        momentum: float = 0.999,
+        semisupervised_loss: Optional[torch.nn.Module] = None,
+        semisupervised_loader: Optional[torch.utils.data.DataLoader] = None,
         logger=TensorboardLogger,
         **kwargs,
     ):
@@ -33,11 +47,15 @@ class SPOCOTrainer(DefaultTrainer):
             param_teacher.data = param_teacher.data * self.momentum + param_model.data * (1. - self.momentum)
 
     def save_checkpoint(self, name, current_metric, best_metric, **extra_save_dict):
+        """@private
+        """
         super().save_checkpoint(
             name, current_metric, best_metric, model2_state=self.model2.state_dict(), **extra_save_dict
         )
 
     def load_checkpoint(self, checkpoint="best"):
+        """@private
+        """
         save_dict = super().load_checkpoint(checkpoint)
         self.model2.load_state_dict(save_dict["model2_state"])
         self.model2.to(self.device)
@@ -56,7 +74,7 @@ class SPOCOTrainer(DefaultTrainer):
         )
 
         for x in self.semisupervised_loader:
-            x = x.to(self.device)
+            x = x.to(self.device, non_blocking=True)
             self.optimizer.zero_grad()
 
             with forward_context():
@@ -76,7 +94,7 @@ class SPOCOTrainer(DefaultTrainer):
         n_iter = 0
         t_per_iter = time.time()
         for x, y in self.train_loader:
-            x, y = x.to(self.device), y.to(self.device)
+            x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
 
             self.optimizer.zero_grad()
 
@@ -120,7 +138,7 @@ class SPOCOTrainer(DefaultTrainer):
 
         with torch.no_grad():
             for x, y in self.val_loader:
-                x, y = x.to(self.device), y.to(self.device)
+                x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
                 with forward_context():
                     prediction = self.model(x)
                     prediction2 = self.model2(x)

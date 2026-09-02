@@ -1,4 +1,4 @@
-# this file implements 3d resnets, based on the implementations from torchvision:
+# This file implements 3d resnets, based on the implementations from torchvision:
 # https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 
 from typing import Any, Callable, List, Optional, Type, Union
@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch import Tensor
 
 # from torchvision.models._api import WeightsEnum
-# from torchvision.models._utils import _ovewrite_named_param
+from torchvision.models._utils import _ovewrite_named_param
 # from torchvision.utils import _log_api_usage_once
 
 
@@ -28,7 +28,9 @@ __all__ = [
 
 
 def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv3d:
-    """3x3 convolution with padding"""
+    """@private
+    """
+    # 3x3 convolution with padding
     return nn.Conv3d(
         in_planes,
         out_planes,
@@ -42,11 +44,15 @@ def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, d
 
 
 def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv3d:
-    """1x1 convolution"""
+    """@private
+    """
+    # 1x1 convolution
     return nn.Conv3d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 
 class BasicBlock(nn.Module):
+    """@private
+    """
     expansion: int = 1
 
     def __init__(
@@ -96,6 +102,8 @@ class BasicBlock(nn.Module):
 
 
 class Bottleneck(nn.Module):
+    """@private
+    """
     # Bottleneck in torchvision places the stride for downsampling at 3x3 convolution(self.conv2)
     # while original implementation places the stride at the first 1x1 convolution(self.conv1)
     # according to "Deep residual learning for image recognition"https://arxiv.org/abs/1512.03385.
@@ -154,6 +162,8 @@ class Bottleneck(nn.Module):
 
 
 class ResNet3d(nn.Module):
+    """@private
+    """
     def __init__(
         self,
         block: Type[Union[BasicBlock, Bottleneck]],
@@ -301,6 +311,19 @@ def _resnet(
 
 
 def resnet3d_18(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a residual network for 3d data with 18 layers.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The 3D ResNet.
+    """
     return _resnet(
         BasicBlock, [2, 2, 2, 2], weights=None, progress=False,
         in_channels=in_channels, out_channels=out_channels, **kwargs
@@ -308,6 +331,19 @@ def resnet3d_18(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
 
 
 def resnet3d_34(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a residual network for 3d data with 34 layers.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The 3D ResNet.
+    """
     return _resnet(
         BasicBlock, [3, 4, 6, 3], weights=None, progress=False,
         in_channels=in_channels, out_channels=out_channels, **kwargs
@@ -315,6 +351,19 @@ def resnet3d_34(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
 
 
 def resnet3d_50(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a residual network for 3d data with 50 layers.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The 3D ResNet.
+    """
     return _resnet(
         Bottleneck, [3, 4, 6, 3], weights=None, progress=False,
         in_channels=in_channels, out_channels=out_channels, **kwargs
@@ -322,6 +371,19 @@ def resnet3d_50(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
 
 
 def resnet3d_101(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a residual network for 3d data with 101 layers.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The 3D ResNet.
+    """
     return _resnet(
         Bottleneck, [3, 4, 23, 3], weights=None, progress=False,
         in_channels=in_channels, out_channels=out_channels, **kwargs
@@ -329,6 +391,19 @@ def resnet3d_101(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d
 
 
 def resnet3d_152(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a residual network for 3d data with 152 layers.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The 3D ResNet.
+    """
     return _resnet(
         Bottleneck, [3, 8, 36, 3], weights=None, progress=False,
         in_channels=in_channels, out_channels=out_channels, **kwargs
@@ -336,6 +411,19 @@ def resnet3d_152(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d
 
 
 def resnext3d_50_32x4d(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a residual network for 3d data with 50 layers and ResNext layer design.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The 3D ResNext.
+    """
     _ovewrite_named_param(kwargs, "groups", 32)
     _ovewrite_named_param(kwargs, "width_per_group", 4)
     return _resnet(
@@ -345,6 +433,19 @@ def resnext3d_50_32x4d(in_channels: int, out_channels: int, **kwargs: Any) -> Re
 
 
 def resnext3d_101_32x8d(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a residual network for 3d data with 101 layers and ResNext layer design.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The 3D ResNext.
+    """
     _ovewrite_named_param(kwargs, "groups", 32)
     _ovewrite_named_param(kwargs, "width_per_group", 8)
     return _resnet(
@@ -354,6 +455,19 @@ def resnext3d_101_32x8d(in_channels: int, out_channels: int, **kwargs: Any) -> R
 
 
 def resnext3d_101_64x4d(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a residual network for 3d data with 101 layers and ResNext layer design.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The 3D ResNext.
+    """
     _ovewrite_named_param(kwargs, "groups", 64)
     _ovewrite_named_param(kwargs, "width_per_group", 4)
     return _resnet(
@@ -363,6 +477,19 @@ def resnext3d_101_64x4d(in_channels: int, out_channels: int, **kwargs: Any) -> R
 
 
 def wide_resnet3d_50_2(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a wide residual network for 3d data with 50 layers.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The wide 3D ResNet.
+    """
     _ovewrite_named_param(kwargs, "width_per_group", 64 * 2)
     return _resnet(
         Bottleneck, [3, 4, 6, 3], weights=None, progress=False,
@@ -371,6 +498,19 @@ def wide_resnet3d_50_2(in_channels: int, out_channels: int, **kwargs: Any) -> Re
 
 
 def wide_resnet3d_101_2(in_channels: int, out_channels: int, **kwargs: Any) -> ResNet3d:
+    """Get a wide residual network for 3d data with 101 layers.
+
+    The implementation of this network is based on torchvision:
+    https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        kwargs: Additional keyword arguments for the ResNet.
+
+    Returns:
+        The wide 3D ResNet.
+    """
     _ovewrite_named_param(kwargs, "width_per_group", 64 * 2)
     return _resnet(
         Bottleneck, [3, 4, 23, 3], weights=None, progress=False,

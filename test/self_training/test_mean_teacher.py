@@ -35,7 +35,7 @@ class TestMeanTeacher(unittest.TestCase):
         unsupervised_loss_and_metric=None,
     ):
         model = UNet2d(in_channels=1, out_channels=1, initial_features=8, depth=3)
-        optimizer = torch.optim.Adam(model.parameters())
+        optimizer = torch.optim.AdamW(model.parameters())
 
         name = "mt-test"
         trainer = self_training.MeanTeacherTrainer(

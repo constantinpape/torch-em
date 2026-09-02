@@ -1,17 +1,18 @@
 import json
+from typing import Union
 import numpy as np
 
 
 class nnUNetRawTransform:
-    """Apply transformation on the raw inputs.
+    """Apply nnUNet transformation to raw inptus.
+
     Adapted from nnUNetv2's `ImageNormalization`:
-        - https://github.com/MIC-DKFZ/nnUNet/tree/master/nnunetv2/preprocessing/normalization
+    https://github.com/MIC-DKFZ/nnUNet/tree/master/nnunetv2/preprocessing/normalization
 
     You can use this class to apply the necessary raw transformations on input modalities.
-
-    (Current Support - CT and PET): The inputs should be of dimension 2 * (H * W * D).
-        - The first channel should be CT volume
-        - The second channel should be PET volume
+    Currently supports transformations for CT and PET data. The inputs should be of dimension 2 * (H * W * D).
+    - The first channel should be CT volume
+    - The second channel should be PET volume
 
     Here's an example for how to use this class:
     ```python
@@ -22,13 +23,19 @@ class nnUNetRawTransform:
     patient_vol = np.concatenate(ct_vol, pet_vol)
     patient_transformed = raw_transform(patient_vol)
     ```
+
+    Args:
+        plans_file: The file with the nnUNet data plan.
+        expected_dtype: The expected dtype of the input data.
+        tolerance: The numerical tolerance.
+        model_name: The name of the model.
     """
     def __init__(
-            self,
-            plans_file: str,
-            expected_dtype: type = np.float32,
-            tolerance: float = 1e-8,
-            model_name: str = "3d_fullres"
+        self,
+        plans_file: str,
+        expected_dtype: Union[np.dtype, str] = np.float32,
+        tolerance: float = 1e-8,
+        model_name: str = "3d_fullres",
     ):
         self.expected_dtype = expected_dtype
         self.tolerance = tolerance
@@ -38,12 +45,16 @@ class nnUNetRawTransform:
         self.per_channel_scheme = json_file["configurations"][model_name]["normalization_schemes"]
 
     def load_json(self, _file: str):
+        """@private
+        """
         # source: `batchgenerators.utilities.file_and_folder_operations`
-        with open(_file, 'r') as f:
+        with open(_file, "r") as f:
             a = json.load(f)
         return a
 
     def ct_transform(self, channel, properties):
+        """@private
+        """
         mean = properties['mean']
         std = properties['std']
         lower_bound = properties['percentile_00_5']
@@ -53,17 +64,14 @@ class nnUNetRawTransform:
         transformed_channel = (transformed_channel - mean) / max(std, self.tolerance)
         return transformed_channel
 
-    def __call__(
-            self,
-            raw: np.ndarray
-    ) -> np.ndarray:  # the transformed raw inputs
+    def __call__(self, raw: np.ndarray) -> np.ndarray:
         """Returns the raw inputs after applying the pre-processing from nnUNet.
 
         Args:
-            raw: The raw array inputs
-                Expectd a float array of shape M * (H * W * D) (where, M is the number of modalities)
+            raw: The raw array inputs. Expectd a float array of shape M * (H * W * D), with M = number of modalities.
+
         Returns:
-            The transformed raw inputs (the same shape as inputs)
+            The transformed raw inputs (the same shape as inputs).
         """
         assert raw.shape[0] == len(self.per_channel_scheme), "Number of channels & transforms from data plan must match"
 

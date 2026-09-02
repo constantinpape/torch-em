@@ -4,21 +4,23 @@ This dataset is from the publication https://doi.org/10.1007/978-3-030-87193-2_1
 Please cite it if you use this dataset for a publication.
 """
 
-
 import os
 from glob import glob
-from typing import Tuple, Union
+from typing import Tuple, Union, Literal, List
 
-import h5py
 import torch_em
+
 from torch.utils.data import Dataset, DataLoader
 
 from .. import util
+
 
 URL = "https://drive.google.com/drive/folders/1_4CrlYvzx0ITnGlJOHdgcTRgeSkm9wT8"
 
 
 def _extract_split(image_folder, label_folder, output_folder):
+    import h5py
+
     os.makedirs(output_folder, exist_ok=True)
     image_files = sorted(glob(os.path.join(image_folder, "*.h5")))
     label_files = sorted(glob(os.path.join(label_folder, "*.h5")))
@@ -35,7 +37,7 @@ def _extract_split(image_folder, label_folder, output_folder):
             f.create_dataset("labels", data=seg, compression="gzip")
 
 
-def get_nuc_mm_data(path: Union[os.PathLike, str], sample: str, download: bool) -> str:
+def get_nuc_mm_data(path: Union[os.PathLike, str], sample: Literal['mouse', 'zebrafish'], download: bool) -> str:
     """Download the NucMM training data.
 
     Args:
@@ -73,9 +75,29 @@ def get_nuc_mm_data(path: Union[os.PathLike, str], sample: str, download: bool) 
     return sample_folder
 
 
+def get_nuc_mm_paths(
+    path: Union[os.PathLike], sample: Literal['mouse', 'zebrafish'], split: str, download: bool = False,
+) -> List[str]:
+    """Get paths to the NucMM data.
+
+    Args:
+        path: Filepath to a folder where the downloaded data will be saved.
+        sample: The NucMM samples to use. The available samples are 'mouse' and 'zebrafish'.
+        split: The split for the dataset, either 'train' or 'val'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        The filepaths to the stored data.
+    """
+    get_nuc_mm_data(path, sample, download)
+    split_folder = os.path.join(path, sample, split)
+    paths = sorted(glob(os.path.join(split_folder, "*.h5")))
+    return paths
+
+
 def get_nuc_mm_dataset(
     path: Union[os.PathLike, str],
-    sample: str,
+    sample: Literal['mouse', 'zebrafish'],
     split: str,
     patch_shape: Tuple[int, int, int],
     download: bool = False,
@@ -85,7 +107,7 @@ def get_nuc_mm_dataset(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        sample: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        sample: The NucMM samples to use. The available samples are 'mouse' and 'zebrafish'.
         split: The split for the dataset, either 'train' or 'val'.
         patch_shape: The patch shape to use for training.
         download: Whether to download the data if it is not present.
@@ -96,19 +118,22 @@ def get_nuc_mm_dataset(
     """
     assert split in ("train", "val")
 
-    sample_folder = get_nuc_mm_data(path, sample, download)
-    split_folder = os.path.join(sample_folder, split)
-    paths = sorted(glob(os.path.join(split_folder, "*.h5")))
+    paths = get_nuc_mm_paths(path, sample, split, download)
 
-    raw_key, label_key = "raw", "labels"
     return torch_em.default_segmentation_dataset(
-        paths, raw_key, paths, label_key, patch_shape, is_seg_dataset=True, **kwargs
+        raw_paths=paths,
+        raw_key="raw",
+        label_paths=paths,
+        label_key="labels",
+        patch_shape=patch_shape,
+        is_seg_dataset=True,
+        **kwargs
     )
 
 
 def get_nuc_mm_loader(
     path: Union[os.PathLike, str],
-    sample: str,
+    sample: Literal['mouse', 'zebrafish'],
     split: str,
     patch_shape: Tuple[int, int, int],
     batch_size: int,
@@ -119,7 +144,7 @@ def get_nuc_mm_loader(
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
-        sample: The CREMI samples to use. The available samples are 'A', 'B', 'C'.
+        sample: The NucMM samples to use. The available samples are 'mouse' and 'zebrafish'.
         split: The split for the dataset, either 'train' or 'val'.
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
@@ -129,8 +154,6 @@ def get_nuc_mm_loader(
     Returns:
        The segmentation dataset.
     """
-    ds_kwargs, loader_kwargs = util.split_kwargs(
-        torch_em.default_segmentation_dataset, **kwargs
-    )
+    ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     ds = get_nuc_mm_dataset(path, sample, split, patch_shape, download, **ds_kwargs)
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)

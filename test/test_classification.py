@@ -15,7 +15,7 @@ class TestClassification(unittest.TestCase):
 
     def _check_checkpoint(self, path, expected_iterations, expected_model, model_class, **model_kwargs):
         self.assertTrue(os.path.exists(path))
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, weights_only=False)
 
         self.assertIn("optimizer_state", checkpoint)
         self.assertIn("model_state", checkpoint)
