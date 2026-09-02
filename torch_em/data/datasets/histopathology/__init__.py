@@ -18,6 +18,7 @@ from .ignite import get_ignite_loader, get_ignite_dataset
 from .janowczyk import get_janowczyk_loader, get_janowczyk_dataset
 from .khoshdeli import get_khoshdeli_loader, get_khoshdeli_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset
+from .lizard_mitosis import get_lizard_mitosis_loader, get_lizard_mitosis_dataset
 from .lynsec import get_lynsec_loader, get_lynsec_dataset
 from .monuseg import get_monuseg_loader, get_monuseg_dataset
 from .monusac import get_monusac_loader, get_monusac_dataset
