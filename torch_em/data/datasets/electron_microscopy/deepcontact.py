@@ -222,7 +222,6 @@ def get_deepcontact_dataset(
         label_paths=data_paths,
         label_key=f"labels/{label_choice}",
         patch_shape=patch_shape,
-        is_seg_dataset=False,
         **kwargs,
     )
 
