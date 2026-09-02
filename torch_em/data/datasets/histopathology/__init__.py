@@ -10,6 +10,7 @@ from .crc_epithelium import get_crc_epithelium_loader, get_crc_epithelium_datase
 from .cryonuseg import get_cryonuseg_loader, get_cryonuseg_dataset
 from .cytodark0 import get_cytodark0_loader, get_cytodark0_dataset
 from .deepliif import get_deepliif_loader, get_deepliif_dataset
+from .derma_paseg import get_derma_paseg_loader, get_derma_paseg_dataset
 from .glas import get_glas_loader, get_glas_dataset
 from .glysac import get_glysac_loader, get_glysac_dataset
 from .hest import get_hest_loader, get_hest_dataset
