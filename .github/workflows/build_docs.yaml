@@ -13,6 +13,11 @@ on:
 permissions:
   contents: read
 
+# Allow only one concurrent deployment, but do not cancel in-progress runs.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build Documentation
@@ -20,7 +25,10 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v5
 
     - name: Set up Micromamba
       uses: mamba-org/setup-micromamba@v2
@@ -64,5 +72,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GiHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

@@ -484,6 +484,7 @@ def default_segmentation_trainer(
     save_root: Optional[str] = None,
     compile_model: Optional[Union[bool, str]] = None,
     rank: Optional[int] = None,
+    mixed_precision_dtype: Optional[str] = None,
 ):
     """Get a trainer for a segmentation network.
 
@@ -520,7 +521,7 @@ def default_segmentation_trainer(
         learning_rate: The initial learning rate for the AdamW optimizer.
         device: The torch device to use for training. If None, will use a GPU if available.
         log_image_interval: The interval for saving images during logging, in training iterations.
-        mixed_precision: Whether to train with mixed precision.
+        mixed_precision: Whether to train with mixed precision. CPU training uses float32 unless a dtype is set.
         early_stopping: The patience for early stopping in epochs. If None, early stopping will not be used.
         logger: The logger class. Will be instantiated for logging.
             By default uses `torch_em.training.tensorboard_logger.TensorboardLogger`.
@@ -533,6 +534,8 @@ def default_segmentation_trainer(
         save_root: The root folder for saving the checkpoint and logs.
         compile_model: Whether to compile the model before training.
         rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+        mixed_precision_dtype: The dtype for autocast in mixed precision training, 'float16' or 'bfloat16'.
+            The GPU default is 'float16'. Set this explicitly to enable CPU mixed precision.
 
     Returns:
         The trainer.
@@ -548,8 +551,7 @@ def default_segmentation_trainer(
     else:
         device = torch.device(device)
 
-    # CPU does not support mixed precision training.
-    if device.type == "cpu":
+    if device.type == "cpu" and mixed_precision_dtype is None:
         mixed_precision = False
 
     return trainer_class(
@@ -563,6 +565,7 @@ def default_segmentation_trainer(
         device=device,
         lr_scheduler=scheduler,
         mixed_precision=mixed_precision,
+        mixed_precision_dtype=mixed_precision_dtype,
         early_stopping=early_stopping,
         log_image_interval=log_image_interval,
         logger=logger,
