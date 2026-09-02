@@ -55,6 +55,10 @@ from .gonuclear import get_gonuclear_loader, get_gonuclear_dataset
 from .hela_cytonuc import (
     get_hela_cytonuc_data, get_hela_cytonuc_paths, get_hela_cytonuc_loader, get_hela_cytonuc_dataset,
 )
+from .hipsc_single_cell import (
+    get_hipsc_single_cell_data, get_hipsc_single_cell_paths,
+    get_hipsc_single_cell_loader, get_hipsc_single_cell_dataset,
+)
 from .hpa import get_hpa_segmentation_loader, get_hpa_segmentation_dataset
 from .ifnuclei import get_ifnuclei_loader, get_ifnuclei_dataset
 from .idr0095 import get_idr0095_loader, get_idr0095_dataset
