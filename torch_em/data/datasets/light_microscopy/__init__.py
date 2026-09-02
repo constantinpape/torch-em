@@ -80,6 +80,7 @@ from .neurosphere import get_neurosphere_loader, get_neurosphere_dataset
 from .nuc_morph import get_nuc_morph_loader, get_nuc_morph_dataset
 from .nucverse3d import get_nucverse3d_loader, get_nucverse3d_dataset
 from .nuc_morph_timelapse import get_nuc_morph_timelapse_loader, get_nuc_morph_timelapse_dataset
+from .oocount import get_oocount_loader, get_oocount_dataset
 from .oocyteseg import get_oocyteseg_loader, get_oocyteseg_dataset
 from .omnipose import get_omnipose_loader, get_omnipose_dataset
 from .orgaextractor import get_orgaextractor_loader, get_orgaextractor_dataset
