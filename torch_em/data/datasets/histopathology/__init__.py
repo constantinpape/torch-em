@@ -35,6 +35,7 @@ from .spatch import get_spatch_loader, get_spatch_dataset
 from .spatialproteomics_bnhl import get_spatialproteomics_bnhl_loader, get_spatialproteomics_bnhl_dataset
 from .srsanet import get_srsanet_loader, get_srsanet_dataset
 from .tcga_tissue import get_tcga_tissue_loader, get_tcga_tissue_dataset
+from .tevg import get_tevg_loader, get_tevg_dataset
 from .tiger import get_tiger_loader, get_tiger_dataset
 from .tissueseg import get_tissueseg_loader, get_tissueseg_dataset
 from .tnbc import get_tnbc_loader, get_tnbc_dataset
