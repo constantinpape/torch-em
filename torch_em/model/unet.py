@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from ..nn.layers import BatchRenorm2d, BatchRenorm3d
+
 
 #
 # Model Internal Post-processing
@@ -402,6 +404,8 @@ def get_norm_layer(norm, dim, channels, n_groups=32):
         return nn.GroupNorm(min(n_groups, channels), channels)
     elif norm == "BatchNorm":
         return nn.BatchNorm2d(channels) if dim == 2 else nn.BatchNorm3d(channels)
+    elif norm == "BatchRenorm":
+        return BatchRenorm2d(channels) if dim == 2 else BatchRenorm3d(channels)
     else:
         raise ValueError(f"Invalid norm: expect one of 'InstanceNorm', 'BatchNorm' or 'GroupNorm', got {norm}")
 
