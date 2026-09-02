@@ -6,6 +6,7 @@ from .catch import get_catch_loader, get_catch_dataset
 from .conic import get_conic_loader, get_conic_dataset
 from .consep import get_consep_loader, get_consep_dataset
 from .cpm import get_cpm_loader, get_cpm_dataset
+from .crc_epithelium import get_crc_epithelium_loader, get_crc_epithelium_dataset
 from .cryonuseg import get_cryonuseg_loader, get_cryonuseg_dataset
 from .cytodark0 import get_cytodark0_loader, get_cytodark0_dataset
 from .deepliif import get_deepliif_loader, get_deepliif_dataset
