@@ -13,6 +13,7 @@ from .cytonuke import get_cytonuke_loader, get_cytonuke_dataset
 from .deepliif import get_deepliif_loader, get_deepliif_dataset
 from .glas import get_glas_loader, get_glas_dataset
 from .glysac import get_glysac_loader, get_glysac_dataset
+from .hashi import get_hashi_loader, get_hashi_dataset
 from .hest import get_hest_loader, get_hest_dataset
 from .icc import get_icc_loader, get_icc_dataset
 from .ignite import get_ignite_loader, get_ignite_dataset
