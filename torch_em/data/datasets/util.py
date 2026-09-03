@@ -536,9 +536,10 @@ def generate_labeled_array_from_xml(shape: Tuple[int, ...], xml_file: str) -> np
         xy.append(np.int32(vw))
 
     # Creating a completely black image
-    mask = np.zeros(shape, np.float32)
+    mask = np.zeros(shape, np.uint32)  # Integer instance ids; float labels break connected-component ops.
 
-    for i, contour in enumerate(xy):
+    # Start the instance ids at 1: id 0 is background, so enumerating from 0 silently drops the first region.
+    for i, contour in enumerate(xy, start=1):
         r, c = polygon(np.array(contour)[:, 1], np.array(contour)[:, 0], shape=shape)
         mask[r, c] = i
     return mask
@@ -562,9 +563,22 @@ def convert_svs_to_array(
     Returns:
         The image as numpy array.
     """
-    from tiffslide import TiffSlide
-
     assert path.endswith(".svs"), f"The provided file ({path}) isn't in svs format"
+
+    try:
+        from tiffslide import TiffSlide
+    except ImportError:
+        # svs is a pyramidal TIFF variant, so tifffile can read it without the tiffslide dependency.
+        import tifffile
+        with tifffile.TiffFile(path) as f:
+            image = f.series[0].levels[level].asarray()
+        x, y = location
+        if img_size is not None:
+            image = image[y:y + img_size[1], x:x + img_size[0]]
+        else:
+            image = image[y:, x:]
+        return image
+
     _slide = TiffSlide(path)
     if img_size is None:
         img_size = _slide.level_dimensions[0]
