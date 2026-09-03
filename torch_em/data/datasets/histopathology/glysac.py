@@ -34,14 +34,24 @@ URL = f"https://drive.google.com/uc?id={GDRIVE_ID}"
 CHECKSUM = None
 
 
+def _find_split_dir(data_dir: str, split: str) -> str:
+    """Resolve the split folder. Distributions of this dataset differ in capitalization."""
+    for folder in (split.capitalize(), split, split.upper()):
+        candidate = os.path.join(data_dir, folder)
+        if os.path.exists(candidate):
+            return candidate
+    raise RuntimeError(f"Could not find a folder for split '{split}' in '{data_dir}'.")
+
+
 def _create_h5_files(data_dir: str, split: str) -> None:
-    folder = "Train" if split == "train" else "Test"
-    image_dir = os.path.join(data_dir, folder, "Images")
-    label_dir = os.path.join(data_dir, folder, "Labels")
+    split_dir = _find_split_dir(data_dir, split)
+    image_dir = os.path.join(split_dir, "Images")
+    label_dir = os.path.join(split_dir, "Labels")
     h5_dir = os.path.join(data_dir, "h5", split)
     os.makedirs(h5_dir, exist_ok=True)
 
-    image_paths = natsorted(glob(os.path.join(image_dir, "*.png")))
+    # Distributions of this dataset ship the images either as png or as tif.
+    image_paths = natsorted(glob(os.path.join(image_dir, "*.png")) + glob(os.path.join(image_dir, "*.tif")))
     for image_path in tqdm(image_paths, desc=f"Preprocessing {split}"):
         fname = os.path.splitext(os.path.basename(image_path))[0]
         h5_path = os.path.join(h5_dir, f"{fname}.h5")
@@ -70,9 +80,13 @@ def get_glysac_data(path: Union[os.PathLike, str], download: bool = False) -> st
     Returns:
         The filepath to the data directory.
     """
+    # Distributions of this dataset unpack either as 'glysac_dataset' or as 'GLySAC'.
+    for folder in ("glysac_dataset", "GLySAC"):
+        data_dir = os.path.join(path, folder)
+        if os.path.exists(data_dir):
+            return data_dir
+
     data_dir = os.path.join(path, "glysac_dataset")
-    if os.path.exists(data_dir):
-        return data_dir
 
     os.makedirs(path, exist_ok=True)
     zip_path = os.path.join(path, "glysac_dataset.zip")

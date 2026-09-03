@@ -132,8 +132,9 @@ def get_deepbacs_paths(
         if split == "val":
             raise NotImplementedError("The e_coli_stationary dataset does not have a val split.")
         from natsort import natsorted
-        image_folder = natsorted(glob(os.path.join(path, bac_type, dir_choice, "brightfield", "*.tif")))
-        label_folder = natsorted(glob(os.path.join(path, bac_type, dir_choice, "masks", "*.tif")))
+        # This archive ships 'train' and 'test' folders, unlike 'mixed' which uses 'training'.
+        image_folder = natsorted(glob(os.path.join(path, bac_type, split, "brightfield", "*.tif")))
+        label_folder = natsorted(glob(os.path.join(path, bac_type, split, "masks", "*.tif")))
     elif bac_type != "mixed":
         raise NotImplementedError(
             f"Currently only 'mixed' and 'e_coli_stationary' are supported, not {bac_type}"
