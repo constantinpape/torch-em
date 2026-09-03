@@ -12,6 +12,7 @@ from pathlib import Path
 from natsort import natsorted
 from typing import Union, Literal, Tuple, Optional, List
 
+import numpy as np
 import imageio.v3 as imageio
 from bioimage_cpp.segmentation import label as connected_components
 
@@ -59,7 +60,11 @@ def _preprocess_labels(label_paths):
                 lpath = Path(lpath).parent / rf" {os.path.basename(lpath)}"
 
             label = imageio.imread(lpath)
-            imageio.imwrite(neu_lpath, connected_components(label).astype(label.dtype), compression="zlib")
+            # The source masks are binary uint8. The connected components must not be cast back to that dtype:
+            # crops have several hundred cells, so the ids would wrap at 255.
+            instances = connected_components(label)
+            dtype = "uint16" if instances.max() < np.iinfo("uint16").max else "uint32"
+            imageio.imwrite(neu_lpath, instances.astype(dtype), compression="zlib")
 
     return neu_label_paths
 

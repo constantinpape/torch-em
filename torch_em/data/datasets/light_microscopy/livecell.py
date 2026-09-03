@@ -88,10 +88,12 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
     return seg.astype("uint16")
 
 
-def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types):
-    # Use a per-cell_types cache to avoid reloading the COCO JSON when data is already prepared.
+def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types, split):
+    # Use a per-split and per-cell_types cache to avoid reloading the COCO JSON when data is already prepared.
+    # The split must be part of the key: train and val share the same seg_folder, so a key without it
+    # would return the paths of whichever split was processed first for both.
     cache_key = "all" if cell_types is None else "_".join(sorted(cell_types))
-    cache_file = os.path.join(seg_folder, f"seg_paths_{cache_key}.json")
+    cache_file = os.path.join(seg_folder, f"seg_paths_{split}_{cache_key}.json")
     if os.path.exists(cache_file):
         with open(cache_file) as f:
             cached = json.load(f)
@@ -164,7 +166,7 @@ def _download_livecell_annotations(path, split, download, cell_types, label_path
 
     assert os.path.exists(image_folder), image_folder
 
-    return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types)
+    return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types, split)
 
 
 def get_livecell_data(path: Union[os.PathLike], download: bool = False):
