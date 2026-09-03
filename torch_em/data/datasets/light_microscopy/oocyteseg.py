@@ -22,7 +22,10 @@ from .. import util
 
 
 URL = "https://zenodo.org/records/6502830/files/SegmentationCortex.tar.gz"
-CHECKSUM = "1da5d4fd102d8e903744db424f6114c6"
+# NOTE: This is the sha256 of the archive, which is what `util.download_source` verifies.
+# Zenodo publishes an md5 (1da5d4fd102d8e903744db424f6114c6), which was stored here previously
+# and always failed the check, leaving the completed download as a rejected .incomplete file.
+CHECKSUM = "46852468b41c4e19c28f079de9e7f6ae565e45c8dc89273adb6f3bd7e9b50613"
 
 SPECIES = ["mouse", "human", "sea_urchin"]
 
@@ -100,7 +103,7 @@ def get_oocyteseg_data(path: Union[os.PathLike, str], download: bool = False) ->
     os.makedirs(path, exist_ok=True)
     tar_path = os.path.join(path, "SegmentationCortex.tar.gz")
     util.download_source(path=tar_path, url=URL, download=download, checksum=CHECKSUM)
-    util.unzip(zip_path=tar_path, dst=path)
+    util.unzip_tarfile(tar_path=tar_path, dst=path)
 
     return data_dir
 
