@@ -48,6 +48,10 @@ FILE_TEMPLATES = {
     "cuticle": "train_data_%02i.n5",
 }
 
+# Default ignore label. Stays exact through a float32 round-trip, which the augmentations do,
+# and sits far above any real instance id.
+CELL_IGNORE_LABEL = 2 ** 24 - 1
+
 # Ids that label neuropil rather than a single cell, found by inspecting every cell volume.
 CELL_NEUROPIL_IDS = {
     1: (),
@@ -352,7 +356,7 @@ def get_platynereis_cell_dataset(
     boundaries: bool = False,
     rois: Dict[int, Any] = {},
     download: bool = False,
-    ignore_label: int = np.iinfo("uint32").max,
+    ignore_label: int = CELL_IGNORE_LABEL,
     **kwargs
 ) -> Dataset:
     """Get the dataset for cell segmentation in platynereis.
@@ -411,7 +415,7 @@ def get_platynereis_cell_loader(
     boundaries: bool = False,
     rois: Dict[int, Any] = {},
     download: bool = False,
-    ignore_label: int = np.iinfo("uint32").max,
+    ignore_label: int = CELL_IGNORE_LABEL,
     **kwargs
 ) -> DataLoader:
     """Get the dataloader for cell segmentation in platynereis.
