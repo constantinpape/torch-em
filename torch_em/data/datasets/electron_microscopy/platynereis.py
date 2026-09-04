@@ -7,6 +7,10 @@ platynereis larve. Contains annotations for the segmentation of:
 
 This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
 Please cite it if you use this dataset for a publication.
+
+NOTE: The cell segmentation does not resolve the neuropil into individual cells. It carries one
+instance id instead, listed per volume in `CELL_NEUROPIL_IDS`, which the cell dataset maps to
+`ignore_label`.
 """
 
 import os
@@ -18,6 +22,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
+from torch_em.data import ConcatDataset
 
 from .. import util
 
@@ -42,6 +47,61 @@ FILE_TEMPLATES = {
     "cilia": "train_data_cilia_%02i.h5",
     "cuticle": "train_data_%02i.n5",
 }
+
+# Ids that label neuropil rather than a single cell, found by inspecting every cell volume.
+CELL_NEUROPIL_IDS = {
+    1: (),
+    2: (66,),
+    3: (253,),
+    4: (58,),
+    5: (72,),
+    6: (73, 11),
+    7: (),
+    8: (3,),
+    9: (19,),
+}
+
+
+def get_platynereis_cell_neuropil_ids(sample_id: int) -> Tuple[int, ...]:
+    """Get the neuropil instance ids of a platynereis cell volume.
+
+    Args:
+        sample_id: The id of the volume, between 1 and 9.
+
+    Returns:
+        The instance ids that label neuropil rather than a single cell. Empty if the volume has none.
+    """
+    return CELL_NEUROPIL_IDS.get(sample_id, ())
+
+
+class MapIdsToIgnoreLabel:
+    """Map the given instance ids to an ignore label, then apply another label transform.
+
+    Args:
+        ids: The instance ids to map.
+        ignore_label: The value to map them to.
+        label_transform: An optional label transform to apply afterwards.
+    """
+
+    def __init__(self, ids: Sequence[int], ignore_label: int, label_transform: Optional[Any] = None):
+        self.ids = tuple(ids)
+        self.ignore_label = ignore_label
+        self.label_transform = label_transform
+
+    def __call__(self, labels):
+        if self.ids:
+            labels = np.asarray(labels)
+            mask = np.isin(labels, self.ids)
+            if mask.any():
+                # Widen the dtype if the ignore label does not fit.
+                if labels.dtype.kind in "ui" and self.ignore_label > np.iinfo(labels.dtype).max:
+                    labels = labels.astype("uint64")
+                else:
+                    labels = labels.copy()
+                labels[mask] = self.ignore_label
+        if self.label_transform is not None:
+            labels = self.label_transform(labels)
+        return labels
 
 
 #
@@ -276,6 +336,14 @@ def get_platynereis_cilia_loader(
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
 
+def _resolve_cell_sample_ids(path, sample_ids, download):
+    """Resolve sample ids the same way `get_platynereis_paths` does, so they line up with its paths."""
+    _, n_files = get_platynereis_data(path, "cells", download)
+    if sample_ids is None:
+        return list(range(1, n_files + 1))
+    return sorted(sample_ids)
+
+
 def get_platynereis_cell_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
@@ -284,6 +352,7 @@ def get_platynereis_cell_dataset(
     boundaries: bool = False,
     rois: Dict[int, Any] = {},
     download: bool = False,
+    ignore_label: int = np.iinfo("uint32").max,
     **kwargs
 ) -> Dataset:
     """Get the dataset for cell segmentation in platynereis.
@@ -296,6 +365,8 @@ def get_platynereis_cell_dataset(
         boundaries: Whether to compute boundaries as the target.
         rois: The region of interests to use for the data blocks.
         download: Whether to download the data if it is not present.
+        ignore_label: The value the neuropil ids of `CELL_NEUROPIL_IDS` are mapped to, so that a loss
+            can exclude them.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
@@ -305,19 +376,30 @@ def get_platynereis_cell_dataset(
         path=path, sample_ids=sample_ids, name="cells", rois=rois, download=download, return_rois=True,
     )
 
-    kwargs = util.update_kwargs(kwargs, "rois", data_rois)
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=False, boundaries=boundaries, offsets=offsets,
     )
 
-    return torch_em.default_segmentation_dataset(
-        raw_paths=data_paths,
-        raw_key="volumes/raw/s1",
-        label_paths=data_paths,
-        label_key="volumes/labels/segmentation/s1",
-        patch_shape=patch_shape,
-        **kwargs
+    ds_kwargs = dict(
+        raw_key="volumes/raw/s1", label_key="volumes/labels/segmentation/s1", patch_shape=patch_shape,
     )
+
+    resolved_ids = _resolve_cell_sample_ids(path, sample_ids, download)
+    datasets = []
+    for sample_id, data_path, data_roi in zip(resolved_ids, data_paths, data_rois):
+        sample_kwargs = dict(kwargs)
+        sample_kwargs["label_transform"] = MapIdsToIgnoreLabel(
+            ids=get_platynereis_cell_neuropil_ids(sample_id),
+            ignore_label=ignore_label,
+            label_transform=sample_kwargs.get("label_transform"),
+        )
+        datasets.append(
+            torch_em.default_segmentation_dataset(
+                raw_paths=[data_path], label_paths=[data_path], rois=[data_roi], **ds_kwargs, **sample_kwargs
+            )
+        )
+
+    return datasets[0] if len(datasets) == 1 else ConcatDataset(*datasets)
 
 
 def get_platynereis_cell_loader(
@@ -329,6 +411,7 @@ def get_platynereis_cell_loader(
     boundaries: bool = False,
     rois: Dict[int, Any] = {},
     download: bool = False,
+    ignore_label: int = np.iinfo("uint32").max,
     **kwargs
 ) -> DataLoader:
     """Get the dataloader for cell segmentation in platynereis.
@@ -342,6 +425,7 @@ def get_platynereis_cell_loader(
         boundaries: Whether to compute boundaries as the target.
         rois: The region of interests to use for the data blocks.
         download: Whether to download the data if it is not present.
+        ignore_label: The value the neuropil ids of `CELL_NEUROPIL_IDS` are mapped to.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
@@ -350,7 +434,7 @@ def get_platynereis_cell_loader(
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     ds = get_platynereis_cell_dataset(
         path, patch_shape, sample_ids, rois=rois,
-        offsets=offsets, boundaries=boundaries, download=download,
+        offsets=offsets, boundaries=boundaries, download=download, ignore_label=ignore_label,
         **ds_kwargs,
     )
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
