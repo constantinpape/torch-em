@@ -56,27 +56,47 @@ CHECKSUMS = {
 SAMPLES = list(URLS.keys())
 
 
+def _squeeze_raw(raw_path):
+    """tstvol-520-1 stores the raw as (1, z, y, x); drop the singleton so it matches the labels."""
+    import h5py
+
+    # Check read-only first: opening for writing fails while the dataset holds the file open.
+    with h5py.File(raw_path, "r") as f:
+        if f["raw"].ndim != 4:
+            return
+    with h5py.File(raw_path, "a") as f:
+        raw = f["raw"][:].reshape(f["raw"].shape[-3:])
+        del f["raw"]
+        f.create_dataset("raw", data=raw, compression="gzip")
+
+
 def _apply_transforms(groundtruth_path):
     """Apply the supervoxel-to-neuron mapping from the 'transforms' dataset.
 
-    The groundtruth h5 files contain a 'stack' dataset with supervoxel IDs
-    and a 'transforms' dataset that maps supervoxels to neuron body IDs.
-    This function applies the mapping and saves the result as 'neuron_ids'.
+    The groundtruth h5 files contain a 'stack' dataset and, for some samples, a 'transforms'
+    dataset that maps supervoxels to neuron body IDs. Where it exists the mapping is applied;
+    otherwise 'stack' already holds neuron ids. The result is saved as 'neuron_ids'.
     """
     import h5py
 
-    with h5py.File(groundtruth_path, "a") as f:
+    with h5py.File(groundtruth_path, "r") as f:
         if "neuron_ids" in f:
             return
-
+    with h5py.File(groundtruth_path, "a") as f:
         stack = f["stack"][:]
-        transforms = f["transforms"][:]
+        if stack.ndim == 4:
+            stack = stack.reshape(stack.shape[-3:])
 
-        # Build the mapping from supervoxel IDs to neuron body IDs.
-        mapping = np.zeros(stack.max() + 1, dtype=stack.dtype)
-        for src, dst in transforms:
-            mapping[src] = dst
-        neuron_ids = mapping[stack]
+        # tstvol-520-1 ships neuron ids in 'stack' and has no 'transforms'.
+        if "transforms" not in f:
+            neuron_ids = stack
+        else:
+            transforms = f["transforms"][:]
+            # Build the mapping from supervoxel IDs to neuron body IDs.
+            mapping = np.zeros(stack.max() + 1, dtype=stack.dtype)
+            for src, dst in transforms:
+                mapping[src] = dst
+            neuron_ids = mapping[stack]
 
         f.create_dataset("neuron_ids", data=neuron_ids, compression="gzip")
 
@@ -109,6 +129,7 @@ def get_fib25_data(
 
         # Apply the supervoxel-to-neuron mapping.
         _apply_transforms(labels_path)
+        _squeeze_raw(raw_path)
 
 
 def get_fib25_paths(

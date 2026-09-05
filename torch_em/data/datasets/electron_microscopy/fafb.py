@@ -2,9 +2,9 @@
 full adult female Drosophila brain with dense neuron instance segmentation from FlyWire.
 
 The EM (FAFB v14) is a ssTEM dataset. The native 4 x 4 x 40 nm mip level is a
-placeholder with no data - the finest available EM is at mip=2 (16 x 16 x 40 nm),
-which matches the FlyWire neuron segmentation (materialization v783, Nature 2024 paper)
-resolution exactly. Both are stored at 16 x 16 x 40 nm.
+placeholder with no data and mip=1 (8 x 8 x 40 nm) holds EM only. mip=2 (16 x 16 x 40 nm)
+is the finest level of the FlyWire neuron segmentation (materialization v783, Nature 2024
+paper), so both are used at 16 x 16 x 40 nm.
 
 Bounding boxes are specified in 16 x 16 x 40 nm voxel coordinates
 (x_min, x_max, y_min, y_max, z_min, z_max).
@@ -44,15 +44,20 @@ SEG_URL = "gs://flywire_v141_m783"
 # mip=2 gives 16x16x40nm, matching the seg resolution; mip=0 is a placeholder with no data.
 EM_MIP = 2
 
-# Four 2048x2048x819-voxel crops sampling different brain regions.
-# At 16x16x40 nm this gives ~32x32x32 um physically isotropic subvolumes.
+# 1024x1024x410-voxel crops (16 x 16 x 16 um) inside brain tissue at three depths; the brain fills only part of
+# the coordinate range, so a box must be checked against the data.
 DEFAULT_BOUNDING_BOXES = [
-    (6000, 8048, 2000, 4048, 500, 1319),  # anterior-left, low z
-    (31000, 33048, 14500, 16548, 3200, 4019),  # central brain
-    (56000, 58048, 26500, 28548, 5800, 6619),  # posterior-right, high z
-    (15000, 17048, 8000, 10048, 6100, 6919),  # mid-left, high z
+    (35840, 36864, 6656, 7680, 1500, 1910),  # right, dorsal, anterior
+    (32768, 33792, 18944, 19968, 1500, 1910),  # midline, ventral, anterior
+    (15360, 16384, 17920, 18944, 3500, 3910),  # left optic lobe, ventral, mid-depth
+    (48128, 49152, 18944, 19968, 3500, 3910),  # right optic lobe, ventral, mid-depth
+    (24576, 25600, 11776, 12800, 3500, 3910),  # left, dorsal, mid-depth
+    (41984, 43008, 12800, 13824, 3500, 3910),  # right, mid-height, mid-depth
+    (18432, 19456, 11776, 12800, 5500, 5910),  # left, dorsal, posterior
+    (21504, 22528, 17920, 18944, 5500, 5910),  # left, ventral, posterior
+    (23552, 24576, 14848, 15872, 5500, 5910),  # left, mid-height, posterior
 ]
-DEFAULT_BOUNDING_BOX = DEFAULT_BOUNDING_BOXES[1]
+DEFAULT_BOUNDING_BOX = DEFAULT_BOUNDING_BOXES[4]
 
 FAFB_CHUNK_SHAPE = (64, 256, 256)
 
@@ -83,7 +88,7 @@ def get_fafb_data(
     Args:
         path: Filepath to a folder where the cached zarr store will be saved.
         bounding_box: The region to fetch as (x_min, x_max, y_min, y_max, z_min, z_max)
-            in 16 nm voxel coordinates. Defaults to a 2048x2048x819 central brain crop.
+            in 16 nm voxel coordinates. Defaults to DEFAULT_BOUNDING_BOXES, 1024x1024x410 crops inside brain tissue.
         download: Whether to stream and cache the data if it is not present.
 
     Returns:
@@ -116,6 +121,13 @@ def get_fafb_data(
 
     raw = np.array(em_vol[x_min:x_max, y_min:y_max, z_min:z_max])[..., 0].transpose(2, 1, 0)
     labels = np.array(seg_vol[x_min:x_max, y_min:y_max, z_min:z_max])[..., 0].transpose(2, 1, 0)
+
+    # The brain fills only part of the coordinate range and the servers return zeros outside it.
+    if not raw.any() or len(np.unique(labels)) < 2:
+        raise RuntimeError(
+            f"The bounding box {bounding_box} holds no tissue or no segmentation. "
+            "Pick a box inside the brain, e.g. one of DEFAULT_BOUNDING_BOXES."
+        )
 
     # FlyWire IDs are large uint64 values - relabel to consecutive integers.
     _, labels = np.unique(labels, return_inverse=True)
@@ -150,7 +162,7 @@ def get_fafb_paths(
         path: Filepath to a folder where the cached zarr stores will be saved.
         bounding_boxes: List of regions to fetch, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 16 nm voxel coordinates.
-            Defaults to DEFAULT_BOUNDING_BOXES (4 crops).
+            Defaults to DEFAULT_BOUNDING_BOXES, 1024x1024x410 crops inside brain tissue.
         download: Whether to stream and cache the data if it is not present.
 
     Returns:
@@ -177,7 +189,7 @@ def get_fafb_dataset(
         patch_shape: The patch shape (z, y, x) to use for training.
         bounding_boxes: List of subvolumes to use, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 16 nm voxel coordinates.
-            Defaults to DEFAULT_BOUNDING_BOXES - four 2048x2048x819 isotropic crops.
+            Defaults to DEFAULT_BOUNDING_BOXES, 1024x1024x410 crops inside brain tissue.
         download: Whether to stream and cache data if not already present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
@@ -223,7 +235,7 @@ def get_fafb_loader(
         batch_size: The batch size for training.
         bounding_boxes: List of subvolumes to use, each as
             (x_min, x_max, y_min, y_max, z_min, z_max) in 16 nm voxel coordinates.
-            Defaults to DEFAULT_BOUNDING_BOXES - four 2048x2048x819 isotropic crops.
+            Defaults to DEFAULT_BOUNDING_BOXES, 1024x1024x410 crops inside brain tissue.
         download: Whether to stream and cache data if not already present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.

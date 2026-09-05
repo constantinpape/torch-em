@@ -34,7 +34,8 @@ import torch_em
 from .. import util
 
 
-FTP_BASE = "https://ftp.ebi.ac.uk/pub/databases/biostudies/S-BIAD/263/S-BIAD3263/Files"
+# The BioStudies file service; the FTP mirror only carries the directory skeleton of this study.
+FTP_BASE = "https://www.ebi.ac.uk/biostudies/files/S-BIAD3263"
 ZARR_URL = f"{FTP_BASE}/Au_01-vol_01.zarr.zip"
 ZARR_ROOT = "Au_01-vol_01.zarr"
 
