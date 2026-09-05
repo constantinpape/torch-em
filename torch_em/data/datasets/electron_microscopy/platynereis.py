@@ -8,16 +8,18 @@ platynereis larve. Contains annotations for the segmentation of:
 This dataset is from the publication https://doi.org/10.1016/j.cell.2021.07.017.
 Please cite it if you use this dataset for a publication.
 
-NOTE: The cell segmentation does not resolve the neuropil into individual cells. It carries one
-instance id instead, listed per volume in `CELL_NEUROPIL_IDS`, which the cell dataset maps to
-`ignore_label`.
+The cell dataset stores corrected labels separately from the source annotations. It maps the
+neuropil IDs in `CELL_NEUROPIL_IDS` to `ignore_label` before sampling training patches.
 """
 
 import os
 from glob import glob
+from tempfile import TemporaryDirectory
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from elf.io import open_file
+from skimage.segmentation import flood
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -51,18 +53,22 @@ FILE_TEMPLATES = {
 # Default ignore label. Stays exact through a float32 round-trip, which the augmentations do,
 # and sits far above any real instance id.
 CELL_IGNORE_LABEL = 2 ** 24 - 1
+# Increment this version when corrections change, so stored labels and ROI caches are regenerated.
+CELL_LABEL_VERSION = 1
+CELL_SOURCE_LABEL_KEY = "volumes/labels/segmentation/s1"
+CELL_BACKGROUND_IDS = {7: (63,), 8: (5,)}
 
 # Ids that label neuropil rather than a single cell, found by inspecting every cell volume.
 CELL_NEUROPIL_IDS = {
     1: (),
-    2: (66,),
+    2: (),
     3: (253,),
     4: (58,),
     5: (72,),
-    6: (73, 11),
+    6: (73,),
     7: (),
-    8: (3, 43),
-    9: (19,),
+    8: (43,),
+    9: (19, 1084),
 }
 
 
@@ -78,34 +84,107 @@ def get_platynereis_cell_neuropil_ids(sample_id: int) -> Tuple[int, ...]:
     return CELL_NEUROPIL_IDS.get(sample_id, ())
 
 
-class MapIdsToIgnoreLabel:
-    """Map the given instance ids to an ignore label, then apply another label transform.
+def get_platynereis_cell_label_key(ignore_label: int = CELL_IGNORE_LABEL) -> str:
+    """Get the N5 key for corrected cell labels.
 
     Args:
-        ids: The instance ids to map.
-        ignore_label: The value to map them to.
-        label_transform: An optional label transform to apply afterwards.
+        ignore_label: The value assigned to neuropil voxels.
+
+    Returns:
+        The dataset key, including the correction version and ignore label.
     """
+    return f"volumes/labels/segmentation_corrected/v{CELL_LABEL_VERSION}/ignore_{ignore_label}/s1"
 
-    def __init__(self, ids: Sequence[int], ignore_label: int, label_transform: Optional[Any] = None):
-        self.ids = tuple(ids)
-        self.ignore_label = ignore_label
-        self.label_transform = label_transform
 
-    def __call__(self, labels):
-        if self.ids:
-            labels = np.asarray(labels)
-            mask = np.isin(labels, self.ids)
-            if mask.any():
-                # Widen the dtype if the ignore label does not fit.
-                if labels.dtype.kind in "ui" and self.ignore_label > np.iinfo(labels.dtype).max:
-                    labels = labels.astype("uint64")
-                else:
-                    labels = labels.copy()
-                labels[mask] = self.ignore_label
-        if self.label_transform is not None:
-            labels = self.label_transform(labels)
-        return labels
+def _split_cell_label(labels, source_id, target_id, seed, expected_size, expected_bbox):
+    if any(c >= size for c, size in zip(seed, labels.shape)) or labels[seed] != source_id:
+        raise ValueError("The muscle seed does not point to the expected source label.")
+    if np.any(labels == target_id):
+        raise ValueError(f"The muscle target label {target_id} is already assigned.")
+    muscle = flood(labels, seed, connectivity=3)
+    coordinates = np.where(muscle)
+    bbox = tuple((int(c.min()), int(c.max()) + 1) for c in coordinates)
+    if int(muscle.sum()) != expected_size or bbox != expected_bbox:
+        raise ValueError("The muscle component differs from the inspected size or bounding box.")
+    labels[muscle] = target_id
+
+
+def _correct_cell_labels(labels, sample_id, ignore_label):
+    labels = labels.astype("int64" if ignore_label < 0 else "uint64", copy=True)
+    if ignore_label != 0 and np.any(labels == ignore_label):
+        raise ValueError(f"The ignore label {ignore_label} is already assigned to an instance.")
+    if sample_id == 5:
+        if ignore_label == 256:
+            raise ValueError("The ignore label conflicts with the new muscle label 256.")
+        _split_cell_label(
+            labels, source_id=72, target_id=256, seed=(29, 70, 242), expected_size=102740,
+            expected_bbox=((15, 80), (64, 129), (185, 293)),
+        )
+    for label_id in CELL_BACKGROUND_IDS.get(sample_id, ()):
+        labels[labels == label_id] = 0
+    for label_id in get_platynereis_cell_neuropil_ids(sample_id):
+        labels[labels == label_id] = ignore_label
+    return labels
+
+
+def _prepare_cell_labels(path, sample_id, ignore_label):
+    key = get_platynereis_cell_label_key(ignore_label)
+    target = os.path.join(path, key)
+    if os.path.exists(target):
+        return
+    with open_file(path, "r") as f:
+        source = f[CELL_SOURCE_LABEL_KEY]
+        labels = _correct_cell_labels(source[:], sample_id, ignore_label)
+        chunks = source.chunks
+        spatial_attrs = {name: source.attrs[name] for name in ("offset", "global_offset") if name in source.attrs}
+
+    # Publish the complete dataset atomically. Other training ranks may prepare it at the same time.
+    with TemporaryDirectory(dir=path, prefix=".cell-labels-") as tmp:
+        tmp_path = os.path.join(tmp, "labels.n5")
+        with open_file(tmp_path, "a") as f:
+            ds = f.create_dataset("labels", data=labels, chunks=chunks, compression="gzip")
+            ds.attrs.update(spatial_attrs)
+            ds.attrs.update({
+                "correction_version": CELL_LABEL_VERSION,
+                "source_key": CELL_SOURCE_LABEL_KEY,
+                "sample_id": sample_id,
+                "ignore_label": ignore_label,
+                "neuropil_ids": list(get_platynereis_cell_neuropil_ids(sample_id)),
+                "background_ids": list(CELL_BACKGROUND_IDS.get(sample_id, ())),
+            })
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        try:
+            os.rename(os.path.join(tmp_path, "labels"), target)
+        except OSError:
+            if not os.path.isdir(target):
+                raise
+
+
+def prepare_platynereis_cell_data(
+    path: Union[os.PathLike, str],
+    sample_ids: Optional[Sequence[int]] = None,
+    download: bool = False,
+    ignore_label: int = CELL_IGNORE_LABEL,
+) -> List[str]:
+    """Prepare corrected cell labels without changing the source annotations.
+
+    Corrections split the muscle cell in volume 5, remove false foreground in volumes 7 and 8,
+    and map neuropil IDs to the ignore label. Existing labels for this version are reused.
+
+    Args:
+        path: Folder containing the membrane subfolder.
+        sample_ids: Volume IDs to prepare. By default, prepare all nine volumes.
+        download: Whether to download missing source data.
+        ignore_label: The value assigned to neuropil voxels.
+
+    Returns:
+        The N5 paths in sample ID order. Read corrected labels with `get_platynereis_cell_label_key`.
+    """
+    sample_ids = list(range(1, 10)) if sample_ids is None else sorted(sample_ids)
+    paths = get_platynereis_paths(path, sample_ids, name="cells", download=download)
+    for sample_id, data_path in zip(sample_ids, paths):
+        _prepare_cell_labels(data_path, sample_id, ignore_label)
+    return paths
 
 
 #
@@ -340,14 +419,6 @@ def get_platynereis_cilia_loader(
     return torch_em.get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
 
-def _resolve_cell_sample_ids(path, sample_ids, download):
-    """Resolve sample ids the same way `get_platynereis_paths` does, so they line up with its paths."""
-    _, n_files = get_platynereis_data(path, "cells", download)
-    if sample_ids is None:
-        return list(range(1, n_files + 1))
-    return sorted(sample_ids)
-
-
 def get_platynereis_cell_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
@@ -379,27 +450,21 @@ def get_platynereis_cell_dataset(
     data_paths, data_rois = get_platynereis_paths(
         path=path, sample_ids=sample_ids, name="cells", rois=rois, download=download, return_rois=True,
     )
+    prepare_platynereis_cell_data(path, sample_ids, download=download, ignore_label=ignore_label)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=False, boundaries=boundaries, offsets=offsets,
     )
 
     ds_kwargs = dict(
-        raw_key="volumes/raw/s1", label_key="volumes/labels/segmentation/s1", patch_shape=patch_shape,
+        raw_key="volumes/raw/s1", label_key=get_platynereis_cell_label_key(ignore_label), patch_shape=patch_shape,
     )
 
-    resolved_ids = _resolve_cell_sample_ids(path, sample_ids, download)
     datasets = []
-    for sample_id, data_path, data_roi in zip(resolved_ids, data_paths, data_rois):
-        sample_kwargs = dict(kwargs)
-        sample_kwargs["label_transform"] = MapIdsToIgnoreLabel(
-            ids=get_platynereis_cell_neuropil_ids(sample_id),
-            ignore_label=ignore_label,
-            label_transform=sample_kwargs.get("label_transform"),
-        )
+    for data_path, data_roi in zip(data_paths, data_rois):
         datasets.append(
             torch_em.default_segmentation_dataset(
-                raw_paths=[data_path], label_paths=[data_path], rois=[data_roi], **ds_kwargs, **sample_kwargs
+                raw_paths=[data_path], label_paths=[data_path], rois=[data_roi], **ds_kwargs, **kwargs
             )
         )
 
