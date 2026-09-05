@@ -42,6 +42,7 @@ from .platynereis import (
     get_platynereis_cuticle_loader, get_platynereis_cuticle_dataset,
     get_platynereis_nuclei_loader, get_platynereis_nuclei_dataset
 )
+from .popsicle import get_popsicle_loader, get_popsicle_dataset
 from .saber import get_saber_loader, get_saber_dataset
 from .snemi import get_snemi_loader, get_snemi_dataset
 from .sponge_em import get_sponge_em_loader, get_sponge_em_dataset
