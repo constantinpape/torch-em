@@ -33,8 +33,10 @@ import os
 import shutil
 from glob import glob
 from pathlib import Path
+from warnings import warn
 from typing import Union, Optional, List, Tuple
 
+from packaging import version
 from sklearn.model_selection import train_test_split
 
 import torch
@@ -44,12 +46,20 @@ import torch_em
 
 from .. import util
 
+try:
+    import gdown
+except ImportError:
+    gdown = None
+
 
 URL = "https://drive.google.com/drive/folders/1zqbdkQF8i5cEmZOGmbdQm-EP8dRYtvss?usp=sharing"
 
 
 # TODO
 CHECKSUM = None
+
+# Google Drive can deny access to some files in the folder above. A retry usually gets them.
+MAX_DOWNLOAD_ATTEMPTS = 3
 
 
 TEST_LIST = [
@@ -65,32 +75,58 @@ TEST_LIST = [
 
 
 def _download_bcss_dataset(path, download):
-    """Current recommendation:
-        - download the folder from URL manually
-        - use the consortium's git repo to download the dataset (https://github.com/PathologyDataScience/BCSS)
-    """
-    raise NotImplementedError("Please download the dataset using the drive link / git repo directly")
+    for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
+        if not os.path.exists(path):
+            util.download_source_gdrive(
+                path=path, url=URL, download=download, checksum=CHECKSUM, download_type="folder"
+            )
+        else:
+            # `download_folder` skips files that already exist on disk.
+            # This call only retries the files that a previous attempt could not download.
+            assert version.parse(gdown.__version__) == version.parse("4.6.3"), "Please install 'gdown==4.6.3'."
+            gdown.download_folder.__globals__["MAX_NUMBER_FILES"] = 10000
+            gdown.download_folder(url=URL, output=path, quiet=True, remaining_ok=True)
 
-    # FIXME: limitation for the installation below:
-    #   - only downloads first 50 files - due to `gdown`'s download folder function
-    #   - (optional) clone their git repo to download their data
-    util.download_source_gdrive(path=path, url=URL, download=download, checksum=CHECKSUM, download_type="folder")
+        n_images = len(glob(os.path.join(path, "rgbs_colorNormalized", "*")))
+        n_masks = len(glob(os.path.join(path, "masks", "*")))
+        if n_images > 0 and n_images == n_masks:
+            return
+        print(f"Download attempt {attempt} of {MAX_DOWNLOAD_ATTEMPTS} found {n_images} images and {n_masks} masks.")
+
+    print(
+        "Google Drive did not serve every file after several attempts. "
+        "The dataset will use only the images that have a matching mask."
+    )
 
 
 def _get_image_and_label_paths(path):
     # when downloading the files from `URL`, the input images are stored under `rgbs_colorNormalized`
     # when getting the files from the git repo's command line feature, the input images are stored under `images`
     if os.path.exists(os.path.join(path, "images")):
-        image_paths = sorted(glob(os.path.join(path, "images", "*")))
-        label_paths = sorted(glob(os.path.join(path, "masks", "*")))
-    elif os.path.exists(os.path.join(path, "0_Public-data-Amgad2019_0.25MPP", "rgbs_colorNormalized")):
-        image_paths = sorted(glob(os.path.join(path, "0_Public-data-Amgad2019_0.25MPP", "rgbs_colorNormalized", "*")))
-        label_paths = sorted(glob(os.path.join(path, "0_Public-data-Amgad2019_0.25MPP", "masks", "*")))
+        image_dir = os.path.join(path, "images")
+    elif os.path.exists(os.path.join(path, "rgbs_colorNormalized")):
+        image_dir = os.path.join(path, "rgbs_colorNormalized")
     else:
         raise ValueError(
             "Please check the image directory. "
             "If downloaded from gdrive, it's named \"rgbs_colorNormalized\", if from github it's named \"images\""
         )
+    label_dir = os.path.join(path, "masks")
+
+    # Google Drive can deny access to individual files, so the folder download can skip some of them.
+    # We pair each image with its mask by filename, not by their sorted order.
+    image_stems = {Path(p).stem: p for p in glob(os.path.join(image_dir, "*"))}
+    label_stems = {Path(p).stem: p for p in glob(os.path.join(label_dir, "*"))}
+    common_stems = sorted(set(image_stems) & set(label_stems))
+
+    if len(common_stems) < len(image_stems) or len(common_stems) < len(label_stems):
+        warn(
+            f"Found {len(image_stems)} images and {len(label_stems)} masks, but only {len(common_stems)} "
+            "of them form a matching pair. The dataset will use only the matching pairs."
+        )
+
+    image_paths = [image_stems[stem] for stem in common_stems]
+    label_paths = [label_stems[stem] for stem in common_stems]
 
     return image_paths, label_paths
 
