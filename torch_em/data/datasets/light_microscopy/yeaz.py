@@ -76,8 +76,8 @@ def _create_data_splits(path, data_dir, choice, split, raw_paths):
         names = [os.path.basename(p) for p in raw_paths]
 
         # Create train / val / test splits
-        train_split, test_split = train_test_split(names, test_size=0.2)
-        train_split, val_split = train_test_split(train_split, test_size=0.15)
+        train_split, test_split = train_test_split(names, test_size=0.2, random_state=42)
+        train_split, val_split = train_test_split(train_split, test_size=0.15, random_state=42)
         data = {"train": train_split, "val": val_split, "test": test_split}
 
         # Write the filenames with splits to a json file.

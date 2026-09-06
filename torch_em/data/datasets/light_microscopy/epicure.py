@@ -62,7 +62,7 @@ SOURCE_INFO = {
         "raw": "data_generalisations/movie4/Composite_cropped.tif",
         "label": "data_generalisations/movie4/epics_correctedWithTA/Composite_cropped_labels.tif",
         "channel_axis": 0,
-        "main_channel": 0,
+        "main_channel": 1,  # Channel 0 of the composite holds only noise, the membranes are in channel 1.
         "single_frame": True,
     },
 }

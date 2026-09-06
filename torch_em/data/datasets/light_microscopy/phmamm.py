@@ -9,7 +9,7 @@ Please cite it if you use this dataset in your research.
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, Optional, List
+from typing import Union, Tuple, Optional, List, Sequence
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -56,12 +56,13 @@ def get_phmamm_data(path: Union[os.PathLike, str], download: bool = False) -> st
 
 
 def get_phmamm_paths(
-    path: Union[os.PathLike, str], download: bool = False,
+    path: Union[os.PathLike, str], timepoints: Optional[Sequence[int]] = None, download: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the PhMamm data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        timepoints: The timepoints of the time-lapse to restrict to, e.g. range(1, 81). By default all 100 are used.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -74,6 +75,12 @@ def get_phmamm_paths(
     label_paths = natsorted(glob(os.path.join(data_dir, "ASTEC_Ground_truth", "*.tiff")))
     assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0
 
+    if timepoints is not None:
+        timepoints = set(timepoints)
+        keep = [int(os.path.basename(p).split("_t")[1][:3]) in timepoints for p in raw_paths]
+        raw_paths = [p for p, k in zip(raw_paths, keep) if k]
+        label_paths = [p for p, k in zip(label_paths, keep) if k]
+
     return raw_paths, label_paths
 
 
@@ -83,6 +90,7 @@ def get_phmamm_dataset(
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     binary: bool = False,
+    timepoints: Optional[Sequence[int]] = None,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -94,13 +102,14 @@ def get_phmamm_dataset(
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
+        timepoints: The timepoints of the time-lapse to restrict to, e.g. range(1, 81). By default all 100 are used.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_phmamm_paths(path, download)
+    raw_paths, label_paths = get_phmamm_paths(path, timepoints, download)
 
     kwargs, _ = util.add_instance_label_transform(
         kwargs, add_binary_target=True, offsets=offsets, boundaries=boundaries, binary=binary
@@ -123,6 +132,7 @@ def get_phmamm_loader(
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     binary: bool = False,
+    timepoints: Optional[Sequence[int]] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -135,6 +145,7 @@ def get_phmamm_loader(
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
+        timepoints: The timepoints of the time-lapse to restrict to, e.g. range(1, 81). By default all 100 are used.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -148,6 +159,7 @@ def get_phmamm_loader(
         offsets=offsets,
         boundaries=boundaries,
         binary=binary,
+        timepoints=timepoints,
         download=download,
         **ds_kwargs,
     )
