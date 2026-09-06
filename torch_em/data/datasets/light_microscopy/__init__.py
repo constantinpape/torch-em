@@ -49,6 +49,7 @@ from .epicure import get_epicure_data, get_epicure_paths, get_epicure_loader, ge
 from .evican import get_evican_loader, get_evican_dataset
 from .fluo_neuronal_cells import get_fluo_neuronal_cells_loader, get_fluo_neuronal_cells_dataset
 from .flywing import get_flywing_data, get_flywing_paths, get_flywing_loader, get_flywing_dataset
+from .fusionx import get_fusionx_data, get_fusionx_paths, get_fusionx_loader, get_fusionx_dataset
 from .medussa import get_medussa_loader, get_medussa_dataset
 from .mndino import get_mndino_loader, get_mndino_dataset
 from .glioma_c6 import get_glioma_c6_loader, get_glioma_c6_dataset

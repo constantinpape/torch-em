@@ -404,6 +404,23 @@ def unzip(zip_path: str, dst: str, remove: bool = True) -> None:
         os.remove(zip_path)
 
 
+def unzip_7z(path_7z: str, dst: str, remove: bool = True) -> None:
+    """Unpack a 7z archive.
+
+    Args:
+        path_7z: Path to the 7z file.
+        dst: Where to unpack the archive.
+        remove: Whether to remove the 7z file after unpacking.
+    """
+    if which("7z") is None:
+        raise RuntimeError("Need the 'p7zip' CLI to extract 7z archives. You can install it via 'conda install -c conda-forge p7zip'.")  # noqa
+
+    run(["7z", "x", f"-o{dst}", "-y", path_7z])
+
+    if remove:
+        os.remove(path_7z)
+
+
 def split_kwargs(function, **kwargs):
     """@private
     """
