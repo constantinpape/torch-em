@@ -8,6 +8,7 @@ Please cite it if you use this dataset for your research.
 """
 
 import os
+import warnings
 import subprocess
 from glob import glob
 from natsort import natsorted
@@ -22,6 +23,16 @@ from .neurips_cell_seg import to_rgb
 
 
 DOWNLOAD_SCRIPT = 'wget -c -nH -np -r -R "index.html*" --cut-dirs 4 ftp://ftp.cngb.org/pub/CNSA/data5/CNP0006370/Other/'
+
+# Files that are corrupted in the source archive (5 of 1044 pairs): one truncated ssDNA image and four
+# instance masks that are not TIFF files. Their image-label pairs are skipped.
+CORRUPTED_FILES = {
+    "HH799999864GO_W8_36_62-img.tif",
+    "X98668W8-x10151_y9176_w256_h256-instancemask.tif",
+    "Z98801V5-x15153_y13890_w256_h256-instancemask.tif",
+    "HH799999356_M1-x1536_y9216_w512_h512-instancemask.tif",
+    "X97754Z3-x17024_y19696_w512_h512-instancemask.tif",
+}
 
 CHOICES = ["10×Genomics_DAPI", "10×Genomics_HE", "DAPI", "HE", "mIF", "ssDNA"]
 
@@ -84,7 +95,9 @@ def get_cellbindb_paths(
 
     # NOTE: Some files are corrupted from source. Since it's just a few of them, let's bump them out.
     valid_paired_images = [
-        (rp, lp) for rp, lp in zip(raw_paths, label_paths) if _is_valid_image(rp) and _is_valid_image(lp)
+        (rp, lp) for rp, lp in zip(raw_paths, label_paths)
+        if not {os.path.basename(rp), os.path.basename(lp)} & CORRUPTED_FILES
+        and _is_valid_image(rp) and _is_valid_image(lp)
     ]
     raw_paths, label_paths = zip(*valid_paired_images)
     raw_paths, label_paths = list(raw_paths), list(label_paths)
@@ -101,7 +114,7 @@ def _is_valid_image(im_path):
         _ = tifffile.imread(im_path)
         return True
     except Exception as e:
-        print(f"'{im_path}' throwing '{type(e).__name__}': '{e}'")
+        warnings.warn(f"Skipping the corrupted CellBinDB file '{im_path}': {type(e).__name__}: {e}")
         return False
 
 
