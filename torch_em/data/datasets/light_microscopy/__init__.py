@@ -47,6 +47,7 @@ from .embedseg_data import get_embedseg_loader, get_embedseg_dataset
 from .enseg import get_enseg_loader, get_enseg_dataset
 from .epicure import get_epicure_data, get_epicure_paths, get_epicure_loader, get_epicure_dataset
 from .evican import get_evican_loader, get_evican_dataset
+from .fl2net import get_fl2net_loader, get_fl2net_dataset
 from .fluo_neuronal_cells import get_fluo_neuronal_cells_loader, get_fluo_neuronal_cells_dataset
 from .flywing import get_flywing_data, get_flywing_paths, get_flywing_loader, get_flywing_dataset
 from .fusionx import get_fusionx_data, get_fusionx_paths, get_fusionx_loader, get_fusionx_dataset
