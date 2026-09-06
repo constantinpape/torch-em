@@ -13,7 +13,7 @@ from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from natsort import natsorted
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Optional, Sequence
 
 import imageio.v3 as imageio
 
@@ -78,36 +78,46 @@ def get_pnas_arabidopsis_data(path: Union[os.PathLike, str], download: bool = Fa
     return data_dir
 
 
-def get_pnas_arabidopsis_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
+def get_pnas_arabidopsis_paths(
+    path: Union[os.PathLike, str], plants: Optional[Sequence[str]] = None, download: bool = False
+) -> List[str]:
     """Get paths to the PNAS Arabidopsis data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        plants: The plants to restrict to, e.g. ["plant4"]. By default all six plants are used.
         download: Whether to download the data if it is not present.
 
     Returns:
         List of filepaths for the volumetric data.
     """
     data_dir = get_pnas_arabidopsis_data(path, download)
-    volume_paths = glob(os.path.join(data_dir, "*.h5"))
+    volume_paths = sorted(glob(os.path.join(data_dir, "*.h5")))
+    if plants is not None:
+        volume_paths = [p for p in volume_paths if os.path.basename(p).split("_")[1] in plants]
     return volume_paths
 
 
 def get_pnas_arabidopsis_dataset(
-    path: Union[os.PathLike, str], patch_shape: Tuple[int, ...], download: bool = False, **kwargs
+    path: Union[os.PathLike, str],
+    patch_shape: Tuple[int, ...],
+    plants: Optional[Sequence[str]] = None,
+    download: bool = False,
+    **kwargs
 ) -> Dataset:
     """Get the PNAS Arabidopsis dataset for cell segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
+        plants: The plants to restrict to, e.g. ["plant4"]. By default all six plants are used.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    volume_paths = get_pnas_arabidopsis_paths(path, download)
+    volume_paths = get_pnas_arabidopsis_paths(path, plants, download)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=volume_paths,
@@ -121,7 +131,12 @@ def get_pnas_arabidopsis_dataset(
 
 
 def get_pnas_arabidopsis_loader(
-    path: Union[os.PathLike, str], batch_size: int, patch_shape: Tuple[int, ...], download: bool = False, **kwargs
+    path: Union[os.PathLike, str],
+    batch_size: int,
+    patch_shape: Tuple[int, ...],
+    plants: Optional[Sequence[str]] = None,
+    download: bool = False,
+    **kwargs
 ) -> DataLoader:
     """Get the PNAS Arabidopsis dataset for cell segmentation.
 
@@ -129,6 +144,7 @@ def get_pnas_arabidopsis_loader(
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
+        plants: The plants to restrict to, e.g. ["plant4"]. By default all six plants are used.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -136,5 +152,5 @@ def get_pnas_arabidopsis_loader(
         The segmentation dataset.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_pnas_arabidopsis_dataset(path, patch_shape, download, **ds_kwargs)
+    dataset = get_pnas_arabidopsis_dataset(path, patch_shape, plants, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
