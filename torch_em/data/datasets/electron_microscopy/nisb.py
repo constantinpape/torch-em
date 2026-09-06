@@ -40,10 +40,14 @@ NISB_CHUNK_SHAPE = (64, 64, 64)
 NISB_SHARD_SHAPE = (512, 512, 512)
 
 
-def _nisb_n_seeds(setting: str, split: str) -> int:
-    if split in ("val", "test"):
-        return 1
-    return 100 if setting == "train_100" else 5
+# The val and test cubes are stored under these seed ids on S3.
+NISB_SEED_IDS = {"val": (100,), "test": (101,)}
+
+
+def _nisb_seed_ids(setting: str, split: str) -> Tuple[int, ...]:
+    if split in NISB_SEED_IDS:
+        return NISB_SEED_IDS[split]
+    return tuple(range(100 if setting == "train_100" else 5))
 
 
 def _nisb_zarr_complete(zarr_path: str) -> bool:
@@ -143,9 +147,8 @@ def get_nisb_data(path: Union[os.PathLike, str], setting: str, split: str, downl
     assert split in ("train", "val", "test"), f"Invalid split '{split}'. Choose 'train', 'val', or 'test'."
 
     split_dir = os.path.join(str(path), setting, split)
-    n = _nisb_n_seeds(setting, split)
 
-    for i in tqdm(range(n), desc=f"NISB {setting}/{split}", leave=False):
+    for i in tqdm(_nisb_seed_ids(setting, split), desc=f"NISB {setting}/{split}", leave=False):
         seed_dir = os.path.join(split_dir, f"seed{i}")
         zarr_path = os.path.join(seed_dir, "data.zarr")
 
