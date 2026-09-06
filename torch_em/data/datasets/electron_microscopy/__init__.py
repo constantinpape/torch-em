@@ -4,6 +4,7 @@ from .astih import get_astih_loader, get_astih_dataset
 from .axondeepseg import get_axondeepseg_loader, get_axondeepseg_dataset
 from .axonem import get_axonem_loader, get_axonem_dataset
 from .betaseg import get_betaseg_loader, get_betaseg_dataset
+from .cefa_hela import get_cefa_hela_loader, get_cefa_hela_dataset
 from .cellmap import get_cellmap_loader, get_cellmap_dataset
 from .cem import get_mitolab_loader
 from .cremi import get_cremi_loader, get_cremi_dataset
