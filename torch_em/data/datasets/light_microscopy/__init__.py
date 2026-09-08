@@ -52,6 +52,7 @@ from .fluo_neuronal_cells import get_fluo_neuronal_cells_loader, get_fluo_neuron
 from .flywing import get_flywing_data, get_flywing_paths, get_flywing_loader, get_flywing_dataset
 from .fusionx import get_fusionx_data, get_fusionx_paths, get_fusionx_loader, get_fusionx_dataset
 from .medussa import get_medussa_loader, get_medussa_dataset
+from .micronucml import get_micronucml_loader, get_micronucml_dataset
 from .mndino import get_mndino_loader, get_mndino_dataset
 from .glioma_c6 import get_glioma_c6_loader, get_glioma_c6_dataset
 from .gonuclear import get_gonuclear_loader, get_gonuclear_dataset
