@@ -217,6 +217,52 @@ def _find_instance_path(input_dir, subset, fov):
     return None
 
 
+def _recover_saturated_ids(instances, rgb_path):
+    """Recover the cell ids that a uint16 mask clips at 65535 from the RGB rendering of the mask.
+
+    Four CODEX colon fields hold more than 65534 cells. Their '_labeled.ome.tif' is uint16, so every cell
+    from id 65535 on shares that value. The '_masks.png' next to it draws each cell in its own colour, with a
+    one pixel edge ring in the colour of a neighbour. The cells are the colour components with an interior
+    pixel inside the saturated region. The rings go to the nearest such component.
+    """
+    from PIL import Image
+    from skimage.measure import label
+    from skimage.segmentation import expand_labels
+
+    saturated_id = np.iinfo(instances.dtype).max
+    saturated = instances == saturated_id
+
+    Image.MAX_IMAGE_PIXELS = None
+    rgb = np.asarray(Image.open(rgb_path)).astype("uint32")
+    colour = rgb[..., 0] + (rgb[..., 1] << 8) + (rgb[..., 2] << 16)
+    components = label(np.where(saturated, colour + 1, 0), connectivity=1)
+
+    interior = components > 0
+    for axis in (0, 1):
+        for shift in (1, -1):
+            interior &= np.roll(components, shift, axis=axis) == components
+    keep = np.zeros(components.max() + 1, dtype=bool)
+    keep[np.unique(components[interior])] = True
+    keep[0] = False
+    cores = np.unique(np.where(keep[components], components, 0), return_inverse=True)[1].reshape(components.shape)
+
+    cells = expand_labels(cores, distance=3)
+    cells[~saturated] = 0
+    recovered = instances.astype("uint32")
+    recovered[saturated] = 0
+    recovered[cells > 0] = cells[cells > 0] + saturated_id - 1
+    return recovered
+
+
+def _load_instances(instance_path):
+    """Load a cell mask and recover the ids that its uint16 encoding clipped."""
+    instances = np.squeeze(tifffile.imread(instance_path))
+    rgb_path = instance_path.replace("_labeled.ome.tif", "_masks.png")
+    if instances.dtype == np.uint16 and instances.max() == np.iinfo(np.uint16).max and os.path.exists(rgb_path):
+        instances = _recover_saturated_ids(instances, rgb_path)
+    return instances.astype("uint32")
+
+
 def _preprocess_data(input_dir, data_dir, subset):
     import h5py
 
@@ -255,7 +301,7 @@ def _preprocess_data(input_dir, data_dir, subset):
         if membrane is None:
             membrane = np.zeros_like(nuclei)
 
-        instances = np.squeeze(tifffile.imread(instance_path)).astype("uint32")
+        instances = _load_instances(instance_path)
 
         # The volume is written under a temporary name and renamed once it is complete, so that an
         # interrupted write does not leave a partial file that the check above would skip forever.
