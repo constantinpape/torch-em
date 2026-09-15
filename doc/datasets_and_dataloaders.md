@@ -13,6 +13,8 @@ All datasets in `torch_em.data.datasets` are implemented according to the follow
 
 We provide ready-to-use light microscopy datasets in `torch_em.data.datasets.light_microscopy`, electron microscopy datasets in `torch_em.data.datasets.electron_microscopy`, histopathology datases in `torch_em.data.datasets.histopathology` and medical imaging datasets in `torch_em.data.datasets.medical`.
 
+See [nnInteractive Datasets](nninteractive_datasets.md) for the list of all datasets used to train and evaluate nnInteractive and which of them are available in `torch_em`.
+
 ## Creating your own Dataset and DataLoader
 
 The following tutorial walks you through the steps to create a `torch_em`-based dataloader for your data.
