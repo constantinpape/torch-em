@@ -9,6 +9,20 @@ on TCIA. The segmentation masks are from the third-party "PROSTATEx masks" repos
   The zone labels are: 1: peripheral zone, 2: transition zone (the rest of the gland, i.e. transition zone,
   central zone and anterior fibromuscular stroma).
 
+The label type 'zones_detailed' provides a second, finer set of zonal masks on the axial T2-weighted images
+from the ProstateZones release (Hartman et al. 2024), which separates the zones the label type 'zones' merges
+and adds the urethra, for 200 patients. Its label ids are 1: peripheral zone, 2: central zone,
+3: transition zone, 4: anterior fibromuscular stroma, 5: urethra (see `DETAILED_ZONE_IDS`). 40 of these
+patients were delineated by two readers independently; the second delineation is stored next to the first as
+'zones_detailed/t2/labels_reader2'.
+
+NOTE: The ProstateZones masks are distributed without the images they were drawn on and without their label
+legend. The series was identified from the list of series that its repository ships, and the label ids were
+assigned by measuring each annotation: the urethra is the smallest structure, the transition zone the largest,
+the anterior fibromuscular stroma the most anterior one and the central zone the most superior one.
+
+NOTE: This requires the pynrrd python package to read the ProstateZones masks.
+
 This module downloads only the annotated T2 and ADC series from TCIA, stacks them into volumes and stores them
 together with the aligned masks in one hdf5 file per patient. The masks were drawn on NIfTI conversions of the DICOM
 series (dcm2niix), so the module maps them back onto the DICOM grid and checks the alignment against the NIfTI images
@@ -23,7 +37,8 @@ The dataset is located at https://www.cancerimagingarchive.net/collection/prosta
 and the masks at https://github.com/rcuocolo/PROSTATEx_masks.
 
 This dataset is from the publications https://doi.org/10.1109/TMI.2014.2303821 (PROSTATEx)
-and https://doi.org/10.1016/j.ejrad.2021.109647 (masks).
+https://doi.org/10.1016/j.ejrad.2021.109647 (masks) and
+https://doi.org/10.1038/s41597-024-03945-2 (ProstateZones, CC BY 4.0).
 The data was released at https://doi.org/10.7937/K9TCIA.2017.MURS5CL.
 Please cite them if you use this dataset in your research.
 """
@@ -53,14 +68,27 @@ MASKS_COMMIT = "21b9dfde9da4f7b719c206fe1ca00ae31d6f5cf3"
 URLS = {
     "images": f"{util.NBIA_API_URL}getSeries?Collection=PROSTATEx",
     "masks": f"https://github.com/rcuocolo/PROSTATEx_masks/archive/{MASKS_COMMIT}.zip",
+    "zones_detailed": "https://zenodo.org/records/10718469/files/ProstateZones.zip?download=1",
+    "series_list": (
+        "https://raw.githubusercontent.com/UMU-DDI/ProstateZones/main/Support%20Files/list_of_PROSTATEx_files.txt"
+    ),
 }
 
 CHECKSUMS = {
     "images": None,  # The DICOM series are downloaded individually from TCIA.
     "masks": None,  # GitHub does not guarantee stable archive checksums.
+    "zones_detailed": "5a45816230b4bf94e88527a00754cc0b9329ec2c3459179a3931c11cb574e80a",
+    "series_list": None,  # GitHub does not guarantee stable raw file checksums.
 }
 
 ZONE_IDS = {"peripheral_zone": 1, "transition_zone": 2}
+"""The zone ids of the 'zones' labels."""
+
+DETAILED_ZONE_IDS = {
+    "peripheral_zone": 1, "central_zone": 2, "transition_zone": 3,
+    "anterior_fibromuscular_stroma": 4, "urethra": 5,
+}
+"""The zone ids of the 'zones_detailed' labels."""
 
 
 def _load_dicom_volume(series_dir):
@@ -116,6 +144,55 @@ def _read_image_lists(mask_dir):
             image_path = os.path.join(mask_dir, "prostate", "Images", f"{row['T2'].strip()}.nii.gz")
             image_series[("zones", "t2", patient_id)] = (series_number, image_path)
     return image_series
+
+
+def _nrrd_on_dicom_grid(path):
+    """Map a ProstateZones nrrd array (x, y, z) onto the DICOM grid (z, y, x).
+
+    These are stored with the geometry of the series they were drawn on, so unlike the dcm2niix NIfTI
+    conversions of the lesion and zone masks they only have to be transposed and not flipped.
+    """
+    import nrrd
+
+    data, _ = nrrd.read(path)
+    return np.asarray(data).transpose(2, 1, 0)
+
+
+def _read_detailed_zone_series(path):
+    """Read the axial T2 series number of every patient from the ProstateZones series list.
+
+    Each line names the series of one patient, starting with the axial T2 series, e.g.
+    'ProstateX-0000:4.000000-t2tsetra-00702:3.000000-t2tsesag-87368:...'.
+    """
+    series_numbers = {}
+    with open(os.path.join(path, "list_of_PROSTATEx_files.txt"), "r") as f:
+        for line in f:
+            fields = line.strip().split(":")
+            if len(fields) < 2:
+                continue
+            match = re.match(r"([\d.]+)-t2tsetra-", fields[1])
+            if match is not None:
+                series_numbers[fields[0]] = int(float(match.group(1)))
+    return series_numbers
+
+
+def _get_detailed_zone_masks(zones_dir, patient_id):
+    """Get the ProstateZones masks of a patient, which are one file or one file per reader."""
+    number = patient_id.split("-")[-1]
+    single = os.path.join(zones_dir, "Singles", f"Seg-{number}.nrrd")
+    if os.path.exists(single):
+        return [single]
+    duplicates = [os.path.join(zones_dir, "Duplicates", reader, f"Seg-{number}_{reader}.nrrd")
+                  for reader in ("R1", "R2")]
+    return duplicates if all(os.path.exists(mask_path) for mask_path in duplicates) else []
+
+
+def _load_detailed_zone_labels(mask_paths, shape):
+    """Load the ProstateZones masks of a patient, one per reader."""
+    labels = [_nrrd_on_dicom_grid(mask_path) for mask_path in mask_paths]
+    if any(mask.shape != shape for mask in labels):
+        return None
+    return [mask.astype("uint8") for mask in labels]
 
 
 def _get_series_metadata(path, download):
@@ -214,7 +291,7 @@ def _load_zone_labels(mask_paths, shape):
     return zones, prostate.astype("uint8")
 
 
-def _preprocess_prostatex(dicom_dir, mask_dir, series_metadata, image_series, preprocessed_dir):
+def _preprocess_prostatex(dicom_dir, mask_dir, zones_dir, series_metadata, image_series, preprocessed_dir):
     import h5py
 
     series_by_number = defaultdict(list)
@@ -228,15 +305,27 @@ def _preprocess_prostatex(dicom_dir, mask_dir, series_metadata, image_series, pr
     os.makedirs(preprocessed_dir, exist_ok=True)
     for patient_id, groups in tqdm(sorted(groups_per_patient.items()), desc="Preprocess PROSTATEx"):
         out_path = os.path.join(preprocessed_dir, f"{patient_id}.h5")
+        # Groups that are already stored are kept, so that a file written by an earlier version of this
+        # module gains the groups it is missing instead of being recomputed.
         if os.path.exists(out_path):
-            continue
+            with h5py.File(out_path, "r") as f:
+                stored = {key for key in f if isinstance(f[key], h5py.Group)}
+            groups = [group for group in groups if group[0] not in stored]
+            if not groups:
+                continue
 
         datasets = {}
         for label_type, sequence, series_number, image_path in groups:
-            mask_paths = _get_mask_paths(mask_dir, label_type, sequence, patient_id)
+            if label_type == "zones_detailed":
+                mask_paths = _get_detailed_zone_masks(zones_dir, patient_id)
+            else:
+                mask_paths = _get_mask_paths(mask_dir, label_type, sequence, patient_id)
             if not mask_paths:  # Some patients only have masks for one of the label types.
                 continue
-            mask_shape = _load_nifti_on_dicom_grid(mask_paths[0]).shape
+            if label_type == "zones_detailed":
+                mask_shape = _nrrd_on_dicom_grid(mask_paths[0]).shape
+            else:
+                mask_shape = _load_nifti_on_dicom_grid(mask_paths[0]).shape
             candidates = series_by_number[(patient_id, series_number)]
             volume = _find_series(dicom_dir, candidates, image_path, mask_shape)
             if volume is None:
@@ -245,6 +334,14 @@ def _preprocess_prostatex(dicom_dir, mask_dir, series_metadata, image_series, pr
                 labels = _load_lesion_labels(mask_paths, patient_id, volume.shape)
                 if labels is None:
                     continue
+            elif label_type == "zones_detailed":
+                reader_labels = _load_detailed_zone_labels(mask_paths, volume.shape)
+                if reader_labels is None:
+                    continue
+                labels = reader_labels[0]
+                # 40 of the patients were delineated by two readers independently.
+                if len(reader_labels) > 1:
+                    datasets[f"{label_type}/{sequence}/labels_reader2"] = reader_labels[1]
             else:
                 labels, prostate = _load_zone_labels(mask_paths, volume.shape)
                 if labels is None:
@@ -255,11 +352,16 @@ def _preprocess_prostatex(dicom_dir, mask_dir, series_metadata, image_series, pr
 
         if not datasets:
             continue
-        tmp_path = out_path + ".tmp"
-        with h5py.File(tmp_path, "w") as f:
-            for key, data in datasets.items():
-                f.create_dataset(key, data=data, compression="gzip")
-        os.rename(tmp_path, out_path)
+        if os.path.exists(out_path):
+            with h5py.File(out_path, "a") as f:
+                for key, data in datasets.items():
+                    f.create_dataset(key, data=data, compression="gzip")
+        else:
+            tmp_path = out_path + ".tmp"
+            with h5py.File(tmp_path, "w") as f:
+                for key, data in datasets.items():
+                    f.create_dataset(key, data=data, compression="gzip")
+            os.rename(tmp_path, out_path)
 
 
 def get_prostatex_data(path: Union[os.PathLike, str], download: bool = False) -> str:
@@ -285,7 +387,26 @@ def get_prostatex_data(path: Union[os.PathLike, str], download: bool = False) ->
         util.download_source(path=zip_path, url=URLS["masks"], download=download, checksum=CHECKSUMS["masks"])
         util.unzip(zip_path=zip_path, dst=path)
 
+    # Download the ProstateZones annotations and the list of the series they were drawn on.
+    zones_dir = os.path.join(path, "ProstateZones")
+    if not os.path.exists(os.path.join(zones_dir, "Singles")):
+        zip_path = os.path.join(path, "ProstateZones.zip")
+        util.download_source(
+            path=zip_path, url=URLS["zones_detailed"], download=download, checksum=CHECKSUMS["zones_detailed"]
+        )
+        util.unzip(zip_path=zip_path, dst=zones_dir, remove=False)
+    util.download_source(
+        path=os.path.join(path, "list_of_PROSTATEx_files.txt"), url=URLS["series_list"],
+        download=download, checksum=CHECKSUMS["series_list"],
+    )
+
     image_series = _read_image_lists(mask_dir)
+    detailed_series = _read_detailed_zone_series(path)
+    for patient_id, series_number in detailed_series.items():
+        if _get_detailed_zone_masks(zones_dir, patient_id):
+            # The ProstateZones masks ship without a reference image, so the series is matched by shape.
+            image_series[("zones_detailed", "t2", patient_id)] = (series_number, "")
+
     n_patients = len({patient_id for _, _, patient_id in image_series})
     if len(glob(os.path.join(preprocessed_dir, "*.h5"))) == n_patients:
         return preprocessed_dir
@@ -303,14 +424,14 @@ def get_prostatex_data(path: Union[os.PathLike, str], download: bool = False) ->
     elif not all(os.path.exists(os.path.join(dicom_dir, uid)) for uid in series_uids):
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
 
-    _preprocess_prostatex(dicom_dir, mask_dir, series_metadata, image_series, preprocessed_dir)
+    _preprocess_prostatex(dicom_dir, mask_dir, zones_dir, series_metadata, image_series, preprocessed_dir)
     return preprocessed_dir
 
 
 def get_prostatex_paths(
     path: Union[os.PathLike, str],
     sequence: Literal["t2", "adc"] = "t2",
-    label_type: Literal["lesions", "zones"] = "lesions",
+    label_type: Literal["lesions", "zones", "zones_detailed"] = "lesions",
     download: bool = False,
 ) -> List[str]:
     """Get paths to the PROSTATEx data.
@@ -318,7 +439,7 @@ def get_prostatex_paths(
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         sequence: The MRI sequence, either 't2' or 'adc'. The zone labels are only available for 't2'.
-        label_type: The label type, either 'lesions' or 'zones'.
+        label_type: The label type, one of 'lesions', 'zones' or 'zones_detailed'.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -328,8 +449,8 @@ def get_prostatex_paths(
     import h5py
 
     assert sequence in ("t2", "adc"), f"Invalid sequence: {sequence}."
-    assert label_type in ("lesions", "zones"), f"Invalid label type: {label_type}."
-    if label_type == "zones" and sequence != "t2":
+    assert label_type in ("lesions", "zones", "zones_detailed"), f"Invalid label type: {label_type}."
+    if label_type in ("zones", "zones_detailed") and sequence != "t2":
         raise ValueError("The zone labels are only available for the 't2' sequence.")
 
     data_dir = get_prostatex_data(path, download)
@@ -345,7 +466,7 @@ def get_prostatex_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     sequence: Literal["t2", "adc"] = "t2",
-    label_type: Literal["lesions", "zones"] = "lesions",
+    label_type: Literal["lesions", "zones", "zones_detailed"] = "lesions",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -356,7 +477,7 @@ def get_prostatex_dataset(
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
         sequence: The MRI sequence, either 't2' or 'adc'. The zone labels are only available for 't2'.
-        label_type: The label type, either 'lesions' or 'zones'.
+        label_type: The label type, one of 'lesions', 'zones' or 'zones_detailed'.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -388,7 +509,7 @@ def get_prostatex_loader(
     batch_size: int,
     patch_shape: Tuple[int, ...],
     sequence: Literal["t2", "adc"] = "t2",
-    label_type: Literal["lesions", "zones"] = "lesions",
+    label_type: Literal["lesions", "zones", "zones_detailed"] = "lesions",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -400,7 +521,7 @@ def get_prostatex_loader(
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         sequence: The MRI sequence, either 't2' or 'adc'. The zone labels are only available for 't2'.
-        label_type: The label type, either 'lesions' or 'zones'.
+        label_type: The label type, one of 'lesions', 'zones' or 'zones_detailed'.
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.

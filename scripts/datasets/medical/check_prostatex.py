@@ -12,7 +12,9 @@ sys.path.append("..")
 def check_prostatex():
     from util import ROOT
 
-    for sequence, label_type in [("t2", "lesions"), ("adc", "lesions"), ("t2", "zones")]:
+    for sequence, label_type in [
+        ("t2", "lesions"), ("adc", "lesions"), ("t2", "zones"), ("t2", "zones_detailed")
+    ]:
         loader = get_prostatex_loader(
             path=os.path.join(ROOT, "prostatex"),
             patch_shape=(1, 128, 128) if sequence == "adc" else (1, 384, 384),
