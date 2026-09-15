@@ -45,6 +45,7 @@ from .duke_liver import get_duke_liver_dataset, get_duke_liver_loader
 from .emidec import get_emidec_dataset, get_emidec_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
 from .flare import get_flare_dataset, get_flare_loader
+from .fumpe import get_fumpe_dataset, get_fumpe_loader
 from .fundus_avseg import get_fundus_avseg_dataset, get_fundus_avseg_loader
 from .han_seg import get_han_seg_dataset, get_han_seg_loader
 from .hcc_tace import get_hcc_tace_dataset, get_hcc_tace_loader
