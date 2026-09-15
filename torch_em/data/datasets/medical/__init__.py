@@ -55,6 +55,7 @@ from .idrid import get_idrid_dataset, get_idrid_loader
 from .insect_anatomy import get_insect_anatomy_dataset, get_insect_anatomy_loader
 from .instance22 import get_instance22_dataset, get_instance22_loader
 from .ircadb import get_ircadb_dataset, get_ircadb_loader
+from .isbi_mslesion import get_isbi_mslesion_dataset, get_isbi_mslesion_loader
 from .isic import get_isic_dataset, get_isic_loader
 from .isles import get_isles_dataset, get_isles_loader
 from .jsrt import get_jsrt_dataset, get_jsrt_loader
