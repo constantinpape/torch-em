@@ -94,6 +94,7 @@ from .panorama import get_panorama_dataset, get_panorama_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .parse22 import get_parse22_dataset, get_parse22_loader
 from .particleseg3d import get_particleseg3d_dataset, get_particleseg3d_loader
+from .pddca import get_pddca_dataset, get_pddca_loader
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
