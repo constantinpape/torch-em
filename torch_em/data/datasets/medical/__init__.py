@@ -30,6 +30,7 @@ from .colorectal_liver_mets import get_colorectal_liver_mets_dataset, get_colore
 from .covid19_20 import get_covid19_20_dataset, get_covid19_20_loader
 from .covid19_seg import get_covid19_seg_dataset, get_covid19_seg_loader
 from .covid_qu_ex import get_covid_qu_ex_dataset, get_covid_qu_ex_loader
+from .crossmoda import get_crossmoda_dataset, get_crossmoda_loader
 from .ct_cadaiver import get_ct_cadaiver_dataset, get_ct_cadaiver_loader
 from .curvas import get_curvas_dataset, get_curvas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
