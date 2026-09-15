@@ -130,3 +130,4 @@ from .upenn_gbm import get_upenn_gbm_dataset, get_upenn_gbm_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
 from .valdo import get_valdo_dataset, get_valdo_loader
 from .verse import get_verse_dataset, get_verse_loader
+from .wmh import get_wmh_dataset, get_wmh_loader
