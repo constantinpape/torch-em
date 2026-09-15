@@ -106,6 +106,7 @@ from .prostatex import get_prostatex_dataset, get_prostatex_loader
 from .psfhs import get_psfhs_dataset, get_psfhs_loader
 from .ravir import get_ravir_dataset, get_ravir_loader
 from .remind import get_remind_dataset, get_remind_loader
+from .resect import get_resect_dataset, get_resect_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .sega import get_sega_dataset, get_sega_loader
