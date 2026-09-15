@@ -112,6 +112,7 @@ from .rider_lung import get_rider_lung_dataset, get_rider_lung_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .sega import get_sega_dataset, get_sega_loader
+from .segrap import get_segrap_dataset, get_segrap_loader
 from .segthy import get_segthy_dataset, get_segthy_loader
 from .siim_acr import get_siim_acr_dataset, get_siim_acr_loader
 from .spider import get_spider_dataset, get_spider_loader
