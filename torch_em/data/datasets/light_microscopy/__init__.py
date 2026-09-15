@@ -25,6 +25,7 @@ from .cardioblast_nuclei import (
 from .cartocell import get_cartocell_loader, get_cartocell_dataset
 from .ccagt import get_ccagt_loader, get_ccagt_dataset
 from .lapd_mouse import get_lapd_mouse_loader, get_lapd_mouse_dataset
+from .lungvis import get_lungvis_loader, get_lungvis_dataset
 from .mucic import get_mucic_loader, get_mucic_dataset
 from .celegans_atlas import get_celegans_atlas_loader, get_celegans_atlas_dataset
 from .cell_acdc import get_cell_acdc_loader, get_cell_acdc_dataset
