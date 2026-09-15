@@ -27,6 +27,7 @@ from .chaksu import get_chaksu_dataset, get_chaksu_loader
 from .chaos import get_chaos_dataset, get_chaos_loader
 from .cholecseg8k import get_cholecseg8k_dataset, get_cholecseg8k_loader
 from .colorectal_liver_mets import get_colorectal_liver_mets_dataset, get_colorectal_liver_mets_loader
+from .covid19_20 import get_covid19_20_dataset, get_covid19_20_loader
 from .covid19_seg import get_covid19_seg_dataset, get_covid19_seg_loader
 from .covid_qu_ex import get_covid_qu_ex_dataset, get_covid_qu_ex_loader
 from .ct_cadaiver import get_ct_cadaiver_dataset, get_ct_cadaiver_loader
