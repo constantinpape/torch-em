@@ -124,5 +124,6 @@ from .spine_mets import get_spine_mets_dataset, get_spine_mets_loader
 from .structseg import get_structseg_dataset, get_structseg_loader
 from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .topcow import get_topcow_dataset, get_topcow_loader
+from .totalsegmentator import get_totalsegmentator_dataset, get_totalsegmentator_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
 from .verse import get_verse_dataset, get_verse_loader
