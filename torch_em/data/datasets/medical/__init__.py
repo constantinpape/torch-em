@@ -66,6 +66,7 @@ from .kvasir import get_kvasir_dataset, get_kvasir_loader
 from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
 from .lidc_idri import get_lidc_idri_dataset, get_lidc_idri_loader
+from .lndb import get_lndb_dataset, get_lndb_loader
 from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
 from .mice_tumseg import get_mice_tumseg_dataset, get_mice_tumseg_loader
