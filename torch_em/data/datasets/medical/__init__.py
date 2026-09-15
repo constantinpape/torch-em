@@ -79,6 +79,7 @@ from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
 from .mnms import get_mnms_dataset, get_mnms_loader
 from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .motum import get_motum_dataset, get_motum_loader
+from .mrbrains18 import get_mrbrains18_dataset, get_mrbrains18_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .oasis import get_oasis_dataset, get_oasis_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
