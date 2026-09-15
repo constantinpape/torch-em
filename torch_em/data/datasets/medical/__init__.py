@@ -46,6 +46,7 @@ from .feta24 import get_feta24_dataset, get_feta24_loader
 from .flare import get_flare_dataset, get_flare_loader
 from .fundus_avseg import get_fundus_avseg_dataset, get_fundus_avseg_loader
 from .han_seg import get_han_seg_dataset, get_han_seg_loader
+from .hcc_tace import get_hcc_tace_dataset, get_hcc_tace_loader
 from .hil_toothseg import get_hil_toothseg_dataset, get_hil_toothseg_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .ircadb import get_ircadb_dataset, get_ircadb_loader
