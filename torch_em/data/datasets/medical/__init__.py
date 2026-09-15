@@ -121,6 +121,7 @@ from .skm_tea import get_skm_tea_dataset, get_skm_tea_loader
 from .soft_tissue_sarcoma import get_soft_tissue_sarcoma_dataset, get_soft_tissue_sarcoma_loader
 from .spider import get_spider_dataset, get_spider_loader
 from .spine_mets import get_spine_mets_dataset, get_spine_mets_loader
+from .structseg import get_structseg_dataset, get_structseg_loader
 from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
 from .verse import get_verse_dataset, get_verse_loader
