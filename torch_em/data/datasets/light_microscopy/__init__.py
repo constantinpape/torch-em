@@ -4,6 +4,7 @@ from .bbbc024 import get_bbbc024_loader, get_bbbc024_dataset
 from .bbbc027 import get_bbbc027_loader, get_bbbc027_dataset
 from .bbbc030 import get_bbbc030_loader, get_bbbc030_dataset
 from .bbbc032 import get_bbbc032_loader, get_bbbc032_dataset
+from .bbbc033 import get_bbbc033_loader, get_bbbc033_dataset
 from .bbbc034 import get_bbbc034_loader, get_bbbc034_dataset
 from .apacs23 import get_apacs23_loader, get_apacs23_dataset
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
