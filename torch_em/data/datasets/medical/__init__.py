@@ -126,5 +126,6 @@ from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .topcow import get_topcow_dataset, get_topcow_loader
 from .totalsegmentator import get_totalsegmentator_dataset, get_totalsegmentator_loader
 from .totalsegmentator_mri import get_totalsegmentator_mri_dataset, get_totalsegmentator_mri_loader
+from .upenn_gbm import get_upenn_gbm_dataset, get_upenn_gbm_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
 from .verse import get_verse_dataset, get_verse_loader
