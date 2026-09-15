@@ -50,6 +50,7 @@ from .hcc_tace import get_hcc_tace_dataset, get_hcc_tace_loader
 from .hecktor import get_hecktor_dataset, get_hecktor_loader
 from .hil_toothseg import get_hil_toothseg_dataset, get_hil_toothseg_loader
 from .hntsmrg import get_hntsmrg_dataset, get_hntsmrg_loader
+from .hvsmr import get_hvsmr_dataset, get_hvsmr_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .ircadb import get_ircadb_dataset, get_ircadb_loader
 from .isic import get_isic_dataset, get_isic_loader
