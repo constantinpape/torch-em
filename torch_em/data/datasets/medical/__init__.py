@@ -53,6 +53,7 @@ from .hntsmrg import get_hntsmrg_dataset, get_hntsmrg_loader
 from .hvsmr import get_hvsmr_dataset, get_hvsmr_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .insect_anatomy import get_insect_anatomy_dataset, get_insect_anatomy_loader
+from .instance22 import get_instance22_dataset, get_instance22_loader
 from .ircadb import get_ircadb_dataset, get_ircadb_loader
 from .isic import get_isic_dataset, get_isic_loader
 from .isles import get_isles_dataset, get_isles_loader
