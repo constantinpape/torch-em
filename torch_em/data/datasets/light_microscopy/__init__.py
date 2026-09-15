@@ -11,6 +11,7 @@ from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bac_mother import get_bac_mother_loader, get_bac_mother_dataset
 from .balf import get_balf_loader, get_balf_dataset
 from .bbbc046 import get_bbbc046_loader, get_bbbc046_dataset
+from .bbbc050 import get_bbbc050_loader, get_bbbc050_dataset
 from .bccd import get_bccd_loader, get_bccd_dataset
 from .bmgd import get_bmgd_loader, get_bmgd_dataset
 from .bitdepth_nucseg import get_bitdepth_nucseg_loader, get_bitdepth_nucseg_dataset
