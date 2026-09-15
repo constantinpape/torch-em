@@ -76,6 +76,7 @@ from .mediastinal_ct import get_mediastinal_ct_dataset, get_mediastinal_ct_loade
 from .mendeley_ms import get_mendeley_ms_dataset, get_mendeley_ms_loader
 from .mice_tumseg import get_mice_tumseg_dataset, get_mice_tumseg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
+from .mnms import get_mnms_dataset, get_mnms_loader
 from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .motum import get_motum_dataset, get_motum_loader
 from .msd import get_msd_dataset, get_msd_loader
