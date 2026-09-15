@@ -5,6 +5,7 @@ from .acdc import get_acdc_dataset, get_acdc_loader
 from .acouslic_ai import get_acouslic_ai_dataset, get_acouslic_ai_loader
 from .acrin_hnscc import get_acrin_hnscc_dataset, get_acrin_hnscc_loader
 from .adrenal_acc import get_adrenal_acc_dataset, get_adrenal_acc_loader
+from .aeropath import get_aeropath_dataset, get_aeropath_loader
 from .amd_sd import get_amd_sd_dataset, get_amd_sd_loader
 from .amos import get_amos_dataset, get_amos_loader
 from .autopet import get_autopet_dataset, get_autopet_loader
