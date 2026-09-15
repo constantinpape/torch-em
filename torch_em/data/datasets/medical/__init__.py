@@ -92,6 +92,7 @@ from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
 from .palm import get_palm_dataset, get_palm_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
 from .papila import get_papila_dataset, get_papila_loader
+from .parse22 import get_parse22_dataset, get_parse22_loader
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
