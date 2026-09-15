@@ -1,3 +1,4 @@
+from .abdomen_atlas import get_abdomen_atlas_dataset, get_abdomen_atlas_loader
 from .abus import get_abus_dataset, get_abus_loader
 from .acdc import get_acdc_dataset, get_acdc_loader
 from .acouslic_ai import get_acouslic_ai_dataset, get_acouslic_ai_loader
