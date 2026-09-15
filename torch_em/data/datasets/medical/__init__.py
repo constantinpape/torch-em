@@ -87,6 +87,7 @@ from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
 from .nsclc_radiomics import get_nsclc_radiomics_dataset, get_nsclc_radiomics_loader
 from .oasis import get_oasis_dataset, get_oasis_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
+from .orcascore import get_orcascore_dataset, get_orcascore_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
 from .palm import get_palm_dataset, get_palm_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
