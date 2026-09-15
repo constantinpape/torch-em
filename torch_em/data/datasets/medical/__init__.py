@@ -102,6 +102,7 @@ from .plethora import get_plethora_dataset, get_plethora_loader
 from .promise12 import get_promise12_dataset, get_promise12_loader
 from .prostate158 import get_prostate158_dataset, get_prostate158_loader
 from .prostate_edge_cases import get_prostate_edge_cases_dataset, get_prostate_edge_cases_loader
+from .prostatex import get_prostatex_dataset, get_prostatex_loader
 from .psfhs import get_psfhs_dataset, get_psfhs_loader
 from .ravir import get_ravir_dataset, get_ravir_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
