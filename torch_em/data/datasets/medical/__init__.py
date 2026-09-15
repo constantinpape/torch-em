@@ -12,6 +12,7 @@ from .aortaseg24 import get_aortaseg24_dataset, get_aortaseg24_loader
 from .atlas_liver import get_atlas_liver_dataset, get_atlas_liver_loader
 from .atlas_stroke import get_atlas_stroke_dataset, get_atlas_stroke_loader
 from .atm22 import get_atm22_dataset, get_atm22_loader
+from .atriaseg import get_atriaseg_dataset, get_atriaseg_loader
 from .autopet import get_autopet_dataset, get_autopet_loader
 from .btcv import get_btcv_dataset, get_btcv_loader
 from .busi import get_busi_dataset, get_busi_loader
