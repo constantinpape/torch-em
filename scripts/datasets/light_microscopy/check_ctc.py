@@ -3,7 +3,7 @@ import sys
 
 from torch_em.util.debug import check_loader
 from torch_em.data.sampler import MinInstanceSampler
-from torch_em.data.datasets.light_microscopy.ctc import get_ctc_segmentation_loader, CTC_CHECKSUMS
+from torch_em.data.datasets.light_microscopy.ctc import get_ctc_segmentation_loader, CTC_2D_DATASETS
 
 sys.path.append("..")
 
@@ -12,11 +12,12 @@ sys.path.append("..")
 # - Fluo-N2DH-GOWT1
 # - Fluo-N2DL-HeLa
 # Maybe depends on the split?!
+# The 3d datasets are checked in check_ctc_3d.py.
 def check_ctc_segmentation(split):
     from util import ROOT, USE_NAPARI
 
     data_root = os.path.join(ROOT, "ctc")
-    ctc_dataset_names = list(CTC_CHECKSUMS["train"].keys())
+    ctc_dataset_names = CTC_2D_DATASETS
     for name in ctc_dataset_names:
         print("Checking dataset", name)
         loader = get_ctc_segmentation_loader(
