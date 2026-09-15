@@ -35,6 +35,7 @@ from .ct_cadaiver import get_ct_cadaiver_dataset, get_ct_cadaiver_loader
 from .ct_lymph_nodes import get_ct_lymph_nodes_dataset, get_ct_lymph_nodes_loader
 from .ct_org import get_ct_org_dataset, get_ct_org_loader
 from .curvas import get_curvas_dataset, get_curvas_loader
+from .dap_atlas import get_dap_atlas_dataset, get_dap_atlas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
 from .drive import get_drive_dataset, get_drive_loader
 from .dsad import get_dsad_dataset, get_dsad_loader
