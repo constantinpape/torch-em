@@ -10,7 +10,7 @@ from xml.dom import minidom
 from packaging import version
 from shutil import copyfileobj, which
 
-from typing import Optional, Tuple, Literal
+from typing import Optional, Tuple, Literal, List, Dict, Union, Callable
 
 import numpy as np
 from skimage.draw import polygon
@@ -255,31 +255,143 @@ def download_source_kaggle(path: str, dataset_name: str, download: bool, competi
         api.dataset_download_files(dataset=dataset_name, path=path, quiet=False)
 
 
+NBIA_API_URL = "https://services.cancerimagingarchive.net/nbia-api/services/v1/"
+
+
+def _download_tcia_series_with_rest(series_uids, dst, csv_filename):
+    """Download DICOM series from TCIA via the NBIA REST API.
+
+    This is the fallback for missing 'tcia_utils'. It mimics the on-disk layout of 'nbia.downloadSeries':
+    each series is extracted to '<dst>/<SeriesInstanceUID>/' and the series metadata are written to
+    '<csv_filename>.csv' (including the 'Series UID', 'Subject ID' and 'Modality' columns).
+    The metadata of each series is cached in '<csv_filename>.partial.json' while the download is running,
+    so that an interrupted download does not have to query the metadata of all series again.
+    See https://wiki.cancerimagingarchive.net/x/fILTB for the API documentation.
+    """
+    import csv
+    import json
+    import time
+    import tempfile
+
+    def get_with_retries(endpoint, n_retries=5, **kwargs):
+        # The NBIA API occasionally returns server errors, so the requests are retried.
+        for attempt in range(n_retries):
+            response = requests.get(NBIA_API_URL + endpoint, **kwargs)
+            if response.status_code < 500 or attempt == n_retries - 1:
+                response.raise_for_status()
+                return response
+            response.close()
+            time.sleep(10 * (attempt + 1))
+
+    os.makedirs(dst, exist_ok=True)
+    cache_path = f"{csv_filename}.partial.json"
+    cache = {}
+    if os.path.exists(cache_path):
+        with open(cache_path, "r") as f:
+            cache = json.load(f)
+
+    metadata = []
+    for i, uid in enumerate(tqdm(series_uids, desc=f"Download {len(series_uids)} series from TCIA to {dst}")):
+        series_dir = os.path.join(dst, uid)
+        if uid in cache and os.path.exists(series_dir):
+            metadata.append(cache[uid])
+            continue
+
+        response = get_with_retries("getSeriesMetaData", params={"SeriesInstanceUID": uid})
+        metadata.append(response.json()[0])
+        cache[uid] = metadata[-1]
+        if i % 50 == 0:
+            with open(cache_path, "w") as f:
+                json.dump(cache, f)
+
+        if os.path.exists(series_dir):  # This series has been downloaded already.
+            continue
+
+        # The series is downloaded as a zip archive, which is extracted to a temporary folder
+        # and only moved to the final location once it is complete.
+        with tempfile.TemporaryDirectory(dir=dst) as tmp_dir:
+            zip_path = os.path.join(tmp_dir, "series.zip")
+            with get_with_retries("getImage", params={"SeriesInstanceUID": uid}, stream=True) as r:
+                with open(zip_path, "wb") as f:
+                    copyfileobj(r.raw, f)
+            tmp_series_dir = os.path.join(tmp_dir, "series")
+            unzip(zip_path, tmp_series_dir)
+            os.rename(tmp_series_dir, series_dir)
+
+    # The metadata keys differ between series (e.g. 'Series Date' is only reported for some), so the header
+    # has to be the union of all keys.
+    fieldnames = list(dict.fromkeys(key for row in metadata for key in row))
+    csv_path = f"{csv_filename}.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(metadata)
+
+    if os.path.exists(cache_path):  # The download is complete, so the metadata cache is not needed anymore.
+        os.remove(cache_path)
+
+
+def _download_tcia_manifest_with_rest(manifest_path, dst, csv_filename):
+    """Download all series listed in a TCIA manifest via the NBIA REST API."""
+    with open(manifest_path, "r") as f:
+        lines = [line.strip() for line in f.readlines()]
+    series_uids = lines[lines.index("ListOfSeriesToDownload=") + 1:]
+    series_uids = [uid for uid in series_uids if uid]
+    _download_tcia_series_with_rest(series_uids, dst, csv_filename)
+
+
+def download_tcia_series(series_uids: List[str], dst: str, csv_filename: str) -> str:
+    """Download individual DICOM series from TCIA by their series instance UIDs.
+
+    Uses the tcia_utils python package if it is installed and falls back to the NBIA REST API otherwise.
+    Each series is stored in '<dst>/<SeriesInstanceUID>/', series that exist there already are skipped.
+
+    Args:
+        series_uids: The UIDs of the series to download.
+        dst: The folder for saving the DICOM series.
+        csv_filename: The path for saving the series metadata (without the '.csv' extension).
+
+    Returns:
+        The path to the csv file with the series metadata.
+    """
+    if nbia is None:
+        _download_tcia_series_with_rest(series_uids, dst, csv_filename)
+    else:
+        nbia.downloadSeries(series_data=series_uids, input_type="list", path=dst, csv_filename=csv_filename)
+    return f"{csv_filename}.csv"
+
+
 def download_source_tcia(path, url, dst, csv_filename, download):
     """Download data from TCIA.
 
-    Requires the tcia_utils python package.
+    Uses the tcia_utils python package if it is installed and falls back to the NBIA REST API otherwise.
 
     Args:
-        path: The path for saving the data.
-        url: The URL to the TCIA dataset.
-        dst:
-        csv_filename:
+        path: The path for saving the manifest file. If `url` is None, this must point to an existing manifest,
+            e.g. one that was written by the caller to download only a subset of the series of a collection.
+        url: The URL to the TCIA manifest of the dataset. Set to None to use the manifest at `path`.
+        dst: The folder for saving the DICOM series. Each series is stored in a sub-folder named after its UID.
+        csv_filename: The path for saving the series metadata (without the '.csv' extension).
         download: Whether to download the data if it is not saved at `path` yet.
     """
-    if nbia is None:
-        raise RuntimeError("Requires the tcia_utils python package.")
     if not download:
         raise RuntimeError(f"Cannot find the data at {path}, but download was set to False.")
-    assert url.endswith(".tcia"), f"{url} is not a TCIA Manifest."
 
-    # Downloads the manifest file from the collection page.
-    manifest = requests.get(url=url)
-    with open(path, "wb") as f:
-        f.write(manifest.content)
+    if url is None:
+        assert os.path.exists(path), f"The manifest {path} does not exist."
+    else:
+        assert url.endswith(".tcia"), f"{url} is not a TCIA Manifest."
+        # Downloads the manifest file from the collection page.
+        manifest = requests.get(url=url)
+        manifest.raise_for_status()
+        with open(path, "wb") as f:
+            f.write(manifest.content)
 
     # This part extracts the UIDs from the manifests and downloads them.
-    nbia.downloadSeries(series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename)
+    if nbia is None:
+        _download_tcia_manifest_with_rest(path, dst, csv_filename)
+    else:
+        nbia.downloadSeries(series_data=path, input_type="manifest", path=dst, csv_filename=csv_filename)
 
 
 def download_source_synapse(path: str, entity: str, download: bool) -> None:
@@ -365,9 +477,14 @@ def unzip_rarfile(rar_path: str, dst: str, remove: bool = True, use_rarfile: boo
         with az.rar.RarArchive(rar_path) as archive:
             archive.extract_to_directory(dst)
 
+    def _extract_with_7z():
+        if which("7z") is None:
+            raise RuntimeError("The 'p7zip' CLI is not available.")
+        run(["7z", "x", f"-o{dst}", "-y", rar_path], check=True)
+
     extractors = [
-        ('rarfile', _extract_with_rarfile), ('aspose.zip', _extract_with_aspose),
-    ] if use_rarfile else [('aspose.zip', _extract_with_aspose)]
+        ('rarfile', _extract_with_rarfile), ('aspose.zip', _extract_with_aspose), ('7z', _extract_with_7z),
+    ] if use_rarfile else [('aspose.zip', _extract_with_aspose), ('7z', _extract_with_7z)]
 
     errors = []
     for name, extractor in extractors:
@@ -560,6 +677,123 @@ def generate_labeled_array_from_xml(shape: Tuple[int, ...], xml_file: str) -> np
         r, c = polygon(np.array(contour)[:, 1], np.array(contour)[:, 0], shape=shape)
         mask[r, c] = i
     return mask
+
+
+def load_dicom_series(series_dir: str) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+    """Stack a single-frame DICOM image series (CT, MR, PET) into a volume with axes (z, y, x).
+
+    The slices are sorted by their position along the slice normal (the cross product of the row and column
+    direction in 'ImageOrientationPatient'), so the volume is stacked consistently for any acquisition plane.
+    'RescaleSlope' and 'RescaleIntercept' are applied per slice, i.e. CT volumes are returned in Hounsfield units.
+
+    NOTE: This requires the pydicom python package.
+
+    Args:
+        series_dir: The folder with the DICOM files of the series.
+
+    Returns:
+        The volume with axes (z, y, x) as float32.
+        The geometry of the volume, which is needed by `rasterize_rtstruct`. A dictionary with the keys
+        'origin' (the 'ImagePositionPatient' of each slice, n_slices x 3), 'row_direction' and 'column_direction'
+        (the unit vectors along which the column and the row index increase, from 'ImageOrientationPatient'),
+        'spacing' (the row and column spacing from 'PixelSpacing') and 'sop_uids' (the 'SOPInstanceUID' per slice).
+    """
+    import pydicom
+
+    dcm_paths = [os.path.join(series_dir, fname) for fname in sorted(os.listdir(series_dir)) if fname.endswith(".dcm")]
+    slices = [pydicom.dcmread(dcm_path) for dcm_path in dcm_paths]
+
+    row_direction = np.array([float(v) for v in slices[0].ImageOrientationPatient[:3]])
+    column_direction = np.array([float(v) for v in slices[0].ImageOrientationPatient[3:]])
+    normal = np.cross(row_direction, column_direction)
+    slices.sort(key=lambda dcm: np.dot([float(v) for v in dcm.ImagePositionPatient], normal))
+
+    volume = []
+    for dcm in slices:
+        frame = dcm.pixel_array.astype("float32")
+        volume.append(frame * float(dcm.get("RescaleSlope", 1.0)) + float(dcm.get("RescaleIntercept", 0.0)))
+    volume = np.stack(volume)
+
+    geometry = {
+        "origin": np.array([[float(v) for v in dcm.ImagePositionPatient] for dcm in slices]),
+        "row_direction": row_direction,
+        "column_direction": column_direction,
+        "spacing": np.array([float(v) for v in slices[0].PixelSpacing]),
+        "sop_uids": np.array([str(dcm.SOPInstanceUID) for dcm in slices]),
+    }
+    return volume, geometry
+
+
+def rasterize_rtstruct(
+    rtstruct_path: str,
+    geometry: Dict[str, np.ndarray],
+    shape: Tuple[int, int, int],
+    roi_labels: Union[Dict[str, int], Callable[[int, str], Optional[int]]],
+) -> np.ndarray:
+    """Rasterize the contours of a DICOM RTSTRUCT file onto the voxel grid of the referenced image series.
+
+    Each 'CLOSED_PLANAR' contour is assigned to the slice it references (via 'ReferencedSOPInstanceUID', with a
+    fallback to the closest slice along the slice normal). Its points are projected onto the row and column
+    direction of that slice to obtain pixel coordinates and the polygon is filled with `skimage.draw.polygon`.
+    Multiple contours of the same ROI on the same slice are combined with XOR, so that inner contours form holes.
+    Where different ROIs overlap, the ROI with the lower label id takes precedence.
+
+    NOTE: This requires the pydicom python package.
+
+    Args:
+        rtstruct_path: The path to the RTSTRUCT DICOM file.
+        geometry: The geometry of the referenced image series, as returned by `load_dicom_series`.
+        shape: The shape of the image volume (z, y, x).
+        roi_labels: The mapping from ROIs to label ids. Either a dictionary that maps the ROI names to label ids,
+            or a function that maps the ROI number and ROI name to a label id. ROIs that are not in the dictionary
+            or for which the function returns None are ignored.
+
+    Returns:
+        The label volume (uint8) with axes (z, y, x).
+    """
+    import pydicom
+
+    rtstruct = pydicom.dcmread(rtstruct_path)
+    roi_names = {int(roi.ROINumber): str(roi.ROIName) for roi in rtstruct.StructureSetROISequence}
+    slice_ids = {uid: z for z, uid in enumerate(geometry["sop_uids"])}
+    normal = np.cross(geometry["row_direction"], geometry["column_direction"])
+    slice_positions = geometry["origin"] @ normal
+
+    masks = {}
+    for roi_contour in rtstruct.ROIContourSequence:
+        roi_number = int(roi_contour.ReferencedROINumber)
+        roi_name = roi_names[roi_number]
+        if isinstance(roi_labels, dict):
+            label_id = roi_labels.get(roi_name)
+        else:
+            label_id = roi_labels(roi_number, roi_name)
+        if label_id is None:
+            continue
+
+        mask = masks.setdefault(label_id, np.zeros(shape, dtype="bool"))
+        for contour in roi_contour.get("ContourSequence", []):
+            if contour.ContourGeometricType != "CLOSED_PLANAR":
+                continue
+            points = np.array([float(v) for v in contour.ContourData]).reshape(-1, 3)
+            if len(points) < 3:
+                continue
+
+            z = None
+            for ref in contour.get("ContourImageSequence", []):
+                z = slice_ids.get(str(ref.ReferencedSOPInstanceUID))
+            if z is None:
+                z = int(np.argmin(np.abs(slice_positions - np.dot(points[0], normal))))
+
+            offsets = points - geometry["origin"][z]
+            cols = offsets @ geometry["row_direction"] / geometry["spacing"][1]
+            rows = offsets @ geometry["column_direction"] / geometry["spacing"][0]
+            rr, cc = polygon(rows, cols, shape=shape[1:])
+            mask[z, rr, cc] = ~mask[z, rr, cc]
+
+    labels = np.zeros(shape, dtype="uint8")
+    for label_id in sorted(masks, reverse=True):
+        labels[masks[label_id]] = label_id
+    return labels
 
 
 # This function could be extended to convert WSIs (or modalities with multiple resolutions).
