@@ -99,6 +99,7 @@ from .pediatric_ct_seg import get_pediatric_ct_seg_dataset, get_pediatric_ct_seg
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
+from .promise12 import get_promise12_dataset, get_promise12_loader
 from .psfhs import get_psfhs_dataset, get_psfhs_loader
 from .ravir import get_ravir_dataset, get_ravir_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
