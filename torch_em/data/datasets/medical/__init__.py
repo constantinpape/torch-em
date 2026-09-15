@@ -116,6 +116,7 @@ from .segrap import get_segrap_dataset, get_segrap_loader
 from .segthor import get_segthor_dataset, get_segthor_loader
 from .segthy import get_segthy_dataset, get_segthy_loader
 from .siim_acr import get_siim_acr_dataset, get_siim_acr_loader
+from .ski10 import get_ski10_dataset, get_ski10_loader
 from .spider import get_spider_dataset, get_spider_loader
 from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
