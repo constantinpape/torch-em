@@ -42,8 +42,12 @@ LABEL_IDS = {"tumor": 1}
 def _load_dicom_volume(series_dir):
     """Stack a DICOM series into a volume with axes (z, y, x) and slices sorted along the slice normal.
 
-    Returns the volume in Hounsfield units and the affine matrix that maps voxel indices (z, y, x)
-    to DICOM patient coordinates.
+    Applies the rescale slope/intercept if present (e.g. to get Hounsfield units for CT); MR series
+    usually do not carry these tags, in which case the stored pixel values are used as-is, per the
+    DICOM standard's own default of a slope of 1 and an intercept of 0.
+
+    Returns the volume and the affine matrix that maps voxel indices (z, y, x) to DICOM patient
+    coordinates.
     """
     import pydicom
 
@@ -54,7 +58,7 @@ def _load_dicom_volume(series_dir):
     slices.sort(key=lambda dcm: np.dot([float(v) for v in dcm.ImagePositionPatient], normal))
 
     volume = np.stack([dcm.pixel_array for dcm in slices]).astype("float32")
-    volume = volume * float(slices[0].RescaleSlope) + float(slices[0].RescaleIntercept)
+    volume = volume * float(getattr(slices[0], "RescaleSlope", 1.0)) + float(getattr(slices[0], "RescaleIntercept", 0.0))  # noqa
     volume = np.round(volume).astype("int16")
 
     positions = np.array([[float(v) for v in dcm.ImagePositionPatient] for dcm in slices])
@@ -99,9 +103,18 @@ def _load_dicom_seg(seg_path):
         slice_spacing = float(pixel_measures.SliceThickness)
     slice_ids = np.round((projections - projections.min()) / slice_spacing).astype("int")
 
+    # The segment identification is usually per-frame, but for a single-segment file it may instead be
+    # stored once in the shared functional group.
+    shared_segment_number = None
+    if "SegmentIdentificationSequence" in shared_group:
+        shared_segment_number = int(shared_group.SegmentIdentificationSequence[0].ReferencedSegmentNumber)
+
     labels = np.zeros((slice_ids.max() + 1, seg.Rows, seg.Columns), dtype="uint8")
     for frame, frame_group, slice_id in zip(frames, frame_groups, slice_ids):
-        segment_number = int(frame_group.SegmentIdentificationSequence[0].ReferencedSegmentNumber)
+        if "SegmentIdentificationSequence" in frame_group:
+            segment_number = int(frame_group.SegmentIdentificationSequence[0].ReferencedSegmentNumber)
+        else:
+            segment_number = shared_segment_number
         labels[slice_id][frame.astype("bool")] = segment_number
 
     affine = np.eye(4)
