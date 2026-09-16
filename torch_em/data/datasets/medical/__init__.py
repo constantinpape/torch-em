@@ -21,6 +21,7 @@ from .brainmetshare import get_brainmetshare_dataset, get_brainmetshare_loader
 from .brainptm import get_brainptm_dataset, get_brainptm_loader
 from .brats import get_brats_dataset, get_brats_loader
 from .btcv import get_btcv_dataset, get_btcv_loader
+from .btxrd import get_btxrd_dataset, get_btxrd_loader
 from .busi import get_busi_dataset, get_busi_loader
 from .camus import get_camus_dataset, get_camus_loader
 from .cap_lv import get_cap_lv_dataset, get_cap_lv_loader
