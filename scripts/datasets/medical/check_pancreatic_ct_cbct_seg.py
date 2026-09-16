@@ -1,0 +1,28 @@
+import os
+import sys
+
+from torch_em.util.debug import check_loader
+from torch_em.data import MinInstanceSampler
+from torch_em.data.datasets.medical.pancreatic_ct_cbct_seg import get_pancreatic_ct_cbct_seg_loader
+
+
+sys.path.append("..")
+
+
+def check_pancreatic_ct_cbct_seg():
+    from util import ROOT
+
+    loader = get_pancreatic_ct_cbct_seg_loader(
+        path=os.path.join(ROOT, "pancreatic_ct_cbct_seg"),
+        patch_shape=(1, 512, 512),
+        batch_size=1,
+        ndim=2,
+        sampler=MinInstanceSampler(min_num_instances=2),
+        download=True,
+    )
+
+    check_loader(loader, 8, plt=True, save_path="./test.png")
+
+
+if __name__ == "__main__":
+    check_pancreatic_ct_cbct_seg()
