@@ -128,6 +128,7 @@ from .pediatric_ct_seg import get_pediatric_ct_seg_dataset, get_pediatric_ct_seg
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
 from .picai import get_picai_dataset, get_picai_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
+from .pituitary_tumor import get_pituitary_tumor_dataset, get_pituitary_tumor_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
 from .promise12 import get_promise12_dataset, get_promise12_loader
 from .prostate158 import get_prostate158_dataset, get_prostate158_loader
