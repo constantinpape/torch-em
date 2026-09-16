@@ -109,6 +109,7 @@ from .orgline import get_orgline_loader, get_orgline_dataset
 from .ovarian_reserve import get_ovarian_reserve_loader, get_ovarian_reserve_dataset
 from .pan_multiplex import get_pan_multiplex_loader, get_pan_multiplex_dataset
 from .parhyale_regen import get_parhyale_regen_loader, get_parhyale_regen_dataset
+from .pcmmd import get_pcmmd_loader, get_pcmmd_dataset
 from .phmamm import get_phmamm_loader, get_phmamm_dataset
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .pnas_arabidopsis import get_pnas_arabidopsis_loader, get_pnas_arabidopsis_dataset
