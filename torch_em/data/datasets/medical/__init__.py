@@ -69,6 +69,7 @@ from .hecktor import get_hecktor_dataset, get_hecktor_loader
 from .hil_toothseg import get_hil_toothseg_dataset, get_hil_toothseg_loader
 from .hippo_subfields import get_hippo_subfields_dataset, get_hippo_subfields_loader
 from .hntsmrg import get_hntsmrg_dataset, get_hntsmrg_loader
+from .hubmap_hpa import get_hubmap_hpa_dataset, get_hubmap_hpa_loader
 from .hva_ct import get_hva_ct_dataset, get_hva_ct_loader
 from .hvsmr import get_hvsmr_dataset, get_hvsmr_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
