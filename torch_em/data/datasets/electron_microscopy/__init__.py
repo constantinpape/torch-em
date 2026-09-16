@@ -31,6 +31,7 @@ from .malecns import get_malecns_loader, get_malecns_dataset
 from .manc import get_manc_loader, get_manc_dataset
 from .microns import get_microns_loader, get_microns_dataset, get_microns_minnie65_loader, get_microns_minnie65_dataset
 from .microns_nuclei import get_microns_nuclei_loader, get_microns_nuclei_dataset
+from .mito_anf import get_mito_anf_loader, get_mito_anf_dataset
 from .mitoem import get_mitoem_loader, get_mitoem_dataset
 from .mitoemv2 import get_mitoemv2_loader, get_mitoemv2_dataset
 from .mito_segem import get_mito_segem_loader, get_mito_segem_dataset
