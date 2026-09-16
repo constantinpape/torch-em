@@ -15,6 +15,7 @@ from .atm22 import get_atm22_dataset, get_atm22_loader
 from .atriaseg import get_atriaseg_dataset, get_atriaseg_loader
 from .autopet import get_autopet_dataset, get_autopet_loader
 from .autopet_organ import get_autopet_organ_dataset, get_autopet_organ_loader
+from .bkai_igh_neopolyp import get_bkai_igh_neopolyp_dataset, get_bkai_igh_neopolyp_loader
 from .brainmetshare import get_brainmetshare_dataset, get_brainmetshare_loader
 from .brainptm import get_brainptm_dataset, get_brainptm_loader
 from .brats import get_brats_dataset, get_brats_loader
