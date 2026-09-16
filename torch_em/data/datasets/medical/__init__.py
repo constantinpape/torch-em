@@ -164,6 +164,7 @@ from .totalsegmentator import get_totalsegmentator_dataset, get_totalsegmentator
 from .totalsegmentator_mri import get_totalsegmentator_mri_dataset, get_totalsegmentator_mri_loader
 from .trackrad import get_trackrad_dataset, get_trackrad_loader
 from .upenn_gbm import get_upenn_gbm_dataset, get_upenn_gbm_loader
+from .us_nerve import get_us_nerve_dataset, get_us_nerve_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
 from .valdo import get_valdo_dataset, get_valdo_loader
 from .verse import get_verse_dataset, get_verse_loader
