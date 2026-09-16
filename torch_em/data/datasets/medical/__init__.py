@@ -92,6 +92,7 @@ from .msd import get_msd_dataset, get_msd_loader
 from .multi_organ_abdominal_ct import get_multi_organ_abdominal_ct_dataset, get_multi_organ_abdominal_ct_loader
 from .nci_isbi_prostate import get_nci_isbi_prostate_dataset, get_nci_isbi_prostate_loader
 from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
+from .nsclc_radiogenomics import get_nsclc_radiogenomics_dataset, get_nsclc_radiogenomics_loader
 from .nsclc_radiomics import get_nsclc_radiomics_dataset, get_nsclc_radiomics_loader
 from .oasis import get_oasis_dataset, get_oasis_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
