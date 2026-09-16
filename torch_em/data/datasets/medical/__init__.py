@@ -146,6 +146,7 @@ from .ribseg import get_ribseg_dataset, get_ribseg_loader
 from .rider_lung import get_rider_lung_dataset, get_rider_lung_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
+from .saros import get_saros_dataset, get_saros_loader
 from .sega import get_sega_dataset, get_sega_loader
 from .segrap import get_segrap_dataset, get_segrap_loader
 from .segthor import get_segthor_dataset, get_segthor_loader
