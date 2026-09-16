@@ -316,19 +316,26 @@ def _download_tcia_series_with_rest(series_uids, dst, csv_filename):
 
         # The series is downloaded as a zip archive, which is extracted to a temporary folder
         # and only moved to the final location once it is complete.
-        with tempfile.TemporaryDirectory(dir=dst) as tmp_dir:
-            zip_path = os.path.join(tmp_dir, "series.zip")
-            with get_with_retries("getImage", params={"SeriesInstanceUID": uid}, stream=True) as r:
-                with open(zip_path, "wb") as f:
-                    copyfileobj(r.raw, f)
-            tmp_series_dir = os.path.join(tmp_dir, "series")
-            unzip(zip_path, tmp_series_dir)
-            try:
+        try:
+            with tempfile.TemporaryDirectory(dir=dst) as tmp_dir:
+                zip_path = os.path.join(tmp_dir, "series.zip")
+                with get_with_retries("getImage", params={"SeriesInstanceUID": uid}, stream=True) as r:
+                    with open(zip_path, "wb") as f:
+                        copyfileobj(r.raw, f)
+                tmp_series_dir = os.path.join(tmp_dir, "series")
+                unzip(zip_path, tmp_series_dir)
                 os.rename(tmp_series_dir, series_dir)
-            except FileExistsError:
-                # A resumed download may have already extracted this series: on some network filesystems
-                # the 'os.path.exists' check above can be stale, so this is not caught earlier.
-                pass
+        except FileExistsError:
+            # A resumed download may have already extracted this series: on some network filesystems
+            # the 'os.path.exists' check above can be stale, so this is not caught earlier.
+            pass
+        except requests.exceptions.HTTPError as e:
+            # A small number of series are indexed but no longer resolvable through this endpoint (e.g. a
+            # stale UID), which should not abort downloading the rest of a possibly multi-hour batch.
+            if e.response is not None and e.response.status_code < 500:
+                tqdm.write(f"Skipping {uid}, which failed to download: {e}")
+            else:
+                raise
 
     # The metadata keys differ between series (e.g. 'Series Date' is only reported for some), so the header
     # has to be the union of all keys.
