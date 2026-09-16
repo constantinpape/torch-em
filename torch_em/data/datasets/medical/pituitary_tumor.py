@@ -13,6 +13,8 @@ NOTE: The two binary masks are combined into one semantic label volume with the 
 A few voxels can overlap between the two structures. In this case, the carotids take priority, as they are
 written after the tumor mask.
 
+NOTE: This requires the nibabel python package.
+
 The dataset is located at https://doi.org/10.6084/m9.figshare.27894084.
 
 This dataset is from the publication https://doi.org/10.1038/s41597-024-04218-8.
@@ -26,7 +28,6 @@ from natsort import natsorted
 from typing import Union, Tuple, List
 
 import numpy as np
-import nibabel as nib
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -58,6 +59,7 @@ def _find_mask_path(t1_path, structure):
 
 def _convert_case(t1_path, tumor_path, carotids_path, out_path):
     import h5py
+    import nibabel as nib
     from nibabel.processing import resample_from_to
 
     t1_img = nib.load(t1_path)
