@@ -43,6 +43,7 @@ from .cptac_ccrcc_tumor import get_cptac_ccrcc_tumor_dataset, get_cptac_ccrcc_tu
 from .cptac_pda_tumor import get_cptac_pda_tumor_dataset, get_cptac_pda_tumor_loader
 from .cptac_ucec_tumor import get_cptac_ucec_tumor_dataset, get_cptac_ucec_tumor_loader
 from .crossmoda import get_crossmoda_dataset, get_crossmoda_loader
+from .ct2us_kidney import get_ct2us_kidney_dataset, get_ct2us_kidney_loader
 from .ct_cadaiver import get_ct_cadaiver_dataset, get_ct_cadaiver_loader
 from .ct_lymph_nodes import get_ct_lymph_nodes_dataset, get_ct_lymph_nodes_loader
 from .ct_org import get_ct_org_dataset, get_ct_org_loader
