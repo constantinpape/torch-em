@@ -73,6 +73,7 @@ from .hubmap_hpa import get_hubmap_hpa_dataset, get_hubmap_hpa_loader
 from .hubmap_kidney import get_hubmap_kidney_dataset, get_hubmap_kidney_loader
 from .hva_ct import get_hva_ct_dataset, get_hva_ct_loader
 from .hvsmr import get_hvsmr_dataset, get_hvsmr_loader
+from .ibd_mre import get_ibd_mre_dataset, get_ibd_mre_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .insect_anatomy import get_insect_anatomy_dataset, get_insect_anatomy_loader
 from .instance22 import get_instance22_dataset, get_instance22_loader
