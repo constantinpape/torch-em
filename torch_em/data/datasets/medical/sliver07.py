@@ -73,9 +73,8 @@ def get_sliver07_data(path: Union[os.PathLike, str], download: bool = False) -> 
     Returns:
         Filepath where the preprocessed data is stored.
     """
+    # NOTE: The conversion below skips scans that were converted already, so an interrupted run resumes.
     preprocessed_dir = os.path.join(path, "preprocessed")
-    if os.path.exists(preprocessed_dir) and glob(os.path.join(preprocessed_dir, "liver-orig*.nii.gz")):
-        return preprocessed_dir
 
     if not glob(os.path.join(path, "**", "liver-orig*.mhd"), recursive=True):
         os.makedirs(path, exist_ok=True)
