@@ -119,6 +119,7 @@ from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
 from .palm import get_palm_dataset, get_palm_loader
 from .pancreatic_ct_cbct_seg import get_pancreatic_ct_cbct_seg_dataset, get_pancreatic_ct_cbct_seg_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
+from .pansegdata import get_pansegdata_dataset, get_pansegdata_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .parse22 import get_parse22_dataset, get_parse22_loader
 from .particleseg3d import get_particleseg3d_dataset, get_particleseg3d_loader
