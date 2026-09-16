@@ -298,7 +298,10 @@ def _download_tcia_series_with_rest(series_uids, dst, csv_filename):
             continue
 
         response = get_with_retries("getSeriesMetaData", params={"SeriesInstanceUID": uid})
-        metadata.append(response.json()[0])
+        # A small number of series have no indexed metadata and the endpoint returns an empty body for
+        # them, even though the image data itself downloads without issue.
+        rows = response.json() if response.content else []
+        metadata.append(rows[0] if rows else {"Series UID": uid})
         cache[uid] = metadata[-1]
         if i % 50 == 0:
             with open(cache_path, "w") as f:
@@ -316,7 +319,12 @@ def _download_tcia_series_with_rest(series_uids, dst, csv_filename):
                     copyfileobj(r.raw, f)
             tmp_series_dir = os.path.join(tmp_dir, "series")
             unzip(zip_path, tmp_series_dir)
-            os.rename(tmp_series_dir, series_dir)
+            try:
+                os.rename(tmp_series_dir, series_dir)
+            except FileExistsError:
+                # A resumed download may have already extracted this series: on some network filesystems
+                # the 'os.path.exists' check above can be stale, so this is not caught earlier.
+                pass
 
     # The metadata keys differ between series (e.g. 'Series Date' is only reported for some), so the header
     # has to be the union of all keys.
