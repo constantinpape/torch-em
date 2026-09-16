@@ -69,6 +69,7 @@ from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
 from .kipa import get_kipa_dataset, get_kipa_loader
 from .kits import get_kits_dataset, get_kits_loader
 from .kvasir import get_kvasir_dataset, get_kvasir_loader
+from .lascarqs import get_lascarqs_dataset, get_lascarqs_loader
 from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
 from .lidc_idri import get_lidc_idri_dataset, get_lidc_idri_loader
@@ -88,6 +89,7 @@ from .motum import get_motum_dataset, get_motum_loader
 from .mrbrains18 import get_mrbrains18_dataset, get_mrbrains18_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .multi_organ_abdominal_ct import get_multi_organ_abdominal_ct_dataset, get_multi_organ_abdominal_ct_loader
+from .myops import get_myops_dataset, get_myops_loader
 from .nci_isbi_prostate import get_nci_isbi_prostate_dataset, get_nci_isbi_prostate_loader
 from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
 from .nsclc_radiomics import get_nsclc_radiomics_dataset, get_nsclc_radiomics_loader
@@ -125,6 +127,7 @@ from .segthy import get_segthy_dataset, get_segthy_loader
 from .siim_acr import get_siim_acr_dataset, get_siim_acr_loader
 from .ski10 import get_ski10_dataset, get_ski10_loader
 from .skm_tea import get_skm_tea_dataset, get_skm_tea_loader
+from .sliver07 import get_sliver07_dataset, get_sliver07_loader
 from .soft_tissue_sarcoma import get_soft_tissue_sarcoma_dataset, get_soft_tissue_sarcoma_loader
 from .spider import get_spider_dataset, get_spider_loader
 from .spine_mets import get_spine_mets_dataset, get_spine_mets_loader
