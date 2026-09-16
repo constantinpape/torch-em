@@ -7,6 +7,7 @@ from .betaseg import get_betaseg_loader, get_betaseg_dataset
 from .cefa_hela import get_cefa_hela_loader, get_cefa_hela_dataset
 from .cellmap import get_cellmap_loader, get_cellmap_dataset
 from .cem import get_mitolab_loader
+from .cortex_connectomics import get_cortex_connectomics_loader, get_cortex_connectomics_dataset
 from .cremi import get_cremi_loader, get_cremi_dataset
 from .densecell import get_densecell_loader, get_densecell_dataset
 from .deepcontact import get_deepcontact_loader, get_deepcontact_dataset
