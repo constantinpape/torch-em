@@ -33,6 +33,7 @@ from .couinaud import get_couinaud_dataset, get_couinaud_loader
 from .covid19_20 import get_covid19_20_dataset, get_covid19_20_loader
 from .covid19_seg import get_covid19_seg_dataset, get_covid19_seg_loader
 from .covid_qu_ex import get_covid_qu_ex_dataset, get_covid_qu_ex_loader
+from .cptac_ccrcc_tumor import get_cptac_ccrcc_tumor_dataset, get_cptac_ccrcc_tumor_loader
 from .cptac_pda_tumor import get_cptac_pda_tumor_dataset, get_cptac_pda_tumor_loader
 from .cptac_ucec_tumor import get_cptac_ucec_tumor_dataset, get_cptac_ucec_tumor_loader
 from .crossmoda import get_crossmoda_dataset, get_crossmoda_loader
