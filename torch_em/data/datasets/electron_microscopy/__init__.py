@@ -49,6 +49,7 @@ from .popsicle import get_popsicle_loader, get_popsicle_dataset
 from .saber import get_saber_loader, get_saber_dataset
 from .snemi import get_snemi_loader, get_snemi_dataset
 from .sponge_em import get_sponge_em_loader, get_sponge_em_dataset
+from .surface_morphometrics import get_surface_morphometrics_loader, get_surface_morphometrics_dataset
 from .tnbc_mito import get_tnbc_mito_loader, get_tnbc_mito_dataset
 from .tumor_spheroid_em import get_tumor_spheroid_loader, get_tumor_spheroid_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
