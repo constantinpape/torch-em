@@ -25,6 +25,7 @@ from .human_organoids import get_human_organoids_loader, get_human_organoids_dat
 from .hydra_vulgaris import get_hydra_loader, get_hydra_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
+from .l4_dense_reconstruction import get_l4_dense_reconstruction_loader, get_l4_dense_reconstruction_dataset
 from .parlakgul_liver import get_parlakgul_liver_loader, get_parlakgul_liver_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
