@@ -116,6 +116,7 @@ from .prostate158 import get_prostate158_dataset, get_prostate158_loader
 from .prostate_edge_cases import get_prostate_edge_cases_dataset, get_prostate_edge_cases_loader
 from .prostatex import get_prostatex_dataset, get_prostatex_loader
 from .psfhs import get_psfhs_dataset, get_psfhs_loader
+from .qin_lungct_seg import get_qin_lungct_seg_dataset, get_qin_lungct_seg_loader
 from .qin_prostate import get_qin_prostate_dataset, get_qin_prostate_loader
 from .ravir import get_ravir_dataset, get_ravir_loader
 from .remind import get_remind_dataset, get_remind_loader
