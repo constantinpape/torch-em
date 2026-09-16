@@ -101,9 +101,8 @@ def get_cptac_ucec_tumor_data(path: Union[os.PathLike, str], download: bool = Fa
     Returns:
         Filepath where the preprocessed data is stored.
     """
+    # NOTE: The preprocessing below skips volumes that were converted already, so an interrupted run resumes.
     preprocessed_dir = os.path.join(path, "preprocessed")
-    if os.path.exists(preprocessed_dir) and glob(os.path.join(preprocessed_dir, "*.h5")):
-        return preprocessed_dir
 
     os.makedirs(path, exist_ok=True)
     series_metadata = _get_series_metadata(path, download)

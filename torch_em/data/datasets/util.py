@@ -299,8 +299,12 @@ def _download_tcia_series_with_rest(series_uids, dst, csv_filename):
 
         response = get_with_retries("getSeriesMetaData", params={"SeriesInstanceUID": uid})
         # A small number of series have no indexed metadata and the endpoint returns an empty body for
-        # them, even though the image data itself downloads without issue.
-        rows = response.json() if response.content else []
+        # them, even though the image data itself downloads without issue. A transient proxy or gateway
+        # error can also return a non-JSON body with a 200 status, which is handled the same way.
+        try:
+            rows = response.json() if response.content else []
+        except ValueError:
+            rows = []
         metadata.append(rows[0] if rows else {"Series UID": uid})
         cache[uid] = metadata[-1]
         if i % 50 == 0:
