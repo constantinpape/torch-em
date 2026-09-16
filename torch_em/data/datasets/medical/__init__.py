@@ -77,6 +77,7 @@ from .ibd_mre import get_ibd_mre_dataset, get_ibd_mre_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .insect_anatomy import get_insect_anatomy_dataset, get_insect_anatomy_loader
 from .instance22 import get_instance22_dataset, get_instance22_loader
+from .intraretinal_cystoid_fluid import get_intraretinal_cystoid_fluid_dataset, get_intraretinal_cystoid_fluid_loader
 from .ircadb import get_ircadb_dataset, get_ircadb_loader
 from .isbi_mslesion import get_isbi_mslesion_dataset, get_isbi_mslesion_loader
 from .isic import get_isic_dataset, get_isic_loader
