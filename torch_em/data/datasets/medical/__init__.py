@@ -16,6 +16,7 @@ from .atriaseg import get_atriaseg_dataset, get_atriaseg_loader
 from .autopet import get_autopet_dataset, get_autopet_loader
 from .autopet_organ import get_autopet_organ_dataset, get_autopet_organ_loader
 from .brainmetshare import get_brainmetshare_dataset, get_brainmetshare_loader
+from .brainptm import get_brainptm_dataset, get_brainptm_loader
 from .brats import get_brats_dataset, get_brats_loader
 from .btcv import get_btcv_dataset, get_btcv_loader
 from .busi import get_busi_dataset, get_busi_loader
@@ -69,7 +70,6 @@ from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
 from .kipa import get_kipa_dataset, get_kipa_loader
 from .kits import get_kits_dataset, get_kits_loader
 from .kvasir import get_kvasir_dataset, get_kvasir_loader
-from .lascarqs import get_lascarqs_dataset, get_lascarqs_loader
 from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
 from .lidc_idri import get_lidc_idri_dataset, get_lidc_idri_loader
@@ -89,7 +89,6 @@ from .motum import get_motum_dataset, get_motum_loader
 from .mrbrains18 import get_mrbrains18_dataset, get_mrbrains18_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .multi_organ_abdominal_ct import get_multi_organ_abdominal_ct_dataset, get_multi_organ_abdominal_ct_loader
-from .myops import get_myops_dataset, get_myops_loader
 from .nci_isbi_prostate import get_nci_isbi_prostate_dataset, get_nci_isbi_prostate_loader
 from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
 from .nsclc_radiomics import get_nsclc_radiomics_dataset, get_nsclc_radiomics_loader
