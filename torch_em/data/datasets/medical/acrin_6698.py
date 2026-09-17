@@ -6,7 +6,7 @@ of the functional tumor volume, obtained by thresholding a per-voxel signal enha
 computed from the pre- and post-contrast DCE-MRI phases. The mask is stored either "uni-lateral cropped"
 (covering one breast) or "bi-lateral" (covering both), cropped in-plane to the analyzed region. The
 collection also ships a second, unrelated family of 1103 "DWI SEG" objects (whole-tumor masks drawn on
-diffusion-weighted imaging derivative series), which is not covered by this module.
+diffusion-weighted imaging derivative series); those are covered separately by `medical.acrin_6698_dwi`.
 
 Unlike most DICOM-SEG collections handled elsewhere in this package, these SEG objects carry neither a
 `ReferencedSeriesSequence` nor a per-frame `DerivationImageSequence`: only a `StudyInstanceUID` and a
