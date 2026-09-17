@@ -39,6 +39,7 @@ from .mitoemv2 import get_mitoemv2_loader, get_mitoemv2_dataset
 from .mito_segem import get_mito_segem_loader, get_mito_segem_dataset
 from .mitonet_predicted_kidney import get_mitonet_predicted_kidney_loader, get_mitonet_predicted_kidney_dataset
 from .mousecc import get_mousecc_loader, get_mousecc_dataset
+from .neuromast_connectomics import get_neuromast_connectomics_loader, get_neuromast_connectomics_dataset
 from .nisb import get_nisb_loader, get_nisb_dataset
 from .nuc_mm import get_nuc_mm_loader, get_nuc_mm_dataset
 from .probtem import get_probtem_loader, get_probtem_dataset
