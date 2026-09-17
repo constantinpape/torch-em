@@ -23,6 +23,7 @@ from .hest import get_hest_loader, get_hest_dataset
 from .histo_miner import get_histo_miner_loader, get_histo_miner_dataset
 from .icc import get_icc_loader, get_icc_dataset
 from .ignite import get_ignite_loader, get_ignite_dataset
+from .imc_kidney import get_imc_kidney_loader, get_imc_kidney_dataset
 from .janowczyk import get_janowczyk_loader, get_janowczyk_dataset
 from .khoshdeli import get_khoshdeli_loader, get_khoshdeli_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset
