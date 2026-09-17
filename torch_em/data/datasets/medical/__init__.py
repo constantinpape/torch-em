@@ -155,6 +155,7 @@ from .qin_lungct_seg import get_qin_lungct_seg_dataset, get_qin_lungct_seg_loade
 from .qin_prostate import get_qin_prostate_dataset, get_qin_prostate_loader
 from .radgenome_chestct import get_radgenome_chestct_dataset, get_radgenome_chestct_loader
 from .ravir import get_ravir_dataset, get_ravir_loader
+from .refuge import get_refuge_dataset, get_refuge_loader
 from .remind import get_remind_dataset, get_remind_loader
 from .resect import get_resect_dataset, get_resect_loader
 from .ribseg import get_ribseg_dataset, get_ribseg_loader
