@@ -86,6 +86,7 @@ from .hvsmr import get_hvsmr_dataset, get_hvsmr_loader
 from .ibd_mre import get_ibd_mre_dataset, get_ibd_mre_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
 from .imagecas import get_imagecas_dataset, get_imagecas_loader
+from .inbreast import get_inbreast_dataset, get_inbreast_loader
 from .insect_anatomy import get_insect_anatomy_dataset, get_insect_anatomy_loader
 from .instance22 import get_instance22_dataset, get_instance22_loader
 from .intraretinal_cystoid_fluid import get_intraretinal_cystoid_fluid_dataset, get_intraretinal_cystoid_fluid_loader
