@@ -1,4 +1,5 @@
 from .abdomen_atlas import get_abdomen_atlas_dataset, get_abdomen_atlas_loader
+from .abdomen_atlas_3 import get_abdomen_atlas_3_dataset, get_abdomen_atlas_3_loader
 from .abdomenct_1k import get_abdomenct_1k_dataset, get_abdomenct_1k_loader
 from .abus import get_abus_dataset, get_abus_loader
 from .acdc import get_acdc_dataset, get_acdc_loader
@@ -172,7 +173,7 @@ from .us_sim_and_seg import get_us_sim_and_seg_dataset, get_us_sim_and_seg_loade
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
 from .valdo import get_valdo_dataset, get_valdo_loader
 from .verse import get_verse_dataset, get_verse_loader
-from .vs_seg import get_vs_seg_dataset, get_vs_seg_loader
 from .waw_tace import get_waw_tace_dataset, get_waw_tace_loader
+from .vs_seg import get_vs_seg_dataset, get_vs_seg_loader
 from .wmh import get_wmh_dataset, get_wmh_loader
 from .word import get_word_dataset, get_word_loader
