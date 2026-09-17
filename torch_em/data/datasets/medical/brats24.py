@@ -1,41 +1,37 @@
-"""The BraTS dataset contains annotations for the sub-regions of adult diffuse glioma
-in multi-modal brain MRI.
+"""The BraTS 2024 dataset contains annotations for the sub-regions of post-treatment adult diffuse
+glioma in multi-modal brain MRI.
 
-It is the adult glioma segmentation task of the Brain Tumor Segmentation (BraTS) challenge
-(https://www.synapse.org/brats). This module implements the BraTS 2023 release of it
-('ASNR-MICCAI-BraTS2023-GLI'), whose training set consists of 1251 pre-operative studies. Each study provides
-four co-registered, skull-stripped and interpolated sequences of shape (240, 240, 155) at 1 mm isotropic
-resolution, which can be selected with the 'modality' argument: a native T1-weighted scan ('t1n'), a
-post-contrast T1-weighted scan ('t1c'), a T2-weighted scan ('t2w') and a T2 FLAIR scan ('t2f').
+It is the adult glioma segmentation task of the 2024 Brain Tumor Segmentation (BraTS) challenge
+(https://www.synapse.org/Synapse:syn53708126). Unlike the BraTS 2023 release (see `brats.py`), this is an
+entirely new dataset of exclusively post-treatment studies, with 1621 training studies. Each study provides
+four co-registered, skull-stripped and interpolated sequences, which can be selected with the 'modality'
+argument: a native T1-weighted scan ('t1n'), a post-contrast T1-weighted scan ('t1c'), a T2-weighted scan
+('t2w') and a T2 FLAIR scan ('t2f').
 
-The label ids are described in `LABEL_IDS`: 0 = background, 1 = necrotic and non-enhancing tumor core (NCR),
-2 = peritumoral edematous / invaded tissue (ED), 3 = GD-enhancing tumor (ET).
-NOTE: These are the ids of the BraTS 2023 (and later) releases. The BraTS 2021 and earlier releases use the
-id 4 for the enhancing tumor and leave the id 3 unused, but are otherwise identical for this task.
+The label ids are described in `LABEL_IDS`: 0 = background, 1 = non-enhancing tumor core (NETC), 2 =
+surrounding non-enhancing FLAIR hyperintensity (SNFH), 3 = enhancing tissue (ET), 4 = resection cavity (RC).
+NOTE: These ids differ from the BraTS 2023 (and earlier) releases, which do not have a resection cavity
+class and instead use the id 1 for the necrotic tumor core.
 
-Evaluation is not done on the sub-regions themselves, but on the three nested regions that they form, which
-can be selected with the 'region' argument (see `REGIONS`): the whole tumor (the union of all three
-sub-regions), the tumor core (the union of the necrotic core and the enhancing tumor) and the enhancing
-tumor. The individual sub-regions can also be selected as a binary target with this argument. By default,
-the sub-region ids are returned as they are.
+Evaluation is not done on the sub-regions themselves, but on the nested regions that they form, which can be
+selected with the 'region' argument (see `REGIONS`): the whole tumor (the union of the non-enhancing tumor
+core, the FLAIR hyperintensity and the enhancing tissue, excluding the resection cavity), the tumor core
+(the union of the non-enhancing tumor core and the enhancing tissue) and the enhancing tissue. The
+individual sub-regions, including the resection cavity, can also be selected as a binary target with this
+argument. By default, the sub-region ids are returned as they are. This follows the official evaluation
+script at https://github.com/rachitsaluja/BraTS-2024-Metrics.
 
-NOTE: The official data at https://www.synapse.org/brats is only handed out to registered participants, so
-this module downloads a public mirror of the BraTS 2023 adult glioma training set at
-https://huggingface.co/datasets/MedOtter/brats2023-gli-dataset. If the official release is extracted into the
-folder passed as 'path', so that files such as
-'<path>/**/BraTS-GLI-00000-000/BraTS-GLI-00000-000-t2f.nii.gz' exist, it is used instead of the mirror.
-
-The BraTS 2024 adult glioma task (https://www.synapse.org/Synapse:syn53708126) is a different dataset. It
-covers post-treatment glioma, and its label ids differ (1 = non-enhancing tumor core, 2 = surrounding
-non-enhancing FLAIR hyperintensity, 3 = enhancing tissue, 4 = resection cavity). See `brats24.py` for that
-module.
+NOTE: The official data at https://www.synapse.org/Synapse:syn53708126 is only handed out to registered
+participants, so this module downloads a public mirror of the BraTS 2024 adult glioma training set at
+https://huggingface.co/datasets/Spirit-26/BraTS-2024-Complete. If the official release is extracted into
+the folder passed as 'path', so that files such as
+'<path>/**/BraTS-GLI-00005-100/BraTS-GLI-00005-100-t2f.nii.gz' exist, it is used instead of the mirror.
 
 The scans are used as nifti volumes directly (the key is 'data'). They are loaded with the axis order
 reversed with respect to the nifti file, i.e. (Z, Y, X), so that a 2d patch shape selects axial slices.
 
-This dataset is from the publications https://doi.org/10.48550/arXiv.2107.02314,
-https://doi.org/10.1109/TMI.2014.2377694 and https://doi.org/10.1038/sdata.2017.117.
-Please cite them if you use this dataset in your research.
+This dataset is from the publication https://doi.org/10.48550/arXiv.2405.18368.
+Please cite it if you use this dataset in your research.
 """
 
 import os
@@ -54,32 +50,39 @@ import torch_em
 from .. import util
 
 
-FOLDER_NAME = "ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData"
+FOLDER_NAME = "BraTS-GLI"
 
-URL_BASE = f"https://huggingface.co/datasets/MedOtter/brats2023-gli-dataset/resolve/main/{FOLDER_NAME}"
+URL_BASE = f"https://huggingface.co/datasets/Spirit-26/BraTS-2024-Complete/resolve/main/{FOLDER_NAME}/train"
 
-API_URL = f"https://huggingface.co/api/datasets/MedOtter/brats2023-gli-dataset/tree/main/{FOLDER_NAME}"
+API_URL = f"https://huggingface.co/api/datasets/Spirit-26/BraTS-2024-Complete/tree/main/{FOLDER_NAME}/train"
 
-LABEL_IDS = {"background": 0, "necrotic_core": 1, "edema": 2, "enhancing_tumor": 3}
+LABEL_IDS = {
+    "background": 0,
+    "non_enhancing_tumor_core": 1,
+    "surrounding_flair_hyperintensity": 2,
+    "enhancing_tissue": 3,
+    "resection_cavity": 4,
+}
 
 # The nested tumor regions that the challenge evaluates, and the sub-regions they are made of.
 REGIONS = {
     "whole_tumor": (1, 2, 3),
     "tumor_core": (1, 3),
-    "enhancing_tumor": (3,),
-    "edema": (2,),
-    "necrotic_core": (1,),
+    "enhancing_tissue": (3,),
+    "surrounding_flair_hyperintensity": (2,),
+    "non_enhancing_tumor_core": (1,),
+    "resection_cavity": (4,),
 }
 
 MODALITIES = ["t1n", "t1c", "t2w", "t2f"]
 
-N_SUBJECTS = 1251
+N_SUBJECTS = 1621
 
 N_RETRIES = 5
 
 
 class RegionTransform:
-    """Transform the BraTS sub-region ids into a binary mask for one of the tumor regions.
+    """Transform the BraTS 2024 sub-region ids into a binary mask for one of the tumor regions.
 
     Args:
         region: The name of the tumor region, see `REGIONS`.
@@ -147,7 +150,7 @@ def _find_data(path, modality):
 
 def _download_volumes(path, modality, download):
     raw_paths, label_paths = [], []
-    for subject_id in tqdm(_get_subject_ids(path, download), desc="Downloading the BraTS studies"):
+    for subject_id in tqdm(_get_subject_ids(path, download), desc="Downloading the BraTS 2024 studies"):
         subject_dir = os.path.join(path, FOLDER_NAME, subject_id)
         os.makedirs(subject_dir, exist_ok=True)
 
@@ -168,12 +171,12 @@ def _download_volumes(path, modality, download):
     return raw_paths, label_paths
 
 
-def get_brats_data(
+def get_brats24_data(
     path: Union[os.PathLike, str],
     modality: Literal["t1n", "t1c", "t2w", "t2f"] = "t2f",
     download: bool = False,
 ) -> Tuple[List[str], List[str]]:
-    """Download the BraTS 2023 adult glioma dataset.
+    """Download the BraTS 2024 post-treatment adult glioma dataset.
 
     Only the requested modality and the annotations are downloaded, since the studies are fetched study
     by study from the mirror.
@@ -199,12 +202,12 @@ def get_brats_data(
     return _download_volumes(path, modality, download)
 
 
-def get_brats_paths(
+def get_brats24_paths(
     path: Union[os.PathLike, str],
     modality: Literal["t1n", "t1c", "t2w", "t2f"] = "t2f",
     download: bool = False,
 ) -> Tuple[List[str], List[str]]:
-    """Get paths to the BraTS 2023 adult glioma data.
+    """Get paths to the BraTS 2024 post-treatment adult glioma data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
@@ -215,21 +218,24 @@ def get_brats_paths(
         List of filepaths for the image data.
         List of filepaths for the label data.
     """
-    raw_paths, label_paths = get_brats_data(path, modality, download)
+    raw_paths, label_paths = get_brats24_data(path, modality, download)
     assert len(raw_paths) == len(label_paths) and len(raw_paths) > 0, f"Could not find the studies in '{path}'."
     return raw_paths, label_paths
 
 
-def get_brats_dataset(
+def get_brats24_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     modality: Literal["t1n", "t1c", "t2w", "t2f"] = "t2f",
-    region: Optional[Literal["whole_tumor", "tumor_core", "enhancing_tumor", "edema", "necrotic_core"]] = None,
+    region: Optional[Literal[
+        "whole_tumor", "tumor_core", "enhancing_tissue",
+        "surrounding_flair_hyperintensity", "non_enhancing_tumor_core", "resection_cavity",
+    ]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the BraTS 2023 adult glioma dataset for brain tumor segmentation.
+    """Get the BraTS 2024 post-treatment adult glioma dataset for brain tumor segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
@@ -246,7 +252,7 @@ def get_brats_dataset(
     if region is not None and region not in REGIONS:
         raise ValueError(f"'{region}' is not a valid region. Please choose one of {list(REGIONS.keys())}.")
 
-    raw_paths, label_paths = get_brats_paths(path, modality, download)
+    raw_paths, label_paths = get_brats24_paths(path, modality, download)
 
     if region is not None:
         kwargs = util.update_kwargs(kwargs, "label_transform", RegionTransform(region))
@@ -268,17 +274,20 @@ def get_brats_dataset(
     )
 
 
-def get_brats_loader(
+def get_brats24_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
     patch_shape: Tuple[int, ...],
     modality: Literal["t1n", "t1c", "t2w", "t2f"] = "t2f",
-    region: Optional[Literal["whole_tumor", "tumor_core", "enhancing_tumor", "edema", "necrotic_core"]] = None,
+    region: Optional[Literal[
+        "whole_tumor", "tumor_core", "enhancing_tissue",
+        "surrounding_flair_hyperintensity", "non_enhancing_tumor_core", "resection_cavity",
+    ]] = None,
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the BraTS 2023 adult glioma dataloader for brain tumor segmentation.
+    """Get the BraTS 2024 post-treatment adult glioma dataloader for brain tumor segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
@@ -294,5 +303,5 @@ def get_brats_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_brats_dataset(path, patch_shape, modality, region, resize_inputs, download, **ds_kwargs)
+    dataset = get_brats24_dataset(path, patch_shape, modality, region, resize_inputs, download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
