@@ -14,6 +14,7 @@ from .cytonuke import get_cytonuke_loader, get_cytonuke_dataset
 from .dcsa_net import get_dcsa_net_loader, get_dcsa_net_dataset
 from .deepliif import get_deepliif_loader, get_deepliif_dataset
 from .derma_paseg import get_derma_paseg_loader, get_derma_paseg_dataset
+from .ecm_phenotyping import get_ecm_phenotyping_loader, get_ecm_phenotyping_dataset
 from .glas import get_glas_loader, get_glas_dataset
 from .gleason2019 import get_gleason2019_loader, get_gleason2019_dataset
 from .glysac import get_glysac_loader, get_glysac_dataset
