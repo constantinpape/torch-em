@@ -133,6 +133,7 @@ from .vibrio_cholerae import get_vibrio_cholerae_loader, get_vibrio_cholerae_dat
 from .vicar import get_vicar_loader, get_vicar_dataset
 from .wing_disc import get_wing_disc_loader, get_wing_disc_dataset
 from .xenium import get_xenium_loader, get_xenium_dataset
+from .xenium_lung_treg import get_xenium_lung_treg_loader, get_xenium_lung_treg_dataset
 from .xpress import get_xpress_loader, get_xpress_dataset
 from .yeastcellseg import get_yeastcellseg_loader, get_yeastcellseg_dataset
 from .yeastms import get_yeastms_loader, get_yeastms_dataset
