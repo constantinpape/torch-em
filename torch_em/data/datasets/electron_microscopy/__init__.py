@@ -24,6 +24,7 @@ from .fafb import get_fafb_loader, get_fafb_dataset
 from .human_cortex_h01 import get_human_cortex_h01_loader, get_human_cortex_h01_dataset
 from .human_liver_em import get_human_liver_em_loader, get_human_liver_em_dataset
 from .hemibrain import get_hemibrain_loader, get_hemibrain_dataset
+from .hela_mito import get_hela_mito_loader, get_hela_mito_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
 from .hydra_vulgaris import get_hydra_loader, get_hydra_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
