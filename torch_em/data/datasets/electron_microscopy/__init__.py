@@ -17,6 +17,7 @@ from .emps import get_emps_loader, get_emps_dataset
 from .fafb import get_fafb_loader, get_fafb_dataset
 from .fafb_nuclei import get_fafb_nuclei_loader, get_fafb_nuclei_dataset
 from .fib25 import get_fib25_loader, get_fib25_dataset
+from .fluoem import get_fluoem_loader, get_fluoem_dataset
 from .fafb import get_fafb_loader, get_fafb_dataset
 from .human_cortex_h01 import get_human_cortex_h01_loader, get_human_cortex_h01_dataset
 from .human_liver_em import get_human_liver_em_loader, get_human_liver_em_dataset
