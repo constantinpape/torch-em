@@ -126,6 +126,7 @@ from .nsclc_radiomics import get_nsclc_radiomics_dataset, get_nsclc_radiomics_lo
 from .nsclc_radiomics_interobserver1 import get_nsclc_radiomics_interobserver1_dataset, get_nsclc_radiomics_interobserver1_loader  # noqa
 from .oasis import get_oasis_dataset, get_oasis_loader
 from .oct5k import get_oct5k_dataset, get_oct5k_loader
+from .octa500 import get_octa500_dataset, get_octa500_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .orcascore import get_orcascore_dataset, get_orcascore_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
