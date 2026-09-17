@@ -28,6 +28,7 @@ from .btcv import get_btcv_dataset, get_btcv_loader
 from .btxrd import get_btxrd_dataset, get_btxrd_loader
 from .bus_uclm import get_bus_uclm_dataset, get_bus_uclm_loader
 from .busi import get_busi_dataset, get_busi_loader
+from .cadis import get_cadis_dataset, get_cadis_loader
 from .camus import get_camus_dataset, get_camus_loader
 from .cap_lv import get_cap_lv_dataset, get_cap_lv_loader
 from .cbis_ddsm import get_cbis_ddsm_dataset, get_cbis_ddsm_loader
