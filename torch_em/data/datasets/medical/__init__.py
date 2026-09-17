@@ -118,6 +118,7 @@ from .nci_isbi_prostate import get_nci_isbi_prostate_dataset, get_nci_isbi_prost
 from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
 from .nsclc_radiogenomics import get_nsclc_radiogenomics_dataset, get_nsclc_radiogenomics_loader
 from .nsclc_radiomics import get_nsclc_radiomics_dataset, get_nsclc_radiomics_loader
+from .nsclc_radiomics_interobserver1 import get_nsclc_radiomics_interobserver1_dataset, get_nsclc_radiomics_interobserver1_loader  # noqa
 from .oasis import get_oasis_dataset, get_oasis_loader
 from .oct5k import get_oct5k_dataset, get_oct5k_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
