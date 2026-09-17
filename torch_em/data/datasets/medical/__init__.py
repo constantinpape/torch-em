@@ -123,6 +123,7 @@ from .orcascore import get_orcascore_dataset, get_orcascore_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
 from .palm import get_palm_dataset, get_palm_loader
 from .pancreatic_ct_cbct_seg import get_pancreatic_ct_cbct_seg_dataset, get_pancreatic_ct_cbct_seg_loader
+from .pandental import get_pandental_dataset, get_pandental_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
 from .pansegdata import get_pansegdata_dataset, get_pansegdata_loader
 from .papila import get_papila_dataset, get_papila_loader
