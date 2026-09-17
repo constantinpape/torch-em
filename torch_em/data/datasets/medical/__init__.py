@@ -5,6 +5,7 @@ from .abus import get_abus_dataset, get_abus_loader
 from .acdc import get_acdc_dataset, get_acdc_loader
 from .acouslic_ai import get_acouslic_ai_dataset, get_acouslic_ai_loader
 from .acrin_6698 import get_acrin_6698_dataset, get_acrin_6698_loader
+from .acrin_6698_dwi import get_acrin_6698_dwi_dataset, get_acrin_6698_dwi_loader
 from .acrin_hnscc import get_acrin_hnscc_dataset, get_acrin_hnscc_loader
 from .adrenal_acc import get_adrenal_acc_dataset, get_adrenal_acc_loader
 from .advanced_mri_breast_lesions import get_advanced_mri_breast_lesions_dataset, get_advanced_mri_breast_lesions_loader  # noqa
