@@ -26,6 +26,7 @@ from .ignite import get_ignite_loader, get_ignite_dataset
 from .imc_kidney import get_imc_kidney_loader, get_imc_kidney_dataset
 from .janowczyk import get_janowczyk_loader, get_janowczyk_dataset
 from .khoshdeli import get_khoshdeli_loader, get_khoshdeli_dataset
+from .liver_tme_mibi import get_liver_tme_mibi_loader, get_liver_tme_mibi_dataset
 from .lizard import get_lizard_loader, get_lizard_dataset
 from .lizard_mitosis import get_lizard_mitosis_loader, get_lizard_mitosis_dataset
 from .lynsec import get_lynsec_loader, get_lynsec_dataset
