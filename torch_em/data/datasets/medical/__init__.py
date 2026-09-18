@@ -104,6 +104,7 @@ from .ircadb import get_ircadb_dataset, get_ircadb_loader
 from .isbi_mslesion import get_isbi_mslesion_dataset, get_isbi_mslesion_loader
 from .isic import get_isic_dataset, get_isic_loader
 from .isles import get_isles_dataset, get_isles_loader
+from .isles2024 import get_isles2024_dataset, get_isles2024_loader
 from .jsrt import get_jsrt_dataset, get_jsrt_loader
 from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
 from .kipa import get_kipa_dataset, get_kipa_loader
