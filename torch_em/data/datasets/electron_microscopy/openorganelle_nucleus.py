@@ -1,6 +1,6 @@
-"""This dataset provides nucleus segmentation masks for 29 volumes from the public
+"""This dataset provides nucleus segmentation masks for 30 volumes from the public
 "OpenOrganelle" `janelia-cosem-datasets` S3 bucket (the same bucket used by `cellmap.py` and
-`janelia_nucleus.py`), none of which are covered by either of those existing loaders. All 29 are
+`janelia_nucleus.py`), none of which are covered by either of those existing loaders. All 30 are
 released under CC0-1.0, except `jrc_mus-thymus-1` and `aic_desmosome-3` whose license and paper
 could not be independently verified (`aic_desmosome-3` is an Allen Institute dataset, so the
 Janelia CC0-1.0 convention documented for the rest does not apply to it).
@@ -9,7 +9,7 @@ Three label folder naming conventions are used across the bucket, all distinct f
 `janelia_nucleus.py`'s:
 
 - `labels/inference/nucleus_seg/{level}` (`jrc_ctl-id8-2`, `jrc_choroid-plexus-2`, `jrc_dauer-larva`).
-- `labels/inference/segmentations/nuc/{level}` (most of the remaining 26 datasets).
+- `labels/inference/segmentations/nuc/{level}` (most of the remaining 27 datasets).
 - `labels/inference/segmentations/nucleus/{level}` (`jrc_hum-airway-14953vc` only).
 - `labels/inference/segmentations/nuc_mem/{level}` (`jrc_mus-liver-4/5/6`) - these three are
   nuclear MEMBRANE labels, a distinct annotation target from a nucleus mask/instance segmentation,
@@ -27,11 +27,10 @@ tens of GB to several TB) are downloaded as one fixed-size representative crop, 
 from a non-empty region of the coarsest available label pyramid level, following `cellmap.py`'s
 per-crop pattern - see `DATASETS[name]["full_array"]`.
 
-One more candidate found by the same discovery sweep, `jrc_mosquito-stylet-6`, also has real
-nucleus instance labels but is deliberately excluded here: its arrays are stored in zarr v3 with
-sharding, and even a small bounded crop pulls one or more full shards (tens of GB decompressed),
-defeating this loader's crop-only cost model. Integrating it would need shard-aware chunk-range
-reads rather than a plain slice.
+`jrc_mosquito-stylet-6` is the only dataset whose raw and label arrays are stored in zarr v3 with
+sharding (1024^3 outer shards, 64^3 inner chunks); `_open_remote_zarr` uses `zarr.storage.
+FsspecStore` rather than `fsspec.get_mapper` specifically so that a crop only pulls the individual
+inner chunks it needs via ranged reads, not whole ~1 GB shard files.
 
 Please cite the CellMap project (https://www.janelia.org/project-team/cellmap) if you use this
 data (except `aic_desmosome-3`, an Allen Institute for Cell Science dataset).
@@ -130,6 +129,16 @@ DATASETS = {
         "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nucleus", "label_level": "s0",
         "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
     },
+    # Stored in zarr v3 with sharding (1024^3 outer shards, 64^3 inner chunks); `_open_remote_zarr`
+    # uses `FsspecStore` rather than `fsspec.get_mapper` so a crop only pulls the inner chunks it
+    # actually needs, not whole ~1GB shard files. Its label pyramid has only one level (s0, full
+    # resolution) - there is no genuinely coarse level to cheaply scan for a non-empty region, so
+    # this uses a verified fixed crop instead of auto-detection.
+    "jrc_mosquito-stylet-6": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+        "bounding_box": ((1088, 1216), (640, 768), (768, 896)),
+    },
     "jrc_mus-epididymis-1": {
         "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
         "label_kind": "binary", "label_target": "nucleus", "axis_reverse": "raw", "full_array": True,
@@ -194,9 +203,12 @@ CROP_SHAPE_DEFAULT = (128, 128, 128)
 
 def _open_remote_zarr(s3_path):
     import zarr
-    import fsspec
+    from zarr.storage import FsspecStore
 
-    store = fsspec.get_mapper(s3_path, anon=True)
+    # `FsspecStore` (not `fsspec.get_mapper`) is required for `jrc_mosquito-stylet-6`'s zarr v3
+    # sharded array: it performs ranged partial reads of individual inner chunks, whereas
+    # `fsspec.get_mapper` fetches whole shard files (up to ~1GB each) even for a small crop.
+    store = FsspecStore.from_url(s3_path, storage_options={"anon": True}, read_only=True)
     return zarr.open(store, mode="r")
 
 
