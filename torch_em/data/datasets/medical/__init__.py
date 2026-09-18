@@ -65,6 +65,7 @@ from .ctspinopelvic1k import get_ctspinopelvic1k_dataset, get_ctspinopelvic1k_lo
 from .curvas import get_curvas_dataset, get_curvas_loader
 from .dap_atlas import get_dap_atlas_dataset, get_dap_atlas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
+from .ddti import get_ddti_dataset, get_ddti_loader
 from .deeplesion import get_deeplesion_dataset, get_deeplesion_loader
 from .dentex import get_dentex_dataset, get_dentex_loader
 from .drive import get_drive_dataset, get_drive_loader
