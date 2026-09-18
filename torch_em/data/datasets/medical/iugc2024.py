@@ -10,9 +10,9 @@ Please cite it if you use this dataset for your research.
 
 NOTE: The dataset stores raw frames as videos (`.avi`) instead of individual images, so
 this module extracts the specific annotated frame(s) out of each video and caches it to
-disk as an image next to the corresponding mask. Only the "val" and "test" splits are
-supported, as the "train" split stores masks in a differently structured per-video layout
-that could not be verified with the same approach.
+disk as an image next to the corresponding mask. The "train" split stores masks nested
+per-video (`seg/<video_stem>/mask/<video_stem>_<frame_index>_6.png`) and its video files
+are named `<recording_id>__<video_stem>.avi`, unlike the flat layout of "val" and "test".
 """
 
 import os
@@ -34,6 +34,7 @@ KAGGLE_DATASET_NAME = "aspirexxx/iugc-ultrasound-video-dataset-miccai-2024"
 # The dataset does not expose a stable top-level folder layout, so the per-split prefixes
 # below were resolved once via the Kaggle Files API (`KaggleApi.dataset_list_files`).
 SPLIT_PREFIXES = {
+    "train": "DatasetV3/train-20251119T060603Z-1-001/train/",
     "val": "DatasetV3/val-20251119T054616Z-1-001/val/",
     "test": "DatasetV3/test-20251119T054614Z-1-001/test/",
 }
@@ -76,7 +77,62 @@ def _list_seg_filenames(api, prefix):
     return filenames
 
 
-def get_iugc2024_data(path: Union[os.PathLike, str], split: Literal["val", "test"], download: bool = False) -> str:
+def _list_all_filenames(api):
+    filenames = []
+    token = None
+    while True:
+        response = api.dataset_list_files(KAGGLE_DATASET_NAME, page_token=token, page_size=500)
+        filenames.extend(f.name for f in response.files)
+        token = response.next_page_token
+        if not token:
+            break
+
+    return filenames
+
+
+def _match_train_video_name(video_names, video_stem):
+    # Train videos are named "<recording_id>__<video_stem>.avi", unlike the flat
+    # "<video_stem>.avi" naming used for the "val" and "test" splits.
+    matches = [name for name in video_names if os.path.splitext(name)[0].rsplit("__", 1)[-1] == video_stem]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"Found {len(matches)} candidate video files for '{video_stem}' in the train split, expected exactly 1."
+        )
+
+    return matches[0]
+
+
+def _download_train_data(api, prefix, rows, videos_dir, seg_dir):
+    all_filenames = _list_all_filenames(api)
+
+    videos_prefix = f"{prefix}videos/"
+    video_names = [name[len(videos_prefix):] for name in all_filenames if name.startswith(videos_prefix)]
+
+    seg_prefix = f"{prefix}seg/"
+    mask_names = [
+        name[len(seg_prefix):] for name in all_filenames
+        if name.startswith(seg_prefix) and name.endswith(".png") and "/mask/" in name
+    ]
+
+    for row in rows:
+        video_stem = os.path.splitext(row["filename"])[0]
+
+        video_name = _match_train_video_name(video_names, video_stem)
+        video_path = os.path.join(videos_dir, video_name)
+        if not os.path.exists(video_path):
+            api.dataset_download_file(KAGGLE_DATASET_NAME, f"{videos_prefix}{video_name}", path=videos_dir, quiet=False)
+
+        video_mask_names = [name for name in mask_names if name.startswith(f"{video_stem}/mask/")]
+        for mask_name in video_mask_names:
+            mask_path = os.path.join(seg_dir, os.path.basename(mask_name))
+            if os.path.exists(mask_path):
+                continue
+            api.dataset_download_file(KAGGLE_DATASET_NAME, f"{seg_prefix}{mask_name}", path=seg_dir, quiet=False)
+
+
+def get_iugc2024_data(
+    path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
+) -> str:
     """Download the IUGC 2024 dataset.
 
     Args:
@@ -111,27 +167,31 @@ def get_iugc2024_data(path: Union[os.PathLike, str], split: Literal["val", "test
     with open(info_path) as f:
         rows = list(csv.DictReader(f))
 
-    seg_filenames = _list_seg_filenames(api, prefix)
+    if split == "train":
+        _download_train_data(api, prefix, rows, videos_dir, seg_dir)
+    else:
+        seg_filenames = _list_seg_filenames(api, prefix)
+        for row in rows:
+            video_name = row["filename"]
+            video_path = os.path.join(videos_dir, video_name)
+            if not os.path.exists(video_path):
+                api.dataset_download_file(
+                    KAGGLE_DATASET_NAME, f"{prefix}videos/{video_name}", path=videos_dir, quiet=False
+                )
 
-    for row in rows:
-        video_name = row["filename"]
-        video_path = os.path.join(videos_dir, video_name)
-        if not os.path.exists(video_path):
-            api.dataset_download_file(KAGGLE_DATASET_NAME, f"{prefix}videos/{video_name}", path=videos_dir, quiet=False)
-
-        video_stem = os.path.splitext(video_name)[0]
-        matches = [name for name in seg_filenames if name.startswith(video_stem)]
-        for mask_name in matches:
-            mask_path = os.path.join(seg_dir, mask_name)
-            if os.path.exists(mask_path):
-                continue
-            api.dataset_download_file(KAGGLE_DATASET_NAME, f"{prefix}seg/{mask_name}", path=seg_dir, quiet=False)
+            video_stem = os.path.splitext(video_name)[0]
+            matches = [name for name in seg_filenames if name.startswith(video_stem)]
+            for mask_name in matches:
+                mask_path = os.path.join(seg_dir, mask_name)
+                if os.path.exists(mask_path):
+                    continue
+                api.dataset_download_file(KAGGLE_DATASET_NAME, f"{prefix}seg/{mask_name}", path=seg_dir, quiet=False)
 
     return data_dir
 
 
 def get_iugc2024_paths(
-    path: Union[os.PathLike, str], split: Literal["val", "test"], download: bool = False
+    path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the IUGC 2024 data.
 
@@ -165,15 +225,25 @@ def get_iugc2024_paths(
         if os.path.exists(frame_path):
             continue
 
-        # The mask stem is either "<video_stem>" (val split) or "<video_stem>_<frame_index>" (test split).
-        video_candidates = glob(os.path.join(videos_dir, f"{mask_stem}.avi"))
-        if video_candidates:
+        if split == "train":
+            # The mask stem is "<video_stem>_<frame_index>_6" and the corresponding video is
+            # named "<recording_id>__<video_stem>.avi".
+            video_stem, frame_index, _ = mask_stem.rsplit("_", 2)
+            video_candidates = glob(os.path.join(videos_dir, f"*__{video_stem}.avi"))
+            if not video_candidates:
+                raise RuntimeError(f"Could not find a video file for the mask stem '{mask_stem}'.")
             video_path = video_candidates[0]
-            frame_index = 0
-        else:
-            video_stem, frame_index = mask_stem.rsplit("_", 1)
-            video_path = os.path.join(videos_dir, f"{video_stem}.avi")
             frame_index = int(frame_index)
+        else:
+            # The mask stem is either "<video_stem>" (val split) or "<video_stem>_<frame_index>" (test split).
+            video_candidates = glob(os.path.join(videos_dir, f"{mask_stem}.avi"))
+            if video_candidates:
+                video_path = video_candidates[0]
+                frame_index = 0
+            else:
+                video_stem, frame_index = mask_stem.rsplit("_", 1)
+                video_path = os.path.join(videos_dir, f"{video_stem}.avi")
+                frame_index = int(frame_index)
 
         capture = cv2.VideoCapture(video_path)
         capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
@@ -191,7 +261,7 @@ def get_iugc2024_paths(
 def get_iugc2024_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
-    split: Literal["val", "test"],
+    split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -232,7 +302,7 @@ def get_iugc2024_loader(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     batch_size: int,
-    split: Literal["val", "test"],
+    split: Literal["train", "val", "test"],
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
