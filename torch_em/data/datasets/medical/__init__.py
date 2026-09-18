@@ -111,6 +111,7 @@ from .jnuifm import get_jnuifm_dataset, get_jnuifm_loader
 from .kipa import get_kipa_dataset, get_kipa_loader
 from .kits import get_kits_dataset, get_kits_loader
 from .kvasir import get_kvasir_dataset, get_kvasir_loader
+from .kvasir_instrument import get_kvasir_instrument_dataset, get_kvasir_instrument_loader
 from .lascarqs import get_lascarqs_dataset, get_lascarqs_loader
 from .lctsc import get_lctsc_dataset, get_lctsc_loader
 from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
