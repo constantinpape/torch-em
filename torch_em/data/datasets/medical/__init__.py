@@ -182,6 +182,7 @@ from .resect import get_resect_dataset, get_resect_loader
 from .retouch import get_retouch_dataset, get_retouch_loader
 from .ribseg import get_ribseg_dataset, get_ribseg_loader
 from .rider_lung import get_rider_lung_dataset, get_rider_lung_loader
+from .riga_plus import get_riga_plus_dataset, get_riga_plus_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .saros import get_saros_dataset, get_saros_loader
