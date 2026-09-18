@@ -200,6 +200,7 @@ from .spider import get_spider_dataset, get_spider_loader
 from .spinal_mm import get_spinal_mm_dataset, get_spinal_mm_loader
 from .spine_mets import get_spine_mets_dataset, get_spine_mets_loader
 from .stanford_coca import get_stanford_coca_dataset, get_stanford_coca_loader
+from .stare import get_stare_dataset, get_stare_loader
 from .structseg import get_structseg_dataset, get_structseg_loader
 from .tom500 import get_tom500_dataset, get_tom500_loader
 from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
