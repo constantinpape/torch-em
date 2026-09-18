@@ -171,6 +171,7 @@ from .prostate_edge_cases import get_prostate_edge_cases_dataset, get_prostate_e
 from .prostatex import get_prostatex_dataset, get_prostatex_loader
 from .psfhs import get_psfhs_dataset, get_psfhs_loader
 from .psma_pet_ct import get_psma_pet_ct_dataset, get_psma_pet_ct_loader
+from .qata_cov19 import get_qata_cov19_dataset, get_qata_cov19_loader
 from .qin_lungct_seg import get_qin_lungct_seg_dataset, get_qin_lungct_seg_loader
 from .qin_prostate import get_qin_prostate_dataset, get_qin_prostate_loader
 from .radgenome_chestct import get_radgenome_chestct_dataset, get_radgenome_chestct_loader
