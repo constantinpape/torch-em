@@ -159,6 +159,7 @@ from .particleseg3d import get_particleseg3d_dataset, get_particleseg3d_loader
 from .pddca import get_pddca_dataset, get_pddca_loader
 from .pediatric_ct_seg import get_pediatric_ct_seg_dataset, get_pediatric_ct_seg_loader
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
+from .ph2 import get_ph2_dataset, get_ph2_loader
 from .picai import get_picai_dataset, get_picai_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .pituitary_tumor import get_pituitary_tumor_dataset, get_pituitary_tumor_loader
