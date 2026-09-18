@@ -1,21 +1,40 @@
-"""This dataset provides nucleus segmentation masks for representative crops from three
-"OpenOrganelle" volumes (the public `janelia-cosem-datasets` S3 bucket, the same bucket used
-by `cellmap.py` and `janelia_nucleus.py`), not covered by either of those existing loaders:
+"""This dataset provides nucleus segmentation masks for 29 volumes from the public
+"OpenOrganelle" `janelia-cosem-datasets` S3 bucket (the same bucket used by `cellmap.py` and
+`janelia_nucleus.py`), none of which are covered by either of those existing loaders. All 29 are
+released under CC0-1.0, except `jrc_mus-thymus-1` and `aic_desmosome-3` whose license and paper
+could not be independently verified (`aic_desmosome-3` is an Allen Institute dataset, so the
+Janelia CC0-1.0 convention documented for the rest does not apply to it).
 
-- jrc_ctl-id8-2: a binary nucleus mask, sharing an identical multiscale pyramid with its FIB-SEM
-  raw data (no resampling or axis reordering needed).
-- jrc_choroid-plexus-2: nucleus instance labels, stored with a reversed axis order relative to its
-  FIB-SEM raw data (corrected internally by this module).
-- jrc_dauer-larva: nucleus instance labels for a TEM volume, whose label pyramid has no exact-scale
-  match in the raw pyramid; the raw crop is resampled onto the label grid.
+Three label folder naming conventions are used across the bucket, all distinct from
+`janelia_nucleus.py`'s:
 
-The label data is released at `{dataset}.zarr/{recon}/labels/inference/nucleus_seg/{level}` on the
-bucket, a third naming convention distinct from the one `janelia_nucleus.py` uses. All 3 volumes are
-released under CC0-1.0. The full matched-resolution raw+label arrays are far too large to download
-whole (tens of GB to ~1.8 TB); this module instead downloads one fixed, manually verified crop per
-dataset, matching the crop that was visually reviewed in napari before this loader was added.
+- `labels/inference/nucleus_seg/{level}` (`jrc_ctl-id8-2`, `jrc_choroid-plexus-2`, `jrc_dauer-larva`).
+- `labels/inference/segmentations/nuc/{level}` (most of the remaining 26 datasets).
+- `labels/inference/segmentations/nucleus/{level}` (`jrc_hum-airway-14953vc` only).
+- `labels/inference/segmentations/nuc_mem/{level}` (`jrc_mus-liver-4/5/6`) - these three are
+  nuclear MEMBRANE labels, a distinct annotation target from a nucleus mask/instance segmentation,
+  tracked via `DATASETS[name]["label_target"]`.
 
-Please cite the CellMap project (https://www.janelia.org/project-team/cellmap) if you use this data.
+Label and raw data are usually released at an exactly matching multiscale pyramid level (no
+resampling, same axis order). Three exceptions are handled: `jrc_dauer-larva` and
+`jrc_hela-h89-1/2` have no exact-scale match and are resampled onto the label grid via
+`scipy.ndimage.zoom`; `jrc_choroid-plexus-2` and `jrc_mus-epididymis-1/2` store one of the two
+arrays with a reversed axis order, corrected via `np.transpose`.
+
+Datasets whose full matched-resolution raw+label pair is small (roughly under 5 GB) are
+downloaded whole, following `janelia_nucleus.py`'s pattern. The rest (full volumes ranging from
+tens of GB to several TB) are downloaded as one fixed-size representative crop, auto-detected
+from a non-empty region of the coarsest available label pyramid level, following `cellmap.py`'s
+per-crop pattern - see `DATASETS[name]["full_array"]`.
+
+One more candidate found by the same discovery sweep, `jrc_mosquito-stylet-6`, also has real
+nucleus instance labels but is deliberately excluded here: its arrays are stored in zarr v3 with
+sharding, and even a small bounded crop pulls one or more full shards (tens of GB decompressed),
+defeating this loader's crop-only cost model. Integrating it would need shard-aware chunk-range
+reads rather than a plain slice.
+
+Please cite the CellMap project (https://www.janelia.org/project-team/cellmap) if you use this
+data (except `aic_desmosome-3`, an Allen Institute for Cell Science dataset).
 """
 
 import os
@@ -31,27 +50,146 @@ from .. import util
 
 
 BUCKET_URL = "https://janelia-cosem-datasets.s3.amazonaws.com/"
-LABEL_SUBPATH = "labels/inference/nucleus_seg"
 
-# dataset name -> recon folder, em array name, nucleus_seg pyramid level, label kind, whether the
-# label array's axis order must be reversed to align with the raw data, and the crop (in label-level
-# voxel coordinates) that was visually reviewed and approved before this loader was added.
-# "binary" = label array only ever takes values {0, 1} (semantic nucleus mask).
-# "instance" = label array carries per-nucleus integer instance IDs.
+# dataset name -> recon folder, em array name, label subpath (relative to "labels/inference/"),
+# label pyramid level, label kind, label target, axis to reverse ("none", "label", or "raw"),
+# and whether the full matched-resolution pair is downloaded whole (True) or as one fixed-size
+# crop auto-detected from a non-empty region (False).
+# label_kind: "binary" = label array only ever takes values {0, 1}; "instance" = per-nucleus IDs.
+# label_target: "nucleus" (a nucleus mask/instance segmentation) or "nuclear_membrane" (a nuclear
+# envelope surface label, a distinct annotation target).
 DATASETS = {
     "jrc_ctl-id8-2": {
-        "recon": "recon-1", "em_name": "fibsem-uint8", "label_level": "s0", "label_kind": "binary",
-        "needs_axis_reverse": False, "bounding_box": ((3824, 4048), (448, 672), (4064, 4288)),
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "nucleus_seg", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+        "bounding_box": ((3824, 4048), (448, 672), (4064, 4288)),
     },
     "jrc_choroid-plexus-2": {
-        "recon": "recon-1", "em_name": "fibsem-uint8", "label_level": "s1", "label_kind": "instance",
-        "needs_axis_reverse": True, "bounding_box": ((780, 1100), (2220, 2540), (620, 940)),
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "nucleus_seg", "label_level": "s1",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "label", "full_array": False,
+        "bounding_box": ((780, 1100), (2220, 2540), (620, 940)),
     },
     "jrc_dauer-larva": {
-        "recon": "recon-1", "em_name": "tem-uint8", "label_level": "s0", "label_kind": "instance",
-        "needs_axis_reverse": False, "bounding_box": ((130, 330), (1804, 2004), (11724, 11924)),
+        "recon": "recon-1", "em_name": "tem-uint8", "label_subpath": "nucleus_seg", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+        "bounding_box": ((130, 330), (1804, 2004), (11724, 11924)),
+    },
+    "jrc_ccl81-covid-1": {
+        "recon": "recon-1", "em_name": "fibsem-uint16", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_cos7-11": {
+        "recon": "recon-1", "em_name": "fibsem-uint16", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_ctl-id8-3": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_ctl-id8-4": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_ctl-id8-5": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_fly-acc-calyx-1": {
+        "recon": "recon-1", "em_name": "fibsem-uint16", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_fly-fsb-1": {
+        "recon": "recon-1", "em_name": "fibsem-uint16", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_hela-21": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_hela-22": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_hela-bfa": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_hela-h89-1": {
+        "recon": "recon-1", "em_name": "fibsem-uint16", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_hela-h89-2": {
+        "recon": "recon-1", "em_name": "fibsem-uint16", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_hela-nz-1": {
+        "recon": "recon-2", "em_name": "fibsem-int16", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_hum-airway-14953vc": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nucleus", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "jrc_mus-epididymis-1": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nucleus", "axis_reverse": "raw", "full_array": True,
+    },
+    "jrc_mus-epididymis-2": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nucleus", "axis_reverse": "raw", "full_array": True,
+    },
+    "jrc_mus-hippocampus-1": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    # These three membranes are too thin/sparse to survive downsampling to the coarsest label
+    # pyramid level, so auto-crop-detection finds no non-empty region; use a verified fixed crop.
+    "jrc_mus-liver-4": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc_mem", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nuclear_membrane", "axis_reverse": "none", "full_array": False,
+        "bounding_box": ((1409, 1537), (2000, 2128), (6000, 6128)),
+    },
+    "jrc_mus-liver-5": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc_mem", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nuclear_membrane", "axis_reverse": "none", "full_array": False,
+        "bounding_box": ((2961, 3089), (5096, 5224), (4553, 4681)),
+    },
+    "jrc_mus-liver-6": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc_mem", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nuclear_membrane", "axis_reverse": "none", "full_array": False,
+        "bounding_box": ((5600, 5792), (3970, 4162), (6610, 6802)),
+    },
+    "jrc_mus-pancreas-4": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_mus-sc-zp104a": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_mus-sc-zp105a": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_mus-skin-1": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": False,
+    },
+    "jrc_mus-thymus-1": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "instance", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
+    },
+    "aic_desmosome-3": {
+        "recon": "recon-1", "em_name": "fibsem-uint8", "label_subpath": "segmentations/nuc", "label_level": "s0",
+        "label_kind": "binary", "label_target": "nucleus", "axis_reverse": "none", "full_array": True,
     },
 }
+
+# Datasets whose data license and paper could not be independently verified. Everything else in
+# `DATASETS` is CC0-1.0 per the OpenOrganelle/CellMap project convention.
+UNVERIFIED_LICENSE = ("jrc_mus-thymus-1", "aic_desmosome-3")
+
+CROP_SHAPE_DEFAULT = (128, 128, 128)
 
 
 def _open_remote_zarr(s3_path):
@@ -70,17 +208,27 @@ def _get_json(url):
     return resp.json()
 
 
-def _multiscale_levels(zattrs_url):
-    attrs = _get_json(zattrs_url)
+def _multiscale_levels(group_url):
+    """Read multiscale pyramid levels from a zarr group, trying zarr v2 and v3 metadata.
+
+    `jrc_mosquito-stylet-6`'s raw and label arrays are stored in zarr v3 (`zarr.json`), unlike
+    every other dataset here (zarr v2, `.zattrs`); its label metadata nests multiscales under
+    `attributes.ome`, while its raw metadata puts them directly under `attributes`.
+    """
+    try:
+        multiscales = _get_json(f"{group_url}/.zattrs")["multiscales"]
+    except Exception:
+        attributes = _get_json(f"{group_url}/zarr.json")["attributes"]
+        multiscales = attributes["ome"]["multiscales"] if "ome" in attributes else attributes["multiscales"]
     return {
         d["path"]: tuple(d["coordinateTransformations"][0]["scale"])
-        for d in attrs["multiscales"][0]["datasets"]
+        for d in multiscales[0]["datasets"]
     }
 
 
 def _find_matching_em_level(dataset_name, recon, em_name, label_scale):
     """Find the EM pyramid level whose scale exactly matches the label pyramid level, or `None`."""
-    em_levels = _multiscale_levels(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}/.zattrs")
+    em_levels = _multiscale_levels(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}")
     for level, scale in em_levels.items():
         if scale == label_scale:
             return level, scale
@@ -90,9 +238,9 @@ def _find_matching_em_level(dataset_name, recon, em_name, label_scale):
 def _nearest_em_level(dataset_name, recon, em_name, label_scale):
     """Find the EM pyramid level whose scale is closest to the label pyramid level.
 
-    Used only for `jrc_dauer-larva`, whose label pyramid has no exact scale match.
+    Used only for datasets whose label pyramid has no exact scale match.
     """
-    em_levels = _multiscale_levels(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}/.zattrs")
+    em_levels = _multiscale_levels(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}")
     best_level, best_dist = None, None
     for level, scale in em_levels.items():
         dist = sum((s - lv) ** 2 for s, lv in zip(scale, label_scale))
@@ -101,8 +249,32 @@ def _nearest_em_level(dataset_name, recon, em_name, label_scale):
     return best_level, em_levels[best_level]
 
 
+def _auto_bounding_box(dataset_name, recon, label_full_path, label_level, label_scale, crop_shape):
+    """Center a crop on a non-empty region, found via the coarsest available label level.
+
+    Downloading the coarsest level (rather than `label_level`, which may be a huge full-resolution
+    array) keeps this cheap even for multi-TB datasets.
+    """
+    levels = _multiscale_levels(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/{label_full_path}")
+    coarsest_level = max(levels, key=lambda lv: levels[lv])
+    coarse_url = (
+        f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/"
+        f"{label_full_path}/{coarsest_level}"
+    )
+    coarse_arr = _open_remote_zarr(coarse_url)
+    coarse_data = np.asarray(coarse_arr[:])
+    nonzero = np.argwhere(coarse_data > 0)
+    if len(nonzero) == 0:
+        raise RuntimeError(f"No non-empty '{label_full_path}' region found for '{dataset_name}'.")
+    center_coarse = nonzero[len(nonzero) // 2]
+    scale_factor = np.array(levels[coarsest_level]) / np.array(label_scale)
+    center = (center_coarse * scale_factor).astype(int)
+    half = [c // 2 for c in crop_shape]
+    return tuple((max(0, int(c - h)), int(c + h)) for c, h in zip(center, half))
+
+
 def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: str, download: bool = False) -> str:
-    """Download the reviewed nucleus segmentation crop for one OpenOrganelle dataset.
+    """Download nucleus segmentation data for one OpenOrganelle dataset.
 
     Args:
         path: Filepath to a folder where the cached zarr store will be saved.
@@ -120,8 +292,9 @@ def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: 
         raise ValueError(f"'{dataset_name}' is not a valid dataset name. Choose from {sorted(DATASETS.keys())}.")
 
     info = DATASETS[dataset_name]
-    recon, em_name, label_level = info["recon"], info["em_name"], info["label_level"]
-    needs_axis_reverse, bounding_box = info["needs_axis_reverse"], info["bounding_box"]
+    recon, em_name = info["recon"], info["em_name"]
+    label_subpath, label_level = info["label_subpath"], info["label_level"]
+    axis_reverse, full_array = info["axis_reverse"], info["full_array"]
 
     os.makedirs(str(path), exist_ok=True)
     zarr_path = os.path.join(str(path), f"{dataset_name}.zarr")
@@ -131,43 +304,69 @@ def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: 
         return zarr_path
 
     if not download:
-        raise RuntimeError(f"No cached crop found at '{zarr_path}'. Set download=True to stream it from S3.")
+        raise RuntimeError(f"No cached data found at '{zarr_path}'. Set download=True to stream it from S3.")
 
-    print(f"Streaming a nucleus crop for '{dataset_name}' from the janelia-cosem-datasets S3 bucket ...")
-    label_url = f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/{LABEL_SUBPATH}/{label_level}"
+    print(f"Streaming nucleus data for '{dataset_name}' from the janelia-cosem-datasets S3 bucket ...")
+    label_full_path = f"labels/inference/{label_subpath}"
+    label_url = (
+        f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/{label_full_path}/{label_level}"
+    )
     label_arr = _open_remote_zarr(label_url)
-    label_slices = tuple(slice(*bb) for bb in bounding_box)
-    label_crop = label_arr[label_slices]
-
-    if needs_axis_reverse:
-        label_crop_zyx = np.transpose(label_crop, tuple(reversed(range(label_crop.ndim))))
-        em_bbox = tuple(reversed(bounding_box))
-    else:
-        label_crop_zyx = label_crop
-        em_bbox = bounding_box
 
     label_scale = _multiscale_levels(
-        f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/{LABEL_SUBPATH}/.zattrs"
+        f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/{label_full_path}"
     )[label_level]
-
     em_level, em_scale = _find_matching_em_level(dataset_name, recon, em_name, label_scale)
     resampled = em_level is None
+
+    if full_array:
+        label_data = np.asarray(label_arr[:])
+        bounding_box = None
+    else:
+        bounding_box = _auto_bounding_box(
+            dataset_name, recon, label_full_path, label_level, label_scale, CROP_SHAPE_DEFAULT,
+        ) if info.get("bounding_box") is None else info["bounding_box"]
+        label_slices = tuple(slice(*bb) for bb in bounding_box)
+        label_data = label_arr[label_slices]
+
+    if axis_reverse == "label":
+        label_data = np.transpose(label_data, tuple(reversed(range(label_data.ndim))))
+        raw_bbox = tuple(reversed(bounding_box)) if bounding_box is not None else None
+    else:
+        raw_bbox = bounding_box
+
     if em_level is not None:
         em_url = f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}/{em_level}"
         em_arr = _open_remote_zarr(em_url)
-        raw_crop = em_arr[tuple(slice(*bb) for bb in em_bbox)]
+        if axis_reverse == "raw":
+            raw_data = np.asarray(em_arr[:])
+            raw_data = np.transpose(raw_data, tuple(reversed(range(raw_data.ndim))))
+            if raw_bbox is not None:
+                raw_data = raw_data[tuple(slice(*bb) for bb in raw_bbox)]
+        elif raw_bbox is not None:
+            raw_data = em_arr[tuple(slice(*bb) for bb in raw_bbox)]
+        else:
+            raw_data = np.asarray(em_arr[:])
     else:
         em_level, em_scale = _nearest_em_level(dataset_name, recon, em_name, label_scale)
         em_url = f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}/{em_level}"
         em_arr = _open_remote_zarr(em_url)
         ratio = [ls / es for ls, es in zip(label_scale, em_scale)]
-        em_bbox_native = tuple((int(lo * r), int(hi * r)) for (lo, hi), r in zip(em_bbox, ratio))
-        raw_native = em_arr[tuple(slice(*bb) for bb in em_bbox_native)]
-        zoom_factors = [t / s for t, s in zip(label_crop_zyx.shape, raw_native.shape)]
-        raw_crop = zoom(raw_native, zoom_factors, order=1).astype(raw_native.dtype)
+        if raw_bbox is not None:
+            em_bbox_native = tuple((int(lo * r), int(hi * r)) for (lo, hi), r in zip(raw_bbox, ratio))
+            raw_native = em_arr[tuple(slice(*bb) for bb in em_bbox_native)]
+        else:
+            raw_native = np.asarray(em_arr[:])
+        zoom_factors = [t / s for t, s in zip(label_data.shape, raw_native.shape)]
+        raw_data = zoom(raw_native, zoom_factors, order=1).astype(raw_native.dtype)
 
-    assert raw_crop.shape == label_crop_zyx.shape, (
-        f"Shape mismatch for '{dataset_name}': raw {raw_crop.shape} vs labels {label_crop_zyx.shape}"
+    # Guard against off-by-a-few-voxel shape mismatches between independently stored pyramids.
+    common_shape = tuple(min(r, lb) for r, lb in zip(raw_data.shape, label_data.shape))
+    raw_data = raw_data[tuple(slice(0, s) for s in common_shape)]
+    label_data = label_data[tuple(slice(0, s) for s in common_shape)]
+
+    assert raw_data.shape == label_data.shape, (
+        f"Shape mismatch for '{dataset_name}': raw {raw_data.shape} vs labels {label_data.shape}"
     )
 
     def _make_array(name, data, shuffle):
@@ -180,15 +379,16 @@ def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: 
     root.attrs["dataset"] = dataset_name
     root.attrs["recon"] = recon
     root.attrs["label_kind"] = info["label_kind"]
+    root.attrs["label_target"] = info["label_target"]
     root.attrs["label_source"] = label_url
     root.attrs["em_source"] = em_url
-    root.attrs["bounding_box"] = bounding_box
     root.attrs["resampled"] = resampled
+    root.attrs["license_verified"] = dataset_name not in UNVERIFIED_LICENSE
 
-    _make_array("raw", raw_crop, shuffle="shuffle")
-    _make_array("labels", label_crop_zyx, shuffle="bitshuffle")
+    _make_array("raw", raw_data, shuffle="shuffle")
+    _make_array("labels", label_data, shuffle="bitshuffle")
 
-    print(f"Cached '{dataset_name}' to '{zarr_path}' (shape {raw_crop.shape}).")
+    print(f"Cached '{dataset_name}' to '{zarr_path}' (shape {raw_data.shape}).")
     return zarr_path
 
 
