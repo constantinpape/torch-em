@@ -126,6 +126,7 @@ from .lnq import get_lnq_dataset, get_lnq_loader
 from .longciu import get_longciu_dataset, get_longciu_loader
 from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .mama_mia import get_mama_mia_dataset, get_mama_mia_loader
+from .mbas import get_mbas_dataset, get_mbas_loader
 from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
 from .mcrib import get_mcrib_dataset, get_mcrib_loader
 from .mediastinal_ct import get_mediastinal_ct_dataset, get_mediastinal_ct_loader
