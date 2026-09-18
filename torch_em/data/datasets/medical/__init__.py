@@ -36,6 +36,7 @@ from .cadis import get_cadis_dataset, get_cadis_loader
 from .camus import get_camus_dataset, get_camus_loader
 from .cap_lv import get_cap_lv_dataset, get_cap_lv_loader
 from .cbis_ddsm import get_cbis_ddsm_dataset, get_cbis_ddsm_loader
+from .cc359 import get_cc359_dataset, get_cc359_loader
 from .cc_tumor_heterogeneity import get_cc_tumor_heterogeneity_dataset, get_cc_tumor_heterogeneity_loader
 from .cetus import get_cetus_dataset, get_cetus_loader
 from .chaksu import get_chaksu_dataset, get_chaksu_loader
