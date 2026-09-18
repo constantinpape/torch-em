@@ -20,6 +20,7 @@ from .atriaseg import get_atriaseg_dataset, get_atriaseg_loader
 from .autopet import get_autopet_dataset, get_autopet_loader
 from .autopet_organ import get_autopet_organ_dataset, get_autopet_organ_loader
 from .bagls import get_bagls_dataset, get_bagls_loader
+from .bagls_vf import get_bagls_vf_dataset, get_bagls_vf_loader
 from .bkai_igh_neopolyp import get_bkai_igh_neopolyp_dataset, get_bkai_igh_neopolyp_loader
 from .bonbid_hie import get_bonbid_hie_dataset, get_bonbid_hie_loader
 from .brainmetshare import get_brainmetshare_dataset, get_brainmetshare_loader
