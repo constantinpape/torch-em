@@ -46,6 +46,7 @@ from .mitonet_predicted_kidney import get_mitonet_predicted_kidney_loader, get_m
 from .mousecc import get_mousecc_loader, get_mousecc_dataset
 from .neuromast_connectomics import get_neuromast_connectomics_loader, get_neuromast_connectomics_dataset
 from .nisb import get_nisb_loader, get_nisb_dataset
+from .npc1_mito import get_npc1_mito_loader, get_npc1_mito_dataset
 from .nuc_mm import get_nuc_mm_loader, get_nuc_mm_dataset
 from .openorganelle_nucleus import get_openorganelle_nucleus_loader, get_openorganelle_nucleus_dataset
 from .optic_lobe import get_optic_lobe_loader, get_optic_lobe_dataset
