@@ -63,6 +63,7 @@ from .ctpelvic1k import get_ctpelvic1k_dataset, get_ctpelvic1k_loader
 from .ctspine1k import get_ctspine1k_dataset, get_ctspine1k_loader
 from .ctspinopelvic1k import get_ctspinopelvic1k_dataset, get_ctspinopelvic1k_loader
 from .curvas import get_curvas_dataset, get_curvas_loader
+from .cvc_colondb import get_cvc_colondb_dataset, get_cvc_colondb_loader
 from .dap_atlas import get_dap_atlas_dataset, get_dap_atlas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
 from .ddti import get_ddti_dataset, get_ddti_loader
