@@ -84,6 +84,7 @@ from .etis_larib import get_etis_larib_dataset, get_etis_larib_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
 from .fetoplac import get_fetoplac_dataset, get_fetoplac_loader
 from .figshare_brain_tumor import get_figshare_brain_tumor_dataset, get_figshare_brain_tumor_loader
+from .fives import get_fives_dataset, get_fives_loader
 from .flare import get_flare_dataset, get_flare_loader
 from .fumpe import get_fumpe_dataset, get_fumpe_loader
 from .fundus_avseg import get_fundus_avseg_dataset, get_fundus_avseg_loader
