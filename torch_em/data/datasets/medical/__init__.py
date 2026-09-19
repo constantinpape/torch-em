@@ -71,6 +71,7 @@ from .ddti import get_ddti_dataset, get_ddti_loader
 from .deeplesion import get_deeplesion_dataset, get_deeplesion_loader
 from .dentex import get_dentex_dataset, get_dentex_loader
 from .dprd import get_dprd_dataset, get_dprd_loader
+from .drishti_gs import get_drishti_gs_dataset, get_drishti_gs_loader
 from .drive import get_drive_dataset, get_drive_loader
 from .dsad import get_dsad_dataset, get_dsad_loader
 from .duke_liver import get_duke_liver_dataset, get_duke_liver_loader
