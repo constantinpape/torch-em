@@ -148,6 +148,11 @@ from .mrbrains18 import get_mrbrains18_dataset, get_mrbrains18_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .mswal import get_mswal_dataset, get_mswal_loader
 from .multi_organ_abdominal_ct import get_multi_organ_abdominal_ct_dataset, get_multi_organ_abdominal_ct_loader
+from .mvaa import (
+    get_mvaa_ct_dataset, get_mvaa_ct_loader,
+    get_mvaa_tee_dataset, get_mvaa_tee_loader,
+    get_mvaa_video_dataset, get_mvaa_video_loader,
+)
 from .nci_isbi_prostate import get_nci_isbi_prostate_dataset, get_nci_isbi_prostate_loader
 from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
 from .nsclc_radiogenomics import get_nsclc_radiogenomics_dataset, get_nsclc_radiogenomics_loader
