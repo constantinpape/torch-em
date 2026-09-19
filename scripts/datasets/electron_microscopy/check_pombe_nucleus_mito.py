@@ -25,7 +25,9 @@ def check_pombe_nucleus_mito(target, patch_shape, n_samples):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target", default="nucleus", choices=["nucleus", "mitochondrion"], help="The target.")
+    parser.add_argument(
+        "--target", default="nucleus", choices=["nucleus", "mitochondrion", "lipid_droplet"], help="The target."
+    )
     parser.add_argument("--patch_shape", type=int, nargs=3, default=[32, 128, 128], help="The patch shape.")
     parser.add_argument("-n", "--n_samples", type=int, default=8, help="The number of samples to display.")
     args = parser.parse_args()
