@@ -1,23 +1,29 @@
-"""This dataset provides nucleus and mitochondrion segmentation masks for one cryo-ET tomogram
-of a Schizosaccharomyces pombe cell.
+"""This dataset provides nucleus, mitochondrion, and lipid droplet segmentation masks for cryo-ET
+tomograms of Schizosaccharomyces pombe cells.
 
-The data is hosted on the CryoET Data Portal at https://cryoetdataportal.czscience.com/datasets/10001
-(EMPIAR-10988), part of the DeePiCt benchmark family - the same paper family as the actin-only
-`deepict.py` loader, but a different dataset within it (`deepict.py` hardcodes dataset 10002, the
-actin dataset; this module covers dataset 10001's run "TS_0006"). The full dataset has 10 runs and
-several more annotated structures (cytoplasm, vesicle, endoplasmic reticulum, nuclear envelope,
-Golgi apparatus, membrane); only run "TS_0006"'s nucleus and mitochondrion masks are provided here,
-since that is what was verified and visually reviewed before this loader was added.
+The data is hosted on the CryoET Data Portal, part of the DeePiCt benchmark family - the same
+paper family as the actin-only `deepict.py` loader, but different datasets within it (`deepict.py`
+hardcodes dataset 10002, the actin dataset). This module covers:
 
-Both masks are real, expert-verified ground truth (`groundTruthStatus=true`, `methodType=hybrid`
+- Dataset 10001 (https://cryoetdataportal.czscience.com/datasets/10001, EMPIAR-10988), run
+  "TS_0006": nucleus and mitochondrion.
+- Dataset 10000 (https://cryoetdataportal.czscience.com/datasets/10000), run "TS_045": nucleus
+  and mitochondrion. Run "TS_028": lipid droplet.
+
+Both datasets have many more runs and several more annotated structures (cytoplasm, vesicle,
+endoplasmic reticulum, nuclear envelope, Golgi apparatus, membrane); only the runs and targets
+listed above are provided here, since that is what was verified and visually reviewed before
+this loader was added.
+
+All masks are real, expert-verified ground truth (`groundTruthStatus=true`, `methodType=hybrid`
 per the portal's own metadata), not automated predictions. Data is CC0-1.0, per the CryoET Data
-Portal's portal-wide terms of use. No public corresponding-author email could be found for this
-dataset (the corresponding authors, Julia Mahamid and Judith B. Zaugg, have no email listed on the
-portal or reachable through a public search).
+Portal's portal-wide terms of use. The corresponding author for dataset 10000, Julia Mahamid, has
+a public email (julia.mahamid@embl.de); no public email could be found for Judith B. Zaugg or for
+dataset 10001's corresponding authors despite a real search.
 """
 
 import os
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 from torch.utils.data import DataLoader, Dataset
 
@@ -27,10 +33,16 @@ from .. import util
 
 
 BUCKET = "cryoet-data-portal-public"
-RUN_PREFIX = f"s3://{BUCKET}/10001/TS_0006/Reconstructions/VoxelSpacing13.480"
-RAW_URL = f"{RUN_PREFIX}/Tomograms/100/TS_0006.zarr"
-NUCLEUS_URL = f"{RUN_PREFIX}/Annotations/108/nucleus-1.0_segmentationmask.zarr"
-MITOCHONDRION_URL = f"{RUN_PREFIX}/Annotations/103/mitochondrion-1.0_segmentationmask.zarr"
+
+# (dataset_id, run) -> {target: annotation folder}. A run's zarr group caches "raw" plus one
+# array per target listed here, so a run contributing multiple targets (e.g. TS_045's nucleus and
+# mitochondrion) is only downloaded once regardless of which target is requested.
+RUN_LABELS = {
+    (10001, "TS_0006"): {"nucleus": "108", "mitochondrion": "103"},
+    (10000, "TS_045"): {"nucleus": "108", "mitochondrion": "103"},
+    (10000, "TS_028"): {"lipid_droplet": "110"},
+}
+TARGETS = ("nucleus", "mitochondrion", "lipid_droplet")
 
 
 def _open_remote_zarr(s3_path):
@@ -41,11 +53,19 @@ def _open_remote_zarr(s3_path):
     return zarr.open(store, mode="r")
 
 
-def get_pombe_nucleus_mito_data(path: Union[os.PathLike, str], download: bool = False) -> str:
-    """Download the S. pombe cryo-ET tomogram and its nucleus and mitochondrion masks.
+def _run_prefix(dataset_id, run):
+    return f"s3://{BUCKET}/{dataset_id}/{run}/Reconstructions/VoxelSpacing13.480"
+
+
+def get_pombe_nucleus_mito_data(
+    path: Union[os.PathLike, str], dataset_id: int, run: str, download: bool = False
+) -> str:
+    """Download one S. pombe cryo-ET run's tomogram and its available organelle masks.
 
     Args:
         path: Filepath to a folder where the cached zarr store will be saved.
+        dataset_id: The CryoET Data Portal dataset id, one of the keys in `RUN_LABELS`.
+        run: The run name, matching `dataset_id` in `RUN_LABELS`.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -54,24 +74,24 @@ def get_pombe_nucleus_mito_data(path: Union[os.PathLike, str], download: bool = 
     import zarr
     from zarr.codecs import BloscCodec
 
+    key = (dataset_id, run)
+    if key not in RUN_LABELS:
+        raise ValueError(f"'{key}' is not a valid (dataset_id, run). Choose from {sorted(RUN_LABELS.keys())}.")
+    labels = RUN_LABELS[key]
+
     os.makedirs(str(path), exist_ok=True)
-    zarr_path = os.path.join(str(path), "TS_0006.zarr")
+    zarr_path = os.path.join(str(path), f"{dataset_id}_{run}.zarr")
 
     root = zarr.open_group(zarr_path, mode="a")
-    if "raw" in root and "nucleus" in root and "mitochondrion" in root:
+    if "raw" in root and all(name in root for name in labels):
         return zarr_path
 
     if not download:
         raise RuntimeError(f"No cached data found at '{zarr_path}'. Set download=True to stream it from S3.")
 
-    print("Streaming the S. pombe TS_0006 tomogram and masks from the CryoET Data Portal ...")
-    raw = _open_remote_zarr(f"{RAW_URL}/0")[:]
-    nucleus = _open_remote_zarr(f"{NUCLEUS_URL}/0")[:]
-    mitochondrion = _open_remote_zarr(f"{MITOCHONDRION_URL}/0")[:]
-
-    assert raw.shape == nucleus.shape == mitochondrion.shape, (
-        f"Shape mismatch: raw {raw.shape}, nucleus {nucleus.shape}, mitochondrion {mitochondrion.shape}"
-    )
+    print(f"Streaming the S. pombe {run} tomogram and masks from the CryoET Data Portal ...")
+    prefix = _run_prefix(dataset_id, run)
+    raw = _open_remote_zarr(f"{prefix}/Tomograms/100/{run}.zarr/0")[:]
 
     def _make_array(name, data, shuffle):
         arr = root.create_array(
@@ -80,19 +100,43 @@ def get_pombe_nucleus_mito_data(path: Union[os.PathLike, str], download: bool = 
         )
         arr[:] = data
 
-    root.attrs["dataset_id"] = 10001
-    root.attrs["run"] = "TS_0006"
+    if "raw" not in root:
+        _make_array("raw", raw, shuffle="shuffle")
+
+    for name, folder in labels.items():
+        if name in root:
+            continue
+        label_data = _open_remote_zarr(f"{prefix}/Annotations/{folder}/{name}-1.0_segmentationmask.zarr/0")[:]
+        assert label_data.shape == raw.shape, (
+            f"Shape mismatch for {key}, target '{name}': raw {raw.shape} vs label {label_data.shape}"
+        )
+        _make_array(name, label_data, shuffle="bitshuffle")
+
+    root.attrs["dataset_id"] = dataset_id
+    root.attrs["run"] = run
     root.attrs["ground_truth"] = True
-    root.attrs["raw_source"] = RAW_URL
-    root.attrs["nucleus_source"] = NUCLEUS_URL
-    root.attrs["mitochondrion_source"] = MITOCHONDRION_URL
 
-    _make_array("raw", raw, shuffle="shuffle")
-    _make_array("nucleus", nucleus, shuffle="bitshuffle")
-    _make_array("mitochondrion", mitochondrion, shuffle="bitshuffle")
-
-    print(f"Cached the S. pombe TS_0006 data to '{zarr_path}' (shape {raw.shape}).")
+    print(f"Cached the S. pombe {run} data to '{zarr_path}' (shape {raw.shape}).")
     return zarr_path
+
+
+def get_pombe_nucleus_mito_paths(
+    path: Union[os.PathLike, str], target: str = "nucleus", download: bool = False,
+) -> List[str]:
+    """Get paths to cached S. pombe zarr stores that provide the requested target.
+
+    Args:
+        path: Filepath to a folder where the cached zarr stores will be saved.
+        target: The segmentation target, one of 'nucleus', 'mitochondrion', or 'lipid_droplet'.
+        download: Whether to download the data if it is not present.
+
+    Returns:
+        List of filepaths to the cached zarr stores.
+    """
+    if target not in TARGETS:
+        raise ValueError(f"'target' must be one of {TARGETS}, got '{target}'.")
+    runs = [key for key, labels in RUN_LABELS.items() if target in labels]
+    return [get_pombe_nucleus_mito_data(path, dataset_id, run, download) for dataset_id, run in runs]
 
 
 def get_pombe_nucleus_mito_dataset(
@@ -102,12 +146,12 @@ def get_pombe_nucleus_mito_dataset(
     download: bool = False,
     **kwargs,
 ) -> Dataset:
-    """Get the S. pombe dataset for nucleus or mitochondrion segmentation.
+    """Get the S. pombe dataset for nucleus, mitochondrion, or lipid droplet segmentation.
 
     Args:
-        path: Filepath to a folder where the cached zarr store will be saved.
+        path: Filepath to a folder where the cached zarr stores will be saved.
         patch_shape: The patch shape (z, y, x) to use for training.
-        target: The segmentation target, either 'nucleus' or 'mitochondrion'.
+        target: The segmentation target, one of 'nucleus', 'mitochondrion', or 'lipid_droplet'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -115,17 +159,15 @@ def get_pombe_nucleus_mito_dataset(
         The segmentation dataset.
     """
     assert len(patch_shape) == 3
-    if target not in ("nucleus", "mitochondrion"):
-        raise ValueError(f"'target' must be 'nucleus' or 'mitochondrion', got '{target}'.")
 
-    zarr_path = get_pombe_nucleus_mito_data(path, download)
+    paths = get_pombe_nucleus_mito_paths(path, target, download)
 
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=zarr_path,
+        raw_paths=paths,
         raw_key="raw",
-        label_paths=zarr_path,
+        label_paths=paths,
         label_key=target,
         patch_shape=patch_shape,
         **kwargs,
@@ -140,13 +182,13 @@ def get_pombe_nucleus_mito_loader(
     download: bool = False,
     **kwargs,
 ) -> DataLoader:
-    """Get the DataLoader for nucleus or mitochondrion segmentation in the S. pombe dataset.
+    """Get the DataLoader for nucleus, mitochondrion, or lipid droplet segmentation in the S. pombe dataset.
 
     Args:
-        path: Filepath to a folder where the cached zarr store will be saved.
+        path: Filepath to a folder where the cached zarr stores will be saved.
         patch_shape: The patch shape (z, y, x) to use for training.
         batch_size: The batch size for training.
-        target: The segmentation target, either 'nucleus' or 'mitochondrion'.
+        target: The segmentation target, one of 'nucleus', 'mitochondrion', or 'lipid_droplet'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`
             or for the PyTorch DataLoader.
