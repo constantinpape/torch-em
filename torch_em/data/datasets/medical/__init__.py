@@ -123,6 +123,7 @@ from .kvasir_instrument import get_kvasir_instrument_dataset, get_kvasir_instrum
 from .lascarqs import get_lascarqs_dataset, get_lascarqs_loader
 from .lctsc import get_lctsc_dataset, get_lctsc_loader
 from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
+from .les_av import get_les_av_dataset, get_les_av_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
 from .lidc_idri import get_lidc_idri_dataset, get_lidc_idri_loader
 from .lndb import get_lndb_dataset, get_lndb_loader
