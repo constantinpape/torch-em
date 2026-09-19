@@ -53,6 +53,7 @@ from .openorganelle_lipid_droplet import (
 )
 from .openorganelle_nucleus import get_openorganelle_nucleus_loader, get_openorganelle_nucleus_dataset
 from .optic_lobe import get_optic_lobe_loader, get_optic_lobe_dataset
+from .pombe_nucleus_mito import get_pombe_nucleus_mito_loader, get_pombe_nucleus_mito_dataset
 from .probtem import get_probtem_loader, get_probtem_dataset
 from .platynereis import (
     get_platynereis_cell_loader, get_platynereis_cell_dataset,
