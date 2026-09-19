@@ -160,6 +160,7 @@ from .pancreatic_ct_cbct_seg import get_pancreatic_ct_cbct_seg_dataset, get_panc
 from .pandental import get_pandental_dataset, get_pandental_loader
 from .panorama import get_panorama_dataset, get_panorama_loader
 from .pansegdata import get_pansegdata_dataset, get_pansegdata_loader
+from .pantrack import get_pantrack_dataset, get_pantrack_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .parse22 import get_parse22_dataset, get_parse22_loader
 from .particleseg3d import get_particleseg3d_dataset, get_particleseg3d_loader
