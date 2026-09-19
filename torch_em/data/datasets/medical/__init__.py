@@ -197,6 +197,7 @@ from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .saros import get_saros_dataset, get_saros_loader
 from .sega import get_sega_dataset, get_sega_loader
 from .segrap import get_segrap_dataset, get_segrap_loader
+from .segrap2025 import get_segrap2025_lnctv_dataset, get_segrap2025_lnctv_loader
 from .segthor import get_segthor_dataset, get_segthor_loader
 from .segthy import get_segthy_dataset, get_segthy_loader
 from .siim_acr import get_siim_acr_dataset, get_siim_acr_loader
