@@ -218,6 +218,9 @@ from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .topbrain import get_topbrain_dataset, get_topbrain_loader
 from .topcow import get_topcow_dataset, get_topcow_loader
 from .totalsegmentator import get_totalsegmentator_dataset, get_totalsegmentator_loader
+from .totalsegmentator_liver_lesions import (
+    get_totalsegmentator_liver_lesions_dataset, get_totalsegmentator_liver_lesions_loader
+)
 from .totalsegmentator_mri import get_totalsegmentator_mri_dataset, get_totalsegmentator_mri_loader
 from .trackrad import get_trackrad_dataset, get_trackrad_loader
 from .upenn_gbm import get_upenn_gbm_dataset, get_upenn_gbm_loader
