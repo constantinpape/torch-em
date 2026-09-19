@@ -218,6 +218,7 @@ from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .topbrain import get_topbrain_dataset, get_topbrain_loader
 from .topcow import get_topcow_dataset, get_topcow_loader
 from .totalsegmentator import get_totalsegmentator_dataset, get_totalsegmentator_loader
+from .totalsegmentator_effusion import get_totalsegmentator_effusion_dataset, get_totalsegmentator_effusion_loader
 from .totalsegmentator_liver_lesions import (
     get_totalsegmentator_liver_lesions_dataset, get_totalsegmentator_liver_lesions_loader
 )
