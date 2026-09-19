@@ -226,6 +226,7 @@ from .tg3k import get_tg3k_dataset, get_tg3k_loader
 from .tn3k import get_tn3k_dataset, get_tn3k_loader
 from .tom500 import get_tom500_dataset, get_tom500_loader
 from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
+from .topaneu import get_topaneu_dataset, get_topaneu_loader
 from .topbrain import get_topbrain_dataset, get_topbrain_loader
 from .topcow import get_topcow_dataset, get_topcow_loader
 from .totalsegmentator import get_totalsegmentator_dataset, get_totalsegmentator_loader
