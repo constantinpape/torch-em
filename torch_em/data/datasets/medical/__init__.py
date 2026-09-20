@@ -83,6 +83,7 @@ from .edd2020 import get_edd2020_dataset, get_edd2020_loader
 from .emidec import get_emidec_dataset, get_emidec_loader
 from .endoscapes2023 import get_endoscapes2023_dataset, get_endoscapes2023_loader
 from .etis_larib import get_etis_larib_dataset, get_etis_larib_loader
+from .fass import get_fass_dataset, get_fass_loader
 from .feta24 import get_feta24_dataset, get_feta24_loader
 from .fetoplac import get_fetoplac_dataset, get_fetoplac_loader
 from .figshare_brain_tumor import get_figshare_brain_tumor_dataset, get_figshare_brain_tumor_loader
