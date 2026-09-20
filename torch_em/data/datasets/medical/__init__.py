@@ -68,6 +68,7 @@ from .cvc_endoscenestill import get_cvc_endoscenestill_dataset, get_cvc_endoscen
 from .dap_atlas import get_dap_atlas_dataset, get_dap_atlas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
 from .ddti import get_ddti_dataset, get_ddti_loader
+from .deep_psma import get_deep_psma_dataset, get_deep_psma_loader
 from .deeplesion import get_deeplesion_dataset, get_deeplesion_loader
 from .dentex import get_dentex_dataset, get_dentex_loader
 from .dprd import get_dprd_dataset, get_dprd_loader
