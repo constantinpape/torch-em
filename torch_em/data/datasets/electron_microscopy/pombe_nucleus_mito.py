@@ -8,7 +8,7 @@ hardcodes dataset 10002, the actin dataset). This module covers:
 - Dataset 10001 (https://cryoetdataportal.czscience.com/datasets/10001, EMPIAR-10988), run
   "TS_0006": nucleus and mitochondrion.
 - Dataset 10000 (https://cryoetdataportal.czscience.com/datasets/10000), run "TS_045": nucleus
-  and mitochondrion. Run "TS_028": lipid droplet.
+  and mitochondrion. Runs "TS_028" and "TS_041": lipid droplet.
 
 Both datasets have many more runs and several more annotated structures (cytoplasm, vesicle,
 endoplasmic reticulum, nuclear envelope, Golgi apparatus, membrane); only the runs and targets
@@ -41,6 +41,7 @@ RUN_LABELS = {
     (10001, "TS_0006"): {"nucleus": "108", "mitochondrion": "103"},
     (10000, "TS_045"): {"nucleus": "108", "mitochondrion": "103"},
     (10000, "TS_028"): {"lipid_droplet": "110"},
+    (10000, "TS_041"): {"lipid_droplet": "110"},
 }
 TARGETS = ("nucleus", "mitochondrion", "lipid_droplet")
 
