@@ -89,6 +89,7 @@ from .fives import get_fives_dataset, get_fives_loader
 from .flare import get_flare_dataset, get_flare_loader
 from .fumpe import get_fumpe_dataset, get_fumpe_loader
 from .fundus_avseg import get_fundus_avseg_dataset, get_fundus_avseg_loader
+from .gist514 import get_gist514_dataset, get_gist514_loader
 from .han_seg import get_han_seg_dataset, get_han_seg_loader
 from .hc18 import get_hc18_dataset, get_hc18_loader
 from .hcc_tace import get_hcc_tace_dataset, get_hcc_tace_loader
