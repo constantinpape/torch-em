@@ -104,6 +104,7 @@ from .hecktor import get_hecktor_dataset, get_hecktor_loader
 from .hil_toothseg import get_hil_toothseg_dataset, get_hil_toothseg_loader
 from .hippo_subfields import get_hippo_subfields_dataset, get_hippo_subfields_loader
 from .hntsmrg import get_hntsmrg_dataset, get_hntsmrg_loader
+from .hqcolon import get_hqcolon_dataset, get_hqcolon_loader
 from .hrf import get_hrf_dataset, get_hrf_loader
 from .hubmap_hpa import get_hubmap_hpa_dataset, get_hubmap_hpa_loader
 from .hubmap_kidney import get_hubmap_kidney_dataset, get_hubmap_kidney_loader
