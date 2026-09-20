@@ -89,6 +89,7 @@ from .fetoplac import get_fetoplac_dataset, get_fetoplac_loader
 from .figshare_brain_tumor import get_figshare_brain_tumor_dataset, get_figshare_brain_tumor_loader
 from .fives import get_fives_dataset, get_fives_loader
 from .flare import get_flare_dataset, get_flare_loader
+from .focus import get_focus_dataset, get_focus_loader
 from .fumpe import get_fumpe_dataset, get_fumpe_loader
 from .fundus_avseg import get_fundus_avseg_dataset, get_fundus_avseg_loader
 from .gist514 import get_gist514_dataset, get_gist514_loader
