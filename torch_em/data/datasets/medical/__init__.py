@@ -26,6 +26,7 @@ from .bagls_vf import get_bagls_vf_dataset, get_bagls_vf_loader
 from .bhsd import get_bhsd_dataset, get_bhsd_loader
 from .bkai_igh_neopolyp import get_bkai_igh_neopolyp_dataset, get_bkai_igh_neopolyp_loader
 from .bonbid_hie import get_bonbid_hie_dataset, get_bonbid_hie_loader
+from .bpd_neo import get_bpd_neo_dataset, get_bpd_neo_loader
 from .brainmetshare import get_brainmetshare_dataset, get_brainmetshare_loader
 from .brainptm import get_brainptm_dataset, get_brainptm_loader
 from .brats import get_brats_dataset, get_brats_loader
