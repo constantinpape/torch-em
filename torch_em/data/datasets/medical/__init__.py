@@ -181,6 +181,7 @@ from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .openkbp import get_openkbp_dataset, get_openkbp_loader
 from .optic_nerve_sheaths import get_optic_nerve_sheaths_dataset, get_optic_nerve_sheaths_loader
 from .orcascore import get_orcascore_dataset, get_orcascore_loader
+from .orvs import get_orvs_dataset, get_orvs_loader
 from .osic_pulmofib import get_osic_pulmofib_dataset, get_osic_pulmofib_loader
 from .palm import get_palm_dataset, get_palm_loader
 from .pancreatic_ct_cbct_seg import get_pancreatic_ct_cbct_seg_dataset, get_pancreatic_ct_cbct_seg_loader
