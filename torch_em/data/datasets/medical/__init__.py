@@ -224,6 +224,7 @@ from .ravir import get_ravir_dataset, get_ravir_loader
 from .refuge import get_refuge_dataset, get_refuge_loader
 from .remind import get_remind_dataset, get_remind_loader
 from .resect import get_resect_dataset, get_resect_loader
+from .reta import get_reta_dataset, get_reta_loader
 from .retouch import get_retouch_dataset, get_retouch_loader
 from .rexgroundingct import get_rexgroundingct_dataset, get_rexgroundingct_loader
 from .ribseg import get_ribseg_dataset, get_ribseg_loader
