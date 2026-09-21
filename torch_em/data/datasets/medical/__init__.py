@@ -269,6 +269,7 @@ from .stanford_coca import get_stanford_coca_dataset, get_stanford_coca_loader
 from .stare import get_stare_dataset, get_stare_loader
 from .structseg import get_structseg_dataset, get_structseg_loader
 from .sts2024 import get_sts2024_dataset, get_sts2024_loader
+from .tear_meniscus import get_tear_meniscus_dataset, get_tear_meniscus_loader
 from .tg3k import get_tg3k_dataset, get_tg3k_loader
 from .tn3k import get_tn3k_dataset, get_tn3k_loader
 from .tom500 import get_tom500_dataset, get_tom500_loader
