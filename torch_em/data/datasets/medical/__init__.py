@@ -231,6 +231,7 @@ from .rossa import get_rossa_dataset, get_rossa_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
 from .sa_med2d import get_sa_med2d_dataset, get_sa_med2d_loader
 from .saros import get_saros_dataset, get_saros_loader
+from .scd import get_scd_dataset, get_scd_loader
 from .sega import get_sega_dataset, get_sega_loader
 from .segrap import get_segrap_dataset, get_segrap_loader
 from .segrap2025 import get_segrap2025_lnctv_dataset, get_segrap2025_lnctv_loader
