@@ -115,6 +115,7 @@ from .hvdropdb import get_hvdropdb_dataset, get_hvdropdb_loader
 from .hvsmr import get_hvsmr_dataset, get_hvsmr_loader
 from .ibd_mre import get_ibd_mre_dataset, get_ibd_mre_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
+from .ima_plus_plus import get_ima_plus_plus_dataset, get_ima_plus_plus_loader
 from .imagecas import get_imagecas_dataset, get_imagecas_loader
 from .imagetbad import get_imagetbad_dataset, get_imagetbad_loader
 from .inbreast import get_inbreast_dataset, get_inbreast_loader
