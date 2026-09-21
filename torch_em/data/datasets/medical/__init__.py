@@ -195,6 +195,7 @@ from .octa500 import get_octa500_dataset, get_octa500_loader
 from .ocutox import get_ocutox_dataset, get_ocutox_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .openkbp import get_openkbp_dataset, get_openkbp_loader
+from .openswisshcc import get_openswisshcc_dataset, get_openswisshcc_loader
 from .optic_nerve_sheaths import get_optic_nerve_sheaths_dataset, get_optic_nerve_sheaths_loader
 from .orcascore import get_orcascore_dataset, get_orcascore_loader
 from .orvs import get_orvs_dataset, get_orvs_loader
