@@ -212,6 +212,7 @@ from .ph2 import get_ph2_dataset, get_ph2_loader
 from .picai import get_picai_dataset, get_picai_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
 from .pituitary_tumor import get_pituitary_tumor_dataset, get_pituitary_tumor_loader
+from .plaque_us import get_plaque_us_dataset, get_plaque_us_loader
 from .plethora import get_plethora_dataset, get_plethora_loader
 from .polypgen import get_polypgen_dataset, get_polypgen_loader
 from .promise12 import get_promise12_dataset, get_promise12_loader
