@@ -173,6 +173,7 @@ from .nsclc_radiomics_interobserver1 import get_nsclc_radiomics_interobserver1_d
 from .oasis import get_oasis_dataset, get_oasis_loader
 from .oct5k import get_oct5k_dataset, get_oct5k_loader
 from .octa500 import get_octa500_dataset, get_octa500_loader
+from .ocutox import get_ocutox_dataset, get_ocutox_loader
 from .oimhs import get_oimhs_dataset, get_oimhs_loader
 from .openkbp import get_openkbp_dataset, get_openkbp_loader
 from .optic_nerve_sheaths import get_optic_nerve_sheaths_dataset, get_optic_nerve_sheaths_loader
