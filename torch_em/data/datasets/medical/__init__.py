@@ -10,6 +10,7 @@ from .acrin_hnscc import get_acrin_hnscc_dataset, get_acrin_hnscc_loader
 from .adrenal_acc import get_adrenal_acc_dataset, get_adrenal_acc_loader
 from .advanced_mri_breast_lesions import get_advanced_mri_breast_lesions_dataset, get_advanced_mri_breast_lesions_loader  # noqa
 from .aeropath import get_aeropath_dataset, get_aeropath_loader
+from .afio import get_afio_dataset, get_afio_loader
 from .amd_sd import get_amd_sd_dataset, get_amd_sd_loader
 from .amos import get_amos_dataset, get_amos_loader
 from .aortaseg24 import get_aortaseg24_dataset, get_aortaseg24_loader
