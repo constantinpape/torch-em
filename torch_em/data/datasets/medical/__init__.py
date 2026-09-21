@@ -13,6 +13,7 @@ from .aeropath import get_aeropath_dataset, get_aeropath_loader
 from .amd_sd import get_amd_sd_dataset, get_amd_sd_loader
 from .amos import get_amos_dataset, get_amos_loader
 from .aortaseg24 import get_aortaseg24_dataset, get_aortaseg24_loader
+from .arcade import get_arcade_dataset, get_arcade_loader
 from .atlas_liver import get_atlas_liver_dataset, get_atlas_liver_loader
 from .atlas_stroke import get_atlas_stroke_dataset, get_atlas_stroke_loader
 from .atm22 import get_atm22_dataset, get_atm22_loader
