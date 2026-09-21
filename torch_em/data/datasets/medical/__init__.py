@@ -114,6 +114,7 @@ from .hippo_subfields import get_hippo_subfields_dataset, get_hippo_subfields_lo
 from .hntsmrg import get_hntsmrg_dataset, get_hntsmrg_loader
 from .hqcolon import get_hqcolon_dataset, get_hqcolon_loader
 from .hrf import get_hrf_dataset, get_hrf_loader
+from .hrf_seg_plus import get_hrf_seg_plus_dataset, get_hrf_seg_plus_loader
 from .hubmap_hpa import get_hubmap_hpa_dataset, get_hubmap_hpa_loader
 from .hubmap_kidney import get_hubmap_kidney_dataset, get_hubmap_kidney_loader
 from .hva_ct import get_hva_ct_dataset, get_hva_ct_loader
