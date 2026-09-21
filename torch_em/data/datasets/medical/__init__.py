@@ -44,6 +44,7 @@ from .chaksu import get_chaksu_dataset, get_chaksu_loader
 from .chaos import get_chaos_dataset, get_chaos_loader
 from .chase_db1 import get_chase_db1_dataset, get_chase_db1_loader
 from .chest_xray_masks import get_chest_xray_masks_dataset, get_chest_xray_masks_loader
+from .chestx_det import get_chestx_det_dataset, get_chestx_det_loader
 from .cholecseg8k import get_cholecseg8k_dataset, get_cholecseg8k_loader
 from .colorectal_liver_mets import get_colorectal_liver_mets_dataset, get_colorectal_liver_mets_loader
 from .coph100 import get_coph100_dataset, get_coph100_loader
