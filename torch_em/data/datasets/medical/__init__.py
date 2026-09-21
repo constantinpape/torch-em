@@ -164,6 +164,7 @@ from .mrbrains18 import get_mrbrains18_dataset, get_mrbrains18_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .mswal import get_mswal_dataset, get_mswal_loader
 from .multi_organ_abdominal_ct import get_multi_organ_abdominal_ct_dataset, get_multi_organ_abdominal_ct_loader
+from .muscle_us import get_muscle_us_dataset, get_muscle_us_loader
 from .mvaa import (
     get_mvaa_ct_dataset, get_mvaa_ct_loader,
     get_mvaa_tee_dataset, get_mvaa_tee_loader,
