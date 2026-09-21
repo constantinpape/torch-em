@@ -3,9 +3,12 @@ dental X-rays (PXI) and dental CBCT scans.
 
 This is a multi-modal dataset for semi-supervised learning: alongside the labeled images, it also
 ships large unlabeled sets of panoramic X-rays and CBCT scans (not covered by this module, as they
-have no ground truth). This module only covers the labeled panoramic X-ray subset (STS-2D-Tooth),
-which has binary tooth segmentation masks for 900 adult and pediatric panoramic radiographs. The
-dataset also ships a labeled CBCT subset (STS-3D-Tooth), which is not covered by this module.
+have no ground truth). This module covers both labeled subsets:
+- The labeled panoramic X-ray subset (STS-2D-Tooth, `modality="2d"`), with binary tooth segmentation
+  masks for 900 adult and pediatric panoramic radiographs.
+- The labeled CBCT subset (STS-3D-Tooth, `modality="3d"`), with 22 region-of-interest (ROI) volumes
+  with per-tooth instance masks (`subset="roi"`) and 10 whole field-of-view volumes with binary tooth
+  masks (`subset="integrity"`).
 
 The dataset was curated for the MICCAI 2023 and 2024 Semi-supervised Teeth Segmentation (STS)
 challenges (https://sts-challenge.github.io/miccai2024/index.html) and is hosted on Zenodo at
@@ -97,13 +100,23 @@ def get_semi_teethseg_data(path: Union[os.PathLike, str], download: bool = False
 
 
 def get_semi_teethseg_paths(
-    path: Union[os.PathLike, str], split: Literal["adult", "child"] = "adult", download: bool = False,
+    path: Union[os.PathLike, str],
+    split: Literal["adult", "child"] = "adult",
+    modality: Literal["2d", "3d"] = "2d",
+    subset: Literal["roi", "integrity"] = "roi",
+    download: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the Semi-TeethSeg data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
-        split: The data split to use. Either 'adult' (A-PXI) or 'child' (C-PXI).
+        split: The data split to use for the panoramic X-ray subset. Either 'adult' (A-PXI) or
+            'child' (C-PXI). Only relevant for `modality="2d"`.
+        modality: The choice of modality. Either '2d' (panoramic X-rays, STS-2D-Tooth) or
+            '3d' (CBCT volumes, STS-3D-Tooth).
+        subset: The choice of CBCT subset. Either 'roi' (22 region-of-interest volumes with
+            per-tooth instance masks) or 'integrity' (10 whole field-of-view volumes with binary
+            tooth masks). Only relevant for `modality="3d"`.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -111,6 +124,17 @@ def get_semi_teethseg_paths(
         List of filepaths for the label data.
     """
     data_dir = get_semi_teethseg_data(path, download)
+
+    if modality == "3d":
+        subset_dir = "ROI" if subset == "roi" else "Integrity"
+        base_dir = os.path.join(data_dir, "STS-3D-Tooth", subset_dir, "Labeled")
+
+        image_paths = natsorted(glob(os.path.join(base_dir, "Image", "*.nii.gz")))
+        gt_paths = natsorted(glob(os.path.join(base_dir, "Mask", "*.nii.gz")))
+
+        assert len(image_paths) == len(gt_paths) and len(image_paths) > 0
+
+        return image_paths, gt_paths
 
     modality_dir = "A-PXI" if split == "adult" else "C-PXI"
     base_dir = os.path.join(data_dir, "STS-2D-Tooth", modality_dir, "Labeled")
@@ -141,18 +165,26 @@ def get_semi_teethseg_paths(
 
 def get_semi_teethseg_dataset(
     path: Union[os.PathLike, str],
-    patch_shape: Tuple[int, int],
+    patch_shape: Tuple[int, ...],
     split: Literal["adult", "child"] = "adult",
+    modality: Literal["2d", "3d"] = "2d",
+    subset: Literal["roi", "integrity"] = "roi",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the Semi-TeethSeg dataset for tooth segmentation in panoramic dental radiographs.
+    """Get the Semi-TeethSeg dataset for tooth segmentation in panoramic dental radiographs or CBCT volumes.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         patch_shape: The patch shape to use for training.
-        split: The data split to use. Either 'adult' (A-PXI) or 'child' (C-PXI).
+        split: The data split to use for the panoramic X-ray subset. Either 'adult' (A-PXI) or
+            'child' (C-PXI). Only relevant for `modality="2d"`.
+        modality: The choice of modality. Either '2d' (panoramic X-rays, STS-2D-Tooth) or
+            '3d' (CBCT volumes, STS-3D-Tooth).
+        subset: The choice of CBCT subset. Either 'roi' (22 region-of-interest volumes with
+            per-tooth instance masks) or 'integrity' (10 whole field-of-view volumes with binary
+            tooth masks). Only relevant for `modality="3d"`.
         resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
@@ -160,12 +192,23 @@ def get_semi_teethseg_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = get_semi_teethseg_paths(path, split, download)
+    image_paths, gt_paths = get_semi_teethseg_paths(path, split, modality, subset, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
         kwargs, patch_shape = util.update_kwargs_for_resize_trafo(
             kwargs=kwargs, patch_shape=patch_shape, resize_inputs=resize_inputs, resize_kwargs=resize_kwargs
+        )
+
+    if modality == "3d":
+        return torch_em.default_segmentation_dataset(
+            raw_paths=image_paths,
+            raw_key="data",
+            label_paths=gt_paths,
+            label_key="data",
+            is_seg_dataset=True,
+            patch_shape=patch_shape,
+            **kwargs
         )
 
     return torch_em.default_segmentation_dataset(
@@ -182,19 +225,27 @@ def get_semi_teethseg_dataset(
 def get_semi_teethseg_loader(
     path: Union[os.PathLike, str],
     batch_size: int,
-    patch_shape: Tuple[int, int],
+    patch_shape: Tuple[int, ...],
     split: Literal["adult", "child"] = "adult",
+    modality: Literal["2d", "3d"] = "2d",
+    subset: Literal["roi", "integrity"] = "roi",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the Semi-TeethSeg dataloader for tooth segmentation in panoramic dental radiographs.
+    """Get the Semi-TeethSeg dataloader for tooth segmentation in panoramic dental radiographs or CBCT volumes.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
-        split: The data split to use. Either 'adult' (A-PXI) or 'child' (C-PXI).
+        split: The data split to use for the panoramic X-ray subset. Either 'adult' (A-PXI) or
+            'child' (C-PXI). Only relevant for `modality="2d"`.
+        modality: The choice of modality. Either '2d' (panoramic X-rays, STS-2D-Tooth) or
+            '3d' (CBCT volumes, STS-3D-Tooth).
+        subset: The choice of CBCT subset. Either 'roi' (22 region-of-interest volumes with
+            per-tooth instance masks) or 'integrity' (10 whole field-of-view volumes with binary
+            tooth masks). Only relevant for `modality="3d"`.
         resize_inputs: Whether to resize the inputs to the patch shape.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
@@ -203,5 +254,7 @@ def get_semi_teethseg_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_semi_teethseg_dataset(path, patch_shape, split, resize_inputs, download, **ds_kwargs)
+    dataset = get_semi_teethseg_dataset(
+        path, patch_shape, split, modality, subset, resize_inputs, download, **ds_kwargs
+    )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
