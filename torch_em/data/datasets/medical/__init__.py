@@ -56,6 +56,7 @@ from .cptac_pda_tumor import get_cptac_pda_tumor_dataset, get_cptac_pda_tumor_lo
 from .cptac_ucec_tumor import get_cptac_ucec_tumor_dataset, get_cptac_ucec_tumor_loader
 from .crossmoda import get_crossmoda_dataset, get_crossmoda_loader
 from .crosspan import get_crosspan_dataset, get_crosspan_loader
+from .csc_fundus_segmentation import get_csc_fundus_segmentation_dataset, get_csc_fundus_segmentation_loader
 from .ct2us_kidney import get_ct2us_kidney_dataset, get_ct2us_kidney_loader
 from .ct_cadaiver import get_ct_cadaiver_dataset, get_ct_cadaiver_loader
 from .ct_lymph_nodes import get_ct_lymph_nodes_dataset, get_ct_lymph_nodes_loader
