@@ -216,6 +216,7 @@ from .pddca import get_pddca_dataset, get_pddca_loader
 from .pediatric_ct_seg import get_pediatric_ct_seg_dataset, get_pediatric_ct_seg_loader
 from .pedims import get_pedims_dataset, get_pedims_loader
 from .pengwin import get_pengwin_dataset, get_pengwin_loader
+from .pfus1 import get_pfus1_dataset, get_pfus1_loader
 from .ph2 import get_ph2_dataset, get_ph2_loader
 from .picai import get_picai_dataset, get_picai_loader
 from .piccolo import get_piccolo_dataset, get_piccolo_loader
