@@ -171,6 +171,7 @@ from .montgomery import get_montgomery_dataset, get_montgomery_loader
 from .mosmed_plus import get_mosmed_plus_dataset, get_mosmed_plus_loader
 from .motum import get_motum_dataset, get_motum_loader
 from .mrbrains18 import get_mrbrains18_dataset, get_mrbrains18_loader
+from .ms3seg import get_ms3seg_dataset, get_ms3seg_loader
 from .msd import get_msd_dataset, get_msd_loader
 from .mswal import get_mswal_dataset, get_mswal_loader
 from .multi_organ_abdominal_ct import get_multi_organ_abdominal_ct_dataset, get_multi_organ_abdominal_ct_loader
