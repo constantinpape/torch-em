@@ -180,6 +180,7 @@ from .mvaa import (
 )
 from .nci_isbi_prostate import get_nci_isbi_prostate_dataset, get_nci_isbi_prostate_loader
 from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
+from .npc_mri import get_npc_mri_dataset, get_npc_mri_loader
 from .nsclc_radiogenomics import get_nsclc_radiogenomics_dataset, get_nsclc_radiogenomics_loader
 from .nsclc_radiomics import get_nsclc_radiomics_dataset, get_nsclc_radiomics_loader
 from .nsclc_radiomics_interobserver1 import get_nsclc_radiomics_interobserver1_dataset, get_nsclc_radiomics_interobserver1_loader  # noqa
