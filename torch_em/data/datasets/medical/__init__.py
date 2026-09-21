@@ -52,6 +52,7 @@ from .cholecseg8k import get_cholecseg8k_dataset, get_cholecseg8k_loader
 from .colonvessels import get_colonvessels_dataset, get_colonvessels_loader
 from .colorectal_liver_mets import get_colorectal_liver_mets_dataset, get_colorectal_liver_mets_loader
 from .coph100 import get_coph100_dataset, get_coph100_loader
+from .corneal_confocal_nerve import get_corneal_confocal_nerve_dataset, get_corneal_confocal_nerve_loader
 from .couinaud import get_couinaud_dataset, get_couinaud_loader
 from .covid19_20 import get_covid19_20_dataset, get_covid19_20_loader
 from .covid19_seg import get_covid19_seg_dataset, get_covid19_seg_loader
@@ -276,8 +277,15 @@ from .topbrain import get_topbrain_dataset, get_topbrain_loader
 from .topcow import get_topcow_dataset, get_topcow_loader
 from .totalsegmentator import get_totalsegmentator_dataset, get_totalsegmentator_loader
 from .totalsegmentator_effusion import get_totalsegmentator_effusion_dataset, get_totalsegmentator_effusion_loader
+from .totalsegmentator_hip_implant import get_totalsegmentator_hip_implant_dataset, get_totalsegmentator_hip_implant_loader  # noqa
 from .totalsegmentator_liver_lesions import (
     get_totalsegmentator_liver_lesions_dataset, get_totalsegmentator_liver_lesions_loader
+)
+from .totalsegmentator_liver_lesions_mr import (
+    get_totalsegmentator_liver_lesions_mr_dataset, get_totalsegmentator_liver_lesions_mr_loader
+)
+from .totalsegmentator_liver_segments_mr import (
+    get_totalsegmentator_liver_segments_mr_dataset, get_totalsegmentator_liver_segments_mr_loader
 )
 from .totalsegmentator_mri import get_totalsegmentator_mri_dataset, get_totalsegmentator_mri_loader
 from .trackrad import get_trackrad_dataset, get_trackrad_loader
