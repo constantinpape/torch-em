@@ -251,6 +251,7 @@ from .totalsegmentator_liver_lesions import (
 )
 from .totalsegmentator_mri import get_totalsegmentator_mri_dataset, get_totalsegmentator_mri_loader
 from .trackrad import get_trackrad_dataset, get_trackrad_loader
+from .trusted import get_trusted_dataset, get_trusted_loader
 from .uls23 import get_uls23_dataset, get_uls23_loader
 from .upenn_gbm import get_upenn_gbm_dataset, get_upenn_gbm_loader
 from .us_nerve import get_us_nerve_dataset, get_us_nerve_loader
