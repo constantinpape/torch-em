@@ -99,6 +99,7 @@ from .full_head_mri_segmentation import (
 )
 from .fumpe import get_fumpe_dataset, get_fumpe_loader
 from .fundus_avseg import get_fundus_avseg_dataset, get_fundus_avseg_loader
+from .fuseg import get_fuseg_dataset, get_fuseg_loader
 from .gist514 import get_gist514_dataset, get_gist514_loader
 from .han_seg import get_han_seg_dataset, get_han_seg_loader
 from .hc18 import get_hc18_dataset, get_hc18_loader
