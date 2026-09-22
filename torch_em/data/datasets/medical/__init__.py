@@ -31,6 +31,7 @@ from .bhsd import get_bhsd_dataset, get_bhsd_loader
 from .bkai_igh_neopolyp import get_bkai_igh_neopolyp_dataset, get_bkai_igh_neopolyp_loader
 from .bobs import get_bobs_dataset, get_bobs_loader
 from .bonbid_hie import get_bonbid_hie_dataset, get_bonbid_hie_loader
+from .bonedat import get_bonedat_dataset, get_bonedat_loader
 from .bpd_neo import get_bpd_neo_dataset, get_bpd_neo_loader
 from .brainmetshare import get_brainmetshare_dataset, get_brainmetshare_loader
 from .brainptm import get_brainptm_dataset, get_brainptm_loader
