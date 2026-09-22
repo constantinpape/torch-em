@@ -11,6 +11,7 @@ from .adrenal_acc import get_adrenal_acc_dataset, get_adrenal_acc_loader
 from .advanced_mri_breast_lesions import get_advanced_mri_breast_lesions_dataset, get_advanced_mri_breast_lesions_loader  # noqa
 from .aeropath import get_aeropath_dataset, get_aeropath_loader
 from .afio import get_afio_dataset, get_afio_loader
+from .aidk import get_aidk_dataset, get_aidk_loader
 from .airrc import get_airrc_dataset, get_airrc_loader
 from .amd_sd import get_amd_sd_dataset, get_amd_sd_loader
 from .amos import get_amos_dataset, get_amos_loader
@@ -27,6 +28,7 @@ from .bagls_vf import get_bagls_vf_dataset, get_bagls_vf_loader
 from .beamster import get_beamster_dataset, get_beamster_loader
 from .bhsd import get_bhsd_dataset, get_bhsd_loader
 from .bkai_igh_neopolyp import get_bkai_igh_neopolyp_dataset, get_bkai_igh_neopolyp_loader
+from .bobs import get_bobs_dataset, get_bobs_loader
 from .bonbid_hie import get_bonbid_hie_dataset, get_bonbid_hie_loader
 from .bpd_neo import get_bpd_neo_dataset, get_bpd_neo_loader
 from .brainmetshare import get_brainmetshare_dataset, get_brainmetshare_loader
