@@ -167,6 +167,7 @@ from .longitudinal_ct import get_longitudinal_ct_dataset, get_longitudinal_ct_lo
 from .longitudinal_mh_oct import get_longitudinal_mh_oct_dataset, get_longitudinal_mh_oct_loader
 from .lss_mri_aisslab import get_lss_mri_aisslab_dataset, get_lss_mri_aisslab_loader
 from .lumase import get_lumase_dataset, get_lumase_loader
+from .lumbar_spine_us import get_lumbar_spine_us_dataset, get_lumbar_spine_us_loader
 from .m2caiseg import get_m2caiseg_dataset, get_m2caiseg_loader
 from .mama_mia import get_mama_mia_dataset, get_mama_mia_loader
 from .maternal_fetal_us_video import get_maternal_fetal_us_video_dataset, get_maternal_fetal_us_video_loader
