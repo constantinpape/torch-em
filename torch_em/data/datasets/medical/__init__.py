@@ -13,6 +13,7 @@ from .aeropath import get_aeropath_dataset, get_aeropath_loader
 from .afio import get_afio_dataset, get_afio_loader
 from .aidk import get_aidk_dataset, get_aidk_loader
 from .airrc import get_airrc_dataset, get_airrc_loader
+from .amd_dme_3d_oct import get_amd_dme_3d_oct_dataset, get_amd_dme_3d_oct_loader
 from .amd_sd import get_amd_sd_dataset, get_amd_sd_loader
 from .amos import get_amos_dataset, get_amos_loader
 from .aortaseg24 import get_aortaseg24_dataset, get_aortaseg24_loader
@@ -289,6 +290,7 @@ from .stanford_coca import get_stanford_coca_dataset, get_stanford_coca_loader
 from .stare import get_stare_dataset, get_stare_loader
 from .structseg import get_structseg_dataset, get_structseg_loader
 from .sts2024 import get_sts2024_dataset, get_sts2024_loader
+from .sustech_sysu import get_sustech_sysu_dataset, get_sustech_sysu_loader
 from .tear_meniscus import get_tear_meniscus_dataset, get_tear_meniscus_loader
 from .tg3k import get_tg3k_dataset, get_tg3k_loader
 from .tn3k import get_tn3k_dataset, get_tn3k_loader
