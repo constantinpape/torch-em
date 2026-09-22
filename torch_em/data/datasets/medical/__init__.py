@@ -287,6 +287,7 @@ from .tear_meniscus import get_tear_meniscus_dataset, get_tear_meniscus_loader
 from .tg3k import get_tg3k_dataset, get_tg3k_loader
 from .tn3k import get_tn3k_dataset, get_tn3k_loader
 from .tom500 import get_tom500_dataset, get_tom500_loader
+from .tongue_mri import get_tongue_mri_dataset, get_tongue_mri_loader
 from .toothfairy import get_toothfairy_dataset, get_toothfairy_loader
 from .topaneu import get_topaneu_dataset, get_topaneu_loader
 from .topbrain import get_topbrain_dataset, get_topbrain_loader
