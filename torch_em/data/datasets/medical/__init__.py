@@ -90,6 +90,7 @@ from .deep_psma import get_deep_psma_dataset, get_deep_psma_loader
 from .deeplesion import get_deeplesion_dataset, get_deeplesion_loader
 from .denpar import get_denpar_dataset, get_denpar_loader
 from .dentex import get_dentex_dataset, get_dentex_loader
+from .derma_octa import get_derma_octa_dataset, get_derma_octa_loader
 from .dprd import get_dprd_dataset, get_dprd_loader
 from .drishti_gs import get_drishti_gs_dataset, get_drishti_gs_loader
 from .drive import get_drive_dataset, get_drive_loader
@@ -248,6 +249,7 @@ from .prostatex import get_prostatex_dataset, get_prostatex_loader
 from .psfhs import get_psfhs_dataset, get_psfhs_loader
 from .psma_pet_ct import get_psma_pet_ct_dataset, get_psma_pet_ct_loader
 from .pu2756 import get_pu2756_dataset, get_pu2756_loader
+from .puwf_av import get_puwf_av_dataset, get_puwf_av_loader
 from .qata_cov19 import get_qata_cov19_dataset, get_qata_cov19_loader
 from .qin_lungct_seg import get_qin_lungct_seg_dataset, get_qin_lungct_seg_loader
 from .qin_prostate import get_qin_prostate_dataset, get_qin_prostate_loader
