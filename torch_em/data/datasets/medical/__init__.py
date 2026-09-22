@@ -129,6 +129,7 @@ from .hubmap_hpa import get_hubmap_hpa_dataset, get_hubmap_hpa_loader
 from .hubmap_kidney import get_hubmap_kidney_dataset, get_hubmap_kidney_loader
 from .hva_ct import get_hva_ct_dataset, get_hva_ct_loader
 from .hvdropdb import get_hvdropdb_dataset, get_hvdropdb_loader
+from .hvm import get_hvm_dataset, get_hvm_loader
 from .hvsmr import get_hvsmr_dataset, get_hvsmr_loader
 from .ibd_mre import get_ibd_mre_dataset, get_ibd_mre_loader
 from .idrid import get_idrid_dataset, get_idrid_loader
@@ -258,7 +259,6 @@ from .ribseg import get_ribseg_dataset, get_ribseg_loader
 from .rider_lung import get_rider_lung_dataset, get_rider_lung_loader
 from .riga_plus import get_riga_plus_dataset, get_riga_plus_loader
 from .rim_one_dl import get_rim_one_dl_dataset, get_rim_one_dl_loader
-from .robust_mips import get_robust_mips_dataset, get_robust_mips_loader
 from .rossa import get_rossa_dataset, get_rossa_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
 from .rvo_me import get_rvo_me_dataset, get_rvo_me_loader
