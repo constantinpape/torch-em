@@ -171,6 +171,7 @@ from .mediastinal_ct import get_mediastinal_ct_dataset, get_mediastinal_ct_loade
 from .mendeley_ms import get_mendeley_ms_dataset, get_mendeley_ms_loader
 from .mice_tumseg import get_mice_tumseg_dataset, get_mice_tumseg_loader
 from .micro_usp import get_micro_usp_dataset, get_micro_usp_loader
+from .migs import get_migs_dataset, get_migs_loader
 from .mindboggle101 import get_mindboggle101_dataset, get_mindboggle101_loader
 from .mmotu import get_mmotu_dataset, get_mmotu_loader
 from .mnms import get_mnms_dataset, get_mnms_loader
