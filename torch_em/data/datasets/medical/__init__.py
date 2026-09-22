@@ -296,6 +296,7 @@ from .sts2024 import get_sts2024_dataset, get_sts2024_loader
 from .sustech_sysu import get_sustech_sysu_dataset, get_sustech_sysu_loader
 from .tear_meniscus import get_tear_meniscus_dataset, get_tear_meniscus_loader
 from .tg3k import get_tg3k_dataset, get_tg3k_loader
+from .thyrln_pumch import get_thyrln_pumch_dataset, get_thyrln_pumch_loader
 from .tn3k import get_tn3k_dataset, get_tn3k_loader
 from .tom500 import get_tom500_dataset, get_tom500_loader
 from .tongue_mri import get_tongue_mri_dataset, get_tongue_mri_loader
