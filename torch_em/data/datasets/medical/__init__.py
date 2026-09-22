@@ -11,6 +11,7 @@ from .adrenal_acc import get_adrenal_acc_dataset, get_adrenal_acc_loader
 from .advanced_mri_breast_lesions import get_advanced_mri_breast_lesions_dataset, get_advanced_mri_breast_lesions_loader  # noqa
 from .aeropath import get_aeropath_dataset, get_aeropath_loader
 from .afio import get_afio_dataset, get_afio_loader
+from .airrc import get_airrc_dataset, get_airrc_loader
 from .amd_sd import get_amd_sd_dataset, get_amd_sd_loader
 from .amos import get_amos_dataset, get_amos_loader
 from .aortaseg24 import get_aortaseg24_dataset, get_aortaseg24_loader
@@ -255,6 +256,7 @@ from .ribseg import get_ribseg_dataset, get_ribseg_loader
 from .rider_lung import get_rider_lung_dataset, get_rider_lung_loader
 from .riga_plus import get_riga_plus_dataset, get_riga_plus_loader
 from .rim_one_dl import get_rim_one_dl_dataset, get_rim_one_dl_loader
+from .robust_mips import get_robust_mips_dataset, get_robust_mips_loader
 from .rossa import get_rossa_dataset, get_rossa_loader
 from .rumc_kidney import get_rumc_kidney_dataset, get_rumc_kidney_loader
 from .rvo_me import get_rvo_me_dataset, get_rvo_me_loader
