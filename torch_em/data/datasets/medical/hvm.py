@@ -27,8 +27,6 @@ from glob import glob
 from natsort import natsorted
 from typing import Union, Tuple, Literal, List
 
-import nibabel as nib
-
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
@@ -72,6 +70,8 @@ def get_hvm_data(path: Union[os.PathLike, str], download: bool = False) -> str:
 
 
 def _header_signature(path):
+    import nibabel as nib
+
     header = nib.load(path).header
     shape = header.get_data_shape()
     zooms = tuple(header.get_zooms())
