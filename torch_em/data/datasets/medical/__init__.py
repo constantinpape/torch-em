@@ -184,6 +184,7 @@ from .maternal_fetal_us_video import get_maternal_fetal_us_video_dataset, get_ma
 from .mbas import get_mbas_dataset, get_mbas_loader
 from .mbh_seg import get_mbh_seg_dataset, get_mbh_seg_loader
 from .mcrib import get_mcrib_dataset, get_mcrib_loader
+from .mct_ltdiag import get_mct_ltdiag_dataset, get_mct_ltdiag_loader
 from .mediastinal_ct import get_mediastinal_ct_dataset, get_mediastinal_ct_loader
 from .mendeley_ms import get_mendeley_ms_dataset, get_mendeley_ms_loader
 from .mice_tumseg import get_mice_tumseg_dataset, get_mice_tumseg_loader
