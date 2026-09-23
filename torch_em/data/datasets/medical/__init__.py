@@ -114,6 +114,7 @@ from .figshare_brain_tumor import get_figshare_brain_tumor_dataset, get_figshare
 from .fives import get_fives_dataset, get_fives_loader
 from .flare import get_flare_dataset, get_flare_loader
 from .focus import get_focus_dataset, get_focus_loader
+from .four_d_lung import get_four_d_lung_dataset, get_four_d_lung_loader
 from .fovea import get_fovea_dataset, get_fovea_loader
 from .full_head_mri_segmentation import (
     get_full_head_mri_segmentation_dataset, get_full_head_mri_segmentation_loader
