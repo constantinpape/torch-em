@@ -90,6 +90,7 @@ from .dca1 import get_dca1_dataset, get_dca1_loader
 from .ddti import get_ddti_dataset, get_ddti_loader
 from .deep_psma import get_deep_psma_dataset, get_deep_psma_loader
 from .deeplesion import get_deeplesion_dataset, get_deeplesion_loader
+from .deeprt import get_deeprt_dataset, get_deeprt_loader
 from .denpar import get_denpar_dataset, get_denpar_loader
 from .dentex import get_dentex_dataset, get_dentex_loader
 from .derma_octa import get_derma_octa_dataset, get_derma_octa_loader
