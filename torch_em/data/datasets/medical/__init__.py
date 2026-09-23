@@ -233,6 +233,7 @@ from .pants import get_pants_dataset, get_pants_loader
 from .papila import get_papila_dataset, get_papila_loader
 from .parse22 import get_parse22_dataset, get_parse22_loader
 from .particleseg3d import get_particleseg3d_dataset, get_particleseg3d_loader
+from .paxray_pp import get_paxray_pp_dataset, get_paxray_pp_loader
 from .pddca import get_pddca_dataset, get_pddca_loader
 from .pediatric_ct_seg import get_pediatric_ct_seg_dataset, get_pediatric_ct_seg_loader
 from .pedims import get_pedims_dataset, get_pedims_loader
