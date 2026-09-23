@@ -335,6 +335,7 @@ from .upenn_gbm import get_upenn_gbm_dataset, get_upenn_gbm_loader
 from .ureteroscopy_lumen import get_ureteroscopy_lumen_dataset, get_ureteroscopy_lumen_loader
 from .us_nerve import get_us_nerve_dataset, get_us_nerve_loader
 from .us_sim_and_seg import get_us_sim_and_seg_dataset, get_us_sim_and_seg_loader
+from .ut_endomri import get_ut_endomri_dataset, get_ut_endomri_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
 from .valdo import get_valdo_dataset, get_valdo_loader
 from .verse import get_verse_dataset, get_verse_loader
