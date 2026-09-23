@@ -166,6 +166,7 @@ from .leg_3d_us import get_leg_3d_us_dataset, get_leg_3d_us_loader
 from .les_av import get_les_av_dataset, get_les_av_loader
 from .lgg_mri import get_lgg_mri_dataset, get_lgg_mri_loader
 from .lidc_idri import get_lidc_idri_dataset, get_lidc_idri_loader
+from .liver_hcc_seg import get_liver_hcc_seg_dataset, get_liver_hcc_seg_loader
 from .lndb import get_lndb_dataset, get_lndb_loader
 from .lnq import get_lnq_dataset, get_lnq_loader
 from .longciu import get_longciu_dataset, get_longciu_loader
