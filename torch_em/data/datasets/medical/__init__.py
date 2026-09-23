@@ -50,6 +50,7 @@ from .cap_lv import get_cap_lv_dataset, get_cap_lv_loader
 from .cbis_ddsm import get_cbis_ddsm_dataset, get_cbis_ddsm_loader
 from .cc359 import get_cc359_dataset, get_cc359_loader
 from .cc_tumor_heterogeneity import get_cc_tumor_heterogeneity_dataset, get_cc_tumor_heterogeneity_loader
+from .cesarean_scar_defect import get_cesarean_scar_defect_dataset, get_cesarean_scar_defect_loader
 from .cetus import get_cetus_dataset, get_cetus_loader
 from .chaksu import get_chaksu_dataset, get_chaksu_loader
 from .chaos import get_chaos_dataset, get_chaos_loader
