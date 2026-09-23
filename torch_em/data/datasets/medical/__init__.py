@@ -297,6 +297,7 @@ from .sliver07 import get_sliver07_dataset, get_sliver07_loader
 from .soft_tissue_sarcoma import get_soft_tissue_sarcoma_dataset, get_soft_tissue_sarcoma_loader
 from .spider import get_spider_dataset, get_spider_loader
 from .spinal_mm import get_spinal_mm_dataset, get_spinal_mm_loader
+from .spine_endoscopic_atlas import get_spine_endoscopic_atlas_dataset, get_spine_endoscopic_atlas_loader
 from .spine_mets import get_spine_mets_dataset, get_spine_mets_loader
 from .stanford_coca import get_stanford_coca_dataset, get_stanford_coca_loader
 from .stare import get_stare_dataset, get_stare_loader
