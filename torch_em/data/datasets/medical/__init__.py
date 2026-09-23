@@ -327,6 +327,7 @@ from .trusted import get_trusted_dataset, get_trusted_loader
 from .uls23 import get_uls23_dataset, get_uls23_loader
 from .ultracortex import get_ultracortex_dataset, get_ultracortex_loader
 from .upenn_gbm import get_upenn_gbm_dataset, get_upenn_gbm_loader
+from .ureteroscopy_lumen import get_ureteroscopy_lumen_dataset, get_ureteroscopy_lumen_loader
 from .us_nerve import get_us_nerve_dataset, get_us_nerve_loader
 from .us_sim_and_seg import get_us_sim_and_seg_dataset, get_us_sim_and_seg_loader
 from .uwaterloo_skin import get_uwaterloo_skin_dataset, get_uwaterloo_skin_loader
