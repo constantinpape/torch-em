@@ -264,6 +264,7 @@ from .promise12 import get_promise12_dataset, get_promise12_loader
 from .prostate158 import get_prostate158_dataset, get_prostate158_loader
 from .prostate_edge_cases import get_prostate_edge_cases_dataset, get_prostate_edge_cases_loader
 from .prostatex import get_prostatex_dataset, get_prostatex_loader
+from .proteas import get_proteas_dataset, get_proteas_loader
 from .psfhs import get_psfhs_dataset, get_psfhs_loader
 from .psma_pet_ct import get_psma_pet_ct_dataset, get_psma_pet_ct_loader
 from .pu2756 import get_pu2756_dataset, get_pu2756_loader
