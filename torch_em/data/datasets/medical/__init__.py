@@ -59,6 +59,7 @@ from .chest_xray_masks import get_chest_xray_masks_dataset, get_chest_xray_masks
 from .chestx_det import get_chestx_det_dataset, get_chestx_det_loader
 from .cholec_instance_seg import get_cholec_instance_seg_dataset, get_cholec_instance_seg_loader
 from .cholecseg8k import get_cholecseg8k_dataset, get_cholecseg8k_loader
+from .cirrmri600 import get_cirrmri600_dataset, get_cirrmri600_loader
 from .colonvessels import get_colonvessels_dataset, get_colonvessels_loader
 from .colorectal_liver_mets import get_colorectal_liver_mets_dataset, get_colorectal_liver_mets_loader
 from .coph100 import get_coph100_dataset, get_coph100_loader
