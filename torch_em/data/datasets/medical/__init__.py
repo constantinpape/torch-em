@@ -212,6 +212,7 @@ from .mvaa import (
     get_mvaa_tee_dataset, get_mvaa_tee_loader,
     get_mvaa_video_dataset, get_mvaa_video_loader,
 )
+from .nasalseg import get_nasalseg_dataset, get_nasalseg_loader
 from .nci_isbi_prostate import get_nci_isbi_prostate_dataset, get_nci_isbi_prostate_loader
 from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
 from .npc_mri import get_npc_mri_dataset, get_npc_mri_loader
