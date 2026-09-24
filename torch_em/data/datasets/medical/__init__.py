@@ -120,6 +120,7 @@ from .flare import get_flare_dataset, get_flare_loader
 from .focus import get_focus_dataset, get_focus_loader
 from .four_d_lung import get_four_d_lung_dataset, get_four_d_lung_loader
 from .fovea import get_fovea_dataset, get_fovea_loader
+from .fracatlas import get_fracatlas_dataset, get_fracatlas_loader
 from .full_head_mri_segmentation import (
     get_full_head_mri_segmentation_dataset, get_full_head_mri_segmentation_loader
 )
