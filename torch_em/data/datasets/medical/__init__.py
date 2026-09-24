@@ -215,6 +215,7 @@ from .mvaa import (
 from .nasalseg import get_nasalseg_dataset, get_nasalseg_loader
 from .nci_isbi_prostate import get_nci_isbi_prostate_dataset, get_nci_isbi_prostate_loader
 from .nih_pancreas import get_nih_pancreas_dataset, get_nih_pancreas_loader
+from .nlstseg import get_nlstseg_dataset, get_nlstseg_loader
 from .npc_mri import get_npc_mri_dataset, get_npc_mri_loader
 from .nsclc_radiogenomics import get_nsclc_radiogenomics_dataset, get_nsclc_radiogenomics_loader
 from .nsclc_radiomics import get_nsclc_radiomics_dataset, get_nsclc_radiomics_loader
