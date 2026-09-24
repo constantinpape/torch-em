@@ -86,6 +86,7 @@ from .curious2022 import get_curious2022_dataset, get_curious2022_loader
 from .curvas import get_curvas_dataset, get_curvas_loader
 from .cvc_colondb import get_cvc_colondb_dataset, get_cvc_colondb_loader
 from .cvc_endoscenestill import get_cvc_endoscenestill_dataset, get_cvc_endoscenestill_loader
+from .cyst_x import get_cyst_x_dataset, get_cyst_x_loader
 from .cystods import get_cystods_dataset, get_cystods_loader
 from .dap_atlas import get_dap_atlas_dataset, get_dap_atlas_loader
 from .dca1 import get_dca1_dataset, get_dca1_loader
