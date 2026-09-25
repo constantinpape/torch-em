@@ -19,7 +19,7 @@ from .. import util
 
 def get_feta24_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Obtain the FETA24 data.
-    
+
     This function describes the download functionality and ensures your data has been downloaded in expected format.
 
     The dataset is from the FeTa Challenge 2024 - https://fetachallenge.github.io/ (Task 1: Segmentation).

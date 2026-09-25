@@ -1,14 +1,14 @@
-from typing import Callable, List, Optional, Sequence, Union
+from typing import Callable, List, Optional, Sequence, Union, Tuple
 
 import numpy as np
 import skimage.measure
 import skimage.segmentation
-import vigra
+import bioimage_cpp as bic
 
 from ..util import ensure_array, ensure_spatial_array
 
 try:
-    from affogato.affinities import compute_affinities
+    from bioimage_cpp.affinities import compute_affinities
 except ImportError:
     compute_affinities = None
 
@@ -25,7 +25,7 @@ def connected_components(labels: np.ndarray, ndim: Optional[int] = None, ensure_
         The segmentation after connected components.
     """
     labels = ensure_array(labels) if ndim is None else ensure_spatial_array(labels, ndim)
-    labels = skimage.measure.label(labels)
+    labels = bic.segmentation.label(labels)
     if ensure_zero and 0 not in labels:
         labels -= 1
     return labels
@@ -55,11 +55,11 @@ def label_consecutive(labels: np.ndarray, with_background: bool = True) -> np.nd
         The consecutively labeled segmentation.
     """
     if with_background:
-        seg = skimage.segmentation.relabel_sequential(labels)[0]
+        seg = bic.segmentation.relabel_sequential(labels)[0]
     else:
         if 0 in labels:
             labels += 1
-        seg = skimage.segmentation.relabel_sequential(labels)[0]
+        seg = bic.segmentation.relabel_sequential(labels)[0]
         assert seg.min() == 1
         seg -= 1
     return seg
@@ -92,7 +92,7 @@ class MinSizeLabelTransform:
             ids, sizes = np.unique(components, return_counts=True)
             filter_ids = ids[sizes < self.min_size]
             components[np.isin(components, filter_ids)] = 0
-            components, _, _ = skimage.segmentation.relabel_sequential(components)
+            components, _, _ = bic.segmentation.relabel_sequential(components)
         return components
 
 
@@ -259,7 +259,7 @@ class AffinityTransform:
     def __init__(
         self,
         offsets: List[List[int]],
-        ignore_label: Optional[bool] = None,
+        ignore_label: Optional[int] = None,
         add_binary_target: bool = False,
         add_mask: bool = False,
         include_ignore_transitions: bool = False,
@@ -280,7 +280,7 @@ class AffinityTransform:
         ignore_seg = (labels == self.ignore_label).astype(labels.dtype)
         ignore_transitions, invalid_mask = compute_affinities(ignore_seg, self.offsets)
         invalid_mask = np.logical_not(invalid_mask)
-        # NOTE affinity convention returned by affogato: transitions are marked by 0
+        # NOTE affinity convention returned by compute_affinities: transitions are marked by 0
         ignore_transitions = ignore_transitions == 0
         ignore_transitions[invalid_mask] = 0
         affs[ignore_transitions] = 1
@@ -300,9 +300,7 @@ class AffinityTransform:
         if np.dtype(labels.dtype) in (np.dtype("int16"), np.dtype("int32"), np.dtype("int64")):
             dtype = "int64"
         labels = ensure_spatial_array(labels, self.ndim, dtype=dtype)
-        affs, mask = compute_affinities(labels, self.offsets,
-                                        have_ignore_label=self.ignore_label is not None,
-                                        ignore_label=0 if self.ignore_label is None else self.ignore_label)
+        affs, mask = compute_affinities(labels, self.offsets, ignore_label=self.ignore_label)
         # we use the "disaffinity" convention for training; i.e. 1 means repulsive, 0 attractive
         affs = 1. - affs
 
@@ -364,7 +362,7 @@ class DistanceTransform:
         normalize: Whether to normalize the computed distances.
         max_distance: Maximal distance at which to threshold the distances.
         foreground_id: Label id to which the distance is compute.
-        invert Whether to invert the distances:
+        invert: Whether to invert the distances.
         func: Normalization function for the distances.
     """
     eps = 1e-7
@@ -435,7 +433,9 @@ class DistanceTransform:
         else:
             ndim = distance_mask.ndim
             to_channel_first = (ndim,) + tuple(range(ndim))
-            directed_distances = vigra.filters.vectorDistanceTransform(distance_mask).transpose(to_channel_first)
+            directed_distances = bic.distance.vector_difference_transform(
+                distance_mask == 0
+            ).transpose(to_channel_first)
 
         if self.distances:
             distances = self._compute_distances(directed_distances)
@@ -459,10 +459,13 @@ class PerObjectDistanceTransform:
         boundary_distances: Whether to compute the distances to the object boundaries.
         directed_distances: Whether to compute the directed distances (vector distances).
         foreground: Whether to return a foreground channel.
+        instances: Whether to append the original labels as an extra channel to the target.
         apply_label: Whether to apply connected components to the labels before computing distances.
         correct_centers: Whether to correct centers that are not in the objects.
         min_size: Minimal size of objects for distance calculdation.
         distance_fill_value: Fill value for the distances outside of objects.
+        sampling: The spacing of the distance transform. This is especially relevant for anisotropic data;
+            for which it is recommended to use a sampling of (ANISOTROPY_FACTOR, 1, 1).
     """
     eps = 1e-7
 
@@ -477,6 +480,7 @@ class PerObjectDistanceTransform:
         correct_centers: bool = True,
         min_size: int = 0,
         distance_fill_value: float = 1.0,
+        sampling: Optional[Tuple[float, ...]] = None
     ):
         if sum([distances, directed_distances, boundary_distances]) == 0:
             raise ValueError("At least one of distances or directed distances has to be passed.")
@@ -490,6 +494,7 @@ class PerObjectDistanceTransform:
         self.correct_centers = correct_centers
         self.min_size = min_size
         self.distance_fill_value = distance_fill_value
+        self.sampling = sampling
 
     def compute_normalized_object_distances(self, mask, boundaries, bb, center, distances):
         """@private
@@ -508,7 +513,7 @@ class PerObjectDistanceTransform:
         if correct_center or self.boundary_distances:
             # Crop the boundary mask and compute the boundary distances.
             cropped_boundary_mask = boundaries[bb]
-            boundary_distances = vigra.filters.distanceTransform(cropped_boundary_mask)
+            boundary_distances = bic.distance.distance_transform(cropped_boundary_mask == 0, sampling=self.sampling)
             boundary_distances[~cropped_mask] = 0
             max_dist_point = np.unravel_index(np.argmax(boundary_distances), boundary_distances.shape)
 
@@ -522,13 +527,13 @@ class PerObjectDistanceTransform:
 
         # Compute the directed distances,
         if self.distances or self.directed_distances:
-            this_distances = vigra.filters.vectorDistanceTransform(cropped_center_mask)
+            this_distances = bic.distance.vector_difference_transform(cropped_center_mask == 0, sampling=self.sampling)
         else:
             this_distances = None
 
         # Keep only the specified distances:
         if self.distances and self.directed_distances:  # all distances
-            # Compute the undirected ditacnes from directed distances and concatenate,
+            # Compute the undirected distances from directed distances and concatenate,
             undir = np.linalg.norm(this_distances, axis=-1, keepdims=True)
             this_distances = np.concatenate([undir, this_distances], axis=-1)
 
@@ -570,16 +575,16 @@ class PerObjectDistanceTransform:
         """
         # Apply label (connected components) if specified.
         if self.apply_label:
-            labels = skimage.measure.label(labels).astype("uint32")
+            labels = bic.segmentation.label(labels).astype("uint32")
         else:  # Otherwise just relabel the segmentation.
-            labels = vigra.analysis.relabelConsecutive(labels)[0].astype("uint32")
+            labels = bic.segmentation.relabel_sequential(labels)[0].astype("uint32")
 
         # Filter out small objects if min_size is specified.
         if self.min_size > 0:
             ids, sizes = np.unique(labels, return_counts=True)
             discard_ids = ids[sizes < self.min_size]
             labels[np.isin(labels, discard_ids)] = 0
-            labels = vigra.analysis.relabelConsecutive(labels)[0].astype("uint32")
+            labels = bic.segmentation.relabel_sequential(labels)[0].astype("uint32")
 
         # Compute the boundaries. They will be used to determine the most central point,
         # and if 'self.boundary_distances is True' to add the boundary distances.

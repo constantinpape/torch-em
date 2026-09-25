@@ -1,24 +1,30 @@
 import torch
+
 import torch_em
 from torch_em.model.unetr import UNETR
+
+from micro_sam.util import _download_sam_model
 
 from common import get_loaders
 
 
 def get_model(pretrained):
-    checkpoint = "/home/nimcpape/.cache/micro_sam/models/vit_b" if pretrained else None
+    model_type = "vit_b"
+    checkpoint = _download_sam_model(model_type=model_type)[0] if pretrained else None
     model = UNETR(
-        backbone="sam", encoder="vit_b", out_channels=3,
+        backbone="sam",
+        encoder=model_type,
+        out_channels=3,
         encoder_checkpoint_path=checkpoint,
-        use_sam_stats=pretrained, final_activation="Sigmoid",
+        use_sam_stats=pretrained,
+        final_activation="Sigmoid",
+        use_skip_connection=False,
     )
     return model
 
 
 def train_unetr(pretrained, use_dice, mask_background):
     model = get_model(pretrained)
-
-    n_iterations = 10_000
 
     if use_dice:
         loss = torch_em.loss.DiceBasedDistanceLoss(mask_distances_in_bg=mask_background)
@@ -36,8 +42,6 @@ def train_unetr(pretrained, use_dice, mask_background):
     train_loader, val_loader = get_loaders(True)
 
     # the trainer object that handles the training details
-    # the model checkpoints will be saved in "checkpoints/dsb-boundary-model"
-    # the tensorboard logs will be saved in "logs/dsb-boundary-model"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
@@ -51,8 +55,8 @@ def train_unetr(pretrained, use_dice, mask_background):
         log_image_interval=100,
         compile_model=False,
     )
-    trainer.fit(n_iterations)
+    trainer.fit(iterations=int(1e4))
 
 
 if __name__ == "__main__":
-    train_unetr(pretrained=True, use_dice=False, mask_background=True)
+    train_unetr(pretrained=True, use_dice=True, mask_background=True)

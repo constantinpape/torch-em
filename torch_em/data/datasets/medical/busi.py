@@ -56,7 +56,8 @@ def get_busi_paths(
         download: Whether to download the data if it is not present.
 
     Returns:
-        Filepath where the data is downloaded.
+        List of filepaths for the image data.
+        List of filepaths for the label data.
     """
     data_dir = get_busi_data(path=path, download=download)
 
@@ -126,6 +127,7 @@ def get_busi_loader(
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        batch_size: The batch size for training.
         patch_shape: The patch shape to use for training.
         category: The choice of data sub-category.
         resize_inputs: Whether to resize the inputs.

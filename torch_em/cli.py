@@ -194,7 +194,7 @@ def _get_loaders(args, ndim):
             args=args, ndim=ndim,
         )
         val_loader = _get_loader(
-            args.validation_inputs, args.validation_key, args.validation_labels, args.validation_label_key,
+            args.validation_inputs, args.validation_input_key, args.validation_labels, args.validation_label_key,
             args=args, ndim=ndim,
         )
     return train_loader, val_loader

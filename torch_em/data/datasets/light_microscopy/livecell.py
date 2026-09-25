@@ -6,6 +6,7 @@ Please cite it if you use this dataset in your research.
 """
 
 import os
+import json
 import requests
 from tqdm import tqdm
 from shutil import copyfileobj
@@ -55,7 +56,7 @@ def _download_annotation_file(path, split, download):
 
 
 def _annotations_to_instances(coco, image_metadata, category_ids):
-    import vigra
+    import bioimage_cpp as bic
 
     # create and save the segmentation
     annotation_ids = coco.getAnnIds(imgIds=image_metadata["id"], catIds=category_ids)
@@ -82,12 +83,24 @@ def _annotations_to_instances(coco, image_metadata, category_ids):
     seg_ids, sizes = np.unique(seg, return_counts=True)
     seg[np.isin(seg, seg_ids[sizes < min_size])] = 0
 
-    vigra.analysis.relabelConsecutive(seg, out=seg)
+    seg, _, _ = bic.segmentation.relabel_sequential(seg)
 
     return seg.astype("uint16")
 
 
-def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types):
+def _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types, split):
+    # Use a per-split and per-cell_types cache to avoid reloading the COCO JSON when data is already prepared.
+    # The split must be part of the key: train and val share the same seg_folder, so a key without it
+    # would return the paths of whichever split was processed first for both.
+    cache_key = "all" if cell_types is None else "_".join(sorted(cell_types))
+    cache_file = os.path.join(seg_folder, f"seg_paths_{split}_{cache_key}.json")
+    if os.path.exists(cache_file):
+        with open(cache_file) as f:
+            cached = json.load(f)
+        image_paths = [os.path.join(seg_folder, fname) for fname in cached["image_paths"]]
+        seg_paths = [os.path.join(seg_folder, fname) for fname in cached["seg_paths"]]
+        return image_paths, seg_paths
+
     if COCO is None:
         raise ModuleNotFoundError(
             "'pycocotools' is required for processing the LIVECell ground-truth. "
@@ -131,6 +144,12 @@ def _create_segmentations_from_annotations(annotation_file, image_folder, seg_fo
     assert len(image_paths) > 0, \
         f"No matching image paths were found. Did you pass invalid cell type names ({cell_types})?"
 
+    cache_dir = os.path.dirname(cache_file)
+    image_paths_rel = [os.path.relpath(image_path, start=cache_dir) for image_path in image_paths]
+    seg_paths_rel = [os.path.relpath(seg_path, start=cache_dir) for seg_path in seg_paths]
+    with open(cache_file, "w") as f:
+        json.dump({"image_paths": image_paths_rel, "seg_paths": seg_paths_rel}, f)
+
     return image_paths, seg_paths
 
 
@@ -147,7 +166,7 @@ def _download_livecell_annotations(path, split, download, cell_types, label_path
 
     assert os.path.exists(image_folder), image_folder
 
-    return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types)
+    return _create_segmentations_from_annotations(annotation_file, image_folder, seg_folder, cell_types, split)
 
 
 def get_livecell_data(path: Union[os.PathLike], download: bool = False):
