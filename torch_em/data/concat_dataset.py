@@ -11,10 +11,10 @@ class ConcatDataset(Dataset):
     """
     def __init__(self, *datasets: Dataset):
         self.datasets = datasets
-        if isinstance(datasets[0], Subset):
-            self.ndim = datasets[0].dataset.ndim  # Access the underlying dataset's ndim
-        else:
-            self.ndim = datasets[0].ndim
+        dataset = datasets[0]
+        while isinstance(dataset, Subset):
+            dataset = dataset.dataset
+        self.ndim = dataset.ndim
 
         # compute the number of samples for each volume
         self.ds_lens = [len(dataset) for dataset in self.datasets]
