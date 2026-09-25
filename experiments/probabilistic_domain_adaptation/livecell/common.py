@@ -13,9 +13,7 @@ import torch_em
 from torch_em.model import ProbabilisticUNet
 
 from elf.evaluation import dice_score
-from torch_em.data.datasets.livecell import (get_livecell_loader,
-                                             _download_livecell_images,
-                                             _download_livecell_annotations)
+from torch_em.data.datasets.light_microscopy.livecell import get_livecell_paths, get_livecell_loader
 from torch_em.model import UNet2d
 from torch_em.util.prediction import predict_with_padding
 from torchvision import transforms
@@ -84,8 +82,10 @@ def get_unet():
 
 
 def get_punet():
-    return ProbabilisticUNet(input_channels=1, num_classes=1, num_filters=[64, 128, 256, 512],
-                             latent_dim=6, no_convs_fcomb=3, beta=1.0, rl_swap=True)
+    return ProbabilisticUNet(
+        input_channels=1, output_channels=1, num_filters=[64, 128, 256, 512],
+        latent_dim=6, no_convs_fcomb=3, beta=1.0, rl_swap=True
+    )
 
 
 # Computing the Source Distribution for Distribution Alignment
@@ -118,7 +118,7 @@ def get_punet_predictions(model, inputs):
 
     with torch.no_grad():
         model.forward(inputs)
-        samples_per_input = [activation(model.sample(testing=True))for _ in range(prior_samples)]
+        samples_per_input = [activation(model.sample()) for _ in range(prior_samples)]
         avg_pred = torch.stack(samples_per_input, dim=0).sum(dim=0) / prior_samples
 
     return avg_pred
@@ -271,9 +271,7 @@ def evaluate_source_model(args, ct_src, method, get_model=get_unet, prediction_f
 
 
 def _get_image_paths(args, split, cell_type):
-    _download_livecell_images(args.input, download=True)
-    image_paths, _ = _download_livecell_annotations(args.input, split, download=True,
-                                                    cell_types=[cell_type], label_path=None)
+    image_paths, _ = get_livecell_paths(args.input, split, download=True, cell_types=[cell_type])
     return image_paths
 
 

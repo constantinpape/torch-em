@@ -126,6 +126,7 @@ from .scaffold_a549 import get_scaffold_a549_loader, get_scaffold_a549_dataset
 from .slimia import get_slimia_loader, get_slimia_dataset
 from .sperm_scd import get_sperm_scd_loader, get_sperm_scd_dataset
 from .spheroids_hepg2 import get_spheroids_hepg2_loader, get_spheroids_hepg2_dataset
+from .stomataquant import get_stomataquant_loader, get_stomataquant_dataset
 from .svia import get_svia_loader, get_svia_dataset
 from .synthmt import get_synthmt_loader, get_synthmt_dataset
 from .tissuenet import get_tissuenet_loader, get_tissuenet_dataset
