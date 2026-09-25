@@ -2,13 +2,9 @@ from typing import Optional, List
 
 import numpy as np
 
-from skimage.measure import label
-from skimage.filters import gaussian
-from skimage.segmentation import watershed
 from skimage.feature import peak_local_max
-from scipy.ndimage import distance_transform_edt
 
-import vigra
+import bioimage_cpp as bic
 
 import elf.segmentation as elseg
 from elf.segmentation.utils import normalize_input
@@ -41,7 +37,7 @@ def size_filter(
         ids, sizes = np.unique(seg, return_counts=True)
         bg_ids = ids[sizes < min_size]
         seg[np.isin(seg, bg_ids)] = 0
-        seg, _, _ = vigra.analysis.relabelConsecutive(seg.astype(np.uint), start_label=1, keep_zeros=True)
+        seg, _, _ = bic.segmentation.relabel_sequential(seg.astype(np.uint), offset=1)
     else:
         assert hmap.ndim in (seg.ndim, seg.ndim + 1)
         hmap_ = np.max(hmap[:seg.ndim], axis=0) if hmap.ndim > seg.ndim else hmap
@@ -98,9 +94,9 @@ def connected_components_with_boundaries(
         The instance segmentation.
     """
     input_ = np.clip(foreground - boundaries, 0, 1)
-    seeds = label(input_ > threshold)
+    seeds = bic.segmentation.label(input_ > threshold)
     mask = normalize_input(foreground > threshold)
-    seg = watershed(boundaries, markers=seeds, mask=mask)
+    seg = bic.segmentation.watershed(boundaries, markers=seeds, mask=mask.astype(bool))
     return seg.astype("uint64")
 
 
@@ -129,9 +125,9 @@ def watershed_from_components(
     Returns:
         The instance segmentation.
     """
-    seeds = label((foreground - boundaries) > threshold1)
+    seeds = bic.segmentation.label((foreground - boundaries) > threshold1)
     mask = foreground > threshold2
-    seg = watershed(boundaries, seeds, mask=mask)
+    seg = bic.segmentation.watershed(boundaries, seeds, mask=mask)
     seg = size_filter(seg, min_size)
     return seg
 
@@ -166,13 +162,13 @@ def watershed_from_maxima(
         The instance segmentation.
     """
     mask = foreground > threshold1
-    boundary_distances = distance_transform_edt(boundaries < 0.1)
+    boundary_distances = bic.distance.distance_transform(boundaries < 0.1)
     boundary_distances[~mask] = 0
-    boundary_distances = gaussian(boundary_distances, sigma)
+    boundary_distances = bic.filters.gaussian_smoothing(boundary_distances, sigma)
     seed_points = peak_local_max(boundary_distances, min_distance=min_distance, exclude_border=False)
     seeds = np.zeros(mask.shape, dtype="uint32")
     seeds[seed_points[:, 0], seed_points[:, 1]] = np.arange(1, len(seed_points) + 1)
-    seg = watershed(boundaries, markers=seeds, mask=foreground)
+    seg = bic.segmentation.watershed(boundaries, markers=seeds, mask=foreground.astype(bool))
     return size_filter(seg, min_size)
 
 
@@ -211,8 +207,8 @@ def watershed_from_center_and_boundary_distances(
         The instance segmentation.
     """
     if distance_smoothing > 0:
-        center_distances = vigra.filters.gaussianSmoothing(center_distances, distance_smoothing)
-        boundary_distances = vigra.filters.gaussianSmoothing(boundary_distances, distance_smoothing)
+        center_distances = bic.filters.gaussian_smoothing(center_distances, distance_smoothing)
+        boundary_distances = bic.filters.gaussian_smoothing(boundary_distances, distance_smoothing)
 
     fg_mask = foreground_map > foreground_threshold
 
@@ -220,9 +216,9 @@ def watershed_from_center_and_boundary_distances(
         center_distances < center_distance_threshold, boundary_distances < boundary_distance_threshold
     )
     marker_map[~fg_mask] = 0
-    markers = label(marker_map)
+    markers = bic.segmentation.label(marker_map)
 
-    seg = watershed(boundary_distances, markers=markers, mask=fg_mask)
+    seg = bic.segmentation.watershed(boundary_distances, markers=markers, mask=fg_mask)
     seg = size_filter(seg, min_size)
 
     if debug:

@@ -1,0 +1,26 @@
+import os
+
+from torch_em.util.debug import check_loader
+from torch_em.data import MinInstanceSampler
+from torch_em.data.datasets.medical import get_hvm_loader
+
+
+DATA_ROOT = "/mnt/vast-nhr/projects/cidas/cca/data"
+
+
+def check_hvm():
+    loader = get_hvm_loader(
+        path=os.path.join(DATA_ROOT, "hvm"),
+        patch_shape=(1, 512, 512),
+        batch_size=1,
+        annotation="hepatic_veins",
+        sampler=MinInstanceSampler(),
+        ndim=2,
+        download=True,
+    )
+
+    check_loader(loader, 8, plt=True, save_path="./test.png")
+
+
+if __name__ == "__main__":
+    check_hvm()

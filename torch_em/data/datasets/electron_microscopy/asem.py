@@ -48,8 +48,8 @@ VOLUMES = {
 
 ORGANELLES = {
     "mito": ["cell_1", "cell_2", "cell_3", "cell_6", "cell_13", "cell_13a"],
-    "golgi": ["cell_1", "cell_2", "cell_3", "cell_6",],
-    "er": ["cell_1", "cell_2", "cell_3", "cell_6",],
+    "golgi": ["cell_1", "cell_2", "cell_3", "cell_6"],
+    "er": ["cell_1", "cell_2", "cell_3", "cell_6"],
     "ccp": ["cell_12", "cell_13"],
     "np": ["cell_13a"],
     "np_bottom": ["cell_13a"]

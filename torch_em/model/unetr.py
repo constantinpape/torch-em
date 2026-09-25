@@ -15,7 +15,7 @@ except ImportError:
     get_sam_model = None
 
 try:
-    from micro_sam2.util import get_sam2_model
+    from micro_sam.v2.util import get_sam2_model
 except ImportError:
     get_sam2_model = None
 
@@ -26,8 +26,55 @@ except ImportError:
 
 
 #
-# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / SAM2 / SAM3 / DINOv2 / DINOv3 / MAE / ScaleMAE) + UNet Decoder from `torch_em`]  # noqa
+# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / CellposeSAM / SAM2 / SAM3 / DINOv2 / DINOv3 / MAE / ScaleMAE) + UNet Decoder from `torch_em`]  # noqa
 #
+
+
+def _check_input_normalization_range(
+    x: torch.Tensor,
+    expected_range: Optional[Tuple[float, float]],
+    unit_scale_max: Optional[float] = None,
+) -> None:
+    """Check whether raw inputs match the value range expected by the model normalizer.
+
+    Args:
+        x: The input tensor to validate.
+        expected_range: The (min, max) value range the input must lie within. If None, all checks are skipped.
+        unit_scale_max: If set, raises an error when the input's maximum value is at or below this threshold,
+            catching inputs that are likely in the wrong scale (e.g. [0, 1] instead of [0, 255] for SAM1).
+    """
+    if expected_range is None:
+        return
+
+    if not torch.all(torch.isfinite(x)):
+        raise ValueError("The input contains NaN or infinite values before normalization.")
+
+    min_value, max_value = expected_range
+    if torch.any((x < min_value) | (x > max_value)):
+        actual_min, actual_max = torch.aminmax(x.detach())
+        raise ValueError(
+            "The input is outside the expected scale before normalization: "
+            f"expected values in [{min_value}, {max_value}], got [{actual_min.item()}, {actual_max.item()}]. "
+            "Please check whether the raw inputs should be scaled to [0, 1] or kept in [0, 255] "
+            "before applying the pretrained normalization statistics."
+        )
+
+    if unit_scale_max is not None:
+        actual_max = x.detach().max().item()
+        if actual_max <= unit_scale_max:
+            raise ValueError(
+                f"The input maximum value ({actual_max:.4f}) suggests the input is in the wrong scale: "
+                f"expected inputs with values in [{min_value}, {max_value}], "
+                f"but the maximum is only {actual_max:.4f}. "
+                "Please check whether the raw inputs should be scaled to [0, 255] instead of [0, 1]."
+            )
+
+
+def _as_stats(mean, std, device, dtype, is_3d: bool):
+    view_shape = (1, -1, 1, 1, 1) if is_3d else (1, -1, 1, 1)
+    pixel_mean = torch.tensor(mean, device=device, dtype=dtype).view(*view_shape)
+    pixel_std = torch.tensor(std, device=device, dtype=dtype).view(*view_shape)
+    return pixel_mean, pixel_std
 
 
 class UNETRBase(nn.Module):
@@ -36,8 +83,10 @@ class UNETRBase(nn.Module):
     Args:
         img_size: The size of the input for the image encoder. Input images will be resized to match this size.
         backbone: The name of the vision transformer implementation.
-            One of "sam", "sam2", "sam3, "mae", "scalemae", "dinov2", "dinov3" (see all combinations below)
-        encoder: The vision transformer. Can either be a name, such as "vit_b" (see all combinations for this below) or a torch module.
+            One of "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"
+            (see all combinations below)
+        encoder: The vision transformer. Can either be a name, such as "vit_b"
+            (see all combinations for this below) or a torch module.
         decoder: The convolutional decoder.
         out_channels: The number of output channels of the UNETR.
         use_sam_stats: Whether to normalize the input data with the statistics of the
@@ -54,6 +103,10 @@ class UNETRBase(nn.Module):
         embed_dim: The embedding dimensionality, corresponding to the output dimension of the vision transformer.
         use_conv_transpose: Whether to use transposed convolutions instead of resampling for upsampling.
             By default, it uses resampling for upsampling.
+        perform_range_checks: Whether to validate the input value range before normalization on each forward pass.
+            You can disable the checks to avoid GPU sync overhead during training when inputs are known to be correct.
+        initial_features: The number of features of the finest decoder level. The features per level are
+            'initial_features * gain ** i', so this scales the decoder parameters quadratically.
 
         NOTE: The currently supported combinations of 'backbone' x 'encoder' are the following:
 
@@ -66,6 +119,7 @@ class UNETRBase(nn.Module):
             - 'sam2' x 'hvit_b'
             - 'sam2' x 'hvit_l'
             - 'sam3' x 'vit_pe'
+            - 'cellpose_sam' x 'vit_l'
 
         DINO_family_models:
             - 'dinov2' x 'vit_s'
@@ -95,7 +149,7 @@ class UNETRBase(nn.Module):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -108,6 +162,8 @@ class UNETRBase(nn.Module):
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
+        perform_range_checks: bool = True,
+        initial_features: int = 64,
         **kwargs
     ) -> None:
         super().__init__()
@@ -118,7 +174,9 @@ class UNETRBase(nn.Module):
         self.use_dino_stats = use_dino_stats
         self.use_skip_connection = use_skip_connection
         self.resize_input = resize_input
+        self.perform_range_checks = perform_range_checks
         self.use_conv_transpose = use_conv_transpose
+        self.initial_features = initial_features
         self.backbone = backbone
 
         if isinstance(encoder, str):  # e.g. "vit_b" / "hvit_b" / "vit_pe"
@@ -130,6 +188,10 @@ class UNETRBase(nn.Module):
 
             if embed_dim is None:
                 embed_dim = self.encoder.embed_dim
+
+            # For SAM1 encoder, if 'apply_neck' is applied, the embedding dimension must change.
+            if hasattr(self.encoder, "apply_neck") and self.encoder.apply_neck:
+                embed_dim = self.encoder.neck[2].out_channels  # the value is 256
 
         else:  # `nn.Module` ViT backbone
             self.encoder = encoder
@@ -162,6 +224,21 @@ class UNETRBase(nn.Module):
                 except Exception:
                     # Try loading the encoder state directly from a checkpoint.
                     encoder_state = torch.load(checkpoint, weights_only=False)
+
+            elif backbone == "cellpose_sam" and isinstance(encoder, str):
+                # The architecture matches CellposeSAM exactly (same rel_pos sizes),
+                # so weights load directly without any interpolation.
+                encoder_state = torch.load(checkpoint, map_location="cpu", weights_only=False)
+                # Handle DataParallel/DistributedDataParallel prefix.
+                if any(k.startswith("module.") for k in encoder_state.keys()):
+                    encoder_state = OrderedDict(
+                        {k[len("module."):]: v for k, v in encoder_state.items()}
+                    )
+                # Extract encoder weights from CellposeSAM checkpoint format (strip 'encoder.' prefix).
+                if any(k.startswith("encoder.") for k in encoder_state.keys()):
+                    encoder_state = OrderedDict(
+                        {k[len("encoder."):]: v for k, v in encoder_state.items() if k.startswith("encoder.")}
+                    )
 
             elif backbone == "sam2" and isinstance(encoder, str):
                 # If we have a SAM2 encoder, then we first try to load the full SAM2 Model.
@@ -291,47 +368,63 @@ class UNETRBase(nn.Module):
     def _as_stats(self, mean, std, device, dtype, is_3d: bool):
         """@private
         """
-        # Either 2d batch: (1, C, 1, 1) or 3d batch: (1, C, 1, 1, 1).
-        view_shape = (1, -1, 1, 1, 1) if is_3d else (1, -1, 1, 1)
-        pixel_mean = torch.tensor(mean, device=device, dtype=dtype).view(*view_shape)
-        pixel_std = torch.tensor(std, device=device, dtype=dtype).view(*view_shape)
-        return pixel_mean, pixel_std
+        return _as_stats(mean, std, device, dtype, is_3d)
+
+    def _check_input_normalization_range(self, x: torch.Tensor, expected_range: Optional[Tuple[float, float]]) -> None:
+        """@private
+        """
+        _check_input_normalization_range(x, expected_range)
+
+    def encode(self, x: torch.Tensor):
+        """Preprocess the input and run the image encoder.
+
+        Args:
+            x: The input tensor.
+
+        Returns:
+            The encoder features to pass to `decode` and the spatial shape after preprocessing.
+        """
+        raise NotImplementedError
+
+    def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
+        """Run the convolutional decoder on the encoder features.
+
+        Args:
+            features: The encoder features returned by `encode`.
+            input_shape: The spatial shape after preprocessing, returned by `encode`.
+            original_shape: The spatial shape of the original input.
+
+        Returns:
+            The UNETR output, resized to `original_shape`.
+        """
+        raise NotImplementedError
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the UNETR to the input data.
+
+        Args:
+            x: The input tensor.
+
+        Returns:
+            The UNETR output.
+        """
+        features, input_shape = self.encode(x)
+        return self.decode(features, input_shape, tuple(x.shape[2:]))
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         """@private
         """
-        device = x.device
-        is_3d = (x.ndim == 5)
-        device, dtype = x.device, x.dtype
-
-        if self.use_sam_stats:
-            mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
-        elif self.use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
-            raise NotImplementedError
-        elif self.use_dino_stats or (self.use_sam_stats and self.backbone == "sam2"):
-            mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
-        elif self.use_sam_stats and self.backbone == "sam3":
-            mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-        else:
-            mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
-
-        pixel_mean, pixel_std = self._as_stats(mean, std, device=device, dtype=dtype, is_3d=is_3d)
-
-        if self.resize_input:
-            x = self.resize_longest_side(x)
-        input_shape = x.shape[-3:] if is_3d else x.shape[-2:]
-
-        x = (x - pixel_mean) / pixel_std
-        h, w = x.shape[-2:]
-        padh = self.encoder.img_size - h
-        padw = self.encoder.img_size - w
-
-        if is_3d:
-            x = F.pad(x, (0, padw, 0, padh, 0, 0))
-        else:
-            x = F.pad(x, (0, padw, 0, padh))
-
-        return x, input_shape
+        return preprocess_vit_inputs(
+            x,
+            use_sam_stats=self.use_sam_stats,
+            backbone=self.backbone,
+            use_mae_stats=self.use_mae_stats,
+            use_dino_stats=self.use_dino_stats,
+            resize_input=self.resize_input,
+            img_size=self.img_size,
+            encoder_img_size=self.encoder.img_size,
+            perform_range_checks=self.perform_range_checks,
+        )
 
     def postprocess_masks(
         self, masks: torch.Tensor, input_size: Tuple[int, ...], original_size: Tuple[int, ...],
@@ -364,13 +457,98 @@ class UNETRBase(nn.Module):
         return masks
 
 
+def preprocess_vit_inputs(
+    x: torch.Tensor,
+    use_sam_stats: bool = False,
+    backbone: str = "sam",
+    use_mae_stats: bool = False,
+    use_dino_stats: bool = False,
+    resize_input: bool = True,
+    img_size: int = 1024,
+    encoder_img_size: int = 1024,
+    perform_range_checks: bool = True,
+) -> Tuple[torch.Tensor, Tuple]:
+    """Preprocess inputs for ViT-backbones in UNETR models.
+
+    Handles normalization stat selection, input range validation, optional resizing to the longest side,
+    and padding to `encoder_img_size`. Can be used as a standalone function without a model instance.
+
+    Args:
+        x: Input tensor of shape (B, C, H, W) for 2D or (B, C, Z, H, W) for 3D.
+        use_sam_stats: Whether to normalize with SAM/SAM2/SAM3 backbone statistics.
+        backbone: The backbone name - controls which SAM stats are used when `use_sam_stats=True`.
+        use_mae_stats: Whether to normalize with MAE statistics.
+        use_dino_stats: Whether to normalize with DINOv2/DINOv3 statistics.
+        resize_input: Whether to resize the input to the longest side before padding.
+        img_size: The model image size, used for 3D resize.
+        encoder_img_size: The encoder image size, used for 2D resize and padding.
+        perform_range_checks: Whether to validate the expected input value range before normalization.
+            You can disable the checks to avoid GPU sync overhead during training when inputs are known to be correct.
+
+    Returns:
+        The preprocessed tensor and the spatial shape after resizing (before padding).
+    """
+    is_3d = (x.ndim == 5)
+    device, dtype = x.device, x.dtype
+    mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+    expected_range = None
+    unit_scale_max = None
+
+    if use_sam_stats:
+        if backbone == "sam2":
+            mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+            expected_range = (0.0, 1.0)
+        elif backbone == "sam3":
+            mean, std = (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+            expected_range = (0.0, 1.0)
+        else:  # sam1 / default
+            mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
+            expected_range = (0.0, 255.0)
+            unit_scale_max = 1.0
+    elif use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
+        raise NotImplementedError
+    elif use_dino_stats:
+        mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+        expected_range = (0.0, 1.0)
+    else:
+        mean, std = (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+        expected_range = None
+
+    if perform_range_checks:
+        _check_input_normalization_range(x, expected_range, unit_scale_max)
+    pixel_mean, pixel_std = _as_stats(mean, std, device=device, dtype=dtype, is_3d=is_3d)
+
+    if resize_input:
+        if x.ndim == 4:
+            target_size = UNETRBase.get_preprocess_shape(x.shape[2], x.shape[3], encoder_img_size)
+            x = F.interpolate(x, target_size, mode="bilinear", align_corners=False, antialias=True)
+        elif x.ndim == 5:
+            B, C, Z, H, W = x.shape
+            target_size = UNETRBase.get_preprocess_shape(H, W, img_size)
+            x = F.interpolate(x, (Z, *target_size), mode="trilinear", align_corners=False)
+
+    input_shape = x.shape[-3:] if is_3d else x.shape[-2:]
+
+    x = (x - pixel_mean) / pixel_std
+    h, w = x.shape[-2:]
+    padh = encoder_img_size - h
+    padw = encoder_img_size - w
+
+    if is_3d:
+        x = F.pad(x, (0, padw, 0, padh, 0, 0))
+    else:
+        x = F.pad(x, (0, padw, 0, padh))
+
+    return x, input_shape
+
+
 class UNETR(UNETRBase):
     """A (2d-only) UNet Transformer using a vision transformer as encoder and a convolutional decoder.
     """
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -383,6 +561,7 @@ class UNETR(UNETRBase):
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
+        perform_range_checks: bool = True,
         **kwargs
     ) -> None:
 
@@ -401,6 +580,7 @@ class UNETR(UNETRBase):
             use_skip_connection=use_skip_connection,
             embed_dim=embed_dim,
             use_conv_transpose=use_conv_transpose,
+            perform_range_checks=perform_range_checks,
             **kwargs,
         )
 
@@ -418,9 +598,8 @@ class UNETR(UNETRBase):
 
         # parameters for the decoder network
         depth = 3
-        initial_features = 64
         gain = 2
-        features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
+        features_decoder = [self.initial_features * gain ** i for i in range(depth + 1)][::-1]
         scale_factors = depth * [2]
         self.out_channels = out_channels
 
@@ -499,17 +678,17 @@ class UNETR(UNETRBase):
         )
         self.decoder_head = ConvBlock2d(2 * features_decoder[-1], features_decoder[-1])
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply the UNETR to the input data.
+    def encode(self, x: torch.Tensor):
+        """Preprocess the input and run the image encoder.
 
         Args:
-            x: The input tensor.
+            x: The input tensor of shape (B, C, Y, X).
 
         Returns:
-            The UNETR output.
+            The features as a tuple of the image embeddings, the list of intermediate encoder outputs
+            (None if the encoder returns only the embeddings) and the preprocessed input, which the
+            skip connections consume, and the spatial shape after preprocessing.
         """
-        original_shape = x.shape[-2:]
-
         # Reshape the inputs to the shape expected by the encoder
         # and normalize the inputs if normalization is part of the model.
         x, input_shape = self.preprocess(x)
@@ -522,7 +701,22 @@ class UNETR(UNETRBase):
             #   - or, we return the image embeddings and the "list" of global attention layers
             z12, from_encoder = encoder_outputs
         else:
-            z12 = encoder_outputs
+            z12, from_encoder = encoder_outputs, None
+
+        return (z12, from_encoder, x), input_shape
+
+    def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
+        """Run the convolutional decoder on the encoder features.
+
+        Args:
+            features: The tuple returned by `encode`.
+            input_shape: The spatial shape (Y, X) after preprocessing.
+            original_shape: The spatial shape (Y, X) of the original input.
+
+        Returns:
+            The UNETR output, resized to `original_shape`.
+        """
+        z12, from_encoder, x = features
 
         if self.use_skip_connection:
             from_encoder = from_encoder[::-1]
@@ -550,8 +744,7 @@ class UNETR(UNETRBase):
         if self.final_activation is not None:
             x = self.final_activation(x)
 
-        x = self.postprocess_masks(x, input_shape, original_shape)
-        return x
+        return self.postprocess_masks(x, input_shape, original_shape)
 
 
 class UNETR2D(UNETR):
@@ -566,7 +759,7 @@ class UNETR3D(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal["sam", "sam2", "sam3", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
+        backbone: Literal["sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3"] = "sam",
         encoder: Optional[Union[nn.Module, str]] = "hvit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -580,6 +773,7 @@ class UNETR3D(UNETRBase):
         embed_dim: Optional[int] = None,
         use_conv_transpose: bool = False,
         use_strip_pooling: bool = True,
+        perform_range_checks: bool = True,
         **kwargs
     ):
         if use_skip_connection:
@@ -605,15 +799,15 @@ class UNETR3D(UNETRBase):
             use_skip_connection=use_skip_connection,
             embed_dim=embed_dim,
             use_conv_transpose=use_conv_transpose,
+            perform_range_checks=perform_range_checks,
             **kwargs,
         )
 
         # The 3d convolutional decoder.
         # First, get the important parameters for the decoder.
         depth = 3
-        initial_features = 64
         gain = 2
-        features_decoder = [initial_features * gain ** i for i in range(depth + 1)][::-1]
+        features_decoder = [self.initial_features * gain ** i for i in range(depth + 1)][::-1]
         scale_factors = [1, 2, 2]
         self.out_channels = out_channels
 
@@ -674,27 +868,34 @@ class UNETR3D(UNETRBase):
         )
         self.out_conv = nn.Conv3d(features_decoder[-1], out_channels, 1)
 
-    def forward(self, x: torch.Tensor):
-        """Forward pass of the UNETR-3D model.
+    def encode(self, x: torch.Tensor):
+        """Preprocess the input and run the image encoder on every z-slice.
 
         Args:
             x: Inputs of expected shape (B, C, Z, Y, X), where Z considers flexible inputs.
 
         Returns:
-            The UNETR output.
+            The encoder features of shape (B, D, Z, Y', X') and the spatial shape after preprocessing.
         """
-        B, C, Z, H, W = x.shape
-        original_shape = (Z, H, W)
-
-        # Preprocessing step
+        Z = x.shape[2]
         x, input_shape = self.preprocess(x)
+        features = torch.stack([self.encoder(x[:, :, i])[0] for i in range(Z)], dim=2)
+        return features, input_shape
 
-        # Run the image encoder.
-        curr_features = torch.stack([self.encoder(x[:, :, i])[0] for i in range(Z)], dim=2)
+    def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
+        """Run the convolutional decoder on the encoder features.
 
+        Args:
+            features: Encoder features of shape (B, D, Z, Y', X'), see `encode`.
+            input_shape: The spatial shape (Z, Y, X) after preprocessing.
+            original_shape: The spatial shape (Z, Y, X) of the original input.
+
+        Returns:
+            The UNETR output, resized to `original_shape`.
+        """
         # Prepare the counterparts for the decoder.
         # NOTE: The section below is sequential, there's no skip connections atm.
-        z9 = self.deconv1(curr_features)
+        z9 = self.deconv1(features)
         z6 = self.deconv2(z9)
         z3 = self.deconv3(z6)
         z0 = self.deconv4(z3)
@@ -702,7 +903,7 @@ class UNETR3D(UNETRBase):
         updated_from_encoder = [z9, z6, z3]
 
         # Align the features through the base block.
-        x = self.base(curr_features)
+        x = self.base(features)
         # Run the decoder
         x = self.decoder(x, encoder_inputs=updated_from_encoder)
         x = self.deconv_out(x)  # NOTE before `end_up`
@@ -715,8 +916,7 @@ class UNETR3D(UNETRBase):
             x = self.final_activation(x)
 
         # Postprocess the output back to original size.
-        x = self.postprocess_masks(x, input_shape, original_shape)
-        return x
+        return self.postprocess_masks(x, input_shape, original_shape)
 
 #
 #  ADDITIONAL FUNCTIONALITIES
@@ -737,7 +937,7 @@ class DepthStripPooling(nn.Module):
         to Z=1, and then passes through a small 1x1x1 MLP, then broadcasts it back to Z to
         modulate the original features (using a gated residual).
 
-        For 2D (Z == 1 or Z == 3): returns input unchanged (no-op).
+        For 2D (Z == 1): returns input unchanged (no-op).
 
         Args:
             channels: The output channels.
@@ -755,11 +955,13 @@ class DepthStripPooling(nn.Module):
             raise ValueError(f"DepthStripPooling expects 5D tensors as input, got '{x.shape}'.")
 
         B, C, Z, H, W = x.shape
-        if Z == 1 or Z == 3:  # i.e. 2d-as-1-slice or RGB_2d-as-1-slice.
+        if Z == 1:  # i.e. always the case of all 2d.
             return x  # We simply do nothing there.
 
-        # We pool only along the depth dimension: i.e. target shape (B, C, 1, H, W)
-        feat = F.adaptive_avg_pool3d(x, output_size=(1, H, W))
+        # We pool only along the depth dimension: i.e. target shape (B, C, 1, H, W).
+        # A plain mean over Z is the same operation as adaptive_avg_pool3d to (1, H, W), but its
+        # reduction kernel is several times faster at full resolution.
+        feat = x.mean(dim=2, keepdim=True)
         feat = self.conv1(feat)
         feat = self.bn1(feat)
         feat = self.relu(feat)

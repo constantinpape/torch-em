@@ -215,6 +215,15 @@ class TestLabelTransforms(unittest.TestCase):
         self.assertGreaterEqual(result.min(), 0)
         self.assertLessEqual(result.max(), 1)
 
+        # apply_label=False exercises the relabel_sequential branch (instead of connected components).
+        trafo = PerObjectDistanceTransform(
+            distances=True, boundary_distances=True, directed_distances=False, foreground=True, apply_label=False,
+        )
+        result = trafo(labels)
+        self.assertEqual(result.shape, (3,) + labels.shape)
+        self.assertGreaterEqual(result.min(), 0)
+        self.assertLessEqual(result.max(), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
