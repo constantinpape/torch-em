@@ -351,4 +351,5 @@ from .verse import get_verse_dataset, get_verse_loader
 from .waw_tace import get_waw_tace_dataset, get_waw_tace_loader
 from .vs_seg import get_vs_seg_dataset, get_vs_seg_loader
 from .wmh import get_wmh_dataset, get_wmh_loader
+from .woives import get_woives_dataset, get_woives_loader
 from .word import get_word_dataset, get_word_loader
