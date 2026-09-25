@@ -163,8 +163,12 @@ class ProbabilisticUNetTrainerLogger(torch_em.trainer.logger_base.TorchEmLogger)
     def add_image(self, x, y, samples, name, step):
         # NOTE: we only show the first tensor per batch for all images
         self.tb.add_image(tag=f"{name}/input", img_tensor=x[0], global_step=step)
-        self.tb.add_image(tag=f"{name}/target", img_tensor=y[0], global_step=step)
-        sample_grid = make_grid([sample[0] for sample in samples], nrow=4, padding=4)
+        target_grid = make_grid(list(y[0].float().split(1)), nrow=4, padding=4, normalize=True)
+        self.tb.add_image(tag=f"{name}/target", img_tensor=target_grid, global_step=step)
+        predictions = [
+            sample.sigmoid() if sample.shape[1] == 1 else sample.argmax(dim=1, keepdim=True) for sample in samples
+        ]
+        sample_grid = make_grid([sample[0].float() for sample in predictions], nrow=4, padding=4, normalize=True)
         self.tb.add_image(tag=f"{name}/samples", img_tensor=sample_grid, global_step=step)
 
     def log_train(self, step, loss, lr, x, y, samples):

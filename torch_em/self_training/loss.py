@@ -1,8 +1,9 @@
-from typing import Optional
+from typing import Optional, Union
 
 import torch
-import torch_em
 import torch.nn as nn
+
+import torch_em
 from torch_em.loss import DiceLoss
 
 
@@ -100,7 +101,8 @@ class ProbabilisticUNetLoss(nn.Module):
 
     Computes the ELBO loss: reconstruction term plus beta-weighted KL divergence,
     with L2 regularisation on the posterior, prior, and fcomb weights.
-    Labels are sliced to model.output_channels to support multi-rater inputs.
+    Labels have shape (B, R, H, W), with one binary mask or class-index map per rater.
+    The ELBO averages the contributions from all raters.
 
     Args:
         loss: Reserved. Must be None; the ELBO objective is always used.
@@ -113,7 +115,6 @@ class ProbabilisticUNetLoss(nn.Module):
         self, model: nn.Module, input_: torch.Tensor, labels: torch.Tensor, label_filter: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         model(input_, labels)
-        labels = labels[:, :model.output_channels, ...]
 
         if self.loss is None:
             elbo = model.elbo(labels, label_filter)
@@ -134,19 +135,20 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
 
     Computes the ELBO loss and a sample-averaged Dice metric in a single forward pass.
     Draws prior_samples segmentation hypotheses, averages them, and evaluates against labels.
-    Labels are sliced to model.output_channels to support multi-rater inputs.
+    Labels have shape (B, R, H, W). The loss and metric average the contributions from all raters.
 
     Args:
         loss: Reserved. Must be None; the ELBO objective is always used.
         metric: Metric function applied to averaged prior samples vs. labels.
-        activation: Activation applied to prior samples before metric computation.
+        activation: Activation applied to prior samples. The default uses sigmoid for binary outputs
+            and softmax for multiclass outputs. Pass None to use logits.
         prior_samples: Number of prior samples to average for the metric.
     """
     def __init__(
         self,
         loss: Optional[nn.Module] = None,
         metric: nn.Module = DiceLoss(),
-        activation: Optional[nn.Module] = torch.nn.Sigmoid(),
+        activation: Optional[Union[nn.Module, str]] = "auto",
         prior_samples: int = 16,
     ) -> None:
         super().__init__()
@@ -159,7 +161,6 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
         self, model: nn.Module, input_: torch.Tensor, labels: torch.Tensor, label_filter: Optional[torch.Tensor] = None
     ):
         model(input_, labels)
-        labels = labels[:, :model.output_channels, ...]
 
         if self.loss is None:
             elbo = model.elbo(labels, label_filter)
@@ -175,12 +176,20 @@ class ProbabilisticUNetLossAndMetric(nn.Module):
         samples_per_distribution = []
         for _ in range(self.prior_samples):
             samples = model.sample()
-            if self.activation is not None:
+            if self.activation == "auto":
+                samples = samples.sigmoid() if model.output_channels == 1 else samples.softmax(dim=1)
+            elif self.activation is not None:
                 samples = self.activation(samples)
             samples_per_distribution.append(samples)
 
         avg_samples = torch.stack(samples_per_distribution, dim=0).mean(dim=0)
-        metric = self.metric(avg_samples, labels)
+        metrics = []
+        for target in labels.split(1, dim=1):
+            if model.output_channels > 1 and isinstance(self.metric, DiceLoss):
+                target = torch.nn.functional.one_hot(target.squeeze(1).long(), model.output_channels).movedim(-1, 1)
+                target = target.float()
+            metrics.append(self.metric(avg_samples, target))
+        metric = torch.stack(metrics).mean(dim=0)
 
         return loss, metric
 

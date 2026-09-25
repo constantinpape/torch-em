@@ -14,8 +14,8 @@ import torch.nn.functional as F
 from torch.distributions import Normal, Independent, kl
 
 from torch_em.model import UNet2d
+from torch_em.loss.dice import DiceLoss
 from torch_em.model.unet import get_norm_layer
-from torch_em.loss.dice import DiceLossWithLogits
 
 
 def init_weights(m: nn.Module) -> None:
@@ -114,6 +114,7 @@ class AxisAlignedConvGaussian(nn.Module):
         posterior: If True, encodes both image and segmentation (posterior q(z|x,y)).
         num_classes: Number of segmentation channels when posterior=True.
         use_onehot: If True, converts integer class labels to one-hot before concatenation.
+        num_raters: Number of segmentation maps per image for the joint posterior.
         norm: Normalization type passed to the encoder. None disables normalisation.
     """
     def __init__(
@@ -125,6 +126,7 @@ class AxisAlignedConvGaussian(nn.Module):
         posterior: bool = False,
         num_classes: Optional[int] = None,
         use_onehot: bool = False,
+        num_raters: int = 1,
         norm: Optional[str] = None,
     ) -> None:
         super().__init__()
@@ -137,7 +139,7 @@ class AxisAlignedConvGaussian(nn.Module):
             num_filters,
             no_convs_per_block,
             posterior=posterior,
-            num_classes=num_classes,
+            num_classes=None if num_classes is None else num_classes * num_raters,
             norm=norm,
         )
 
@@ -152,7 +154,7 @@ class AxisAlignedConvGaussian(nn.Module):
         # Centering (- 0.5) keeps inputs zero-mean in both the one-hot and raw binary cases.
         if segm is not None:
             if self.use_onehot:
-                segm = F.one_hot(segm.squeeze(1).long(), self.num_classes).permute(0, 3, 1, 2).float() - 0.5
+                segm = F.one_hot(segm.long(), self.num_classes).movedim(-1, 2).flatten(1, 2).float() - 0.5
             else:
                 segm = segm.float() - 0.5
             patch = torch.cat((patch, segm), dim=1)
@@ -226,15 +228,15 @@ class ProbabilisticUNet(nn.Module):
     This generative segmentation heuristic uses UNet combined with a conditional variational
     autoencoder enabling to efficiently produce an unlimited number of plausible hypotheses.
 
-    For multi-class segmentation (output_channels > 1), the posterior encoder automatically receives
-    a one-hot encoded label with output_channels classes. For binary segmentation (output_channels == 1),
-    the posterior receives num_raters raw binary channels centered at -0.5.
+    Labels have shape (B, R, H, W), where R is num_raters. Each rater provides a binary mask
+    or a multiclass map of integer class IDs. The joint posterior receives all raters as input channels.
+    Multiclass maps become R * C one-hot channels. Reconstruction loss averages over raters.
+    Prior samples have shape (B, C, H, W).
 
     Args:
         input_channels: Number of channels in the image (1 for grayscale and 3 for RGB). The default is set to 1.
         output_channels: Number of channels to predict. The default is set to 1.
-        num_raters: Number of annotators providing binary labels (only used when output_channels == 1).
-            The default is set to 1.
+        num_raters: Number of annotators per image for binary or multiclass labels. The default is set to 1.
         num_filters: Number of filters per encoder level. The default is set to [32, 64, 128, 192].
         latent_dim: Dimension of the latent space. The default is set to 6.
         no_convs_per_block: Number of convolutions per block in the prior/posterior encoder. The default is set to 3.
@@ -268,6 +270,9 @@ class ProbabilisticUNet(nn.Module):
     ) -> None:
         super().__init__()
 
+        if output_channels < 1 or num_raters < 1:
+            raise ValueError("output_channels and num_raters must be positive.")
+
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.num_raters = num_raters
@@ -296,18 +301,16 @@ class ProbabilisticUNet(nn.Module):
             norm=norm,
         )
 
-        # Multi-class: one-hot encode the class-index label with output_channels classes.
-        # Binary: concatenate num_raters raw binary channels centered at -0.5.
         use_onehot = output_channels > 1
-        posterior_seg_channels = output_channels if use_onehot else num_raters
         self.posterior = AxisAlignedConvGaussian(
             self.input_channels,
             self.num_filters,
             self.no_convs_per_block,
             self.latent_dim,
             posterior=True,
-            num_classes=posterior_seg_channels,
+            num_classes=output_channels,
             use_onehot=use_onehot,
+            num_raters=num_raters,
             norm=norm,
         )
 
@@ -319,7 +322,7 @@ class ProbabilisticUNet(nn.Module):
         )
 
         if rl_swap:
-            self._criterion = DiceLossWithLogits()
+            self._criterion = DiceLoss()
         elif output_channels == 1:
             self._criterion = nn.BCEWithLogitsLoss(reduction="none")
         else:
@@ -337,15 +340,22 @@ class ProbabilisticUNet(nn.Module):
 
     def forward(self, patch: torch.Tensor, segm: Optional[torch.Tensor] = None) -> None:
         """Run the image through the UNet and build the prior latent space.
-        If segm is provided (training), also builds the posterior latent space.
+
+        Labels have shape (B, R, H, W). The joint posterior receives all R raters.
         """
         self._check_shape(patch)
 
         if segm is not None:
+            self._check_labels(segm, patch)
             self.posterior_latent_space = self.posterior(patch, segm)
 
         self.prior_latent_space = self.prior(patch)
         self.unet_features = self.unet(patch)
+
+    def _check_labels(self, segm: torch.Tensor, image: torch.Tensor) -> None:
+        expected_shape = (image.shape[0], self.num_raters, *image.shape[2:])
+        if segm.shape != expected_shape:
+            raise ValueError(f"Expected labels with shape {expected_shape}, got {tuple(segm.shape)}.")
 
     def sample(self) -> torch.Tensor:
         """Sample a segmentation from the prior and decode it through the UNet feature map.
@@ -363,7 +373,7 @@ class ProbabilisticUNet(nn.Module):
         calculate_posterior: bool = False,
         z_posterior: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Decode a posterior sample into a segmentation via fcomb.
+        """Decode a joint posterior sample into logits with shape (B, C, H, W).
 
         Args:
             use_posterior_mean: Use the posterior mean as z instead of sampling.
@@ -414,24 +424,24 @@ class ProbabilisticUNet(nn.Module):
     ) -> torch.Tensor:
         """Compute the evidence lower bound -E[log p(y|x,z)] + beta * KL(q||p).
 
-        A reparametrized sample z is drawn from the posterior and used for both the
-        reconstruction loss and the KL term. The reconstruction criterion is selected
-        at construction time based on output_channels and rl_swap.
+        One joint posterior sample supplies the reconstruction and KL terms for each image.
+        Reconstruction loss averages over raters. The KL term contributes once per image.
 
         Args:
-            segm: Ground-truth segmentation of shape (B, output_channels, H, W).
-            consm: Optional consensus mask of the same shape as segm. Applied as a
-                multiplicative weight when consensus_masking=True.
+            segm: Binary labels or multiclass indices of shape (B, R, H, W).
+            consm: Optional shared mask (B, 1, H, W) or per-rater mask (B, R, H, W).
+                Applied as a multiplicative weight when consensus_masking=True.
             analytic_kl: If True, compute the KL divergence in closed form.
             reconstruct_posterior_mean: If True, decode the posterior mean instead of a sample.
         """
 
-        # Reconstruction criterion:
-        #   - DiceLossWithLogits when rl_swap=True (returns a scalar directly)
-        #   - BCE for single output channel (Bernoulli log-likelihood)
-        #   - CE for multi-class (Categorical log-likelihood)
-        use_dice = self.rl_swap
-        use_bce = isinstance(self._criterion, nn.BCEWithLogitsLoss)
+        self._check_labels(segm, self.unet_features)
+        mask = consm if self.consensus_masking else None
+        if mask is not None:
+            shared_shape = (segm.shape[0], 1, *segm.shape[2:])
+            if mask.shape != segm.shape and mask.shape != shared_shape:
+                raise ValueError(f"Expected consensus mask with shape {shared_shape} or {tuple(segm.shape)}.")
+            mask = mask.expand_as(segm)
 
         z_posterior = self.posterior_latent_space.rsample()
 
@@ -444,20 +454,42 @@ class ProbabilisticUNet(nn.Module):
             calculate_posterior=False,
             z_posterior=z_posterior
         )
+        losses = []
+        for rater in range(self.num_raters):
+            target = segm[:, rater:rater + 1]
+            rater_mask = None if mask is None else mask[:, rater:rater + 1]
+            losses.append(self._reconstruction_loss(reconstruction, target, rater_mask))
+        reconstruction_loss = torch.stack(losses).mean()
+        return -(reconstruction_loss + self.beta * kl_term)
 
-        # Squeeze trailing channel dim: CE needs (B, H, W) long, BCE needs (B, 1, H, W) float.
-        segm_t = segm.float() if use_bce else segm.squeeze(1).long()
-        if self.consensus_masking and consm is not None:
-            consm_t = consm if use_bce else consm.squeeze(1)
-            target = (segm_t * consm_t) if use_bce else (segm_t * consm_t.long())
-            reconstruction_loss = self._criterion(reconstruction, target)
+    def _reconstruction_loss(
+        self, reconstruction: torch.Tensor, segm: torch.Tensor, mask: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        use_dice = self.rl_swap
+        use_bce = isinstance(self._criterion, nn.BCEWithLogitsLoss)
+        if use_dice:
+            if self.output_channels == 1:
+                prediction = reconstruction.sigmoid()
+                target = segm.float()
+            else:
+                prediction = reconstruction.softmax(dim=1)
+                target = F.one_hot(segm.squeeze(1).long(), self.output_channels).movedim(-1, 1).float()
+            if mask is not None:
+                # Mask probabilities before Dice reduces the spatial dimensions.
+                prediction = prediction * mask
+                target = target * mask
+            reconstruction_loss = self._criterion(prediction, target)
+            if mask is not None:
+                reconstruction_loss = reconstruction_loss * mask.any()
         else:
+            segm_t = segm.float() if use_bce else segm.squeeze(1).long()
             reconstruction_loss = self._criterion(reconstruction, segm_t)
+            if mask is not None:
+                reconstruction_loss = reconstruction_loss * (mask if use_bce else mask.squeeze(1))
 
         if use_dice:
-            # DiceLossWithLogits already returns a scalar
-            return -(reconstruction_loss + self.beta * kl_term)
+            return reconstruction_loss
 
         # Sum over spatial dims, mean over batch - keeps loss scale independent of batch size.
         reconstruction_loss = reconstruction_loss.sum(dim=tuple(range(1, reconstruction_loss.dim()))).mean()
-        return -(reconstruction_loss + self.beta * kl_term)
+        return reconstruction_loss
