@@ -25,13 +25,17 @@ DEFAULT_STRONG_AUGMENTATIONS = {
 }
 
 
-def get_intensity_augmentations(aug_name, ndim, p: float = 0.75) -> callable:
-    if aug_name == "weak":
-        aug_dict = DEFAULT_WEAK_AUGMENTATIONS["intensity"]
-    elif aug_name == "strong":
-        aug_dict = DEFAULT_STRONG_AUGMENTATIONS["intensity"]
-    else:
-        raise ValueError(f"Number of dimensions must be 2 or 3, got ndim={ndim}")
+def get_intensity_augmentations(ndim, aug_name: str = None, aug_dict: dict = None, p: float = 0.75) -> callable:
+    assert ndim == 2 or ndim == 3, f"Number of dimensions must be 2 or 3, got ndim={ndim}"
+    assert aug_name is not None or aug_dict is not None, "Either aug_name or aug_dict must be provided."
+
+    if aug_dict is None:
+        if aug_name == "weak":
+            aug_dict = DEFAULT_WEAK_AUGMENTATIONS["intensity"]
+        elif aug_name == "strong":
+            aug_dict = DEFAULT_STRONG_AUGMENTATIONS["intensity"]
+        else:
+            raise ValueError(f"Augmentation name needs to be \"weak\" or \"strong\", got aug_name={aug_name}")
 
     transforms_list = []
     for trafo, kwargs in aug_dict.items():
@@ -44,13 +48,17 @@ def get_intensity_augmentations(aug_name, ndim, p: float = 0.75) -> callable:
         return AugmentationSequential3D(*transforms_list)
 
 
-def get_geometrical_augmentations(aug_name, ndim, p: float = 0.75) -> callable:
-    if aug_name == "weak":
-        aug_dict = DEFAULT_WEAK_AUGMENTATIONS["geometrical"]
-    elif aug_name == "strong":
-        aug_dict = DEFAULT_STRONG_AUGMENTATIONS["geometrical"]
-    else:
-        raise ValueError(f"Number of dimensions must be 2 or 3, got ndim={ndim}")
+def get_geometrical_augmentations(ndim, aug_name: str = None, aug_dict: dict = None, p: float = 0.75) -> callable:
+    assert ndim == 2 or ndim == 3, f"Number of dimensions must be 2 or 3, got ndim={ndim}"
+    assert aug_name is not None or aug_dict is not None, "Either aug_name or aug_dict must be provided."
+
+    if aug_dict is None:
+        if aug_name == "weak":
+            aug_dict = DEFAULT_WEAK_AUGMENTATIONS["geometrical"]
+        elif aug_name == "strong":
+            aug_dict = DEFAULT_STRONG_AUGMENTATIONS["geometrical"]
+        else:
+            raise ValueError(f"Augmentation name needs to be \"weak\" or \"strong\", got aug_name={aug_name}")
 
     transforms_list = []
     for trafo, kwargs in aug_dict.items():
@@ -63,15 +71,17 @@ def get_geometrical_augmentations(aug_name, ndim, p: float = 0.75) -> callable:
         return AugmentationSequential3D(*transforms_list)
 
 
-def get_augmentations(aug_name: str, ndim: int, p: float = 0.75):
+def get_default_augmentations(aug_name: str, ndim: int, p: float = 0.75):
+    assert ndim == 2 or ndim == 3, f"Number of dimensions must be 2 or 3, got ndim={ndim}"
+
     if aug_name == "weak":
-        intensity_transforms = get_intensity_augmentations(aug_name, ndim=ndim, p=p)
-        geometrical_transforms = get_geometrical_augmentations(aug_name, ndim=ndim, p=p)
+        intensity_transforms = get_intensity_augmentations(ndim, aug_name=aug_name, p=p)
+        geometrical_transforms = get_geometrical_augmentations(ndim, aug_name=aug_name, p=p)
     elif aug_name == "strong":
-        intensity_transforms = get_intensity_augmentations(aug_name, ndim=ndim, p=p)
-        geometrical_transforms = get_geometrical_augmentations(aug_name, ndim=ndim, p=p)
+        intensity_transforms = get_intensity_augmentations(ndim, aug_name=aug_name, p=p)
+        geometrical_transforms = get_geometrical_augmentations(ndim, aug_name=aug_name, p=p)
     else:
-        raise ValueError(f"aug_name must be 'weak' or 'strong', got {aug_name}")
+        raise ValueError(f"Augmentation name needs to be \"weak\" or \"strong\", got aug_name={aug_name}")
 
     return intensity_transforms, geometrical_transforms
 
@@ -129,17 +139,21 @@ class InvertibleAugmenter(torch.nn.Module):
         self,
         intensity_transforms: Callable[[torch.Tensor], torch.Tensor],
         geometrical_transforms: Callable[[torch.Tensor], torch.Tensor],
+        clip_max = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.intensity_transforms = intensity_transforms
         self.geometrical_transforms = geometrical_transforms
+        self.clip_max = clip_max
 
     def reset(self):
         self.params = None
 
     def transform(self, x: torch.Tensor) -> torch.Tensor:
         x = self.intensity_transforms(x)
+        if self.clip_max is not None:
+            x = torch.clamp(x, 0.0, self.clip_max)
         x = self.geometrical_transforms(x)
 
         self.params = self.geometrical_transforms._params
@@ -157,9 +171,10 @@ class MeanTeacherAugmenters:
         ndim: int,
         teacher=None,
         student=None,
+        clip_max=None,
     ):
-        self.teacher = teacher or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
-        self.student = student or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
+        self.teacher = teacher or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.student = student or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.teacher.reset()
@@ -172,9 +187,10 @@ class FixMatchAugmenters:
         ndim: int,
         teacher=None,
         student=None,
+        clip_max=None,
     ):
-        self.teacher = teacher or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
-        self.student = student or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim))
+        self.teacher = teacher or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.student = student or InvertibleAugmenter(*get_default_augmentations("strong", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.teacher.reset()
@@ -188,10 +204,11 @@ class UniMatchv2Augmenters:
         weak=None,
         strong1=None,
         strong2=None,
+        clip_max=None,
     ):
-        self.weak = weak or InvertibleAugmenter(*get_augmentations("weak", ndim=ndim))
-        self.strong1 = strong1 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim))
-        self.strong2 = strong2 or InvertibleAugmenter(*get_augmentations("strong", ndim=ndim))
+        self.weak = weak or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.strong1 = strong1 or InvertibleAugmenter(*get_default_augmentations("strong", ndim=ndim), clip_max=clip_max)
+        self.strong2 = strong2 or InvertibleAugmenter(*get_default_augmentations("strong", ndim=ndim), clip_max=clip_max)
 
     def reset_all(self):
         self.weak.reset()

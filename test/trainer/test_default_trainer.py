@@ -137,6 +137,25 @@ class TestDefaultTrainer(unittest.TestCase):
         self.assertTrue(trainer2.train_loader.shuffle)
         self.assertTrue(trainer2.val_loader.shuffle)
 
+    def test_from_checkpoint_mixed_precision_dtype(self):
+        from torch_em.trainer import DefaultTrainer
+
+        kwargs = self._get_kwargs()
+        kwargs["mixed_precision_dtype"] = "bfloat16"
+        trainer = DefaultTrainer(**kwargs)
+        self.assertFalse(trainer.scaler.is_enabled())
+        trainer.fit(4)
+
+        trainer2 = DefaultTrainer.from_checkpoint(
+            os.path.join(self.checkpoint_folder, self.name),
+            name="latest"
+        )
+        self.assertEqual(trainer2.mixed_precision_dtype, "bfloat16")
+        self.assertFalse(trainer2.scaler.is_enabled())
+
+        trainer2.fit(4)
+        self.assertEqual(trainer2.iteration, 8)
+
     @unittest.skipIf(sys.version_info.minor > 10, "Not supported for python > 3.10")
     def test_compiled_model(self):
         from torch_em.trainer import DefaultTrainer

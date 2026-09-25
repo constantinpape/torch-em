@@ -11,7 +11,7 @@ from typing import List, Optional, Union, Tuple
 
 import imageio
 import numpy as np
-from skimage.measure import label
+from bioimage_cpp.segmentation import label
 
 from torch.utils.data import Dataset, DataLoader
 

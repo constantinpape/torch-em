@@ -1,6 +1,7 @@
 import unittest
 import torch
 
+
 class TestclDiceLoss(unittest.TestCase):
     def test_cldice_random(self):
         from torch_em.loss.cldice import CombinedclDiceLoss
@@ -46,7 +47,7 @@ class TestclDiceLoss(unittest.TestCase):
         # 4-pixel wide non-overlapping lines
         x = torch.zeros(*shape)
         x[0, 0, 4:8, :] = 1.0
-        
+
         y = torch.zeros(*shape)
         y[0, 0, 24:28, :] = 1.0
 
@@ -63,6 +64,7 @@ class TestclDiceLoss(unittest.TestCase):
         y = torch.rand(*shape2)
         with self.assertRaises(ValueError):
             loss(x, y)
+
 
 if __name__ == '__main__':
     unittest.main()

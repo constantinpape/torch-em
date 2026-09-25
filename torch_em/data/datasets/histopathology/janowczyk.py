@@ -20,7 +20,7 @@ import json
 import pandas as pd
 import imageio.v3 as imageio
 from sklearn.model_selection import train_test_split
-from skimage.measure import label as connected_components
+from bioimage_cpp.segmentation import label as connected_components
 
 from torch.utils.data import Dataset, DataLoader
 

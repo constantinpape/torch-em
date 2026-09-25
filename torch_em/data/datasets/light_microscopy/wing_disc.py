@@ -9,7 +9,7 @@ Please cite it if you use this dataset in your research.
 import os
 from glob import glob
 from natsort import natsorted
-from typing import Union, Tuple, Optional, List
+from typing import Union, Tuple, Optional, List, Sequence
 
 import numpy as np
 
@@ -102,12 +102,14 @@ def get_wing_disc_data(path: Union[os.PathLike, str], download: bool = False) ->
 
 def get_wing_disc_paths(
     path: Union[os.PathLike, str],
+    volumes: Optional[Sequence[str]] = None,
     download: bool = False,
 ) -> List[str]:
     """Get paths to the Wing Disc data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
+        volumes: The volume names to restrict to, see VOLUMES. By default all four volumes are used.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -115,6 +117,8 @@ def get_wing_disc_paths(
     """
     data_dir = get_wing_disc_data(path, download)
     data_paths = natsorted(glob(os.path.join(data_dir, "*.h5")))
+    if volumes is not None:
+        data_paths = [p for p in data_paths if os.path.splitext(os.path.basename(p))[0] in volumes]
     assert len(data_paths) > 0
     return data_paths
 
@@ -125,6 +129,7 @@ def get_wing_disc_dataset(
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     binary: bool = False,
+    volumes: Optional[Sequence[str]] = None,
     download: bool = False,
     **kwargs
 ) -> Dataset:
@@ -136,13 +141,14 @@ def get_wing_disc_dataset(
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
+        volumes: The volume names to restrict to, see VOLUMES. By default all four volumes are used.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    data_paths = get_wing_disc_paths(path, download)
+    data_paths = get_wing_disc_paths(path, volumes, download)
 
     kwargs = util.ensure_transforms(ndim=3, **kwargs)
     kwargs, _ = util.add_instance_label_transform(
@@ -167,6 +173,7 @@ def get_wing_disc_loader(
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     binary: bool = False,
+    volumes: Optional[Sequence[str]] = None,
     download: bool = False,
     **kwargs
 ) -> DataLoader:
@@ -179,6 +186,7 @@ def get_wing_disc_loader(
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
+        volumes: The volume names to restrict to, see VOLUMES. By default all four volumes are used.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -192,6 +200,7 @@ def get_wing_disc_loader(
         offsets=offsets,
         boundaries=boundaries,
         binary=binary,
+        volumes=volumes,
         download=download,
         **ds_kwargs,
     )

@@ -9,9 +9,11 @@ Each timepoint is a separate 3D NIfTI volume (.nii.gz):
 - Raw membrane images: RawMemb/{sample}_{tp}_rawMemb.nii.gz
 - Cell segmentation: SegCell/{sample}_{tp}_segCell.nii.gz
 
-NOTE: The data must be downloaded manually. Download the zip from the SharePoint link
-provided at https://doi.org/10.6084/m9.figshare.12839315 and place it as
-`{path}/OneDrive.zip` (or whatever filename it downloads as).
+NOTE: You must download the data manually. The figshare record
+https://doi.org/10.6084/m9.figshare.12839315 links to a Google Drive folder,
+https://drive.google.com/drive/folders/1pVhnvvliE_F7tv1zvGtjav_jWuELVbDj.
+Download "CShaper Supplementary Data" from that folder as a zip.
+Then place the zip inside `path`.
 
 The dataset is from the publication https://doi.org/10.1038/s41467-020-19863-x.
 Please cite it if you use this dataset in your research.
@@ -39,9 +41,9 @@ EVAL_SAMPLES = ["Sample02", "Sample03", "Sample04"]
 def get_cshaper_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     """Extract the CShaper dataset zip.
 
-    NOTE: The zip must be downloaded manually from the SharePoint link at
-    https://doi.org/10.6084/m9.figshare.12839315 and placed inside `path`.
-    Any zip file found in `path` will be extracted automatically.
+    NOTE: You must download the zip manually from the Google Drive folder that
+    https://doi.org/10.6084/m9.figshare.12839315 links to. Place the zip inside `path`.
+    This function extracts any zip file that it finds in `path`.
 
     Args:
         path: Filepath to a folder containing the downloaded CShaper zip.
@@ -58,9 +60,9 @@ def get_cshaper_data(path: Union[os.PathLike, str], download: bool = False) -> s
     zips = glob(os.path.join(path, "*.zip"))
     if not zips:
         raise RuntimeError(
-            f"No zip file found in {path}. "
-            "Please download the CShaper data manually from the SharePoint link at "
-            "https://doi.org/10.6084/m9.figshare.12839315 and place the zip in `path`."
+            f"The folder {path} contains no zip file. "
+            "Download the CShaper data from the Google Drive folder that "
+            "https://doi.org/10.6084/m9.figshare.12839315 links to. Then place the zip in that folder."
         )
 
     util.unzip(zips[0], path)
@@ -103,7 +105,7 @@ def _convert_to_h5(data_dir: str, split: str) -> str:
         seg_dir = os.path.join(sample_dir, "SegCell")
 
         for raw_path in raw_files:
-            # e.g. Sample01_030_rawMemb.nii.gz → Sample01_030
+            # e.g. Sample01_030_rawMemb.nii.gz -> Sample01_030
             basename = os.path.basename(raw_path)
             tp_stem = basename.replace("_rawMemb.nii.gz", "")
             h5_path = os.path.join(h5_dir, f"{tp_stem}.h5")
