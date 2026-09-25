@@ -89,7 +89,7 @@ def ensure_tensor(tensor: Union[torch.Tensor, ArrayLike], dtype: Optional[str] =
             tensor = tensor.astype(DTYPE_MAP[tensor.dtype])
         # Try to convert the tensor, even if it has wrong byte-order
         try:
-            tensor = torch.from_numpy(tensor)
+            tensor = torch.from_numpy(tensor if tensor.flags.writeable else tensor.copy())
         except ValueError:
             tensor = tensor.view(tensor.dtype.newbyteorder())
             if np.dtype(tensor.dtype) in DTYPE_MAP:
@@ -100,6 +100,40 @@ def ensure_tensor(tensor: Union[torch.Tensor, ArrayLike], dtype: Optional[str] =
     if dtype is not None:
         tensor = tensor.to(dtype=dtype)
     return tensor
+
+
+def validate_roi(roi, shape, patch_shape=None):
+    """Normalize an ROI to explicit slices and validate that it is non-empty."""
+    if roi is None:
+        return None
+    if isinstance(roi, slice):
+        roi = (roi,)
+    if not isinstance(roi, tuple):
+        raise TypeError(f"Invalid roi type: {type(roi)}")
+    if len(roi) > len(shape):
+        raise ValueError(f"Invalid roi {roi} for data shape {shape}: too many dimensions")
+
+    normalized_roi = []
+    for this_roi, dim in zip(roi, shape):
+        if not isinstance(this_roi, slice):
+            raise TypeError(f"Invalid roi entry: {this_roi}. Only slices are supported")
+        step = 1 if this_roi.step is None else this_roi.step
+        if step != 1:
+            raise ValueError(f"Invalid roi {roi}: slice steps other than 1 are not supported")
+        start, stop, _ = this_roi.indices(dim)
+        normalized_roi.append(slice(start, stop))
+
+    if len(roi) < len(shape):
+        normalized_roi.extend(slice(0, dim) for dim in shape[len(roi):])
+
+    roi_shape = tuple(sl.stop - sl.start for sl in normalized_roi)
+    if any(sh <= 0 for sh in roi_shape):
+        msg = f"Invalid roi {roi} for data shape {shape}: it results in an empty region"
+        if patch_shape is not None:
+            msg += f" for patch_shape {patch_shape}"
+        raise ValueError(msg)
+
+    return tuple(normalized_roi)
 
 
 def ensure_tensor_with_channels(
@@ -288,12 +322,37 @@ def get_constructor_arguments(obj):
         # These are all the "simple" arguements.
         # "sampler", "batch_sampler" and "worker_init_fn" are more complicated
         # and generally not used in torch_em
-        return _get_args(
-            obj, [
-                "batch_size", "shuffle", "num_workers", "pin_memory", "drop_last",
-                "persistent_workers", "prefetch_factor", "timeout"
-            ]
-        )
+        sampler = getattr(obj, "sampler", None)
+        if sampler is not None and not isinstance(
+            sampler,
+            (
+                torch.utils.data.RandomSampler,
+                torch.utils.data.SequentialSampler,
+                torch.utils.data.SubsetRandomSampler,
+            ),
+        ):
+            warnings.warn(
+                f"DataLoader uses sampler {type(sampler).__name__}, but only its effective `shuffle` setting "
+                "is serialized. `DefaultTrainer.from_checkpoint` will recreate the loader without the original "
+                "sampler, so sampling behavior may change."
+            )
+        shuffle = getattr(obj, "shuffle", None)
+        if shuffle is None:
+            shuffle = getattr(sampler, "shuffle", None)
+        if shuffle is None:
+            # Only randomized samplers map to shuffle=True. SequentialSampler is handled
+            # by the default fallback of shuffle=False and does not need a special case.
+            shuffle = isinstance(sampler, (torch.utils.data.RandomSampler, torch.utils.data.SubsetRandomSampler))
+
+        return {
+            **_get_args(
+                obj, [
+                    "batch_size", "num_workers", "pin_memory", "drop_last",
+                    "persistent_workers", "prefetch_factor", "timeout"
+                ]
+            ),
+            "shuffle": shuffle,
+        }
 
     # TODO support common torch losses (e.g. CrossEntropy, BCE)
     warnings.warn(
@@ -350,47 +409,55 @@ def load_model(
     checkpoint: str,
     model: Optional[torch.nn.Module] = None,
     name: str = "best",
-    state_key: str = "model_state",
+    state_key: Optional[str] = "model_state",
     device: Optional[str] = None,
 ) -> torch.nn.Module:
-    """Load model from a trainer checkpoint.
+    """Load a model from a trainer checkpoint or a serialized torch model.
 
-    This function can either load the model directly from the trainer (model is not passed),
-    or deserialize the model state from the trainer and load the model state (model is passed).
+    This function can either load the model directly (`model` is not passed),
+    or deserialize the model state and then load it (`model` is passed).
+
+    The `checkpoint` argument must either point to the checkpoint directory of a torch_em trainer
+    or to a serialized torch model.
 
     Args:
-        checkpoint: The path to the checkpoint folder.
+        checkpoint: The path to the checkpoint folder or serialized torch model.
         model: The model for which the state should be loaded.
             If it is not passed, the model class and parameters will also be loaded from the trainer.
         name: The name of the checkpoint.
-        state_key: The name of the model state to load.
+        state_key: The name of the model state to load. Set to None if the model state is stored top-level.
         device: The device on which to load the model.
 
     Returns:
         The model.
     """
-    if model is None:  # load the model and its state from the checkpoint
+    if model is None and os.path.isdir(checkpoint):  # Load the model and its state from a torch_em checkpoint.
         trainer = get_trainer(checkpoint, name=name, device=device)
-        # We load the average model (result from EMA) if it is available.
-        # Otherwise we use the standard model.
+        # Use the average model (result from EMA) if it is available.
         model = getattr(trainer, "average_model", trainer.model)
 
-    else:  # load the model state from the checkpoint
-        if os.path.isdir(checkpoint):
+    elif model is None:  # Load the model from a serialized model.
+        model = torch.load(checkpoint, map_location=device, weights_only=False)
+
+    else:  # Load the model state from a checkpoint.
+        if os.path.isdir(checkpoint):  # From a torch_em checkpoint.
             ckpt = os.path.join(checkpoint, f"{name}.pt")
-        else:
+        else:  # From a serialized path.
             ckpt = checkpoint
 
-        state = torch.load(ckpt, map_location=device, weights_only=False)[state_key]
-        # to enable loading compiled models
+        state = torch.load(ckpt, map_location=device, weights_only=False)
+        if state_key is not None:
+            state = state[state_key]
+
+        # To enable loading compiled models.
         compiled_prefix = "_orig_mod."
         state = OrderedDict(
             [(k[len(compiled_prefix):] if k.startswith(compiled_prefix) else k, v) for k, v in state.items()]
         )
+
         model.load_state_dict(state)
         if device is not None:
             model.to(device)
-        model.load_state_dict(state)
 
     return model
 

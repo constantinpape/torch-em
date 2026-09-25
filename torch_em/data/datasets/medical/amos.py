@@ -6,6 +6,7 @@ Please cite them if you use this dataset for your research.
 """
 
 import os
+import shutil
 from glob import glob
 from pathlib import Path
 from typing import Union, Tuple, Optional, Literal, List
@@ -40,6 +41,8 @@ def get_amos_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     zip_path = os.path.join(path, "amos22.zip")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
     util.unzip(zip_path=zip_path, dst=path)
+
+    shutil.rmtree(os.path.join(path, "__MACOSX"))
 
     return data_dir
 

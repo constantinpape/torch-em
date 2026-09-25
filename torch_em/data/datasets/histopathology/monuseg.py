@@ -238,10 +238,11 @@ def get_monuseg_loader(
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
-        The DataLoader
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_monuseg_dataset(
-        path, patch_shape, split, organ_type, download, offsets, boundaries, binary, resize_inputs, **ds_kwargs
+        path, patch_shape, split, organ_type=organ_type, download=download,
+        offsets=offsets, boundaries=boundaries, binary=binary, resize_inputs=resize_inputs, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

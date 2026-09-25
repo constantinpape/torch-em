@@ -10,6 +10,7 @@ Please cite them if you use this data for your research.
 
 import os
 import time
+import warnings
 from pathlib import Path
 from threading import Lock
 from typing import Union, Optional, Tuple, List, Sequence
@@ -17,12 +18,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import h5py
 import numpy as np
-import pandas as pd
 from xarray import DataArray
 
 from torch.utils.data import Dataset, DataLoader
 
 import torch_em
+
+from elf.io import open_file
 
 from .. import util
 
@@ -264,7 +266,7 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
                     return np.pad(
                         array=array.astype(np.int16),
                         pad_width=[
-                            (orig.start - padded.start, padded.stop - orig.stop)
+                            (max(0, orig.start - padded.start), max(0, padded.stop - orig.stop))
                             for orig, padded in zip(slices, slices_padded)
                         ],
                         mode="constant",
@@ -305,7 +307,6 @@ def _download_cellmap_data(path, crops, resolution, padding, download=False):
 
 def get_cellmap_data(
     path: Union[os.PathLike, str],
-    organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
     padding: int = 64,
@@ -315,11 +316,10 @@ def get_cellmap_data(
 
     Args:
         path: Filepath to a folder where the data will be downloaded for further processing.
-        organelles: The choice of organelles to download. By default, loads all types of labels available.
-            For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
-        resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        resolution: The choice of resolution in the original volumes.
+            By default, downloads the highest resolution: `s0`.
         padding: The choice of padding along each dimensions.
             By default, it pads '64' pixels along all dimensions.
             You can set it to '0' for no padding at all.
@@ -347,34 +347,6 @@ def get_cellmap_data(
         download=download,
     )
 
-    # Get the organelle-crop mapping.
-    from cellmap_segmentation_challenge import utils
-
-    # There is a file named 'train_crop_manifest' in the 'utils' sub-module. We need to get that first
-    train_metadata_file = os.path.join(str(Path(utils.__file__).parent / "train_crop_manifest.csv"))
-    train_metadata = pd.read_csv(train_metadata_file)
-
-    # Let's get the label to crop mapping from the manifest file.
-    organelle_to_crops = train_metadata.groupby('class_label')['crop_name'].apply(list).to_dict()
-
-    # By default, 'organelles' set to 'None' will give you 'all' organelle types.
-    if organelles is not None:  # The assumption here is that the user wants specific organelle(s).
-        # Validate whether the organelle exists in the desired crops at all.
-        if isinstance(organelles, str):
-            organelles = [organelles]
-
-        # Next, we check whether they match the crops.
-        for curr_organelle in organelles:
-            if curr_organelle not in organelle_to_crops:  # Check whether the organelle is valid or not.
-                raise ValueError(f"The chosen organelle: '{curr_organelle}' seems to be an invalid choice.")
-
-            # Lastly, we check whether the final crops have the organelle(s) or not.
-            # Otherwise, we throw a warning and go ahead with the true valid choices.
-            # NOTE: The priority below is higher for organelles than crops.
-            for curr_crop in final_crops:
-                if curr_crop not in organelle_to_crops.get(curr_organelle):
-                    raise ValueError(f"The crop '{curr_crop}' does not have the chosen organelle '{curr_organelle}'.")
-
     if _data_path is None or len(_data_path) == 0:
         raise RuntimeError("Something went wrong. Please read the information logged above.")
 
@@ -388,6 +360,7 @@ def get_cellmap_paths(
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
+    voxel_size: Optional[Tuple[float]] = None,
     padding: int = 64,
     download: bool = False,
     return_test_crops: bool = False,
@@ -400,7 +373,10 @@ def get_cellmap_paths(
             For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
-        resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        resolution: The choice of resolution in the original volumes.
+            By default, downloads the highest resolution: `s0`.
+        voxel_size: The choice of voxel size for the preprocessed crops to prepare the dataset.
+            By default, chooses all crops in scope.
         padding: The choice of padding along each dimensions.
             By default, it pads '64' pixels along all dimensions.
             You can set it to '0' for no padding at all.
@@ -417,18 +393,54 @@ def get_cellmap_paths(
 
     # Get the CellMap data crops.
     data_path, crops = get_cellmap_data(
-        path=path, organelles=organelles, crops=crops, resolution=resolution, padding=padding, download=download
+        path=path, crops=crops, resolution=resolution, padding=padding, download=download,
     )
 
     # Get all crops.
     volume_paths = [os.path.join(data_path, f"crop_{c}.h5") for c in crops]
 
+    # Check for valid organelles list to filter crops.
+    if organelles is None:
+        organelles = "all"
+
+    if isinstance(organelles, str):
+        organelles = [organelles]
+
+    other_volume_paths = []
+    for organelle in organelles:
+
+        if organelle != "all":
+            warnings.warn(
+                "You have chosen a different organelle annotations than 'all'. Please keep in mind "
+                f"that it is not guaranteed to provide you the correct masks for '{organelle}'. "
+                "We suggest sticking to 'all' labels and use the corresponding label ids."
+            )
+
+        for vpath in volume_paths:
+            if f"label_crop/{organelle}" in open_file(vpath) and vpath not in other_volume_paths:
+                other_volume_paths.append(vpath)
+
+    if len(other_volume_paths) == 0:
+        raise ValueError(f"'{organelles}' are not valid organelle(s) found in the crops: '{crops}'.")
+
+    # Next, we check for valid voxel size to filter crops.
+    if voxel_size is None:  # no filtering required.
+        another_volume_paths = other_volume_paths
+    else:
+        another_volume_paths = []
+        for vpath in other_volume_paths:
+            if all(np.array(voxel_size) == open_file(vpath).attrs["scale"]) and vpath not in another_volume_paths:
+                another_volume_paths.append(vpath)
+
+    if len(another_volume_paths) == 0:
+        raise ValueError(f"'{voxel_size}' is not a valid voxel size found in the crops: '{crops}'.")
+
     # Check whether all volume paths exist.
-    for volume_path in volume_paths:
+    for volume_path in another_volume_paths:
         if not os.path.exists(volume_path):
             raise FileNotFoundError(f"The volume '{volume_path}' could not be found.")
 
-    return volume_paths
+    return another_volume_paths
 
 
 def get_cellmap_dataset(
@@ -437,6 +449,7 @@ def get_cellmap_dataset(
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
+    voxel_size: Optional[Tuple[float]] = None,
     padding: int = 64,
     download: bool = False,
     **kwargs,
@@ -450,7 +463,10 @@ def get_cellmap_dataset(
             For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
-        resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        resolution: The choice of resolution in the original volumes.
+            By default, downloads the highest resolution: `s0`.
+        voxel_size: The choice of voxel size for the preprocessed crops to prepare the dataset.
+            By default, chooses all crops in scope.
         padding: The choice of padding along each dimensions.
             By default, it pads '64' pixels along all dimensions.
             You can set it to '0' for no padding at all.
@@ -462,7 +478,12 @@ def get_cellmap_dataset(
         The segmentation dataset.
     """
     volume_paths = get_cellmap_paths(
-        path=path, organelles=organelles, crops=crops, resolution=resolution, padding=padding, download=download
+        path=path,
+        organelles=organelles,
+        crops=crops,
+        resolution=resolution,
+        voxel_size=voxel_size,
+        padding=padding, download=download
     )
 
     # Arrange the organelle choices as expected for loading labels.
@@ -493,6 +514,7 @@ def get_cellmap_loader(
     organelles: Optional[Union[str, List[str]]] = None,
     crops: Union[str, Sequence[str]] = "all",
     resolution: str = "s0",
+    voxel_size: Optional[Tuple[float]] = None,
     padding: int = 64,
     download: bool = False,
     **kwargs,
@@ -507,7 +529,10 @@ def get_cellmap_loader(
             For one for multiple organelles, specify either like 'mito' or ['mito', 'cell'].
         crops: The choice of crops to download. By default, downloads `all` crops.
             For multiple crops, provide the crop ids as a sequence of crop ids.
-        resolution: The choice of resolution. By default, downloads the highest resolution: `s0`.
+        resolution: The choice of resolution in the original volumes.
+            By default, downloads the highest resolution: `s0`.
+        voxel_size: The choice of voxel size for the preprocessed crops to prepare the dataset.
+            By default, chooses all crops in scope.
         padding: The choice of padding along each dimensions.
             By default, it pads '64' pixels along all dimensions.
             You can set it to '0' for no padding at all.
@@ -519,5 +544,7 @@ def get_cellmap_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cellmap_dataset(path, patch_shape, organelles, crops, resolution, padding, download, **ds_kwargs)
+    dataset = get_cellmap_dataset(
+        path, patch_shape, organelles, crops, resolution, voxel_size, padding, download, **ds_kwargs
+    )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
