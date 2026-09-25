@@ -65,6 +65,7 @@ from .micronucml import get_micronucml_loader, get_micronucml_dataset
 from .mif_tonsil import get_mif_tonsil_loader, get_mif_tonsil_dataset
 from .mndino import get_mndino_loader, get_mndino_dataset
 from .glioma_c6 import get_glioma_c6_loader, get_glioma_c6_dataset
+from .goblet_cell import get_goblet_cell_loader, get_goblet_cell_dataset
 from .gonuclear import get_gonuclear_loader, get_gonuclear_dataset
 from .hela_cytonuc import (
     get_hela_cytonuc_data, get_hela_cytonuc_paths, get_hela_cytonuc_loader, get_hela_cytonuc_dataset,
