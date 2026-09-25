@@ -7,7 +7,8 @@ import elf.segmentation as elfseg
 import elf.segmentation.embeddings as elfemb
 import torch
 import torch.nn as nn
-import vigra
+import bioimage_cpp as bic
+from skimage.measure import regionprops
 from elf.segmentation.watershed import apply_size_filter
 
 
@@ -69,6 +70,9 @@ class MWS:
         if self.with_background:
             assert len(affinities) == len(self.offsets) + 1
             mask, affinities = affinities[0], affinities[1:]
+            # bioimage_cpp's mutex_watershed requires a boolean mask; treat the foreground
+            # channel as a probability and threshold it (matching torch_em.util.segmentation).
+            mask = mask >= 0.5
         else:
             assert len(affinities) == len(self.offsets)
             mask = None
@@ -97,15 +101,19 @@ class EmbeddingMWS:
         seg += 1
         seg_ids, counts = np.unique(seg, return_counts=True)
         bg_seg = seg_ids[np.argmax(counts)]
+        n_labels = int(seg.max()) + 1
         mean_embeddings = []
         for emb in embeddings:
-            mean_embeddings.append(vigra.analysis.extractRegionFeatures(emb, seg, features=["mean"])["mean"][None])
+            means = np.zeros(n_labels, dtype="float32")
+            for prop in regionprops(seg, intensity_image=np.asarray(emb)):
+                means[prop.label] = prop.mean_intensity
+            mean_embeddings.append(means[None])
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         bg_embed = mean_embeddings[:, bg_seg][:, None]
         bg_probs = elfemb._embeddings_to_probabilities(mean_embeddings, bg_embed, self.delta, 0)
         bg_ids = np.where(bg_probs > 0.5)
         seg[np.isin(seg, bg_ids)] = 0
-        vigra.analysis.relabelConsecutive(seg, out=seg)
+        seg, _, _ = bic.segmentation.relabel_sequential(seg)
         return seg
 
     def __call__(self, embeddings):
@@ -144,11 +152,11 @@ class Multicut:
                                                              sigma_seeds=self.sigma_seeds,
                                                              sigma_weights=self.sigma_seeds)
         rag = elfseg.compute_rag(ws, max_id + 1, n_threads=1)
-        feats = elfseg.compute_boundary_mean_and_length(rag, boundaries, n_threads=1)[:, 0]
+        feats = elfseg.compute_boundary_mean_and_length(rag, ws, boundaries, n_threads=1)[:, 0]
         costs = elfseg.compute_edge_costs(feats)
         solver = elfseg.get_multicut_solver(self.solver)
         node_labels = solver(rag, costs, n_threads=1)
-        seg = elfseg.project_node_labels_to_pixels(rag, node_labels, n_threads=1).astype("uint32")
+        seg = elfseg.project_node_labels_to_pixels(rag, ws, node_labels, n_threads=1).astype("uint32")
         if self.min_seg_size > 0:
             seg = filter_sizes(seg, self.min_seg_size, hmap=boundaries)
         return seg

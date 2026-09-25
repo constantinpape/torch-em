@@ -73,6 +73,14 @@ CROPPING_VOLUMES = {
     "N_420_ds2x.h5": slice(None, -1),
 }
 
+# These root volumes are byte-identical copies of test volumes and are excluded from the train split.
+DUPLICATE_ROOT_TRAIN_VOLUMES = ("Movie1_t00045_crop_gt.h5", "Movie2_T00010_crop_gt.h5")
+
+# In these root volumes the region outside the root carries an instance id instead of the background id 1.
+ROOT_BACKGROUND_IDS = {
+    "Movie2_T00000_crop_gt.h5": 286, "Movie3_T00004_crop_gt.h5": 1004, "Movie2_T00020_crop_gt.h5": 411,
+}
+
 # The resolution previous used for the resizing
 # I have removed this feature since it was not reliable,
 # but leaving this here for reference
@@ -90,27 +98,24 @@ def _fix_inconsistent_volumes(data_path, name, split):
 
     for vol_path in tqdm(file_paths, desc="Fixing inconsistencies in volumes"):
         fname = os.path.basename(vol_path)
-
-        # avoid duplicated volumes in 'train' and 'test'.
-        if fname == "Movie1_t00045_crop_gt.h5" and (name == "root" and split == "train"):
-            os.remove(vol_path)
-            continue
+        if fname in ROOT_BACKGROUND_IDS:
+            with h5py.File(vol_path, "r+") as f:
+                labels = f["label"][:]
+                labels[labels == ROOT_BACKGROUND_IDS[fname]] = 1
+                f["label"][...] = labels
 
         if fname not in CROPPING_VOLUMES:
             continue
 
         with h5py.File(vol_path, "r+") as f:
-            raw, labels = f["raw"], f["label"]
-
             crop_slices = CROPPING_VOLUMES[fname]
-            resized_raw, resized_labels = raw[:][crop_slices], labels[:][crop_slices]
-
-            cropped_shape = resized_raw.shape
-            raw.resize(cropped_shape)
-            labels.resize(cropped_shape)
-
-            raw[...] = resized_raw
-            labels[...] = resized_labels
+            for key in ("raw", "label", "label_with_ignore"):
+                if key not in f:
+                    continue
+                ds = f[key]
+                cropped = ds[:][crop_slices]
+                ds.resize(cropped.shape)
+                ds[...] = cropped
 
 
 def get_plantseg_data(path: Union[os.PathLike, str], name: str, split: str, download: bool = False) -> str:
@@ -157,6 +162,8 @@ def get_plantseg_paths(
     """
     data_path = get_plantseg_data(path, name, split, download)
     file_paths = sorted(glob(os.path.join(data_path, "*.h5")))
+    if name == "root" and split == "train":
+        file_paths = [p for p in file_paths if os.path.basename(p) not in DUPLICATE_ROOT_TRAIN_VOLUMES]
     return file_paths
 
 
@@ -169,6 +176,7 @@ def get_plantseg_dataset(
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     binary: bool = False,
+    with_ignore: bool = False,
     **kwargs,
 ) -> Dataset:
     """Get the PlantSeg dataset for segmenting nuclei or cells.
@@ -182,12 +190,15 @@ def get_plantseg_dataset(
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
+        with_ignore: Whether to load the ovules labels with the unannotated regions marked as -1.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
        The segmentation dataset.
     """
     assert len(patch_shape) == 3
+    if with_ignore and name != "ovules":
+        raise ValueError("Labels with ignore regions are only available for 'ovules'.")
 
     file_paths = get_plantseg_paths(path, name, split, download)
 
@@ -200,13 +211,12 @@ def get_plantseg_dataset(
         raw_paths=file_paths,
         raw_key="raw",
         label_paths=file_paths,
-        label_key="label",
+        label_key="label_with_ignore" if with_ignore else "label",
         patch_shape=patch_shape,
         **kwargs
     )
 
 
-# TODO add support for ignore label, key: "/label_with_ignore"
 def get_plantseg_loader(
     path: Union[os.PathLike, str],
     name: str,
@@ -217,6 +227,7 @@ def get_plantseg_loader(
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
     binary: bool = False,
+    with_ignore: bool = False,
     **kwargs,
 ) -> DataLoader:
     """Get the PlantSeg dataloader for segmenting nuclei or cells.
@@ -231,6 +242,7 @@ def get_plantseg_loader(
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
         binary: Whether to use a binary segmentation target.
+        with_ignore: Whether to load the ovules labels with the unannotated regions marked as -1.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
@@ -239,6 +251,6 @@ def get_plantseg_loader(
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_plantseg_dataset(
         path, name, split, patch_shape, download=download, offsets=offsets,
-        boundaries=boundaries, binary=binary, **ds_kwargs
+        boundaries=boundaries, binary=binary, with_ignore=with_ignore, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)

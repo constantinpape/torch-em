@@ -4,7 +4,7 @@ segmentation.
 
 The dataset provides two annotation types for 5 biofilm volumes:
 - semi-manual-annotation: all 5 volumes labeled via automated segmentation + manual correction.
-- fully-manual-annotation: 1 cropped volume (biofilm_1) with fully manual annotations —
+- fully-manual-annotation: 1 cropped volume (biofilm_1) with fully manual annotations -
   intended as a held-out evaluation set.
 
 NOTE: The semi-manual labels are used by default for training. Whether all cells in each

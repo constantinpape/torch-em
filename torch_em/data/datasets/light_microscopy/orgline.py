@@ -49,8 +49,8 @@ ORGANS2 = ("stomach", "breast")
 
 
 def _annotations_to_instances(coco, image_metadata):
-    from skimage.measure import label
-    from skimage.segmentation import relabel_sequential
+    from bioimage_cpp.segmentation import label
+    from bioimage_cpp.segmentation import relabel_sequential
 
     # create and save the segmentation
     annotation_ids = coco.getAnnIds(imgIds=image_metadata["id"])

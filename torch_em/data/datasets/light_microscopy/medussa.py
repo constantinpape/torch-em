@@ -12,6 +12,7 @@ Please cite it if you use this dataset in your research.
 
 import os
 import json
+import warnings
 from glob import glob
 from typing import Union, Tuple, List, Literal
 
@@ -90,6 +91,11 @@ def _create_h5_data(path, split, image_paths_rel, mask_paths_rel):
 
         if labels.ndim > 2:
             labels = labels.max(axis=0)
+
+        # Five benchmark masks belong to restored images that the study does not ship, so they cannot be paired.
+        if raw.shape != labels.shape:
+            warnings.warn(f"Skipping '{fname}': image shape {raw.shape} does not match mask shape {labels.shape}.")
+            continue
 
         with h5py.File(h5_path, "w") as f:
             f.create_dataset("raw", data=raw, compression="gzip")

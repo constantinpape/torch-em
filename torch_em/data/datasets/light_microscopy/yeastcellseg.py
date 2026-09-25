@@ -35,7 +35,7 @@ def _create_h5_data(path, raw_dir, gt_dir):
         - 'labels/instances': (H, W) int64 connected component labels.
     """
     import h5py
-    from skimage.measure import label
+    from bioimage_cpp.segmentation import label
 
     h5_dir = os.path.join(path, "h5_data")
     os.makedirs(h5_dir, exist_ok=True)

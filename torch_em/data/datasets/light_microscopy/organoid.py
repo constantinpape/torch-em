@@ -13,7 +13,7 @@ from typing import Union, Tuple, List, Literal, Optional
 
 import numpy as np
 import imageio.v3 as imageio
-from skimage.measure import label as connected_components
+from bioimage_cpp.segmentation import label as connected_components
 
 from torch.utils.data import DataLoader, Dataset
 

@@ -3,17 +3,16 @@ channels:
 name:
     torch-em-dev
 dependencies:
-    - affogato
+    - bioimage-cpp
     - bioimageio.spec
     - bioimageio.core >=0.8.0
     - imagecodecs
+    - kornia
     - natsort
-    - nifty >=1.2.3
-    - python-elf
+    - python-elf >=0.9.1
     - pytorch
+    - requests
     - tensorboard
     - tifffile >=2024
     - torchvision
     - tqdm
-    - kornia
-    - requests
