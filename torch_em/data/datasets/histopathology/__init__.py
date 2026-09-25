@@ -40,6 +40,7 @@ from .pannuke import get_pannuke_loader, get_pannuke_dataset
 from .panoptils import get_panoptils_loader, get_panoptils_dataset
 from .peso import get_peso_loader, get_peso_dataset
 from .phenocell import get_phenocell_loader, get_phenocell_dataset
+from .precise import get_precise_loader, get_precise_dataset
 from .pcns import get_pcns_loader, get_pcns_dataset
 from .puma import get_puma_loader, get_puma_dataset
 from .rings import get_rings_loader, get_rings_dataset
