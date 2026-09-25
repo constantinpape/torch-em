@@ -86,6 +86,7 @@ from .microbeseg import get_microbeseg_loader, get_microbeseg_dataset
 from .micro_bench import get_micro_bench_loader, get_micro_bench_dataset
 from .morphonet import get_morphonet_loader, get_morphonet_dataset
 from .morphoseg import get_morphoseg_loader, get_morphoseg_dataset
+from .mouse_cortex_ios import get_mouse_cortex_ios_loader, get_mouse_cortex_ios_dataset
 from .mouse_embryo import get_mouse_embryo_loader, get_mouse_embryo_dataset
 from .mrose_bacteria import get_mrose_bacteria_loader, get_mrose_bacteria_dataset
 from .myofuse import get_myofuse_loader, get_myofuse_dataset
