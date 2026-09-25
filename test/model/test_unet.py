@@ -2,6 +2,27 @@ import unittest
 import torch
 
 
+class TestDecoder(unittest.TestCase):
+    def test_skip_channels(self):
+        from torch_em.model.unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d
+
+        for ndim, block, sampler in ((2, ConvBlock2d, Upsampler2d), (3, ConvBlock3d, Upsampler3d)):
+            with self.subTest(ndim=ndim):
+                decoder = Decoder(
+                    features=[8, 4], skip_channels=[8], scale_factors=[2],
+                    conv_block_impl=block, sampler_impl=sampler,
+                )
+                x = torch.rand((1, 8) + (4,) * ndim, requires_grad=True)
+                skip = torch.rand((1, 8) + (9,) * ndim, requires_grad=True)
+                cropped = decoder._crop(skip, (1, 4) + (8,) * ndim)
+                torch.testing.assert_close(cropped, skip[(slice(None), slice(None)) + (slice(0, 8),) * ndim])
+                output = decoder(x, [skip])
+                self.assertEqual(output.shape, (1, 4) + (8,) * ndim)
+                output.sum().backward()
+                self.assertIsNotNone(x.grad)
+                self.assertIsNotNone(skip.grad)
+
+
 class TestUnet(unittest.TestCase):
     def _test_net(self, net, shape):
         x = torch.rand(*shape, requires_grad=True)
