@@ -117,6 +117,7 @@ from .pcmmd import get_pcmmd_loader, get_pcmmd_dataset
 from .phmamm import get_phmamm_loader, get_phmamm_dataset
 from .plantseg import get_plantseg_loader, get_plantseg_dataset
 from .pnas_arabidopsis import get_pnas_arabidopsis_loader, get_pnas_arabidopsis_dataset
+from .pyropia import get_pyropia_loader, get_pyropia_dataset
 from .revvity25 import get_revvity25_loader, get_revvity25_dataset
 from .segpc import get_segpc_loader, get_segpc_dataset
 from .selma3d import get_selma3d_data, get_selma3d_paths, get_selma3d_loader, get_selma3d_dataset
