@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 try:
     from torch_scatter import scatter_mean
@@ -132,17 +134,20 @@ def _compute_variance_term_scatter(
 #
 
 
-def expand_as_one_hot(input_, C, ignore_label=None):
-    """
-    Converts NxSPATIAL label image to NxCxSPATIAL, where each label gets converted to its corresponding one-hot vector.
-    NOTE: make sure that the input_ contains consecutive numbers starting from 0, otherwise the scatter_ function
-    won't work.
+def expand_as_one_hot(input_: torch.Tensor, C: int, ignore_label: Optional[int] = None) -> torch.Tensor:
+    """Expand labels to a one-hot representation.
 
-    SPATIAL = DxHxW in case of 3D or SPATIAL = HxW in case of 2D
-    :param input_: 3D or 4D label image (NxSPATIAL)
-    :param C: number of channels/labels
-    :param ignore_label: ignore index to be kept during the expansion
-    :return: 4D or 5D output image (NxCxSPATIAL)
+    Converts NxSPATIAL label image to NxCxSPATIAL, where each label gets converted to its corresponding one-hot vector.
+    Here, SPATIAL = DxHxW in case of 3D data or SPATIAL = HxW in case of 2D data.
+    Make sure that the input_ contains consecutive numbers starting from 0, otherwise the scatter_ function won't work.
+
+    Args:
+        input_: A 3D or 4D label image (NxSPATIAL).
+        C: The number of channels/labels.
+        ignore_label: The ignore index to be discarded during the expansion.
+
+    Returns:
+        A 4D or 5D output (NxCxSPATIAL) with one-hot expanded labels.
     """
     assert input_.dim() in (3, 4), f"Unsupported input shape {input_.shape}"
 

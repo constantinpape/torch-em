@@ -1,3 +1,6 @@
+"""@private
+"""
+
 import time
 import torch
 import torch_em
@@ -13,7 +16,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
     segmentations. The heuristic trains by taking into account the feature maps from UNet and the samples from
     the posterior distribution, estimating the loss and further sampling from the prior for validation.
 
-    Parameters:
+    Args:
         clipping_value [float] - (default: None)
         prior_samples [int] - (default: 16)
         loss [callable] - (default: None)
@@ -59,7 +62,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
         t_per_iter = time.time()
 
         for x, y in self.train_loader:
-            x, y = x.to(self.device), y.to(self.device)
+            x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
 
             self.optimizer.zero_grad()
 
@@ -96,7 +99,7 @@ class ProbabilisticUNetTrainer(torch_em.trainer.DefaultTrainer):
 
         with torch.no_grad():
             for x, y in self.val_loader:
-                x, y = x.to(self.device), y.to(self.device)
+                x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
 
                 with forward_context():
                     loss, metric = self.loss_and_metric(self.model, x, y)
