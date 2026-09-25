@@ -1,6 +1,11 @@
+import os
 import warnings
+from typing import Union, Optional
+
 import torch
-from .util import ensure_array
+import torch.utils.data
+
+from .util import ensure_array, get_random_colors
 
 
 def _check_plt(loader, n_samples, instance_labels, model=None, device=None, save_path=None):
@@ -56,7 +61,8 @@ def _check_plt(loader, n_samples, instance_labels, model=None, device=None, save
         for chan in range(n_target_channels):
             ax = fig.add_subplot(n_rows, n_samples, to_index(n_samples, 1 + chan, ii))
             if instance_labels:
-                ax.imshow(y[chan].astype("uint32"), interpolation="nearest", aspect="auto")
+                label_data = y[chan].astype("uint32")
+                ax.imshow(label_data, interpolation="nearest", aspect="auto", cmap=get_random_colors(label_data))
             else:
                 ax.imshow(y[chan], interpolation="nearest", cmap="Greys_r", aspect="auto")
 
@@ -106,13 +112,36 @@ def _check_napari(loader, n_samples, instance_labels, model=None, device=None, r
                 v.add_image(y)
         if pred is not None:
             v.add_image(pred)
+
         napari.run()
 
 
-def check_trainer(trainer, n_samples, instance_labels=False, split="val", loader=None, plt=False):
+def check_trainer(
+    trainer,
+    n_samples: int,
+    instance_labels: bool = False,
+    split: str = "val",
+    loader: Optional[torch.utils.data.DataLoader] = None,
+    plt: bool = False,
+):
+    """Check a trainer visually.
+
+    This function shows images and labels from the training or validation loader
+    and predictions from the trainer's model for the images.
+    The data will be plotted either with napari or matplotlib.
+
+    Args:
+        trainer: The trainer.
+        n_samples: The number of samples to plot.
+        instance_labels: Whether to visualize the label data as instances.
+        split: Which split to use. This will determine which data loader is used for plotting.
+            Can be one of "val" or "train".
+        loader: An optional loader to use for getting the data. Will be used instead of the loader from the trainer.
+        plt: Whether to plot the data with matplotlib instead of napari.
+    """
     if loader is None:
         assert split in ("val", "train")
-        loader = trainer.val_loader
+        loader = trainer.val_loader if split == "val" else trainer.train_loader
     with torch.no_grad():
         model = trainer.model
         model.eval()
@@ -122,7 +151,27 @@ def check_trainer(trainer, n_samples, instance_labels=False, split="val", loader
             _check_napari(loader, n_samples, instance_labels, model=model, device=trainer.device)
 
 
-def check_loader(loader, n_samples, instance_labels=False, plt=False, rgb=False, save_path=None):
+def check_loader(
+    loader: torch.utils.data.DataLoader,
+    n_samples: int,
+    instance_labels: bool = False,
+    plt: bool = False,
+    rgb: bool = False,
+    save_path: Optional[Union[str, os.PathLike]] = None,
+):
+    """Check a loader visually.
+
+    This function shows images and labels from the loader with napari or matplotlib.
+
+    Args:
+        loader: The data loader.
+        n_samples: The number of samples to plot.
+        instance_labels: Whether to visualize the label data as instances.
+        plt: Whether to plot the data with matplotlib instead of napari.
+        rgb: Whether the image data is rgb.
+        save_path: Path for saving the images instead of showing them.
+            This argument only has an effect if `plt=True`.
+    """
     if plt:
         _check_plt(loader, n_samples, instance_labels, save_path=save_path)
     else:

@@ -1,3 +1,9 @@
+"""@private
+"""
+# This functionality is currently hard-coded to the EMBL slurm cluster.
+# To enable it for other slurm clusters, several configurations, like accounting and partition names,
+# would have to be exposed.
+
 import os
 import sys
 import inspect

@@ -1,26 +1,294 @@
+from typing import Callable, Literal, Optional, Union
+
 import torch
+import numpy as np
 
 
 class DefaultPseudoLabeler:
-    """Compute pseudo labels.
+    """Compute pseudo labels based on model predictions, typically from a teacher model.
 
-    Parameters:
-        activation [nn.Module, callable] - activation function applied to the teacher prediction.
-        confidence_threshold [float] - threshold for computing a mask for filterign the pseudo labels.
-            If none is given no mask will be computed (default: None)
-        threshold_from_both_sides [bool] - whether to include both values bigger than the threshold
-            and smaller than 1 - it, or only values bigger than it in the mask.
-            The former should be used for binary labels, the latter for for multiclass labels (default: False)
+    Args:
+        activation: Activation function applied to the teacher prediction.
+        confidence_threshold: Threshold for computing a mask for filtering the pseudo labels.
+            If None is given no mask will be computed.
+        threshold_from_both_sides: Whether to include both values bigger than the threshold
+            and smaller than 1 - the thrhesold, or only values bigger than the threshold, in the mask.
+            The former should be used for binary labels, the latter for for multiclass labels.
+        mask_channel: A specific channel to use for computing the confidence mask.
+            By default the confidence mask is computed across all channels independently.
+            This is useful, if only one of the channels encodes a probability.
     """
-    def __init__(self, activation=None, confidence_threshold=None, threshold_from_both_sides=True):
+    def __init__(
+        self,
+        activation: Optional[torch.nn.Module] = None,
+        confidence_threshold: Optional[float] = None,
+        threshold_from_both_sides: bool = True,
+        mask_channel: Optional[int] = None,
+    ):
         self.activation = activation
         self.confidence_threshold = confidence_threshold
         self.threshold_from_both_sides = threshold_from_both_sides
+        self.mask_channel = mask_channel
+        # TODO serialize the class names and kwargs for activation instead
+        self.init_kwargs = {
+            "activation": None, "confidence_threshold": confidence_threshold,
+            "threshold_from_both_sides": threshold_from_both_sides,
+            "mask_channel": mask_channel,
+        }
+
+    def _compute_label_mask_both_sides(self, pseudo_labels):
+        upper_threshold = self.confidence_threshold
+        lower_threshold = 1.0 - self.confidence_threshold
+        mask = ((pseudo_labels >= upper_threshold) + (pseudo_labels <= lower_threshold)).to(dtype=torch.float32)
+        return mask
+
+    def _compute_label_mask_one_side(self, pseudo_labels):
+        mask = (pseudo_labels >= self.confidence_threshold)
+        return mask
+
+    def __call__(self, teacher: torch.nn.Module, input_: torch.Tensor) -> torch.Tensor:
+        """Compute pseudo-labels.
+
+        Args:
+            teacher: The teacher model.
+            input_: The input for this batch.
+
+        Returns:
+            The pseudo-labels.
+        """
+        pseudo_labels = teacher(input_)
+        if self.activation is not None:
+            pseudo_labels = self.activation(pseudo_labels)
+        if self.confidence_threshold is None:
+            label_mask = None
+        else:
+            mask_input = pseudo_labels if self.mask_channel is None\
+                else pseudo_labels[self.mask_channel:(self.mask_channel+1)]
+            label_mask = self._compute_label_mask_both_sides(mask_input) if self.threshold_from_both_sides\
+                else self._compute_label_mask_one_side(mask_input)
+            if self.mask_channel is not None:
+                size = (pseudo_labels.shape[0], pseudo_labels.shape[1], *([-1] * (pseudo_labels.ndim - 2)))
+                label_mask = label_mask.expand(*size)
+        return pseudo_labels, label_mask
+
+    def step(self, metric, epoch):
+        pass
+
+
+class ProbabilisticPseudoLabeler:
+    """Compute pseudo labels from a Probabilistic UNet.
+
+    Args:
+        activation: Activation function applied to the teacher prediction.
+        confidence_threshold: Threshold for computing a mask for filterign the pseudo labels.
+            If none is given no mask will be computed.
+        threshold_from_both_sides: Whether to include both values bigger than the threshold
+            and smaller than 1 - the thrhesold, or only values bigger than the threshold, in the mask.
+            The former should be used for binary labels, the latter for for multiclass labels.
+        prior_samples: The number of times to sample from the model distribution per input.
+        consensus_masking: Whether to activate consensus masking in the label filter.
+            If False, the weighted consensus response (weighted per-pixel response) is returned.
+            If True, the masked consensus response (complete aggrement of pixels) is returned.
+    """
+    def __init__(
+        self,
+        activation: Optional[torch.nn.Module] = None,
+        confidence_threshold: Optional[float] = None,
+        threshold_from_both_sides: bool = True,
+        prior_samples: int = 16,
+        consensus_masking: bool = False,
+    ):
+        self.activation = activation
+        self.confidence_threshold = confidence_threshold
+        self.threshold_from_both_sides = threshold_from_both_sides
+        self.prior_samples = prior_samples
+        self.consensus_masking = consensus_masking
         # TODO serialize the class names and kwargs for activation instead
         self.init_kwargs = {
             "activation": None, "confidence_threshold": confidence_threshold,
             "threshold_from_both_sides": threshold_from_both_sides
         }
+
+    def _compute_label_mask_both_sides(self, pseudo_labels):
+        upper_threshold = self.confidence_threshold
+        lower_threshold = 1.0 - self.confidence_threshold
+        mask = [
+            torch.where((sample >= upper_threshold) + (sample <= lower_threshold), torch.tensor(1.), torch.tensor(0.))
+            for sample in pseudo_labels
+        ]
+        return mask
+
+    def _compute_label_mask_one_side(self, pseudo_labels):
+        mask = [
+            torch.where((sample >= self.confidence_threshold), torch.tensor(1.), torch.tensor(0.))
+            for sample in pseudo_labels
+        ]
+        return mask
+
+    def __call__(self, teacher: torch.nn.Module, input_: torch.Tensor) -> torch.Tensor:
+        """Compute pseudo-labels.
+
+        Args:
+            teacher: The teacher model. Must be a `torch_em.model.probabilistic_unet.ProbabilisticUNet`.
+            input_: The input for this batch.
+
+        Returns:
+            The pseudo-labels.
+        """
+        teacher.forward(input_)
+        if self.activation is not None:
+            pseudo_labels = [self.activation(teacher.sample()) for _ in range(self.prior_samples)]
+        else:
+            pseudo_labels = [teacher.sample() for _ in range(self.prior_samples)]
+        pseudo_labels = torch.stack(pseudo_labels, dim=0).sum(dim=0)/self.prior_samples
+
+        if self.confidence_threshold is None:
+            label_mask = None
+        else:
+            label_mask = self._compute_label_mask_both_sides(pseudo_labels) if self.threshold_from_both_sides \
+                else self._compute_label_mask_one_side(pseudo_labels)
+            label_mask = torch.stack(label_mask, dim=0).sum(dim=0)/self.prior_samples
+            if self.consensus_masking:
+                label_mask = torch.where(label_mask == 1, 1, 0)
+
+        return pseudo_labels, label_mask
+
+    def step(self, metric, epoch):
+        pass
+
+
+class ScheduledPseudoLabeler:
+    """
+    Implement scheduled pseudo-labeling with dynamic confidence-threshold updates.
+
+    Pseudo labels are generated from a teacher model prediction and can be filtered
+    by a confidence mask. The confidence threshold can be adapted over time either
+    by decreasing it based on a monitored metric (plateau behavior) or by increasing
+    it with a fixed epoch schedule.
+
+    Args:
+        activation: Activation function applied to the teacher prediction.
+        confidence_threshold: Threshold for computing a mask for filtering the pseudo labels.
+            If None is given, no mask will be computed.
+        increase: If True, increase the confidence threshold over time according to
+            a fixed schedule. If False, decrease it based on plateau detection.
+        last_step_epoch: Last epoch at which threshold increase is allowed when
+            `increase=True`.
+        threshold_from_both_sides: Whether to include values larger than the
+            threshold and smaller than 1 - the threshold in the mask, or only values
+            larger than the threshold. The former should be used for binary labels,
+            the latter for multiclass labels.
+        mode: Determines whether the confidence threshold reduction is triggered by a "min" or "max" metric.
+            - 'min': A lower value of the monitored metric is considered better (e.g., loss).
+            - 'max': A higher value of the monitored metric is considered better (e.g., accuracy).
+        factor: Update size for confidence-threshold scheduling. Interpreted as a
+            multiplicative factor for `threshold_mode='rel'` and as an additive step
+            for `threshold_mode='abs'`.
+        patience: Number of epochs (with no improvement) after which the confidence threshold will be reduced.
+        threshold: Threshold value for determining a significant improvement in the performance metric
+            to reset the patience counter. This can be relative (percentage improvement)
+            or absolute depending on `threshold_mode`.
+        threshold_mode: Determines whether the `threshold` is interpreted as a relative improvement ('rel')
+            or an absolute improvement ('abs').
+        min_ct: Minimum allowed confidence threshold. The threshold will not be reduced below this value.
+        max_ct: Maximum allowed confidence threshold. The threshold will not be increased above this value.
+        eps: A small value to avoid floating-point precision errors during threshold comparison.
+        warm_up_epochs: Number of warm-up epochs. At the end of warm-up,
+            `confidence_threshold` is set to `max_ct`. This is intended for
+            decreasing-threshold scheduling (`increase=False`).
+        mask_channel: Specific channel to use for confidence masking. Currently,
+            only None is supported.
+        verbose: If True, prints messages when the confidence threshold is updated.
+    """
+
+    def __init__(
+        self,
+        activation: Optional[Union[torch.nn.Module, Callable]] = None,
+        confidence_threshold: Optional[float] = None,
+        increase: bool = False,
+        last_step_epoch: int = None,
+        threshold_from_both_sides: bool = True,
+        mode: Literal["min", "max"] = "min",
+        factor: float = 0.05,
+        patience: int = 10,
+        threshold: float = 1e-4,
+        threshold_mode: Literal["rel", "abs"] = "abs",
+        min_ct: float = 0.5,
+        max_ct: float = 0.95,
+        eps: float = 1e-8,
+        warm_up_epochs: int = 0,
+        mask_channel: Optional[int] = None,
+        verbose: bool = True,
+    ):
+        self.activation = activation
+        self.confidence_threshold = confidence_threshold
+        self.increase = increase
+        self.threshold_from_both_sides = threshold_from_both_sides
+        self.init_kwargs = {
+            "activation": None, "confidence_threshold": confidence_threshold,
+            "threshold_from_both_sides": threshold_from_both_sides,
+            "mask_channel": mask_channel,
+        }
+        # scheduler arguments
+        if mode not in {"min", "max"}:
+            raise ValueError(f"Invalid mode: {mode}. Mode should be 'min' or 'max'.")
+        self.mode = mode
+
+        assert factor < 1, f"Factor must be smaller than 1, got {factor}"
+        self.factor = factor
+
+        self.patience = patience
+        self.threshold = threshold
+
+        if threshold_mode not in {"rel", "abs"}:
+            raise ValueError(f"Invalid threshold mode: {mode}. Threshold mode should be 'rel' or 'abs'.")
+        self.threshold_mode = threshold_mode
+
+        self.min_ct = min_ct
+        self.max_ct = max_ct
+        self.eps = eps
+        self.warm_up_epochs = warm_up_epochs
+
+        if self.increase and self.warm_up_epochs > 0:
+            raise ValueError("warm_up_epochs > 0 is only supported when increase=False.")
+
+        # TODO implement mask_channel functionality; for now only None is supported
+        if mask_channel is not None:
+            raise NotImplementedError("mask_channel is not implemented yet; only None is supported.")
+        self.mask_channel = mask_channel
+        self.verbose = verbose
+
+        if mode == "min":
+            self.best = float("inf")
+        else:  # mode == "max":
+            self.best = float("-inf")
+
+        # self.best = 0
+        self.num_bad_epochs: int = 0
+        self.last_epoch = 0
+
+        if self.increase:
+            self.last_step_epoch = last_step_epoch
+
+            n_ct = len(np.arange(self.min_ct, self.max_ct + self.factor / 2, self.factor))
+            n_increments = n_ct - 1
+
+            if n_increments <= 0:
+                # nothing to increase
+                self.step_epoch = 0
+            else:
+                # compute initial step size; enforce minimum step size of 1
+                self.step_epoch = max(1, int(np.floor(self.last_step_epoch / n_increments)))
+
+                # ensure max_ct is reachable
+                required_epochs = self.step_epoch * n_increments
+                if self.last_step_epoch < required_epochs:
+                    self.last_step_epoch = required_epochs
+
+            print(
+                f"ScheduledPseudoLabeler: Increasing confidence_threshold every {self.step_epoch} epochs;",
+                f"until epoch {self.last_step_epoch}"
+            )
 
     def _compute_label_mask_both_sides(self, pseudo_labels):
         upper_threshold = self.confidence_threshold
@@ -43,65 +311,87 @@ class DefaultPseudoLabeler:
                 else self._compute_label_mask_one_side(pseudo_labels)
         return pseudo_labels, label_mask
 
+    def end_warm_up(self):
+        self.confidence_threshold = self.max_ct
+        print(f"End of warm-up phase reached: setting confidence threshold to {self.confidence_threshold}")
 
-class ProbabilisticPseudoLabeler:
-    """Compute pseudo labels from the Probabilistic UNet.
+    def _is_better(self, a, best):
+        if self.mode == "min" and self.threshold_mode == "rel":
+            rel_epsilon = 1.0 - self.threshold
+            return a < best * rel_epsilon
 
-    Parameters:
-        activation [nn.Module, callable] - activation function applied to the teacher prediction.
-        confidence_threshold [float] - threshold for computing a mask for filterign the pseudo labels.
-            If none is given no mask will be computed (default: None)
-        threshold_from_both_sides [bool] - whether to include both values bigger than the threshold
-            and smaller than 1 - it, or only values bigger than it in the mask.
-            The former should be used for binary labels, the latter for for multiclass labels (default: False)
-        prior_samples [int] - the number of times we want to sample from the
-            prior distribution per inputs (default: 16)
-        consensus_masking [bool] - whether to activate consensus masking in the label filter (default: False)
-            If false, the weighted consensus response (weighted per-pixel response) is returned
-            If true, the masked consensus response (complete aggrement of pixels) is returned
-    """
-    def __init__(self, activation=None, confidence_threshold=None, threshold_from_both_sides=True,
-                 prior_samples=16, consensus_masking=False):
-        self.activation = activation
-        self.confidence_threshold = confidence_threshold
-        self.threshold_from_both_sides = threshold_from_both_sides
-        self.prior_samples = prior_samples
-        self.consensus_masking = consensus_masking
-        # TODO serialize the class names and kwargs for activation instead
-        self.init_kwargs = {
-            "activation": None, "confidence_threshold": confidence_threshold,
-            "threshold_from_both_sides": threshold_from_both_sides
-        }
+        elif self.mode == "min" and self.threshold_mode == "abs":
+            return a < best - self.threshold
 
-    def _compute_label_mask_both_sides(self, pseudo_labels):
-        upper_threshold = self.confidence_threshold
-        lower_threshold = 1.0 - self.confidence_threshold
-        mask = [torch.where((sample >= upper_threshold) + (sample <= lower_threshold),
-                            torch.tensor(1.),
-                            torch.tensor(0.)) for sample in pseudo_labels]
-        return mask
+        elif self.mode == "max" and self.threshold_mode == "rel":
+            rel_epsilon = self.threshold + 1.0
+            return a > best * rel_epsilon
 
-    def _compute_label_mask_one_side(self, pseudo_labels):
-        mask = [torch.where((sample >= self.confidence_threshold),
-                            torch.tensor(1.),
-                            torch.tensor(0.)) for sample in pseudo_labels]
-        return mask
+        else:  # mode == 'max' and epsilon_mode == 'abs':
+            return a > best + self.threshold
 
-    def __call__(self, teacher, input_):
-        teacher.forward(input_)
-        if self.activation is not None:
-            pseudo_labels = [self.activation(teacher.sample()) for _ in range(self.prior_samples)]
+    def _reduce_ct(self, epoch):
+        old_ct = self.confidence_threshold
+        if self.threshold_mode == "rel":
+            new_ct = max(self.confidence_threshold * (1-self.factor), self.min_ct)
+        else:  # threshold_mode == 'abs':
+            new_ct = max(self.confidence_threshold - self.factor, self.min_ct)
+        if abs(old_ct - new_ct) > self.eps:
+            self.confidence_threshold = new_ct
+        if self.verbose:
+            print(f"Epoch {epoch}: reducing confidence threshold from {old_ct} to {self.confidence_threshold}")
+
+    def decrease_step(self, metric, epoch=None):
+        if epoch is None:
+            epoch = self.last_epoch + 1
+            self.last_epoch = epoch
+
+        # If the metric is None, reduce the confidence threshold every epoch
+        if metric is None:
+            if epoch == 0:
+                return
+            if epoch % self.patience == 0:
+                self._reduce_ct(epoch)
+            return
+
         else:
-            pseudo_labels = [teacher.sample() for _ in range(self.prior_samples)]
-        pseudo_labels = torch.stack(pseudo_labels, dim=0).sum(dim=0)/self.prior_samples
+            current = float(metric)
 
-        if self.confidence_threshold is None:
-            label_mask = None
+            if self._is_better(current, self.best):
+                self.best = current
+                self.num_bad_epochs = 0
+            else:
+                self.num_bad_epochs += 1
+
+            if self.num_bad_epochs > self.patience:
+                self._reduce_ct(epoch)
+                self.num_bad_epochs = 0
+
+    def _increase_ct(self, epoch):
+        old_ct = self.confidence_threshold
+        if self.threshold_mode == "rel":
+            new_ct = min(self.confidence_threshold * (1+self.factor), self.max_ct)
+        else:  # threshold_mode == 'abs':
+            new_ct = min(self.confidence_threshold + self.factor, self.max_ct)
+        if abs(old_ct - new_ct) > self.eps:
+            self.confidence_threshold = new_ct
+        if self.verbose:
+            print(f"Epoch {epoch}: increase confidence threshold from {old_ct} to {self.confidence_threshold}")
+
+    def increase_step(self, epoch):
+        if epoch > self.last_step_epoch:
+            return
+
+        if epoch % self.step_epoch == 0 and epoch != 0:
+            self._increase_ct(epoch)
+
+    def step(self, metric=None, epoch=None):
+        if epoch == self.warm_up_epochs and self.warm_up_epochs > 0:
+            self.end_warm_up()
+        elif epoch > self.warm_up_epochs:
+            if self.increase:
+                self.increase_step(epoch)
+            else:
+                self.decrease_step(metric, epoch)
         else:
-            label_mask = self._compute_label_mask_both_sides(pseudo_labels) if self.threshold_from_both_sides \
-                else self._compute_label_mask_one_side(pseudo_labels)
-            label_mask = torch.stack(label_mask, dim=0).sum(dim=0)/self.prior_samples
-            if self.consensus_masking:
-                label_mask = torch.where(label_mask == 1, 1, 0)
-
-        return pseudo_labels, label_mask
+            return

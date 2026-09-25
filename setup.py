@@ -4,11 +4,22 @@ from setuptools import setup, find_packages
 __version__ = runpy.run_path("torch_em/__version__.py")["__version__"]
 
 
-# NOTE requirements are not all available via pip, you need to use conda,
-# see 'environment_gpu.yaml' / 'environment_cpu.yaml'
 requires = [
+    "bioimage-cpp",
+    "bioimageio.core",
+    "h5py",
+    "imageio",
+    "kornia",
+    "mrcfile",
+    "natsort",
+    "python-elf >=0.9.1",
+    "requests",
+    "scikit-image",
+    "tensorboard",
+    "tifffile",
     "torch",
-    "h5py"
+    "torchvision",
+    "tqdm",
 ]
 
 
@@ -28,7 +39,7 @@ setup(
             "torch_em.predict_with_tiling = torch_em.cli:predict_with_tiling",
             "torch_em.export_bioimageio_model = torch_em.util.modelzoo:main",
             "torch_em.validate_checkpoint = torch_em.util.validation:main",
-            "torch_em.submit_slurm = torch_em.util.submit_slurm:main",
+            # "torch_em.submit_slurm = torch_em.util.submit_slurm:main",
         ]
     }
 )

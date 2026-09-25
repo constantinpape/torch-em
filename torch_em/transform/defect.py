@@ -1,9 +1,13 @@
+from typing import Optional
+
 import numpy as np
+import torch
 
 from scipy.ndimage import binary_dilation, map_coordinates
 from skimage.draw import line
 from skimage.filters import gaussian
-from skimage.measure import label
+
+import bioimage_cpp as bic
 
 from .augmentation import get_augmentations
 from .raw import standardize
@@ -20,6 +24,8 @@ from ..data import SegmentationDataset, MinForegroundSampler
 def get_artifact_source(artifact_path, patch_shape, min_mask_fraction,
                         normalizer=standardize,
                         raw_key="artifacts", mask_key="alpha_mask"):
+    """@private
+    """
     augmentation = get_augmentations(ndim=2)
     sampler = MinForegroundSampler(min_mask_fraction)
     return SegmentationDataset(
@@ -35,30 +41,30 @@ def get_artifact_source(artifact_path, patch_shape, min_mask_fraction,
 class EMDefectAugmentation:
     """Augment raw data with transformations similar to defects common in EM data.
 
-    Arguments:
-        p_drop_slice: probability for a missing slice
-        p_low_contrast: probability for a low contrast slice
-        p_deform_slice: probaboloty for a deformed slice
-        p_paste_artifact: probability for inserting an artifact from data source
-        contrast_scale: scale of low contrast transformation
-        deformation_mode: deformation mode that should be used
-        deformation_strength: deformation strength in pixel
-        artifact_source: data source for additional artifacts
-        mean_val: mean value for artifact normalization
-        std_val: std value for artifact normalization
+    Args:
+        p_drop_slice: Probability for a missing slice.
+        p_low_contrast: Probability for a low contrast slice.
+        p_deform_slice: Probability for a deformed slice.
+        p_paste_artifact: Probability for inserting an artifact from data source.
+        contrast_scale: Scale of low contrast transformation.
+        deformation_mode: Deformation mode that should be used.
+        deformation_strength: Deformation strength in pixel.
+        artifact_source: Data source for additional artifacts.
+        mean_val: Mean value for artifact normalization.
+        std_val: Std value for artifact normalization.
     """
     def __init__(
         self,
-        p_drop_slice,
-        p_low_contrast,
-        p_deform_slice,
-        p_paste_artifact=0.0,
-        contrast_scale=0.1,
-        deformation_mode='undirected',
-        deformation_strength=10,
-        artifact_source=None,
-        mean_val=None,
-        std_val=None
+        p_drop_slice: float,
+        p_low_contrast: float,
+        p_deform_slice: float,
+        p_paste_artifact: float = 0.0,
+        contrast_scale: float = 0.1,
+        deformation_mode: str = "undirected",
+        deformation_strength: float = 10.0,
+        artifact_source: Optional[torch.utils.data.Dataset] = None,
+        mean_val: Optional[float] = None,
+        std_val: Optional[float] = None,
     ):
         if p_paste_artifact > 0.0:
             assert artifact_source is not None
@@ -87,10 +93,14 @@ class EMDefectAugmentation:
         self.deformation_strength = deformation_strength
 
     def drop_slice(self, raw):
+        """@private
+        """
         raw[:] = 0
         return raw
 
     def low_contrast(self, raw):
+        """@private
+        """
         mean = raw.mean()
         raw -= mean
         raw *= self.contrast_scale
@@ -100,6 +110,8 @@ class EMDefectAugmentation:
     # this simulates a typical defect:
     # missing line of data with rest of data compressed towards the line
     def compress_slice(self, raw):
+        """@private
+        """
         shape = raw.shape
         # randomly choose fixed x or fixed y with p = 1/2
         fixed_x = np.random.rand() < .5
@@ -131,7 +143,7 @@ class EMDefectAugmentation:
 
         # find the 2 components where coordinates are bigger / smaller than the line
         # to apply normal vector in the correct direction
-        components = label(np.logical_not(line_mask))
+        components = bic.segmentation.label(np.logical_not(line_mask))
         assert len(np.unique(components)) == 3, "%i" % len(np.unique(components))
         neg_val = components[0, 0] if fixed_x else components[-1, -1]
         pos_val = components[-1, -1] if fixed_x else components[0, 0]
@@ -158,6 +170,8 @@ class EMDefectAugmentation:
         return raw
 
     def undirected_deformation(self, raw):
+        """@private
+        """
         shape = raw.shape
 
         # make meshgrid
@@ -175,6 +189,8 @@ class EMDefectAugmentation:
         return raw
 
     def deform_slice(self, raw):
+        """@private
+        """
         if self.deformation_mode in ('undirected', 'compress'):
             mode = self.deformation_mode
         else:
@@ -186,6 +202,8 @@ class EMDefectAugmentation:
         return raw
 
     def paste_artifact(self, raw):
+        """@private
+        """
         # draw a random artifact location
         artifact_index = np.random.randint(len(self.artifact_source))
         artifact, alpha_mask = self.artifact_source[artifact_index]
@@ -200,7 +218,15 @@ class EMDefectAugmentation:
         raw = raw * (1. - alpha_mask) + artifact * alpha_mask
         return raw
 
-    def __call__(self, raw):
+    def __call__(self, raw: np.ndarray) -> np.ndarray:
+        """Apply defect augmentations to input data.
+
+        Args:
+            raw: The input data.
+
+        Returns:
+            The augmented data.
+        """
         raw = raw.astype("float32")  # needs to be floating point to avoid errors
         for z in range(raw.shape[0]):
             r = np.random.rand()

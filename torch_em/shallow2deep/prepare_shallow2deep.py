@@ -5,6 +5,7 @@ import warnings
 from concurrent import futures
 from glob import glob
 from functools import partial
+from typing import Callable, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch_em
@@ -14,14 +15,25 @@ from sklearn.ensemble import RandomForestClassifier
 from torch_em.segmentation import check_paths, is_segmentation_dataset, samples_to_datasets
 from tqdm import tqdm
 
-import vigra
-try:
-    import fastfilters as filter_impl
-except ImportError:
-    import vigra.filters as filter_impl
+import bioimage_cpp as bic
+
+# Map legacy vigra/fastfilters CamelCase filter names to bioimage_cpp.filters functions.
+_FILTER_NAMES = {
+    "gaussianSmoothing": "gaussian_smoothing",
+    "laplacianOfGaussian": "laplacian_of_gaussian",
+    "gaussianGradientMagnitude": "gaussian_gradient_magnitude",
+    "hessianOfGaussianEigenvalues": "hessian_of_gaussian_eigenvalues",
+    "structureTensorEigenvalues": "structure_tensor_eigenvalues",
+}
+
+
+def _resolve_filter(name):
+    return getattr(bic.filters, _FILTER_NAMES.get(name, name))
 
 
 class RFSegmentationDataset(torch_em.data.SegmentationDataset):
+    """@private
+    """
     _patch_shape_min = None
     _patch_shape_max = None
 
@@ -55,6 +67,8 @@ class RFSegmentationDataset(torch_em.data.SegmentationDataset):
 
 
 class RFImageCollectionDataset(torch_em.data.ImageCollectionDataset):
+    """@private
+    """
     _patch_shape_min = None
     _patch_shape_max = None
 
@@ -191,21 +205,21 @@ def _load_rf_image_collection_dataset(
 def _get_filters(ndim, filters_and_sigmas):
     # subset of ilastik default features
     if filters_and_sigmas is None:
-        filters = [filter_impl.gaussianSmoothing,
-                   filter_impl.laplacianOfGaussian,
-                   filter_impl.gaussianGradientMagnitude,
-                   filter_impl.hessianOfGaussianEigenvalues,
-                   filter_impl.structureTensorEigenvalues]
+        filters = [bic.filters.gaussian_smoothing,
+                   bic.filters.laplacian_of_gaussian,
+                   bic.filters.gaussian_gradient_magnitude,
+                   bic.filters.hessian_of_gaussian_eigenvalues,
+                   bic.filters.structure_tensor_eigenvalues]
         sigmas = [0.7, 1.6, 3.5, 5.0]
         filters_and_sigmas = [
-            (filt, sigma) if i != len(filters) - 1 else (partial(filt, outerScale=0.5*sigma), sigma)
+            (filt, sigma) if i != len(filters) - 1 else (partial(filt, outer_sigma=0.5*sigma), sigma)
             for i, filt in enumerate(filters) for sigma in sigmas
         ]
     # validate the filter config
     assert isinstance(filters_and_sigmas, (list, tuple))
     for filt_and_sig in filters_and_sigmas:
         filt, sig = filt_and_sig
-        assert callable(filt) or (isinstance(filt, str) and hasattr(filter_impl, filt))
+        assert callable(filt) or (isinstance(filt, str) and hasattr(bic.filters, _FILTER_NAMES.get(filt, filt)))
         assert isinstance(sig, (float, tuple))
         if isinstance(sig, tuple):
             assert ndim is not None and len(sig) == ndim
@@ -217,15 +231,15 @@ def _calculate_response(raw, filter_, sigma):
     if callable(filter_):
         return filter_(raw, sigma)
 
-    # filter_ is still string, convert it to function
-    # fastfilters does not support passing sigma as tuple
-    func = getattr(vigra.filters, filter_) if isinstance(sigma, tuple) else getattr(filter_impl, filter_)
+    # filter_ is still a string, convert it to a bioimage_cpp.filters function.
+    # bioimage_cpp.filters supports passing sigma as a scalar or as a per-axis tuple.
+    func = _resolve_filter(filter_)
 
-    # special case since additional argument outerScale
-    # is needed for structureTensorEigenvalues functions
-    if filter_ == "structureTensorEigenvalues":
-        outerScale = tuple([s*2 for s in sigma]) if isinstance(sigma, tuple) else 2*sigma
-        return func(raw, sigma, outerScale=outerScale)
+    # special case since the additional argument outer_sigma
+    # is needed for the structure tensor eigenvalues filter
+    if filter_ in ("structureTensorEigenvalues", "structure_tensor_eigenvalues"):
+        outer_sigma = tuple(s*2 for s in sigma) if isinstance(sigma, tuple) else 2*sigma
+        return func(raw, sigma, outer_sigma=outer_sigma)
 
     return func(raw, sigma)
 
@@ -340,34 +354,55 @@ def _prepare_shallow2deep(
 
 def _serialize_feature_config(filters_and_sigmas):
     feature_config = [
-        (filt if isinstance(filt, str)
-            else (filt.func.__name__ if isinstance(filt, partial) else filt.__name__),
-        sigma)
+        (filt if isinstance(filt, str) else (filt.func.__name__ if isinstance(filt, partial) else filt.__name__), sigma)
         for filt, sigma in filters_and_sigmas
     ]
     return feature_config
 
 
 def prepare_shallow2deep(
-    raw_paths,
-    raw_key,
-    label_paths,
-    label_key,
-    patch_shape_min,
-    patch_shape_max,
-    n_forests,
-    n_threads,
-    output_folder,
-    ndim,
-    raw_transform=None,
-    label_transform=None,
-    rois=None,
-    is_seg_dataset=None,
-    balance_labels=True,
-    filter_config=None,
-    sampler=None,
+    raw_paths: Union[str, Sequence[str]],
+    raw_key: Optional[str],
+    label_paths: Union[str, Sequence[str]],
+    label_key: Optional[str],
+    patch_shape_min: Tuple[int, ...],
+    patch_shape_max: Tuple[int, ...],
+    n_forests: int,
+    n_threads: int,
+    output_folder: str,
+    ndim: int,
+    raw_transform: Optional[Callable] = None,
+    label_transform: Optional[Callable] = None,
+    rois: Optional[Union[Tuple[slice, ...], Sequence[Tuple[slice, ...]]]] = None,
+    is_seg_dataset: Optional[bool] = None,
+    balance_labels: bool = True,
+    filter_config: Optional[Dict] = None,
+    sampler: Optional[Callable] = None,
     **rf_kwargs,
-):
+) -> None:
+    """Prepare shallow2deep enhancer training by pre-training random forests.
+
+    Args:
+        raw_paths: The file paths to the raw data. May also be a single file.
+        raw_key: The name of the internal dataset for the raw data. Set to None for regular image such as tif.
+        label_paths: The file paths to the lable data. May also be a single file.
+        label_key: The name of the internal dataset for the label data. Set to None for regular image such as tif.
+        patch_shape_min: The minimal patch shape loaded for training a random forest.
+        patch_shape_max: The maximal patch shape loaded for training a random forest.
+        n_forests: The number of random forests to train.
+        n_threads: The number of threads for parallelizing the training.
+        output_folder: The folder for saving the random forests.
+        ndim: The dimensionality of the data.
+        raw_transform: A transform to apply to the raw data before computing feautres on it.
+        label_transform: A transform to apply to the label data before deriving targets for the random forest for it.
+        rois: Region of interests for the training data.
+        is_seg_dataset: Whether to create a segmentation dataset or an image collection dataset.
+            If None, this wil be determined from the data.
+        balance_labels: Whether to balance the training labels for the random forest.
+        filter_config: The configuration for the image filters that are used to compute features for the random forest.
+        sampler: A sampler to reject samples from training.
+        rf_kwargs: Keyword arguments for creating the random forest.
+    """
     os.makedirs(output_folder, exist_ok=True)
     ds, filters_and_sigmas = _prepare_shallow2deep(
         raw_paths, raw_key, label_paths, label_key,
@@ -378,16 +413,16 @@ def prepare_shallow2deep(
     serialized_feature_config = _serialize_feature_config(filters_and_sigmas)
 
     def _train_rf(rf_id):
-        # sample random patch with dataset
+        # Sample random patch with dataset.
         raw, labels = ds[rf_id]
-        # cast to numpy and remove channel axis
-        # need to update this to support multi-channel input data and/or multi class prediction
+        # Cast to numpy and remove channel axis.
+        # Need to update this to support multi-channel input data and/or multi class prediction.
         raw, labels = raw.numpy().squeeze(), labels.numpy().astype("int8").squeeze()
         assert raw.ndim == labels.ndim == ndim, f"{raw.ndim}, {labels.ndim}, {ndim}"
         features, labels = _get_features_and_labels(raw, labels, filters_and_sigmas, balance_labels)
         rf = RandomForestClassifier(**rf_kwargs)
         rf.fit(features, labels)
-        # monkey patch these so that we know the feature config and dimensionality
+        # Monkey patch these so that we know the feature config and dimensionality.
         rf.feature_ndim = ndim
         rf.feature_config = serialized_feature_config
         out_path = os.path.join(output_folder, f"rf_{rf_id:04d}.pkl")
@@ -441,6 +476,8 @@ def worst_points(
     accumulate_samples=True,
     **kwargs,
 ):
+    """@private
+    """
     def score(pred, labels):
         # labels to one-hot encoding
         unique, inverse = np.unique(labels, return_inverse=True)
@@ -460,6 +497,8 @@ def uncertain_points(
     accumulate_samples=True,
     **kwargs,
 ):
+    """@private
+    """
     def score(pred, labels):
         assert pred.ndim == 2
         channel_sorted = np.sort(pred, axis=1)
@@ -479,6 +518,8 @@ def uncertain_worst_points(
     alpha=0.5,
     **kwargs,
 ):
+    """@private
+    """
     def score(pred, labels):
         assert pred.ndim == 2
 
@@ -504,6 +545,8 @@ def random_points(
     accumulate_samples=True,
     **kwargs,
 ):
+    """@private
+    """
     samples = []
     nc = len(np.unique(labels))
     # sample in a class balanced way
@@ -537,6 +580,8 @@ def worst_tiles(
     accumulate_samples=True,
     **kwargs,
 ):
+    """@private
+    """
     # check inputs
     ndim = len(img_shape)
     assert ndim in [2, 3], img_shape
@@ -646,6 +691,8 @@ def balanced_dense_accumulate(
     accumulate_samples=True,
     **kwargs,
 ):
+    """@private
+    """
     samples = []
     nc = len(np.unique(labels))
     # sample in a class balanced way
@@ -678,42 +725,77 @@ SAMPLING_STRATEGIES = {
     "worst_tiles": worst_tiles,
     "balanced_dense_accumulate": balanced_dense_accumulate,
 }
+"""@private
+"""
 
 
 def prepare_shallow2deep_advanced(
-    raw_paths,
-    raw_key,
-    label_paths,
-    label_key,
-    patch_shape_min,
-    patch_shape_max,
-    n_forests,
-    n_threads,
-    output_folder,
-    ndim,
-    forests_per_stage,
-    sample_fraction_per_stage,
-    sampling_strategy="worst_points",
-    sampling_kwargs={},
-    raw_transform=None,
-    label_transform=None,
-    rois=None,
-    is_seg_dataset=None,
-    filter_config=None,
-    sampler=None,
+    raw_paths: Union[str, Sequence[str]],
+    raw_key: Optional[str],
+    label_paths: Union[str, Sequence[str]],
+    label_key: Optional[str],
+    patch_shape_min: Tuple[int, ...],
+    patch_shape_max: Tuple[int, ...],
+    n_forests: int,
+    n_threads: int,
+    output_folder: str,
+    ndim: int,
+    forests_per_stage: int,
+    sample_fraction_per_stage: float,
+    sampling_strategy: Union[str, Callable] = "worst_points",
+    sampling_kwargs: Dict = {},
+    raw_transform: Optional[Callable] = None,
+    label_transform: Optional[Callable] = None,
+    rois: Optional[Union[Tuple[slice, ...], Sequence[Tuple[slice, ...]]]] = None,
+    is_seg_dataset: Optional[bool] = None,
+    balance_labels: bool = True,
+    filter_config: Optional[Dict] = None,
+    sampler: Optional[Callable] = None,
     **rf_kwargs,
-):
-    """Advanced training of random forests for shallow2deep enhancer training.
+) -> None:
+    """Prepare shallow2deep enhancer training by pre-training random forests.
 
-    This function accepts the 'sampling_strategy' parameter, which allows to implement custom
-    sampling strategies for the samples used for training the random forests.
-    Training operates in stages, the parameter 'forests_per_stage' determines how many forests
-    are trained in each stage, and 'sample_fraction_per_stage' which fraction of the samples is
-    taken per stage. The random forests in stage 0 are trained from random balanced labels.
-    For the other stages 'sampling_strategy' enables specifying the strategy; it has to be a function
-    with signature '(features, labels, forests, rf_id, forests_per_stage, sample_fraction_per_stage)',
-    and return the sampled features and labels. See for the 'worst_points' function
-    in this file for an example implementation.
+    This function implements an advanced training procedure compared to `prepare_shallow2deep`.
+    The 'sampling_strategy' argument determines an advnaced sampling strategies,
+    which selects the samples to use for training the random forests.
+    The random forest training operates in stages, the parameter 'forests_per_stage' determines how many forests
+    are trained in each stage, and 'sample_fraction_per_stage' determines which fraction of samples is used per stage.
+    The random forests in stage 0 are trained from random balanced labels.
+    For the other stages 'sampling_strategy' determines the strategy; it has to be a function with signature
+    '(features, labels, forests, rf_id, forests_per_stage, sample_fraction_per_stage)',
+    and return the sampled features and labels. See for example the 'worst_points' function.
+    Alternatively, one of the pre-defined strategies can be selected by passing one of the following names:
+    - "random_poinst": Select random points.
+    - "uncertain_points": Select points with the highest uncertainty.
+    - "uncertain_worst_points": Select the points with the highest uncertainty and worst accuracies.
+    - "worst_points": Select the points with the worst accuracies.
+    - "worst_tiles": Selectt the tiles with the worst accuracies.
+    - "balanced_dense_accumulate": Balanced dense accumulation.
+
+    Args:
+        raw_paths: The file paths to the raw data. May also be a single file.
+        raw_key: The name of the internal dataset for the raw data. Set to None for regular image such as tif.
+        label_paths: The file paths to the lable data. May also be a single file.
+        label_key: The name of the internal dataset for the label data. Set to None for regular image such as tif.
+        patch_shape_min: The minimal patch shape loaded for training a random forest.
+        patch_shape_max: The maximal patch shape loaded for training a random forest.
+        n_forests: The number of random forests to train.
+        n_threads: The number of threads for parallelizing the training.
+        output_folder: The folder for saving the random forests.
+        ndim: The dimensionality of the data.
+        forests_per_stage: The number of forests to train per stage.
+        sample_fraction_per_stage: The fraction of samples to use per stage.
+        sampling_strategy: The sampling strategy.
+        sampling_kwargs: The keyword arguments for the sampling strategy.
+        raw_transform: A transform to apply to the raw data before computing feautres on it.
+        label_transform: A transform to apply to the label data before deriving targets for the random forest for it.
+        rois: Region of interests for the training data.
+        is_seg_dataset: Whether to create a segmentation dataset or an image collection dataset.
+            If None, this wil be determined from the data.
+        balance_labels: Whether to balance the training labels for the random forest.
+        filter_config: The configuration for the image filters that are used to compute features for the random forest.
+        sampler: A sampler to reject samples from training.
+        rf_kwargs: Keyword arguments for creating the random forest.
     """
     os.makedirs(output_folder, exist_ok=True)
     ds, filters_and_sigmas = _prepare_shallow2deep(
@@ -729,7 +811,7 @@ def prepare_shallow2deep_advanced(
         n_forests // forests_per_stage + 1
 
     if isinstance(sampling_strategy, str):
-        assert sampling_strategy in SAMPLING_STRATEGIES,\
+        assert sampling_strategy in SAMPLING_STRATEGIES, \
             f"Invalid sampling strategy {sampling_strategy}, only support {list(SAMPLING_STRATEGIES.keys())}"
         sampling_strategy = SAMPLING_STRATEGIES[sampling_strategy]
     assert callable(sampling_strategy)

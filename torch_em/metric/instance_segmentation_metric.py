@@ -1,4 +1,5 @@
 from functools import partial
+from typing import List, Optional
 
 import numpy as np
 import elf.evaluation as elfval
@@ -6,11 +7,14 @@ import elf.segmentation as elfseg
 import elf.segmentation.embeddings as elfemb
 import torch
 import torch.nn as nn
-import vigra
+import bioimage_cpp as bic
+from skimage.measure import regionprops
 from elf.segmentation.watershed import apply_size_filter
 
 
 class BaseInstanceSegmentationMetric(nn.Module):
+    """@private
+    """
     def __init__(self, segmenter, metric, to_numpy=True):
         super().__init__()
         self.segmenter = segmenter
@@ -37,6 +41,8 @@ class BaseInstanceSegmentationMetric(nn.Module):
 #
 
 def filter_sizes(seg, min_seg_size, hmap=None):
+    """@private
+    """
     seg_ids, counts = np.unique(seg, return_counts=True)
     if hmap is None:
         bg_ids = seg_ids[counts < min_seg_size]
@@ -49,6 +55,8 @@ def filter_sizes(seg, min_seg_size, hmap=None):
 
 
 class MWS:
+    """@private
+    """
     def __init__(self, offsets, with_background, min_seg_size, strides=None):
         self.offsets = offsets
         self.with_background = with_background
@@ -62,6 +70,9 @@ class MWS:
         if self.with_background:
             assert len(affinities) == len(self.offsets) + 1
             mask, affinities = affinities[0], affinities[1:]
+            # bioimage_cpp's mutex_watershed requires a boolean mask; treat the foreground
+            # channel as a probability and threshold it (matching torch_em.util.segmentation).
+            mask = mask >= 0.5
         else:
             assert len(affinities) == len(self.offsets)
             mask = None
@@ -74,6 +85,8 @@ class MWS:
 
 
 class EmbeddingMWS:
+    """@private
+    """
     def __init__(self, delta, offsets, with_background, min_seg_size, strides=None):
         self.delta = delta
         self.offsets = offsets
@@ -88,15 +101,19 @@ class EmbeddingMWS:
         seg += 1
         seg_ids, counts = np.unique(seg, return_counts=True)
         bg_seg = seg_ids[np.argmax(counts)]
+        n_labels = int(seg.max()) + 1
         mean_embeddings = []
         for emb in embeddings:
-            mean_embeddings.append(vigra.analysis.extractRegionFeatures(emb, seg, features=["mean"])["mean"][None])
+            means = np.zeros(n_labels, dtype="float32")
+            for prop in regionprops(seg, intensity_image=np.asarray(emb)):
+                means[prop.label] = prop.mean_intensity
+            mean_embeddings.append(means[None])
         mean_embeddings = np.concatenate(mean_embeddings, axis=0)
         bg_embed = mean_embeddings[:, bg_seg][:, None]
         bg_probs = elfemb._embeddings_to_probabilities(mean_embeddings, bg_embed, self.delta, 0)
         bg_ids = np.where(bg_probs > 0.5)
         seg[np.isin(seg, bg_ids)] = 0
-        vigra.analysis.relabelConsecutive(seg, out=seg)
+        seg, _, _ = bic.segmentation.relabel_sequential(seg)
         return seg
 
     def __call__(self, embeddings):
@@ -112,6 +129,8 @@ class EmbeddingMWS:
 
 
 class Multicut:
+    """@private
+    """
     def __init__(self, min_seg_size, anisotropic=False, dt_threshold=0.25, sigma_seeds=2.0, solver="decomposition"):
         self.min_seg_size = min_seg_size
         self.anisotropic = anisotropic
@@ -133,17 +152,19 @@ class Multicut:
                                                              sigma_seeds=self.sigma_seeds,
                                                              sigma_weights=self.sigma_seeds)
         rag = elfseg.compute_rag(ws, max_id + 1, n_threads=1)
-        feats = elfseg.compute_boundary_mean_and_length(rag, boundaries, n_threads=1)[:, 0]
+        feats = elfseg.compute_boundary_mean_and_length(rag, ws, boundaries, n_threads=1)[:, 0]
         costs = elfseg.compute_edge_costs(feats)
         solver = elfseg.get_multicut_solver(self.solver)
         node_labels = solver(rag, costs, n_threads=1)
-        seg = elfseg.project_node_labels_to_pixels(rag, node_labels, n_threads=1).astype("uint32")
+        seg = elfseg.project_node_labels_to_pixels(rag, ws, node_labels, n_threads=1).astype("uint32")
         if self.min_seg_size > 0:
             seg = filter_sizes(seg, self.min_seg_size, hmap=boundaries)
         return seg
 
 
 class HDBScan:
+    """@private
+    """
     def __init__(self, min_size, eps, remove_largest):
         self.min_size = min_size
         self.eps = eps
@@ -158,6 +179,8 @@ class HDBScan:
 #
 
 class IOUError:
+    """@private
+    """
     def __init__(self, threshold=0.5, metric="precision"):
         self.threshold = threshold
         self.metric = metric
@@ -168,18 +191,24 @@ class IOUError:
 
 
 class VariationOfInformation:
+    """@private
+    """
     def __call__(self, seg, target):
         vis, vim = elfval.variation_of_information(seg, target)
         return vis + vim
 
 
 class AdaptedRandError:
+    """@private
+    """
     def __call__(self, seg, target):
         are, _ = elfval.rand_index(seg, target)
         return are
 
 
 class SymmetricBestDice:
+    """@private
+    """
     def __call__(self, seg, target):
         score = 1.0 - elfval.symmetric_best_dice_score(seg, target)
         return score
@@ -191,7 +220,25 @@ class SymmetricBestDice:
 
 
 class EmbeddingMWSIOUMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, delta, offsets, min_seg_size, iou_threshold=0.5, strides=None):
+    """Intersection over union metric based on mutex watershed computed from embedding-derived affinites.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        delta: The hinge distance of the contrastive loss for training the embeddings.
+        offsets: The offsets for deriving the affinities from the embeddings.
+        min_seg_size: Size for filtering the segmentation objects.
+        iou_threshold: Threshold for the intersection over union metric.
+        strides: The strides for the mutex watershed.
+    """
+    def __init__(
+        self,
+        delta: float,
+        offsets: List[List[int]],
+        min_seg_size: int,
+        iou_threshold: float = 0.5,
+        strides: Optional[List[int]] = None,
+    ):
         segmenter = EmbeddingMWS(delta, offsets, with_background=True, min_seg_size=min_seg_size)
         metric = IOUError(iou_threshold)
         super().__init__(segmenter, metric)
@@ -200,7 +247,17 @@ class EmbeddingMWSIOUMetric(BaseInstanceSegmentationMetric):
 
 
 class EmbeddingMWSSBDMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, delta, offsets, min_seg_size, strides=None):
+    """Symmetric best dice metric based on mutex watershed computed from embedding-derived affinites.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        delta: The hinge distance of the contrastive loss for training the embeddings.
+        offsets: The offsets for deriving the affinities from the embeddings.
+        min_seg_size: Size for filtering the segmentation objects.
+        strides: The strides for the mutex watershed.
+    """
+    def __init__(self, delta: float, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int]] = None):
         segmenter = EmbeddingMWS(delta, offsets, with_background=True, min_seg_size=min_seg_size)
         metric = SymmetricBestDice()
         super().__init__(segmenter, metric)
@@ -208,7 +265,17 @@ class EmbeddingMWSSBDMetric(BaseInstanceSegmentationMetric):
 
 
 class EmbeddingMWSVOIMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, delta, offsets, min_seg_size, strides=None):
+    """Variation of inofrmation metric based on mutex watershed computed from embedding-derived affinites.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        delta: The hinge distance of the contrastive loss for training the embeddings.
+        offsets: The offsets for deriving the affinities from the embeddings.
+        min_seg_size: Size for filtering the segmentation objects.
+        strides: The strides for the mutex watershed.
+    """
+    def __init__(self, delta: float, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int]] = None):
         segmenter = EmbeddingMWS(delta, offsets, with_background=False, min_seg_size=min_seg_size)
         metric = VariationOfInformation()
         super().__init__(segmenter, metric)
@@ -216,7 +283,17 @@ class EmbeddingMWSVOIMetric(BaseInstanceSegmentationMetric):
 
 
 class EmbeddingMWSRandMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, delta, offsets, min_seg_size, strides=None):
+    """Rand index metric based on mutex watershed computed from embedding-derived affinites.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        delta: The hinge distance of the contrastive loss for training the embeddings.
+        offsets: The offsets for deriving the affinities from the embeddings.
+        min_seg_size: Size for filtering the segmentation objects.
+        strides: The strides for the mutex watershed.
+    """
+    def __init__(self, delta: float, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int]] = None):
         segmenter = EmbeddingMWS(delta, offsets, with_background=False, min_seg_size=min_seg_size)
         metric = AdaptedRandError()
         super().__init__(segmenter, metric)
@@ -224,7 +301,16 @@ class EmbeddingMWSRandMetric(BaseInstanceSegmentationMetric):
 
 
 class HDBScanIOUMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, min_size, eps, iou_threshold=0.5):
+    """Intersection over union metric based on HDBScan computed from embeddings.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        min_size: The minimal segment size.
+        eps: The epsilon value for HDBScan.
+        iou_threshold: The threshold for the intersection over union value.
+    """
+    def __init__(self, min_size: int, eps: float, iou_threshold: float = 0.5):
         segmenter = HDBScan(min_size=min_size, eps=eps, remove_largest=True)
         metric = IOUError(iou_threshold)
         super().__init__(segmenter, metric)
@@ -232,7 +318,15 @@ class HDBScanIOUMetric(BaseInstanceSegmentationMetric):
 
 
 class HDBScanSBDMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, min_size, eps):
+    """Symmetric best dice metric based on HDBScan computed from embeddings.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        min_size: The minimal segment size.
+        eps: The epsilon value for HDBScan.
+    """
+    def __init__(self, min_size: int, eps: float):
         segmenter = HDBScan(min_size=min_size, eps=eps, remove_largest=True)
         metric = SymmetricBestDice()
         super().__init__(segmenter, metric)
@@ -240,7 +334,15 @@ class HDBScanSBDMetric(BaseInstanceSegmentationMetric):
 
 
 class HDBScanRandMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, min_size, eps):
+    """Rand index metric based on HDBScan computed from embeddings.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        min_size: The minimal segment size.
+        eps: The epsilon value for HDBScan.
+    """
+    def __init__(self, min_size: int, eps: float):
         segmenter = HDBScan(min_size=min_size, eps=eps, remove_largest=True)
         metric = AdaptedRandError()
         super().__init__(segmenter, metric)
@@ -248,7 +350,15 @@ class HDBScanRandMetric(BaseInstanceSegmentationMetric):
 
 
 class HDBScanVOIMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, min_size, eps):
+    """Variation of information metric based on HDBScan computed from embeddings.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        min_size: The minimal segment size.
+        eps: The epsilon value for HDBScan.
+    """
+    def __init__(self, min_size: int, eps: float):
         segmenter = HDBScan(min_size=min_size, eps=eps, remove_largest=True)
         metric = VariationOfInformation()
         super().__init__(segmenter, metric)
@@ -256,7 +366,19 @@ class HDBScanVOIMetric(BaseInstanceSegmentationMetric):
 
 
 class MulticutVOIMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, min_seg_size, anisotropic=False, dt_threshold=0.25, sigma_seeds=2.0):
+    """Variation of information metric based on a multicut computed from boundary predictions.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        min_seg_size: The minimal segment size.
+        anisotropic: Whether to compute the watersheds in 2d for volumetric data.
+        dt_threshold: The threshold to apply to the boundary predictions before computing the distance transform.
+        sigma_seeds: The sigma value for smoothing the distance transform before computing seeds.
+    """
+    def __init__(
+        self, min_seg_size: int, anisotropic: bool = False, dt_threshold: float = 0.25, sigma_seeds: float = 2.0
+    ):
         segmenter = Multicut(dt_threshold, anisotropic, sigma_seeds)
         metric = VariationOfInformation()
         super().__init__(segmenter, metric)
@@ -265,7 +387,19 @@ class MulticutVOIMetric(BaseInstanceSegmentationMetric):
 
 
 class MulticutRandMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, min_seg_size, anisotropic=False, dt_threshold=0.25, sigma_seeds=2.0):
+    """Rand index metric based on a multicut computed from boundary predictions.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        min_seg_size: The minimal segment size.
+        anisotropic: Whether to compute the watersheds in 2d for volumetric data.
+        dt_threshold: The threshold to apply to the boundary predictions before computing the distance transform.
+        sigma_seeds: The sigma value for smoothing the distance transform before computing seeds.
+    """
+    def __init__(
+        self, min_seg_size: int, anisotropic: bool = False, dt_threshold: float = 0.25, sigma_seeds: float = 2.0
+    ):
         segmenter = Multicut(dt_threshold, anisotropic, sigma_seeds)
         metric = AdaptedRandError()
         super().__init__(segmenter, metric)
@@ -274,7 +408,23 @@ class MulticutRandMetric(BaseInstanceSegmentationMetric):
 
 
 class MWSIOUMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, offsets, min_seg_size, iou_threshold=0.5, strides=None):
+    """Intersection over union metric based on a mutex watershed computed from affinity predictions.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        offsets: The offsets corresponding to the affinity channels.
+        min_seg_size: The minimal segment size.
+        iou_threshold: The threshold for the intersection over union value.
+        strides: The strides for the mutex watershed.
+    """
+    def __init__(
+        self,
+        offsets: List[List[int]],
+        min_seg_size: int,
+        iou_threshold: float = 0.5,
+        strides: Optional[List[int]] = None
+    ):
         segmenter = MWS(offsets, with_background=True, min_seg_size=min_seg_size, strides=strides)
         metric = IOUError(iou_threshold)
         super().__init__(segmenter, metric)
@@ -283,7 +433,16 @@ class MWSIOUMetric(BaseInstanceSegmentationMetric):
 
 
 class MWSSBDMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, offsets, min_seg_size, strides=None):
+    """Symmetric best dice score metric based on a mutex watershed computed from affinity predictions.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        offsets: The offsets corresponding to the affinity channels.
+        min_seg_size: The minimal segment size.
+        strides: The strides for the mutex watershed.
+    """
+    def __init__(self, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int]] = None):
         segmenter = MWS(offsets, with_background=True, min_seg_size=min_seg_size, strides=strides)
         metric = SymmetricBestDice()
         super().__init__(segmenter, metric)
@@ -291,7 +450,16 @@ class MWSSBDMetric(BaseInstanceSegmentationMetric):
 
 
 class MWSVOIMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, offsets, min_seg_size, strides=None):
+    """Variation of information metric based on a mutex watershed computed from affinity predictions.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        offsets: The offsets corresponding to the affinity channels.
+        min_seg_size: The minimal segment size.
+        strides: The strides for the mutex watershed.
+    """
+    def __init__(self, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int]] = None):
         segmenter = MWS(offsets, with_background=False, min_seg_size=min_seg_size, strides=strides)
         metric = VariationOfInformation()
         super().__init__(segmenter, metric)
@@ -299,7 +467,16 @@ class MWSVOIMetric(BaseInstanceSegmentationMetric):
 
 
 class MWSRandMetric(BaseInstanceSegmentationMetric):
-    def __init__(self, offsets, min_seg_size, strides=None):
+    """Rand index metric based on a mutex watershed computed from affinity predictions.
+
+    This class can be used as validation metric when training a network for instance segmentation.
+
+    Args:
+        offsets: The offsets corresponding to the affinity channels.
+        min_seg_size: The minimal segment size.
+        strides: The strides for the mutex watershed.
+    """
+    def __init__(self, offsets: List[List[int]], min_seg_size: int, strides: Optional[List[int]] = None):
         segmenter = MWS(offsets, with_background=False, min_seg_size=min_seg_size, strides=strides)
         metric = AdaptedRandError()
         super().__init__(segmenter, metric)

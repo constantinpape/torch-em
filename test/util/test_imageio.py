@@ -12,7 +12,7 @@ class TestImageRead(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             tifffile.imwrite(os.path.join(td, "test.tif"), np.zeros((10, 10, 2)))
-            self.assert_(supports_memmap(os.path.join(td, "test.tif")))
+            self.assertTrue(supports_memmap(os.path.join(td, "test.tif")))
             data = load_image(os.path.join(td, "test.tif"))
             self.assertEqual(data.shape, (10, 10, 2))
 
