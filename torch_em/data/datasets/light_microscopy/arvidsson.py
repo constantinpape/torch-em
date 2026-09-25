@@ -14,7 +14,7 @@ from typing import Union, Tuple, Literal, List
 
 import numpy as np
 import imageio.v3 as imageio
-from skimage.measure import label as connected_components
+from bioimage_cpp.segmentation import label as connected_components
 
 import torch_em
 
@@ -73,7 +73,7 @@ def get_arvidsson_data(
 
 def get_arvidsson_paths(
     path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False,
-) -> Tuple[List[int], List[int]]:
+) -> Tuple[List[str], List[str]]:
     """Get paths to the Arvidsson data.
 
     Args:

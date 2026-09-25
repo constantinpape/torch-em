@@ -1,13 +1,15 @@
 import os
 import warnings
-import numpy as np
 from typing import List, Union, Tuple, Optional, Any, Callable
+
+import numpy as np
+from math import ceil
 
 import torch
 
 from elf.wrapper import RoiWrapper
 
-from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data, ensure_patch_shape
+from ..util import ensure_spatial_array, ensure_tensor_with_channels, load_data, ensure_patch_shape, validate_roi
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
@@ -43,6 +45,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
         with_label_channels: Whether the label data has channels.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
         z_ext: Extra bounding box for loading the data across z.
+        pre_label_transform: Transformation applied to the label data of a chosen random sample,
+            before applying the sample validity via the `sampler`.
     """
     max_sampling_attempts = 500
     """The maximal number of sampling attempts, for loading a sample via `__getitem__`.
@@ -54,7 +58,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         if patch_shape is None:
             return 1
         else:
-            n_samples = int(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
+            n_samples = ceil(np.prod([float(sh / csh) for sh, csh in zip(shape, patch_shape)]))
             return n_samples
 
     def __init__(
@@ -78,6 +82,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         with_label_channels: bool = False,
         with_padding: bool = True,
         z_ext: Optional[int] = None,
+        pre_label_transform: Optional[Callable] = None,
     ):
         self.raw_path = raw_path
         self.raw_key = raw_key
@@ -91,9 +96,8 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self._with_label_channels = with_label_channels
 
         if roi is not None:
-            if isinstance(roi, slice):
-                roi = (roi,)
-
+            shape = self.raw.shape[1:] if self._with_channels else self.raw.shape
+            roi = validate_roi(roi, shape, patch_shape)
             self.raw = RoiWrapper(self.raw, (slice(None),) + roi) if self._with_channels else RoiWrapper(self.raw, roi)
             self.labels = RoiWrapper(self.labels, (slice(None),) + roi) if self._with_label_channels else\
                 RoiWrapper(self.labels, roi)
@@ -119,6 +123,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         self.transform = transform
         self.sampler = sampler
         self.with_padding = with_padding
+        self.pre_label_transform = pre_label_transform
 
         self.dtype = dtype
         self.label_dtype = label_dtype
@@ -170,6 +175,13 @@ class SegmentationDataset(torch.utils.data.Dataset):
         bb_raw = (slice(None),) + bb if self._with_channels else bb
         bb_labels = (slice(None),) + bb if self._with_label_channels else bb
         raw, labels = self.raw[bb_raw], self.labels[bb_labels]
+
+        # Additional label transform on top to make sampler consider expected labels
+        # (eg. run connected components on disconnected semantic labels)
+        pre_label_transform = getattr(self, "pre_label_transform", None)
+        if pre_label_transform is not None:
+            labels = pre_label_transform(labels)
+
         return raw, labels
 
     def _get_sample(self, index):

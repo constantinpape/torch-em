@@ -140,7 +140,7 @@ def get_aimseg_loader(
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the AimSeg dataset for axon and myelin segmentation.
+    """Get the AimSeg dataloader for axon and myelin segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded.
@@ -152,7 +152,7 @@ def get_aimseg_loader(
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
-        The DataLoader
+        The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_aimseg_dataset(path, patch_shape, targets, download, **ds_kwargs)

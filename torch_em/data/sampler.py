@@ -46,7 +46,7 @@ class MinSemanticLabelForegroundSampler:
     """A sampler to reject samples with a low fraction of foreground pixels in the semantic labels.
 
     Args:
-        sematic_ids: The ids for semantic classes to take into account.
+        semantic_ids: The ids for semantic classes to take into account.
         min_fraction: The minimal fraction of foreground pixels for accepting a sample.
         min_fraction_per_id: Whether the minimal fraction is applied on a per label basis.
         p_reject: The probability for rejecting a sample that does not meet the criterion.
@@ -76,7 +76,7 @@ class MinSemanticLabelForegroundSampler:
         else:
             foreground_fraction = [np.sum(np.isin(y, self.semantic_ids))]
 
-        if all(foreground_fraction) > self.min_fraction:
+        if all(fraction > self.min_fraction for fraction in foreground_fraction):
             return True
         else:
             return np.random.rand() > self.p_reject
@@ -122,11 +122,22 @@ class MinInstanceSampler:
         min_num_instances: The minimum number of instances for accepting a sample.
         p_reject: The probability for rejecting a sample that does not meet the criterion.
         min_size: The minimal size for instances to be taken into account.
+        exclude_ids: The ids to exclude (i.e. not consider) for sampling a valid input.
     """
-    def __init__(self, min_num_instances: int = 2, p_reject: float = 1.0, min_size: Optional[int] = None):
+    def __init__(
+        self,
+        min_num_instances: int = 2,
+        p_reject: float = 1.0,
+        min_size: Optional[int] = None,
+        exclude_ids: Optional[List[int]] = None,
+    ):
         self.min_num_instances = min_num_instances
         self.p_reject = p_reject
         self.min_size = min_size
+        self.exclude_ids = exclude_ids
+
+        if self.exclude_ids is not None:
+            assert isinstance(self.exclude_ids, list)
 
     def __call__(self, x: np.ndarray, y: np.ndarray) -> bool:
         """Check the sample.
@@ -139,9 +150,13 @@ class MinInstanceSampler:
             Whether to accept this sample.
         """
         uniques, sizes = np.unique(y, return_counts=True)
+
         if self.min_size is not None:
             filter_ids = uniques[sizes >= self.min_size]
             uniques = filter_ids
+
+        if self.exclude_ids is not None:
+            uniques = [idx for idx in uniques if idx not in self.exclude_ids]
 
         if len(uniques) >= self.min_num_instances:
             return True

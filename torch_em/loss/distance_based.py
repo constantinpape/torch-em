@@ -11,9 +11,9 @@ class DistanceLoss(nn.Module):
     Typically the distance channels are centroid and inverted boundary distance.
 
     Args:
-        mask_distances_in_bg: whether to mask the loss for distance predictions in the background.
-        foreground_loss: the loss for comparing foreground predictions and target.
-        distance_loss: the loss for comparing distance predictions and target.
+        mask_distances_in_bg: Whether to mask the loss for distance predictions in the background.
+        foreground_loss: The loss for comparing foreground predictions and target.
+        distance_loss: The loss for comparing distance predictions and target.
     """
     def __init__(
         self,
@@ -63,7 +63,7 @@ class DiceBasedDistanceLoss(DistanceLoss):
     """Similar to `DistanceLoss`, using the dice score for all losses.
 
     Args:
-        mask_distances_in_bg: whether to mask the loss for distance predictions in the background.
+        mask_distances_in_bg: Whether to mask the loss for distance predictions in the background.
     """
     def __init__(self, mask_distances_in_bg: bool) -> None:
         super().__init__(mask_distances_in_bg, foreground_loss=DiceLoss(), distance_loss=DiceLoss())

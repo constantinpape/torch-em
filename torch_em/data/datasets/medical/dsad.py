@@ -39,6 +39,8 @@ def get_dsad_data(path: Union[os.PathLike, str], download: bool = False) -> str:
     if os.path.exists(data_dir):
         return data_dir
 
+    os.makedirs(path, exist_ok=True)
+
     zip_path = os.path.join(path, "data.zip")
     print("Downloading the DSAD data. Might take several minutes depending on your internet connection.")
     util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)

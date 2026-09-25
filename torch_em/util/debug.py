@@ -5,7 +5,7 @@ from typing import Union, Optional
 import torch
 import torch.utils.data
 
-from .util import ensure_array
+from .util import ensure_array, get_random_colors
 
 
 def _check_plt(loader, n_samples, instance_labels, model=None, device=None, save_path=None):
@@ -61,7 +61,8 @@ def _check_plt(loader, n_samples, instance_labels, model=None, device=None, save
         for chan in range(n_target_channels):
             ax = fig.add_subplot(n_rows, n_samples, to_index(n_samples, 1 + chan, ii))
             if instance_labels:
-                ax.imshow(y[chan].astype("uint32"), interpolation="nearest", aspect="auto")
+                label_data = y[chan].astype("uint32")
+                ax.imshow(label_data, interpolation="nearest", aspect="auto", cmap=get_random_colors(label_data))
             else:
                 ax.imshow(y[chan], interpolation="nearest", cmap="Greys_r", aspect="auto")
 

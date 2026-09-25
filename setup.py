@@ -4,11 +4,22 @@ from setuptools import setup, find_packages
 __version__ = runpy.run_path("torch_em/__version__.py")["__version__"]
 
 
-# NOTE requirements are not all available via pip, you need to use conda,
-# see 'environment_gpu.yaml' / 'environment_cpu.yaml'
 requires = [
+    "bioimage-cpp",
+    "bioimageio.core",
+    "h5py",
+    "imageio",
+    "kornia",
+    "mrcfile",
+    "natsort",
+    "python-elf >=0.9.1",
+    "requests",
+    "scikit-image",
+    "tensorboard",
+    "tifffile",
     "torch",
-    "h5py"
+    "torchvision",
+    "tqdm",
 ]
 
 

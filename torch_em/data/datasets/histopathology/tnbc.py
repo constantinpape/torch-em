@@ -17,7 +17,7 @@ import json
 import pandas as pd
 import imageio.v3 as imageio
 from sklearn.model_selection import train_test_split
-from skimage.measure import label as connected_components
+from bioimage_cpp.segmentation import label as connected_components
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -112,7 +112,7 @@ def get_tnbc_data(path: Union[os.PathLike, str], download: bool = False) -> str:
 
 def get_tnbc_paths(
     path: Union[os.PathLike, str], split: Literal["train", "val", "test"], download: bool = False
-) -> List[int]:
+) -> List[str]:
     """Get paths to the TNBC data.
 
     Args:

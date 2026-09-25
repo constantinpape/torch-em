@@ -1,16 +1,25 @@
 """The CURVAS dataset contains annotations for pancreas, kidney and liver
-in abdominal CT scans.
+in abdominal CT scans. Each scan is annotated independently by three raters.
+
+The 'train' split consists of the first 10 of the 20 cases of the official training set, the 'val' split of the
+5 cases of the official validation set and the 'test' split of the 65 cases of the official testing set.
+All cases come with the annotations of all three raters.
 
 This dataset is from the challenge: https://curvas.grand-challenge.org.
-The dataset is located at: https://zenodo.org/records/12687192.
+The dataset is located at: https://zenodo.org/records/13767408,
+and is from the publication https://doi.org/10.48550/arXiv.2505.08685
 Please cite tem if you use this dataset for your research.
 """
 
 import os
+import shutil
 import subprocess
+from tqdm import tqdm
 from glob import glob
 from natsort import natsorted
 from typing import Tuple, Union, Literal, List
+
+import numpy as np
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -22,83 +31,126 @@ from .. import util
 URL = "https://zenodo.org/records/12687192/files/training_set.zip"
 CHECKSUM = "1126a2205553ae1d4fe5fbaee7ea732aacc4f5a92b96504ed521c23e5a0e3f89"
 
+URLS = {
+    "val": "https://zenodo.org/records/13767408/files/validation_set.zip",
+    "test": "https://zenodo.org/records/13767408/files/testing_set.zip",
+}
+CHECKSUMS = {
+    "val": "01edfac9a085f06111969821d06c83d164654a6041c2e8ac3b11ed390e7c7028",
+    "test": "6a70aa241a14184778e25d11cae58b39cbc1d8ca204fea19ce0a34bb5b13f7b5",
+}
+H5_DIRS = {"train": "data", "val": "data_val", "test": "data_test"}
 
-def get_curvas_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+
+def _preprocess_data(data_dir, h5_dir):
+    import h5py
+    import nibabel as nib
+
+    os.makedirs(h5_dir, exist_ok=True)
+
+    image_paths = natsorted(glob(os.path.join(data_dir, "*", "image.nii.gz")))
+    for image_path in tqdm(image_paths, desc="Processing data"):
+        rater1_path = os.path.join(os.path.dirname(image_path), "annotation_1.nii.gz")
+        rater2_path = os.path.join(os.path.dirname(image_path), "annotation_2.nii.gz")
+        rater3_path = os.path.join(os.path.dirname(image_path), "annotation_3.nii.gz")
+
+        assert os.path.exists(rater1_path) and os.path.exists(rater2_path) and os.path.exists(rater3_path)
+
+        image = nib.load(image_path).get_fdata().astype("float32").transpose(2, 0, 1)
+
+        label_r1 = np.rint(nib.load(rater1_path).get_fdata()).astype("uint8").transpose(2, 0, 1)
+        label_r2 = np.rint(nib.load(rater2_path).get_fdata()).astype("uint8").transpose(2, 0, 1)
+        label_r3 = np.rint(nib.load(rater3_path).get_fdata()).astype("uint8").transpose(2, 0, 1)
+
+        fname = os.path.basename(os.path.dirname(image_path))
+        chunks = (8, 512, 512)
+        with h5py.File(os.path.join(h5_dir, f"{fname}.h5"), "w") as f:
+            f.create_dataset("raw", data=image, compression="gzip", chunks=chunks)
+            f.create_dataset("labels/rater_1", data=label_r1, compression="gzip", chunks=chunks)
+            f.create_dataset("labels/rater_2", data=label_r2, compression="gzip", chunks=chunks)
+            f.create_dataset("labels/rater_3", data=label_r3, compression="gzip", chunks=chunks)
+
+    # Remove the nifti files as we don't need them anymore!
+    shutil.rmtree(data_dir)
+
+
+def get_curvas_data(
+    path: Union[os.PathLike, str], split: Literal["train", "val", "test"] = "train", download: bool = False
+) -> str:
     """Download the CURVAS dataset.
+
+    NOTE: The test split is about 21.6 GB.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
+        split: The choice of data split.
         download: Whether to download the data if it is not present.
 
     Returns:
         Filepath where the data is downloaded.
     """
-    data_dir = os.path.join(path, "training_set")
+    if split not in H5_DIRS:
+        raise ValueError(f"'{split}' is not a valid split. Choose one of {list(H5_DIRS)}.")
+
+    data_dir = os.path.join(path, H5_DIRS[split])
     if os.path.exists(data_dir):
         return data_dir
 
     os.makedirs(path, exist_ok=True)
 
-    zip_path = os.path.join(path, "training_set.zip")
-    util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
+    if split == "train":
+        zip_path = os.path.join(path, "training_set.zip")
+        util.download_source(path=zip_path, url=URL, download=download, checksum=CHECKSUM)
 
-    # HACK: The zip file is broken. We fix it using the following script.
-    fixed_zip_path = os.path.join(path, "training_set_fixed.zip")
-    subprocess.run(["zip", "-FF", zip_path, "--out", fixed_zip_path])
-    subprocess.run(["unzip", fixed_zip_path, "-d", path])
+        # HACK: The zip file is broken. We fix it using the following script.
+        fixed_zip_path = os.path.join(path, "training_set_fixed.zip")
+        subprocess.run(["zip", "-FF", zip_path, "--out", fixed_zip_path])
+        subprocess.run(["unzip", fixed_zip_path, "-d", path])
+
+        _preprocess_data(os.path.join(path, "training_set"), data_dir)
+
+        # Remove the zip files as we don't need them anymore.
+        os.remove(zip_path)
+        os.remove(fixed_zip_path)
+    else:
+        zip_path = os.path.join(path, os.path.basename(URLS[split]))
+        util.download_source(path=zip_path, url=URLS[split], download=download, checksum=CHECKSUMS[split])
+        util.unzip(zip_path=zip_path, dst=path, remove=False)
+
+        _preprocess_data(os.path.join(path, os.path.splitext(os.path.basename(URLS[split]))[0]), data_dir)
+
+        os.remove(zip_path)
 
     return data_dir
 
 
 def get_curvas_paths(
-    path: Union[os.PathLike, str],
-    split: Literal['train', 'val', 'test'],
-    rater: Literal["1"] = "1",
-    download: bool = False
-) -> Tuple[List[str], List[str]]:
+    path: Union[os.PathLike, str], split: Literal['train', 'val', 'test'], download: bool = False
+) -> List[str]:
     """Get paths to the CURVAS data.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
         split: The choice of data split.
-        rater: The choice of rater providing the annotations.
         download: Whether to download the data if it is not present.
 
     Returns:
-        List of filepaths for the image data.
-        List of filepaths for the label data.
+        List of filepaths for the volumetric data.
     """
-    data_dir = get_curvas_data(path, download)
-
-    if not isinstance(rater, list):
-        rater = [rater]
-
-    assert len(rater) == 1, "The segmentations for multiple raters is not supported at the moment."
-
-    image_paths = natsorted(glob(os.path.join(data_dir, "*", "image.nii.gz")))
-    gt_paths = []
-    for _rater in rater:
-        gt_paths.extend(natsorted(glob(os.path.join(data_dir, "*", f"annotation_{_rater}.nii.gz"))))
-
-    assert len(image_paths) == len(gt_paths)
+    data_dir = get_curvas_data(path, split, download)
+    volume_paths = natsorted(glob(os.path.join(data_dir, "*.h5")))
 
     if split == "train":
-        image_paths, gt_paths = image_paths[:10], gt_paths[:10]
-    elif split == "val":
-        image_paths, gt_paths = image_paths[10:13], gt_paths[10:13]
-    elif split == "test":
-        image_paths, gt_paths = image_paths[13:], gt_paths[13:]
-    else:
-        raise ValueError(f"'{split}' is not a valid split.")
+        volume_paths = volume_paths[:10]
 
-    return image_paths, gt_paths
+    return volume_paths
 
 
 def get_curvas_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, ...],
     split: Literal['train', 'val', 'test'],
-    rater: Literal["1"] = "1",
+    rater: Literal["1", "2", "3"] = "1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
@@ -117,7 +169,7 @@ def get_curvas_dataset(
     Returns:
         The segmentation dataset.
     """
-    image_paths, gt_paths = get_curvas_paths(path, split, rater, download)
+    volume_paths = get_curvas_paths(path, split, download)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -126,12 +178,13 @@ def get_curvas_dataset(
         )
 
     return torch_em.default_segmentation_dataset(
-        raw_paths=image_paths,
-        raw_key="data",
-        label_paths=gt_paths,
-        label_key="data",
+        raw_paths=volume_paths,
+        raw_key="raw",
+        label_paths=volume_paths,
+        label_key=f"labels/rater_{rater}",
         patch_shape=patch_shape,
-        **kwargs
+        is_seg_dataset=True,
+        **kwargs,
     )
 
 
@@ -140,7 +193,7 @@ def get_curvas_loader(
     batch_size: int,
     patch_shape: Tuple[int, ...],
     split: Literal['train', 'val', 'test'],
-    rater: Literal["1"] = "1",
+    rater: Literal["1", "2", "3"] = "1",
     resize_inputs: bool = False,
     download: bool = False,
     **kwargs
