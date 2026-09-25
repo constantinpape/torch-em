@@ -477,6 +477,13 @@ class TorchvisionUNet2d(TorchvisionUNetBase):
             norm_mean=norm_mean, norm_std=norm_std,
         )
 
+        self.init_kwargs = dict(
+            backbone=backbone, out_channels=out_channels, in_channels=in_channels, depth=depth,
+            initial_features=initial_features, gain=gain, pretrained=pretrained,
+            perform_range_checks=perform_range_checks, final_activation=final_activation,
+            postprocessing=postprocessing, check_shape=check_shape, **conv_block_kwargs,
+        )
+
     def _apply_upsample(self, decoded: torch.Tensor) -> torch.Tensor:
         return F.interpolate(decoded, scale_factor=float(self._pre_skip_factor), mode="bilinear", align_corners=False)
 
@@ -559,6 +566,13 @@ class TorchvisionUNet3d(TorchvisionUNetBase):
             final_activation=final_activation, postprocessing=postprocessing,
             check_shape=check_shape, perform_range_checks=perform_range_checks,
             norm_mean=norm_mean, norm_std=norm_std,
+        )
+
+        self.init_kwargs = dict(
+            backbone=backbone, out_channels=out_channels, in_channels=in_channels, depth=depth,
+            initial_features=initial_features, gain=gain, pretrained=pretrained,
+            perform_range_checks=perform_range_checks, final_activation=final_activation,
+            postprocessing=postprocessing, check_shape=check_shape, **conv_block_kwargs,
         )
 
     def _apply_upsample(self, decoded: torch.Tensor) -> torch.Tensor:

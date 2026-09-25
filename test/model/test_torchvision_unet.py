@@ -23,6 +23,10 @@ class TestTorchvisionUNet2d(unittest.TestCase):
         net = self._make("convnext_tiny", depth=3)
         self._run(net, (1, 3, 64, 64))
 
+    def test_forward_custom_gain(self):
+        net = self._make(gain=3)
+        self._run(net, (1, 3, 64, 64))
+
     def test_invalid_backbone(self):
         with self.assertRaises(ValueError):
             self._make("not_a_backbone")
@@ -52,6 +56,16 @@ class TestTorchvisionUNet2d(unittest.TestCase):
 
 
 class TestTorchvisionUNet3d(unittest.TestCase):
+    def test_forward_custom_gain(self):
+        from torch_em.model.torchvision_unet import TorchvisionUNet3d
+        net = TorchvisionUNet3d(
+            "r3d_18", out_channels=2, depth=3, initial_features=4, gain=3, pretrained=False,
+        )
+        x = torch.rand(1, 3, 8, 32, 32, requires_grad=True)
+        y = net(x)
+        self.assertEqual(y.shape, (1, 2, 8, 32, 32))
+        y.sum().backward()
+
     def test_forward(self):
         from torch_em.model.torchvision_unet import TorchvisionUNet3d
         net = TorchvisionUNet3d("r3d_18", out_channels=2, depth=3, initial_features=8, pretrained=False)

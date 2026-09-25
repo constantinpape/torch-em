@@ -318,10 +318,6 @@ class UNETRBase(nn.Module):
 
             elif backbone == "torchvision":
                 encoder_state = torch.load(checkpoint, weights_only=False)
-                if isinstance(encoder_state, dict) and "state_dict" in encoder_state:
-                    encoder_state = encoder_state["state_dict"]
-                # Strip classifier head keys not present in ViT_Torchvision
-                encoder_state = {k: v for k, v in encoder_state.items() if not k.startswith("heads.")}
 
             else:
                 raise ValueError(
@@ -330,6 +326,11 @@ class UNETRBase(nn.Module):
 
         else:
             encoder_state = checkpoint
+
+        if backbone == "torchvision":
+            if "state_dict" in encoder_state:
+                encoder_state = encoder_state["state_dict"]
+            encoder_state = {k: v for k, v in encoder_state.items() if not k.startswith("heads.")}
 
         self.encoder.load_state_dict(encoder_state)
 

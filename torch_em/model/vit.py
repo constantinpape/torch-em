@@ -849,6 +849,23 @@ class ViT_Torchvision(nn.Module):
 
         self.input_proj = nn.Conv2d(in_chans, 3, kernel_size=1) if in_chans != 3 else None
 
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs,
+    ):
+        pos_embed = state_dict.get(prefix + "encoder.pos_embedding")
+        current = self.encoder.pos_embedding
+        if (
+            pos_embed is not None and pos_embed.ndim == 3
+            and pos_embed.shape[0] == current.shape[0] and pos_embed.shape[2] == current.shape[2]
+            and pos_embed.shape[1] != current.shape[1]
+        ):
+            self.encoder.pos_embedding = nn.Parameter(
+                current.new_empty(pos_embed.shape), requires_grad=current.requires_grad,
+            )
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs,
+        )
+
     def _interpolate_pos_embed(self, pos_embed: torch.Tensor, H_p: int, W_p: int) -> torch.Tensor:
         cls_pos, patch_pos = pos_embed[:, :1], pos_embed[:, 1:]
         N = patch_pos.shape[1]
