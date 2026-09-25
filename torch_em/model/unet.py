@@ -327,6 +327,7 @@ class Decoder(nn.Module):
     def __init__(
         self,
         features,
+        skip_channels,
         scale_factors,
         conv_block_impl,
         sampler_impl,
@@ -336,6 +337,8 @@ class Decoder(nn.Module):
         super().__init__()
         if len(features) != len(scale_factors) + 1:
             raise ValueError("Incompatible number of features {len(features)} and scale_factors {len(scale_factors)}")
+        if len(skip_channels) != len(scale_factors):
+            raise ValueError("Each decoder level must have a skip-channel count.")
 
         conv_kwargs = [conv_block_kwargs] * len(scale_factors)
         if anisotropic_kernel:
@@ -343,8 +346,10 @@ class Decoder(nn.Module):
                            for kwargs, scale_factor in zip(conv_kwargs, scale_factors)]
 
         self.blocks = nn.ModuleList(
-            [conv_block_impl(inc, outc, **kwargs)
-             for inc, outc, kwargs in zip(features[:-1], features[1:], conv_kwargs)]
+            [
+                conv_block_impl(outc + skipc, outc, **kwargs)
+                for outc, skipc, kwargs in zip(features[1:], skip_channels, conv_kwargs)
+            ]
         )
         self.samplers = nn.ModuleList(
             [sampler_impl(factor, inc, outc) for factor, inc, outc
@@ -544,6 +549,7 @@ class UNet2d(UNetBase):
             ),
             decoder=Decoder(
                 features=features_decoder,
+                skip_channels=features_encoder[:0:-1],
                 scale_factors=scale_factors[::-1],
                 conv_block_impl=conv_block_impl,
                 sampler_impl=sampler_impl,
@@ -650,6 +656,7 @@ class AnisotropicUNet(UNetBase):
             ),
             decoder=Decoder(
                 features=features_decoder,
+                skip_channels=features_encoder[:0:-1],
                 scale_factors=scale_factors[::-1],
                 conv_block_impl=conv_block_impl,
                 sampler_impl=Upsampler3d,

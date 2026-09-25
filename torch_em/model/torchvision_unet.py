@@ -309,6 +309,7 @@ def _build_encoder_and_decoder(
 
     decoder = Decoder(
         features=features_decoder,
+        skip_channels=skip_targets_deep_first,
         scale_factors=scale_factors[::-1],
         conv_block_impl=conv_block_impl,
         sampler_impl=sampler_impl,

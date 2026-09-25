@@ -639,6 +639,7 @@ class UNETR(UNETRBase):
 
         self.decoder = decoder or Decoder(
             features=features_decoder,
+            skip_channels=features_decoder[:-1],
             scale_factors=scale_factors[::-1],
             conv_block_impl=ConvBlock2d,
             sampler_impl=_upsampler,
@@ -875,6 +876,7 @@ class UNETR3D(UNETRBase):
         # The core decoder block.
         self.decoder = decoder or Decoder(
             features=features_decoder,
+            skip_channels=features_decoder[:-1],
             scale_factors=[scale_factors] * depth,
             conv_block_impl=partial(ConvBlock3dWithStrip, use_strip_pooling=use_strip_pooling),
             sampler_impl=Upsampler3d,
