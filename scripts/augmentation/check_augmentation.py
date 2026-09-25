@@ -1,83 +1,97 @@
-import napari
-import numpy as np
+import os
+
 import h5py
 import kornia
+import napari
+import numpy as np
 
-from torch_em.transform.augmentation import KorniaAugmentationPipeline, get_augmentations
-from torch_em.transform.augmentation import RandomElasticDeformation
+import torch_em.transform.augmentation as augmentation
+from torch_em.data.datasets.uro_cell import _require_urocell_data
 
-pr = '/g/schwab/hennies/project_segmentation_paper/ds_sbem-6dpf-1-whole/seg_210122_mito/seg_10nm/gt_cubes/gt000/raw_256.h5'
-pgt = '/g/schwab/hennies/project_segmentation_paper/ds_sbem-6dpf-1-whole/seg_210122_mito/seg_10nm/gt_cubes/gt000/mito.h5'
 
-bb = np.s_[:32, :128, :128]
-with h5py.File(pr, 'r') as f:
-    raw = f['data'][bb].astype('float32')
-with h5py.File(pgt, 'r') as f:
-    seg = f['data'][bb]
+def get_data():
+    _require_urocell_data("./data", download=True)
+    path = "./data/fib1-3-3-0.h5"
+    assert os.path.exists(path)
+    bb = np.s_[32:64, 128:256, 128:256]
+    with h5py.File(path, "r") as f:
+        raw = f["raw"][bb].astype("float32")
+        seg = f["labels/mito"][bb]
+    return raw, seg
 
 
 def check_kornia_augmentation():
-    rot = kornia.augmentation.RandomRotation(
-        degrees=90., p=1.
-    )
+    raw, seg = get_data()
 
-    trafo = KorniaAugmentationPipeline(
-        rot
-    )
+    rot = kornia.augmentation.RandomRotation(degrees=90.0, p=1.0)
+    trafo = augmentation.KorniaAugmentationPipeline(rot)
 
     transformed_raw, transformed_seg = trafo(raw, seg)
     transformed_raw = transformed_raw.numpy().squeeze()
     transformed_seg = transformed_seg.numpy().squeeze()
 
-    with napari.gui_qt():
-        viewer = napari.Viewer()
-        viewer.add_image(raw)
-        viewer.add_image(transformed_raw)
-        viewer.add_labels(seg)
-        viewer.add_labels(transformed_seg)
+    viewer = napari.Viewer()
+    viewer.add_image(raw)
+    viewer.add_image(transformed_raw)
+    viewer.add_labels(seg)
+    viewer.add_labels(transformed_seg)
+    napari.run()
 
 
 def check_default_augmentation():
-    trafo = get_augmentations()
+    raw, seg = get_data()
+
+    trafo = augmentation.get_augmentations()
 
     transformed_raw, transformed_seg = trafo(raw, seg)
     transformed_raw = transformed_raw.numpy().squeeze()
-    transformed_seg = transformed_seg.numpy().squeeze()
+    transformed_seg = transformed_seg.numpy().squeeze().astype("uint32")
 
-    with napari.gui_qt():
-        viewer = napari.Viewer()
-        viewer.add_image(raw)
-        viewer.add_image(transformed_raw)
-        viewer.add_labels(seg)
-        viewer.add_labels(transformed_seg)
+    viewer = napari.Viewer()
+    viewer.add_image(raw)
+    viewer.add_image(transformed_raw)
+    viewer.add_labels(seg)
+    viewer.add_labels(transformed_seg)
+    napari.run()
 
 
 def check_elastic_2d():
-    import torch
-    raw_ = raw[0]
-    traw = torch.from_numpy(raw_[None, None])
+    raw, seg = get_data()
+    raw, seg = raw[0], seg[0]
 
-    # trafo = RandomElasticDeformation(alpha=(1., 1.), p=1)
-    # transformed_raw = trafo(traw)
-
-    # noise_shape = (1, 2) + raw_.shape
-    # noise = torch.zeros(noise_shape)
-    amp = 1. / raw.shape[0]
-    noise = np.concatenate([np.random.uniform(-amp, amp, traw.shape),
-                            np.random.uniform(-amp, amp, traw.shape)], axis=1).astype('float32')
-    noise = torch.from_numpy(noise)
-
-    alpha = 1.
-    transformed_raw = kornia.geometry.transform.elastic_transform2d(traw, noise, alpha=(alpha, alpha))
-
+    deform = augmentation.RandomElasticDeformation(alpha=(1.0, 1.0), p=1)
+    trafo = augmentation.KorniaAugmentationPipeline(deform)
+    transformed_raw, transformed_seg = trafo(raw[None, None], seg[None, None])
     transformed_raw = transformed_raw.numpy().squeeze()
-    with napari.gui_qt():
-        viewer = napari.Viewer()
-        viewer.add_image(raw_)
-        viewer.add_image(transformed_raw)
+    transformed_seg = transformed_seg.numpy().squeeze().astype("uint32")
+
+    viewer = napari.Viewer()
+    viewer.add_image(raw)
+    viewer.add_image(transformed_raw)
+    viewer.add_labels(seg)
+    viewer.add_labels(transformed_seg)
+    napari.run()
 
 
-if __name__ == '__main__':
+def check_elastic_3d():
+    raw, seg = get_data()
+
+    deform = augmentation.RandomElasticDeformationStacked(alpha=(1.0, 1.0), p=1)
+    trafo = augmentation.KorniaAugmentationPipeline(deform)
+    transformed_raw, transformed_seg = trafo(raw[None, None], seg[None, None])
+    transformed_raw = transformed_raw.numpy().squeeze()
+    transformed_seg = transformed_seg.numpy().squeeze().astype("uint32")
+
+    viewer = napari.Viewer()
+    viewer.add_image(raw)
+    viewer.add_image(transformed_raw)
+    viewer.add_labels(seg)
+    viewer.add_labels(transformed_seg)
+    napari.run()
+
+
+if __name__ == "__main__":
     # check_kornia_augmentation()
     # check_default_augmentation()
-    check_elastic_2d()
+    # check_elastic_2d()
+    check_elastic_3d()

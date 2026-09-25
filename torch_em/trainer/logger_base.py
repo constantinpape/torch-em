@@ -1,12 +1,15 @@
 try:
-    from typing import Literal
+    from typing import Literal  # noqa
 except ImportError:
-    from typing_extensions import Literal  # type: ignore
+    from typing_extensions import Literal  # type: ignore  # noqa
 
 
 class TorchEmLogger:
-    def __init__(self, trainer, **kwargs):
+    """@private
+    """
+    def __init__(self, trainer, save_root, **kwargs):
         self.trainer = trainer
+        self.save_root = save_root
 
     def log_train(self, step, loss, lr, x, y, prediction, log_gradients=False):
         raise NotImplementedError

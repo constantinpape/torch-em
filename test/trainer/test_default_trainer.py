@@ -1,4 +1,5 @@
 import os
+import sys
 import unittest
 from shutil import rmtree
 
@@ -6,8 +7,7 @@ import h5py
 import numpy as np
 import torch
 
-from torch_em import default_segmentation_loader
-from torch_em.loss import DiceLoss
+import torch_em
 from torch_em.model import UNet2d
 
 
@@ -27,19 +27,29 @@ class TestDefaultTrainer(unittest.TestCase):
     def tearDown(self):
         if os.path.exists(self.data_path):
             os.remove(self.data_path)
-        if os.path.exists(self.checkpoint_folder):
-            rmtree(self.checkpoint_folder)
-        if os.path.exists(self.log_folder):
-            rmtree(self.log_folder)
+        rmtree(self.checkpoint_folder, ignore_errors=True)
+        rmtree(self.log_folder, ignore_errors=True)
 
-    def _get_kwargs(self, with_roi=False):
+    def _get_loader(self, with_roi=False, external=False):
         roi = np.s_[:6, :, :] if with_roi else None
-        loader = default_segmentation_loader(
-            raw_paths=self.data_path, raw_key="raw",
-            label_paths=self.data_path, label_key="labels",
-            batch_size=1, patch_shape=(1, 128, 128), ndim=2,
-            rois=roi,
-        )
+        if external:
+            ds = torch_em.default_segmentation_dataset(
+                raw_paths=self.data_path, raw_key="raw",
+                label_paths=self.data_path, label_key="labels",
+                patch_shape=(1, 128, 128), ndim=2,
+                rois=roi,
+            )
+            return torch.utils.data.DataLoader(ds, batch_size=1, shuffle=True)
+        else:
+            return torch_em.default_segmentation_loader(
+                raw_paths=self.data_path, raw_key="raw",
+                label_paths=self.data_path, label_key="labels",
+                batch_size=1, patch_shape=(1, 128, 128), ndim=2,
+                rois=roi,
+            )
+
+    def _get_kwargs(self, with_roi=False, compile_model=False, external=False):
+        loader = self._get_loader(with_roi=with_roi, external=external)
         model = UNet2d(in_channels=1, out_channels=1,
                        depth=2, initial_features=4)
         kwargs = {
@@ -47,18 +57,22 @@ class TestDefaultTrainer(unittest.TestCase):
             "train_loader": loader,
             "val_loader": loader,
             "model": model,
-            "loss": DiceLoss(),
-            "metric": DiceLoss(),
-            "optimizer": torch.optim.Adam(model.parameters(), lr=1e-5),
+            "loss": torch_em.loss.DiceLoss(),
+            "metric": torch_em.loss.DiceLoss(),
+            "optimizer": torch.optim.AdamW(model.parameters(), lr=1e-5),
             "device": torch.device("cpu"),
-            "mixed_precision": False,
+            "mixed_precision": True,
+            "compile_model": compile_model,
         }
         return kwargs
 
     def test_fit(self):
         from torch_em.trainer import DefaultTrainer
+
         trainer = DefaultTrainer(**self._get_kwargs())
         trainer.fit(10)
+        train_time = trainer.train_time
+        self.assertGreater(train_time, 0.0)
 
         save_folder = os.path.join(self.checkpoint_folder, self.name)
         self.assertTrue(os.path.exists(save_folder))
@@ -70,6 +84,7 @@ class TestDefaultTrainer(unittest.TestCase):
 
         trainer.fit(2)
         self.assertEqual(trainer.iteration, 12)
+        self.assertGreater(trainer.train_time, train_time)
 
         trainer = DefaultTrainer(**self._get_kwargs())
         trainer.fit(8, load_from_checkpoint="latest")
@@ -77,8 +92,37 @@ class TestDefaultTrainer(unittest.TestCase):
 
     def test_from_checkpoint(self):
         from torch_em.trainer import DefaultTrainer
+
         trainer = DefaultTrainer(**self._get_kwargs(with_roi=True))
         trainer.fit(10)
+        exp_model = trainer.model
+        exp_data_shape = trainer.train_loader.dataset.raw.shape
+
+        trainer2 = DefaultTrainer.from_checkpoint(
+            os.path.join(self.checkpoint_folder, self.name),
+            name="latest"
+        )
+        self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertEqual(trainer.train_time, trainer2.train_time)
+        self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
+        self.assertTrue(torch_em.util.model_is_equal(exp_model, trainer2.model))
+
+        # make sure that the optimizer was loaded properly
+        lr1 = [pm["lr"] for pm in trainer.optimizer.param_groups][0]
+        lr2 = [pm["lr"] for pm in trainer2.optimizer.param_groups][0]
+        self.assertEqual(lr1, lr2)
+
+        trainer2.fit(10)
+        self.assertEqual(trainer2.iteration, 20)
+
+    def test_from_checkpoint_external_dataloader(self):
+        from torch_em.trainer import DefaultTrainer
+
+        trainer = DefaultTrainer(**self._get_kwargs(with_roi=True, external=True))
+        self.assertFalse(hasattr(trainer.train_loader, "shuffle"))
+        self.assertFalse(hasattr(trainer.val_loader, "shuffle"))
+        trainer.fit(4)
+        exp_model = trainer.model
         exp_data_shape = trainer.train_loader.dataset.raw.shape
 
         trainer2 = DefaultTrainer.from_checkpoint(
@@ -87,11 +131,47 @@ class TestDefaultTrainer(unittest.TestCase):
         )
         self.assertEqual(trainer.iteration, trainer2.iteration)
         self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
+        self.assertTrue(torch_em.util.model_is_equal(exp_model, trainer2.model))
+        self.assertTrue(hasattr(trainer2.train_loader, "shuffle"))
+        self.assertTrue(hasattr(trainer2.val_loader, "shuffle"))
+        self.assertTrue(trainer2.train_loader.shuffle)
+        self.assertTrue(trainer2.val_loader.shuffle)
 
-        # make sure that the optimizer was loaded properly
-        lr1 = [pm["lr"] for pm in trainer.optimizer.param_groups][0]
-        lr2 = [pm["lr"] for pm in trainer2.optimizer.param_groups][0]
-        self.assertEqual(lr1, lr2)
+    def test_from_checkpoint_mixed_precision_dtype(self):
+        from torch_em.trainer import DefaultTrainer
+
+        kwargs = self._get_kwargs()
+        kwargs["mixed_precision_dtype"] = "bfloat16"
+        trainer = DefaultTrainer(**kwargs)
+        self.assertFalse(trainer.scaler.is_enabled())
+        trainer.fit(4)
+
+        trainer2 = DefaultTrainer.from_checkpoint(
+            os.path.join(self.checkpoint_folder, self.name),
+            name="latest"
+        )
+        self.assertEqual(trainer2.mixed_precision_dtype, "bfloat16")
+        self.assertFalse(trainer2.scaler.is_enabled())
+
+        trainer2.fit(4)
+        self.assertEqual(trainer2.iteration, 8)
+
+    @unittest.skipIf(sys.version_info.minor > 10, "Not supported for python > 3.10")
+    def test_compiled_model(self):
+        from torch_em.trainer import DefaultTrainer
+
+        trainer = DefaultTrainer(**self._get_kwargs(compile_model=True))
+        trainer.fit(10)
+        exp_model = trainer.model
+        exp_data_shape = trainer.train_loader.dataset.raw.shape
+
+        trainer2 = DefaultTrainer.from_checkpoint(
+            os.path.join(self.checkpoint_folder, self.name),
+            name="latest"
+        )
+        self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertEqual(trainer2.train_loader.dataset.raw.shape, exp_data_shape)
+        self.assertTrue(torch_em.util.model_is_equal(exp_model, trainer2.model))
 
         trainer2.fit(10)
         self.assertEqual(trainer2.iteration, 20)

@@ -15,14 +15,25 @@ def prepare_shallow2deep_isbi(args, out_folder):
     raw_transform = torch_em.transform.raw.normalize
     label_transform = shallow2deep.BoundaryTransform(ndim=2)
 
-    shallow2deep.prepare_shallow2deep(
-        raw_paths=args.input, raw_key="volumes/raw",
-        label_paths=args.input, label_key="volumes/labels/neuron_ids_3d",
-        patch_shape_min=patch_shape_min, patch_shape_max=patch_shape_max,
-        n_forests=args.n_rfs, n_threads=args.n_threads,
-        output_folder=out_folder, ndim=2,
-        raw_transform=raw_transform, label_transform=label_transform,
-    )
+    if args.train_advanced:
+        shallow2deep.prepare_shallow2deep_advanced(
+            raw_paths=args.input, raw_key="volumes/raw",
+            label_paths=args.input, label_key="volumes/labels/neuron_ids_3d",
+            patch_shape_min=patch_shape_min, patch_shape_max=patch_shape_max,
+            n_forests=args.n_rfs, n_threads=args.n_threads,
+            output_folder=out_folder, ndim=2,
+            raw_transform=raw_transform, label_transform=label_transform,
+            forests_per_stage=25, sample_fraction_per_stage=0.1
+        )
+    else:
+        shallow2deep.prepare_shallow2deep(
+            raw_paths=args.input, raw_key="volumes/raw",
+            label_paths=args.input, label_key="volumes/labels/neuron_ids_3d",
+            patch_shape_min=patch_shape_min, patch_shape_max=patch_shape_max,
+            n_forests=args.n_rfs, n_threads=args.n_threads,
+            output_folder=out_folder, ndim=2,
+            raw_transform=raw_transform, label_transform=label_transform,
+        )
 
 
 def get_isbi_loader(args, split, rf_folder):
@@ -54,7 +65,7 @@ def get_isbi_loader(args, split, rf_folder):
 
 
 def train_shallow2deep(args):
-    name = "isbi2d"
+    name = "isbi2d-advanced" if args.train_advanced else "isbi2d"
 
     # check if we need to train the rfs for preparation
     rf_folder = os.path.join("checkpoints", name, "rfs")
@@ -133,6 +144,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--pseudo_label", type=int, default=0)
     parser.add_argument("--n_rfs", type=int, default=500)
     parser.add_argument("--n_threads", type=int, default=32)
+    parser.add_argument("--train_advanced", "-a", default=0)
     args = parser.parse_args()
     if args.check:
         check_loader(args)

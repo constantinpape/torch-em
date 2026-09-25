@@ -1,7 +1,9 @@
 import os
 import unittest
+from glob import glob
 from shutil import rmtree
 
+import imageio.v3 as imageio
 import h5py
 import numpy as np
 import torch
@@ -37,16 +39,9 @@ class TestSegmentation(unittest.TestCase):
             )
 
     def tearDown(self):
-
-        def _remove(folder):
-            try:
-                rmtree(folder)
-            except OSError:
-                pass
-
-        _remove(self.tmp_folder)
-        _remove("./logs")
-        _remove("./checkpoints")
+        rmtree(self.tmp_folder, ignore_errors=True)
+        rmtree("./logs", ignore_errors=True)
+        rmtree("./checkpoints", ignore_errors=True)
 
     def _test_training(self, model_class, model_kwargs,
                        train_loader, val_loader, n_iterations):
@@ -56,13 +51,12 @@ class TestSegmentation(unittest.TestCase):
                                                train_loader, val_loader,
                                                mixed_precision=False,
                                                device=torch.device("cpu"),
-                                               logger=None)
-        train_iters = 51
-        trainer.fit(train_iters)
+                                               logger=None, compile_model=False)
+        trainer.fit(n_iterations)
 
         def _test_checkpoint(cp_path, check_progress):
             self.assertTrue(os.path.exists(cp_path))
-            checkpoint = torch.load(cp_path)
+            checkpoint = torch.load(cp_path, weights_only=False)
 
             self.assertIn("optimizer_state", checkpoint)
             self.assertIn("model_state", checkpoint)
@@ -71,7 +65,7 @@ class TestSegmentation(unittest.TestCase):
             loaded_model.load_state_dict(checkpoint["model_state"])
 
             if check_progress:
-                self.assertEqual(checkpoint["iteration"], train_iters)
+                self.assertEqual(checkpoint["iteration"], n_iterations)
                 self.assertEqual(checkpoint["epoch"], 2)
 
         _test_checkpoint("./checkpoints/test/latest.pt", True)
@@ -170,6 +164,66 @@ class TestSegmentation(unittest.TestCase):
                                                  n_samples=5)
 
         model_kwargs = dict(in_channels=3, out_channels=1, initial_features=8, depth=3)
+        self._test_training(UNet2d, model_kwargs, train_loader, val_loader, n_iterations=51)
+
+    def test_invalid_empty_roi_message(self):
+        from torch_em.segmentation import default_segmentation_loader
+
+        with self.assertRaisesRegex(ValueError, 'Invalid roi .* empty region'):
+            default_segmentation_loader(
+                self.data_path, self.raw_key,
+                self.data_path, self.semantic_label_key,
+                batch_size=1,
+                patch_shape=(1, 64, 64),
+                rois=np.s_[:0, :, :],
+            )
+
+    def test_roi_smaller_than_patch_shape(self):
+        from torch_em.segmentation import default_segmentation_loader
+
+        patch_shape = (64, 64, 64)
+        loader = default_segmentation_loader(
+            self.data_path, self.raw_key,
+            self.data_path, self.semantic_label_key,
+            batch_size=1,
+            patch_shape=patch_shape,
+            rois=(slice(0, 10), slice(0, 10), slice(0, 10)),
+        )
+
+        raw, labels = loader.dataset[0]
+        self.assertEqual(raw.shape, (1,) + patch_shape)
+        self.assertEqual(labels.shape, (1,) + patch_shape)
+
+    def test_training_with_numpy_data(self):
+        from torch_em.segmentation import default_segmentation_loader
+        from torch_em.transform import labels_to_binary
+        from torch_em.model import UNet2d
+        from torch_em.data import TensorDataset
+        model_kwargs = dict(in_channels=1, out_channels=1, initial_features=8, depth=3)
+
+        batch_size = 1
+        patch_shape = (256,) * 2
+
+        label_trafo = labels_to_binary
+
+        raw_paths = sorted(glob(os.path.join(self.tmp_folder, "images", "*tif")))
+        label_paths = sorted(glob(os.path.join(self.tmp_folder, "labels", "*tif")))
+        images = [imageio.imread(rp) for rp in raw_paths]
+        labels = [imageio.imread(lp) for lp in label_paths]
+
+        train_loader = default_segmentation_loader(images, None,
+                                                   labels, None,
+                                                   batch_size, patch_shape,
+                                                   label_transform=label_trafo,
+                                                   n_samples=25)
+        self.assertIsInstance(train_loader.dataset, TensorDataset)
+        val_loader = default_segmentation_loader(images, None,
+                                                 labels, None,
+                                                 batch_size, patch_shape,
+                                                 label_transform=label_trafo,
+                                                 n_samples=5)
+        self.assertIsInstance(val_loader.dataset, TensorDataset)
+
         self._test_training(UNet2d, model_kwargs, train_loader, val_loader, n_iterations=51)
 
 

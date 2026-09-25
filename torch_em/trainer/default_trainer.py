@@ -1,46 +1,112 @@
-import contextlib
+from __future__ import annotations
+
 import os
 import time
+import inspect
 import warnings
+import contextlib
+from tqdm import tqdm
+from functools import partial
+from datetime import datetime
+from collections import OrderedDict
 from importlib import import_module
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union, Literal
 
 import numpy as np
-import torch
-import torch.cuda.amp as amp
-from tqdm import tqdm
 
-from .tensorboard_logger import TensorboardLogger
+import torch
+
 from .wandb_logger import WandbLogger
-from ..util import get_constructor_arguments
+from .tensorboard_logger import TensorboardLogger
+from ..util import auto_compile, get_constructor_arguments, is_compiled
 
 
 class DefaultTrainer:
-    """ Trainer class for 2d/3d training on a single GPU.
+    """Trainer class for training a segmentation network.
+
+    The trainer class implements the core logic for training a network with pytorch.
+    It implements a training loop to run training and validation, which is started with `fit`.
+    The checkpoints and logs from the training run will be saved in the current working directory,
+    or in the directory specifified by `save_root`. Training can be continued from a checkpoint
+    by passing it's location to the `load_from_checkpoint` argument of `fit`.
+
+    A pre-configured instance of the trainer can be obtained from `torch_em.default_segmentation_trainer`.
+    Alternatively, the trainer class can also be instantiated as in this example:
+    ```python
+    import torch
+    from torch_em.loss import DiceLoss
+    from torch_em.model import UNet2d
+    from torch_em.data.datasets.light_microscopy import get_dsb_loader
+    from torch_em.trainer import DefaultTrainer
+
+    # The training data will be downloaded to this location.
+    data_root = "/path/to/save/the/training/data"
+    patch_shape = (256, 256)
+
+    # Create the model and optimizer.
+    model = UNet2d(in_channels=1, out_channels=1)
+    optimizer = torch.optim.AdamW(model.parameters())
+
+    trainer = DefaultTrainer(
+        name="unet-training",
+        train_loader=get_dsb_loader(path=data_root, patch_shape=patch_shape, split="train"),
+        val_loader=get_dsb_loader(path=data_root, patch_shape=patch_shape, split="test"),
+        model=model,
+        loss=DiceLoss(),  # The loss function.
+        optimizer=optimizer,
+        metric=DiceLoss(),  # The metric. The trainer expects smaller values to represent better results.
+        device="cuda",  # The device to use for training.
+    )
+    trainer.fit(iterations=int(2.5e4))  # Train for 25.000 iterations.
+    ```
+
+    Args:
+        name: The name of the checkpoint that will be created by the trainer.
+        train_loader: The data loader containing the training data.
+        val_loader: The data loader containing the validation data.
+        model: The model to train.
+        loss: The loss function for training.
+        optimizer: The optimizer.
+        metric: The metric for validation.
+        device: The torch device to use for training. If None, will use a GPU if available.
+        lr_scheduler: The learning rate scheduler.
+        log_image_interval: The interval for saving images during logging, in training iterations.
+        mixed_precision: Whether to train with mixed precision.
+        early_stopping: The patience for early stopping in epochs. If None, early stopping will not be used.
+        logger: The logger class. Will be instantiated for logging.
+            By default uses `torch_em.training.tensorboard_logger.TensorboardLogger`.
+        logger_kwargs: The keyword arguments for the logger class.
+        id_: Unique identifier for the trainer. If None then `name` will be used.
+        save_root: The root folder for saving the checkpoint and logs.
+        compile_model: Whether to compile the model before training.
+        rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+        mixed_precision_dtype: The dtype for autocast in mixed precision training, 'float16' or 'bfloat16'.
+            The default is 'float16' on the GPU and 'bfloat16' on the CPU. Use 'bfloat16' to avoid overflows.
     """
     def __init__(
         self,
         name: Optional[str],
-        train_loader=None,
-        val_loader=None,
-        model=None,
-        loss=None,
-        optimizer=None,
-        metric=None,
-        device=None,
-        lr_scheduler=None,
-        log_image_interval=100,
-        mixed_precision=True,
-        early_stopping=None,
+        train_loader: torch.utils.data.DataLoader,
+        val_loader: torch.utils.data.DataLoader,
+        model: torch.nn.Module,
+        loss: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        metric: Callable,
+        device: Union[str, torch.device],
+        lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
+        log_image_interval: int = 100,
+        mixed_precision: bool = True,
+        early_stopping: Optional[int] = None,
         logger=TensorboardLogger,
         logger_kwargs: Optional[Dict[str, Any]] = None,
         id_: Optional[str] = None,
+        save_root: Optional[str] = None,
+        compile_model: Optional[Union[bool, str]] = None,
+        rank: Optional[int] = None,
+        mixed_precision_dtype: Optional[str] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
             raise TypeError("Name cannot be None if not using the WandbLogger")
-
-        if not all(hasattr(loader, "shuffle") for loader in [train_loader, val_loader]):
-            raise ValueError(f"{self.__class__} requires any dataloader to have 'shuffle' attribute.")
 
         self._generate_name = name is None
         self.name = name
@@ -51,27 +117,43 @@ class DefaultTrainer:
         self.loss = loss
         self.optimizer = optimizer
         self.metric = metric
-        self.device = device
+        self.device = torch.device(device)
         self.lr_scheduler = lr_scheduler
         self.log_image_interval = log_image_interval
+        self.save_root = save_root
+        self.compile_model = compile_model
+        self.rank = rank
+        self._device_type = "cpu" if self.device.type == "cpu" else "cuda"
 
         self._iteration = 0
         self._epoch = 0
         self._best_epoch = 0
 
         self.mixed_precision = mixed_precision
+        # These are the defaults of torch.autocast for each device type.
+        self.mixed_precision_dtype = mixed_precision_dtype or ("bfloat16" if self._device_type == "cpu" else "float16")
         self.early_stopping = early_stopping
+        self.train_time = 0.0
 
-        self.scaler = amp.GradScaler() if self.mixed_precision else None
+        if mixed_precision:
+            # Only float16 needs gradient scaling. bfloat16 has the same range as float32.
+            self.scaler = torch.GradScaler(self._device_type, enabled=self.mixed_precision_dtype == "float16")
+        else:
+            self.scaler = None
 
         self.logger_class = logger
         self.logger_kwargs = logger_kwargs
         self.log_image_interval = log_image_interval
 
-    @property  # because the logger may generate and set trainer.id on logger.__init__
+    @property
     def checkpoint_folder(self):
-        assert self.id_ is not None
-        return os.path.join("./checkpoints", self.id_)
+        assert self.id_ is not None  # Because the logger may generate and set trainer.id on logger.__init__.
+        # Save_root enables saving the checkpoints somewhere else than in the local folder.
+        # This is handy for filesystems with limited space, where saving the checkpoints
+        # and log files can lead to running out of space.
+        save_root = getattr(self, "save_root", None)
+        return os.path.join("./checkpoints", self.id_) if save_root is None else\
+            os.path.join(save_root, "./checkpoints", self.id_)
 
     @property
     def iteration(self):
@@ -82,7 +164,7 @@ class DefaultTrainer:
         return self._epoch
 
     class Deserializer:
-        """Determines how to deserialize the trainer kwargs from serialized 'init_data'
+        """Determines how to deserialize the trainer kwargs from serialized 'init_data'.
 
         Examples:
             To extend the initialization process you can inherite from this Deserializer in an inherited Trainer class.
@@ -97,61 +179,70 @@ class DefaultTrainer:
             >>>
             >>>     class Deserializer(DefaultTrainer.Deserializer):
             >>>         def load_the_answer(self):
-            >>>             generic_answer = self.init_data["the_answer"]  # default Deserializer would return this
+            >>>             generic_answer = self.init_data["the_answer"]
             >>>             # (device dependent) special deserialization
-            >>>             if self.device.type == "cpu":
-            >>>                 return generic_answer + 1
+            >>>             if self.trainer_kwargs["device"].type == "cpu":  # accessing previously deserialized kwarg
+            >>>                 self.trainer_kwargs["the_answer"] = generic_answer + 1
             >>>             else:
-            >>>                 return generic_answer * 2
+            >>>                 self.trainer_kwargs["the_answer"] = generic_answer * 2
+
+        Args:
+            init_data: The initialization data of the trainer.
+            save_path: The path where the checkpoint was saved.
+            device: The device.
         """
 
-        def __init__(self, init_data: dict, save_path: str, device: Union[str, torch.device]):
+        def __init__(self, init_data: Dict, save_path: str, device: Union[str, torch.device]):
             self.init_data = init_data
             self.save_path = save_path
-            self.device = torch.device(self.init_data["device"]) if device is None else torch.device(device)
+            # Populate with deserialized trainer kwargs during deserialization; possibly overwrite 'device'.
+            self.trainer_kwargs: Dict[str, Any] = dict(
+                device=torch.device(self.init_data["device"]) if device is None else torch.device(device)
+            )
 
-        def __call__(
-            self,
-            kwarg_name: str,
-            *dynamic_args,
-            optional=False,
-            only_class=False,
-            dynamic_kwargs: Optional[Dict[str, Any]] = None,
-        ):
+        def load(self, kwarg_name: str, optional):
+            """@private
+            """
+            # `optional` is True if self.trainer.__class__.__init__ specifies a default value for 'kwarg_name'
             if kwarg_name == "device":
-                return self.device
+                pass  # deserialized in __init__
             elif kwarg_name.endswith("_loader"):
-                return self.load_data_loader(kwarg_name)
+                self.load_data_loader(kwarg_name, optional)
             else:
                 load = getattr(self, f"load_{kwarg_name}", self.load_generic)
+                load(kwarg_name, optional=optional)
 
-                return load(
-                    kwarg_name, *dynamic_args, optional=optional, only_class=only_class, dynamic_kwargs=dynamic_kwargs
-                )
+        def load_data_loader(self, loader_name, optional) -> None:
+            """@private
+            """
+            ds = self.init_data.get(loader_name.replace("_loader", "_dataset"))
+            if ds is None and optional:
+                return
 
-        def load_data_loader(self, loader_name):
-            ds = self.init_data[loader_name.replace("_loader", "_dataset")]
             loader_kwargs = self.init_data[f"{loader_name}_kwargs"]
             loader = torch.utils.data.DataLoader(ds, **loader_kwargs)
             # monkey patch shuffle loader_name to the loader
             loader.shuffle = loader_kwargs.get("shuffle", False)
-            return loader
+            self.trainer_kwargs[loader_name] = loader
 
         def load_generic(
             self,
             kwarg_name: str,
-            *dynamic_args,
+            *dynamic_args: Dict,
             optional: bool,
-            only_class: bool,
-            dynamic_kwargs: Optional[Dict[str, Any]],
-        ):
+            only_class: bool = False,
+            dynamic_kwargs: Optional[Dict[str, Any]] = None,
+        ) -> None:
+            """@private
+            """
             if kwarg_name in self.init_data:
-                return self.init_data[kwarg_name]
+                self.trainer_kwargs[kwarg_name] = self.init_data[kwarg_name]
+                return
 
             this_cls = self.init_data.get(f"{kwarg_name}_class", None)
             if this_cls is None:
                 if optional:
-                    return None
+                    return
                 else:
                     raise RuntimeError(f"Could not find init data for {kwarg_name} in {self.save_path}")
 
@@ -160,95 +251,256 @@ class DefaultTrainer:
             cls_p, cls_m = this_cls.rsplit(".", 1)
             this_cls = getattr(import_module(cls_p), cls_m)
             if only_class:
-                return this_cls
+                self.trainer_kwargs[kwarg_name] = this_cls
             else:
-                return this_cls(
+                self.trainer_kwargs[kwarg_name] = this_cls(
                     *dynamic_args, **self.init_data.get(f"{kwarg_name}_kwargs", {}), **(dynamic_kwargs or {})
                 )
+
+        def load_name(self, kwarg_name: str, optional: bool):
+            """@private
+            """
+            self.trainer_kwargs[kwarg_name] = os.path.split(os.path.dirname(self.save_path))[1]
+
+        def load_optimizer(self, kwarg_name: str, optional: bool):
+            """@private
+            """
+            self.load_generic(kwarg_name, self.trainer_kwargs["model"].parameters(), optional=optional)
+
+        def load_lr_scheduler(self, kwarg_name: str, optional: bool):
+            """@private
+            """
+            self.load_generic(kwarg_name, self.trainer_kwargs["optimizer"], optional=optional)
+
+        # todo: remove and rename kwarg 'logger' to 'logger_class'
+        def load_logger(self, kwarg_name: str, optional: bool):
+            """@private
+            """
+            assert kwarg_name == "logger"
+            self.load_generic("logger", optional=optional, only_class=True)
 
     @staticmethod
     def _get_save_dict(save_path, device):
         if not os.path.exists(save_path):
             raise ValueError(f"Cannot find checkpoint {save_path}")
-
-        return torch.load(save_path, map_location=device)
-
-    @staticmethod
-    def _get_trainer_kwargs(load: Deserializer):
-        model = load("model")
-        optimizer = load("optimizer", model.parameters())
-
-        kwargs = dict(
-            name=os.path.split(os.path.dirname(load.save_path))[1],
-            model=model,
-            optimizer=optimizer,
-            lr_scheduler=load("lr_scheduler", optimizer, optional=True),
-            logger=load("logger", only_class=True, optional=True),
-            logger_kwargs=load("logger_kwargs", optional=True),
-        )
-        for kw_name in [
-            "train_loader",
-            "val_loader",
-            "loss",
-            "metric",
-            "device",
-            "log_image_interval",
-            "mixed_precision",
-            "early_stopping",
-        ]:
-            kwargs[kw_name] = load(kw_name)
-
-        return kwargs
+        return torch.load(save_path, map_location=device, weights_only=False)
 
     @classmethod
-    def from_checkpoint(cls, checkpoint_folder, name="best", device=None):
+    def from_checkpoint(
+        cls,
+        checkpoint_folder: Union[os.PathLike, str],
+        name: Literal["best", "latest"] = "best",
+        device: Optional[Union[str, torch.device]] = None,
+    ):
+        """@private
+        """
         save_path = os.path.join(checkpoint_folder, f"{name}.pt")
+        # make sure the correct device is set if we don't have access to CUDA
+        if not torch.cuda.is_available():
+            device = "cpu"
         save_dict = cls._get_save_dict(save_path, device)
         deserializer = cls.Deserializer(save_dict["init"], save_path, device)
-        trainer_kwargs = cls._get_trainer_kwargs(deserializer)
-        trainer = cls(**trainer_kwargs)
+
+        has_kwargs = False
+        deserialized = []
+        for name, parameter in inspect.signature(cls).parameters.items():
+            if name == "kwargs":
+                has_kwargs = True
+                continue
+            deserializer.load(name, optional=parameter.default is not inspect.Parameter.empty)
+            deserialized.append(name)
+
+        # to deserialze kwargs we can't rely on inspecting the signature, so we
+        # go through the remaning kwarg names in init data instead
+        if has_kwargs:
+            kwarg_names = list(set(deserializer.init_data.keys()) - set(deserialized))
+            for name in kwarg_names:
+                if name.endswith("_kwargs"):
+                    continue
+                elif name.endswith("_dataset"):
+                    deserializer.load(name.replace("dataset", "loader"), optional=False)
+                elif name.endswith("_class"):
+                    deserializer.load(name.replace("_class", ""), optional=False)
+                else:
+                    deserializer.load(name, optional=False)
+
+        trainer = cls(**deserializer.trainer_kwargs)
         trainer._initialize(0, save_dict)
+        trainer._is_initialized = True
         return trainer
 
-    def _build_init(self):
+    class Serializer:
+        """Implements how to serialize trainer kwargs from a trainer instance.
 
-        def _full_class_path(obj):
-            return f"{obj.__class__.__module__}.{obj.__class__.__name__}"
+        Examples:
+            To extend the serialization process you can inherite from this Serializer in a derived Trainer class.
+            Note that the methods `dump_generic_builtin()`, `dump_generic_class()` and `dump_generic_instance()`
+            called by the `dump()` method when appropriate cover most cases already.
 
-        def _full_class_path_of_class(obj):
-            return f"{obj.__module__}.{obj.__name__}"
+            This example adds `the_answer` kwarg, which requires extra steps on dumping only because we don't keep a
+            'the_answer' attribute:
+            >>> class MyTrainer(DefaultTrainer):
+            >>>     def __init__(self, *args, the_answer: int, **kwargs):
+            >>>         super().__init__(*args, **kwargs)
+            >>>         # self.the_answer = the_answer  # this would allow the default Serializer to save the new kwarg,
+            >>>         # but let's make things more interesting...
+            >>>         self.the = the_answer // 10
+            >>>         self.answer = the_answer % 10
+            >>>
+            >>>     class Serializer(DefaultTrainer.Serializer):
+            >>>         trainer: MyTrainer
+            >>>         def dump_the_answer(self, kwarg_name: str) -> None:  # custom dump method for 'the_answer' kwarg
+            >>>             assert kwarg_name == "the_answer"
+            >>>             # populate self.init_data with the serialized data required by Deserializer
+            >>>             # to restore the trainer kwargs
+            >>>             self.init_data["the_answer"] = self.trainer.the * 10 + self.trainer.answer
 
-        def _update_loader(init_data, loader, name):
-            init_data.update({
-                f"{name}_dataset": loader.dataset,
-                f"{name}_loader_kwargs": get_constructor_arguments(loader)
-            })
-            return init_data
+            This example with both Serializer and Deserializer adds `the_answer` kwarg,
+            while saving it in two separate entries 'the' and 'answer'
+            >>> class MyTrainer(DefaultTrainer):
+            >>>     def __init__(self, *args, the_answer: int, **kwargs):
+            >>>         super().__init__(*args, **kwargs)
+            >>>         self.the_answer = the_answer
+            >>>
+            >>>     class Serializer(DefaultTrainer.Serializer):
+            >>>         trainer: MyTrainer
+            >>>         def dump_the_answer(self, kwarg_name: str):
+            >>>             assert kwarg_name == "the_answer"
+            >>>             self.init_data.update({
+            >>>                 "the": self.trainer.the_answer // 10,
+            >>>                 "answer": self.trainer.the_answer % 10
+            >>>             })
+            >>>
+            >>>     class Deserializer(DefaultTrainer.Deserializer):
+            >>>         def load_the_answer(self, kwarg_name: str, optional: bool):
+            >>>             assert kwarg_name == "the_answer"
+            >>>             # 'optional' is True if MyTrainer.__init__ specifies a default value for 'kwarg_name'
+            >>>             self.trainer_kwargs[kwarg_name] = self.init_data["the"] * 10 + self.init_data["answer"]
 
-        init_data = {
-            "model_class": _full_class_path(self.model),
-            "model_kwargs": get_constructor_arguments(self.model),
-            "loss_class": _full_class_path(self.loss),
-            "loss_kwargs": get_constructor_arguments(self.loss),
-            "optimizer_class": _full_class_path(self.optimizer),
-            "optimizer_kwargs": get_constructor_arguments(self.optimizer),
-            "metric_class": _full_class_path(self.metric),
-            "metric_kwargs": get_constructor_arguments(self.metric),
-            "device": self.device.type,
-            "log_image_interval": self.log_image_interval,
-            "mixed_precision": self.mixed_precision,
-            "early_stopping": self.early_stopping,
-            "logger_class": None if self.logger_class is None else _full_class_path_of_class(self.logger_class),
-            "logger_kwargs": self.logger_kwargs,
-        }
-        init_data = _update_loader(init_data, self.train_loader, "train")
-        init_data = _update_loader(init_data, self.val_loader, "val")
-        if self.lr_scheduler is not None:
-            init_data["lr_scheduler_class"] = _full_class_path(self.lr_scheduler)
-            init_data["lr_scheduler_kwargs"] = get_constructor_arguments(self.lr_scheduler)
-        return init_data
+        Args:
+            trainer: The trainer instance.
+        """
 
-    def _initialize(self, iterations, load_from_checkpoint):
+        def __init__(self, trainer: DefaultTrainer):
+            self.trainer = trainer
+            self.init_data = {}  # to be populated during serialization process
+
+        def dump(self, kwarg_name: str) -> None:
+            """@private
+            """
+            dumper = getattr(self, f"dump_{kwarg_name}", None)
+            if dumper is not None:
+                dumper(kwarg_name)
+            elif kwarg_name.endswith("_loader"):
+                self.dump_data_loader(kwarg_name)
+            elif kwarg_name.endswith("_class"):
+                self.dump_generic_class(kwarg_name)
+            elif not hasattr(self.trainer, kwarg_name):
+                raise AttributeError(
+                    f"{self.trainer.__class__} missing attribute '{kwarg_name}' "
+                    f"or special dump method {self.trainer.__class__}.Serializer.dump_{kwarg_name}()"
+                )
+            else:
+                assert hasattr(self.trainer, kwarg_name)
+                obj = getattr(self.trainer, kwarg_name)
+                if obj is None or type(obj) in (
+                    bool,
+                    bytearray,
+                    bytes,
+                    dict,
+                    float,
+                    frozenset,
+                    int,
+                    list,
+                    set,
+                    str,
+                    tuple,
+                ):
+                    self.dump_generic_builtin(kwarg_name)
+                else:
+                    self.dump_generic_instance(kwarg_name)
+
+        def dump_generic_builtin(self, kwarg_name: str) -> None:
+            """@private
+            """
+            assert hasattr(self.trainer, kwarg_name)
+            self.init_data[kwarg_name] = getattr(self.trainer, kwarg_name)
+
+        def dump_generic_class(self, kwarg_name: str) -> None:
+            """@private
+            """
+            assert hasattr(self.trainer, kwarg_name)
+            assert kwarg_name.endswith("_class")
+            obj = getattr(self.trainer, kwarg_name)
+            self.init_data[kwarg_name] = None if obj is None else f"{obj.__module__}.{obj.__name__}"
+
+        def dump_generic_instance(self, kwarg_name: str) -> None:
+            """@private
+            """
+            assert hasattr(self.trainer, kwarg_name)
+            instance = getattr(self.trainer, kwarg_name)
+            self.init_data.update(
+                {
+                    f"{kwarg_name}_class": f"{instance.__class__.__module__}.{instance.__class__.__name__}",
+                    f"{kwarg_name}_kwargs": get_constructor_arguments(instance),
+                }
+            )
+
+        def dump_device(self, kwarg_name: str):
+            """@private
+            """
+            assert hasattr(self.trainer, kwarg_name)
+            self.init_data[kwarg_name] = str(getattr(self.trainer, kwarg_name))
+
+        def dump_data_loader(self, kwarg_name: str) -> None:
+            """@private
+            """
+            assert hasattr(self.trainer, kwarg_name)
+            loader = getattr(self.trainer, kwarg_name)
+            if loader is None:
+                return
+            self.init_data.update(
+                {
+                    f"{kwarg_name.replace('_loader', '_dataset')}": loader.dataset,
+                    f"{kwarg_name}_kwargs": get_constructor_arguments(loader),
+                }
+            )
+
+        def dump_logger(self, kwarg_name: str):  # todo: remove and rename kwarg 'logger' to 'logger_class'
+            """@private
+            """
+            self.dump_generic_class(f"{kwarg_name}_class")
+
+        def dump_model(self, kwarg_name: str):
+            """@private
+            """
+            if is_compiled(self.trainer.model):
+                self.init_data.update(
+                    {"model_class": self.trainer._model_class, "model_kwargs": self.trainer._model_kwargs}
+                )
+            else:
+                self.dump_generic_instance("model")
+
+    def _build_init(self) -> Dict[str, Any]:
+        serializer = self.Serializer(self)
+        for name in inspect.signature(self.__class__).parameters:
+            # special rules to serialize kwargs
+            # if a trainer class inherits from DefaultTrainer and has **kwargs
+            # they need to be saved in self._kwargs
+            if name == "kwargs":
+                if not hasattr(self, "_kwargs"):
+                    msg = "The trainer class has **kwargs in its signature, but is missing the _kwargs attribute. " +\
+                          "Please add self._kwargs to its __init__ function"
+                    raise RuntimeError(msg)
+                kwargs = getattr(self, "_kwargs")
+                for kwarg_name in kwargs:
+                    serializer.dump(kwarg_name)
+                continue
+            serializer.dump(name)
+
+        return serializer.init_data
+
+    def _initialize(self, iterations, load_from_checkpoint, epochs=None):
         assert self.train_loader is not None
         assert self.val_loader is not None
         assert self.model is not None
@@ -260,53 +512,104 @@ class DefaultTrainer:
         if load_from_checkpoint is not None:
             self.load_checkpoint(load_from_checkpoint)
 
+        if sum((iterations is not None, epochs is not None)) != 1:
+            raise ValueError(
+                "Exactly one of 'iterations' or 'epochs' has to be specified to initialize the trainer."
+                f"You have passed 'iterations'={iterations} and 'epochs'={epochs}"
+            )
+
+        if epochs is None:
+            epochs = int(np.ceil(float(iterations) / len(self.train_loader)))
+        else:
+            iterations = epochs * len(self.train_loader)
+
         self.max_iteration = self._iteration + iterations
-        epochs = int(np.ceil(float(iterations) / len(self.train_loader)))
         self.max_epoch = self._epoch + epochs
 
-        self.model.to(self.device)
-        self.loss.to(self.device)
+        if not getattr(self, "_is_initialized", False):
+            # check if we compile the model (only supported by pytorch 2)
+            # to enable (de)serialization of compiled models, we keep track of the model class and kwargs
+            if is_compiled(self.model):
+                warnings.warn(
+                    "You have passed a compiled model to the trainer."
+                    "It will not be possible to (de)serialize the trainer with it."
+                    "If you want to be able to do this please pass the normal model."
+                    "It can be automatically compiled by setting 'compile_model' to True"
+                )
+            self._model_class = f"{self.model.__class__.__module__}.{self.model.__class__.__name__}"
+            self._model_kwargs = get_constructor_arguments(self.model)
+            self.model = auto_compile(self.model, self.compile_model)
 
-        # this saves all the information that is necessary
-        # to fully load the trainer from the checkpoint
-        self.init_data = self._build_init()
+            self.model.to(self.device)
+            self.loss.to(self.device)
 
-        if self.logger_class is None:
-            self.logger = None
-        else:
-            # may set self.name if self.name is None
-            self.logger = self.logger_class(self, **(self.logger_kwargs or {}))
+            # this saves all the information that is necessary
+            # to fully load the trainer from the checkpoint
+            self.init_data = self._build_init()
 
-        os.makedirs(self.checkpoint_folder, exist_ok=True)
+            if self.logger_class is None:
+                self.logger = None
+            else:
+                # may set self.name if self.name is None
+                save_root = getattr(self, "save_root", None)
+                try:
+                    self.logger = self.logger_class(self, save_root, **(self.logger_kwargs or {}))
+                except (PermissionError, RuntimeError):
+                    warnings.warn(
+                        f"The checkpoint folder at {self.checkpoint_folder} could not be created."
+                        "The most likely reason for this is that you copied the checkpoint somewhere else,"
+                        "so we skip this error to enable loading the model from this checkpoint."
+                    )
+
+            try:
+                os.makedirs(self.checkpoint_folder, exist_ok=True)
+            except PermissionError:
+                warnings.warn(
+                    f"The checkpoint folder at {self.checkpoint_folder} could not be created."
+                    "The most likely reason for this is that you copied the checkpoint somewhere else,"
+                    "so we skip this error to enable loading the model from this checkpoint."
+                )
+                pass
 
         best_metric = np.inf
         return best_metric
 
-    def save_checkpoint(self, name, best_metric, **extra_save_dict):
+    def save_checkpoint(self, name, current_metric, best_metric, train_time=0.0, **extra_save_dict):
+        """@private
+        """
         save_path = os.path.join(self.checkpoint_folder, f"{name}.pt")
+        extra_init_dict = extra_save_dict.pop("init", {})
         save_dict = {
             "iteration": self._iteration,
             "epoch": self._epoch,
             "best_epoch": self._best_epoch,
             "best_metric": best_metric,
+            "current_metric": current_metric,
             "model_state": self.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
-            "init": self.init_data
+            "init": self.init_data | extra_init_dict,
+            "train_time": train_time,
+            "timestamp": datetime.now().strftime("%d-%m-%Y (%H:%M:%S)"),
         }
         save_dict.update(**extra_save_dict)
         if self.scaler is not None:
             save_dict.update({"scaler_state": self.scaler.state_dict()})
         if self.lr_scheduler is not None:
             save_dict.update({"scheduler_state": self.lr_scheduler.state_dict()})
-        torch.save(save_dict, save_path)
+
+        rank = getattr(self, "rank", None)
+        if rank is None or rank == 0:
+            torch.save(save_dict, save_path)
 
     def load_checkpoint(self, checkpoint="best"):
+        """@private
+        """
         if isinstance(checkpoint, str):
             save_path = os.path.join(self.checkpoint_folder, f"{checkpoint}.pt")
             if not os.path.exists(save_path):
                 warnings.warn(f"Cannot load checkpoint. {save_path} does not exist.")
                 return
-            save_dict = torch.load(save_path)
+            save_dict = torch.load(save_path, weights_only=False)
         elif isinstance(checkpoint, dict):
             save_dict = checkpoint
         else:
@@ -316,21 +619,81 @@ class DefaultTrainer:
         self._epoch = save_dict["epoch"]
         self._best_epoch = save_dict["best_epoch"]
         self.best_metric = save_dict["best_metric"]
+        self.current_metric = save_dict["current_metric"]
+        self.train_time = save_dict.get("train_time", 0.0)
 
-        self.model.load_state_dict(save_dict["model_state"])
+        model_state = save_dict["model_state"]
+        # to enable loading compiled models
+        compiled_prefix = "_orig_mod."
+        model_state = OrderedDict(
+            [(k[len(compiled_prefix):] if k.startswith(compiled_prefix) else k, v) for k, v in model_state.items()]
+        )
+        self.model.load_state_dict(model_state)
         # we need to send the network to the device before loading the optimizer state!
         self.model.to(self.device)
 
         self.optimizer.load_state_dict(save_dict["optimizer_state"])
-        if self.scaler is not None:
-            self.scaler.load_state_dict(save_dict["scaler_state"])
+        scaler_state = save_dict.get("scaler_state")
+        if self.scaler is not None and scaler_state:
+            self.scaler.load_state_dict(scaler_state)
         if self.lr_scheduler is not None:
             self.lr_scheduler.load_state_dict(save_dict["scheduler_state"])
 
-    def fit(self, iterations, load_from_checkpoint=None):
-        best_metric = self._initialize(iterations, load_from_checkpoint)
-        print("Start fitting for", self.max_iteration - self._iteration,
-              "iterations / ", self.max_epoch - self._epoch, "epochs")
+        return save_dict
+
+    def _verify_if_training_completed(self, checkpoint="latest"):
+        save_path = os.path.join(self.checkpoint_folder, f"{checkpoint}.pt")
+        save_dict = torch.load(save_path, weights_only=False) if os.path.exists(save_path) else None
+        if save_dict and self.max_iteration == save_dict.get("iteration"):
+            return True
+        return False
+
+    def fit(
+        self,
+        iterations: Optional[int] = None,
+        load_from_checkpoint: Optional[Union[os.PathLike, str]] = None,
+        epochs: Optional[int] = None,
+        save_every_kth_epoch: Optional[int] = None,
+        progress=None,
+        overwrite_training: bool = True,
+    ):
+        """Run neural network training.
+
+        Exactly one of 'iterations' or 'epochs' has to be passed.
+
+        Args:
+            iterations: How long to train, specified in iterations.
+            load_from_checkpoint: Path to a checkpoint from where training should be continued .
+            epochs: How long to train, specified in epochs.
+            save_every_kth_epoch: Save checkpoints after every kth epoch in a separate file.
+                The corresponding checkpoints will be saved with the naming scheme 'epoch-{epoch}.pt'.
+            progress: Optional progress bar for integration with external tools. Expected to follow the tqdm interface.
+            overwrite_training: Whether to overwrite existing checkpoints in the save directory.
+        """
+        best_metric = self._initialize(iterations, load_from_checkpoint, epochs)
+
+        if not overwrite_training:
+            if load_from_checkpoint is not None:
+                raise ValueError(
+                    "We do not support 'overwrite_training=False' and 'load_from_checkpoint' at the same time."
+                )
+
+            if self._verify_if_training_completed():
+                print(
+                    f"The model is trained for {self.max_iteration} iterations / {self.max_epoch} epochs "
+                    "and 'overwrite_training' is set to 'False'."
+                )
+                print(f"The checkpoints are located at '{os.path.abspath(self.checkpoint_folder)}'.")
+                return
+
+        print(
+            "Start fitting for",
+            self.max_iteration - self._iteration,
+            "iterations / ",
+            self.max_epoch - self._epoch,
+            "epochs",
+        )
+        print("with", len(self.train_loader), "iterations per epoch")
 
         if self.mixed_precision:
             train_epoch = self._train_epoch_mixed
@@ -341,25 +704,54 @@ class DefaultTrainer:
             validate = self._validate
             print("Training with single precision")
 
-        # TODO pass the progress to training and update after each iteration
-        progress = tqdm(total=iterations, desc=f"Epoch {self._epoch}", leave=True)
-        msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
+        total_iterations = epochs * len(self.train_loader) if iterations is None else iterations
+        if progress is None:
+            progress = tqdm(total=total_iterations, desc=f"Epoch {self._epoch}", leave=True)
+        else:
+            progress.total = total_iterations
+            progress.set_description(f"Epoch {self._epoch}")
 
+        msg = "Epoch %i: average [s/it]: %f, current metric: %f, best metric: %f"
         train_epochs = self.max_epoch - self._epoch
-        for _ in range(train_epochs):
+        t_start = time.time()
+        for epoch in range(train_epochs):
+
+            # Ensure data is shuffled differently at each epoch.
+            try:
+                self.train_loader.sampler.set_epoch(epoch)
+            except AttributeError:
+                pass
+
+            # Run training and validation for this epoch
             t_per_iter = train_epoch(progress)
             current_metric = validate()
 
+            # perform all the post-epoch steps:
+
+            # apply the learning rate scheduler
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step(current_metric)
 
+            # how long did we train in total?
+            total_train_time = (time.time() - t_start) + self.train_time
+
+            # save this checkpoint as the new best checkpoint if
+            # it has the best overall validation metric
             if current_metric < best_metric:
                 best_metric = current_metric
                 self._best_epoch = self._epoch
-                self.save_checkpoint("best", best_metric)
+                self.save_checkpoint("best", current_metric, best_metric, train_time=total_train_time)
 
-            # TODO for tiny epochs we don"t want to save every time
-            self.save_checkpoint("latest", best_metric)
+            # save this checkpoint as the latest checkpoint
+            self.save_checkpoint("latest", current_metric, best_metric, train_time=total_train_time)
+
+            # if we save after every k-th epoch then check if we need to save now
+            if save_every_kth_epoch is not None and (self._epoch + 1) % save_every_kth_epoch == 0:
+                self.save_checkpoint(
+                    f"epoch-{self._epoch + 1}", current_metric, best_metric, train_time=total_train_time
+                )
+
+            # if early stopping has been specified then check if the stopping condition is met
             if self.early_stopping is not None:
                 epochs_since_best = self._epoch - self._best_epoch
                 if epochs_since_best > self.early_stopping:
@@ -367,14 +759,16 @@ class DefaultTrainer:
                     break
 
             self._epoch += 1
-            progress.set_description(msg % (self._epoch, t_per_iter, current_metric, best_metric),
-                                     refresh=True)
+            progress.set_description(msg % (self._epoch, t_per_iter, current_metric, best_metric), refresh=True)
 
         print(f"Finished training after {self._epoch} epochs / {self._iteration} iterations.")
         print(f"The best epoch is number {self._best_epoch}.")
 
         if self._generate_name:
             self.name = None
+
+        # Update the train time
+        self.train_time = total_train_time
 
         # TODO save the model to wandb if we have the wandb logger
         if isinstance(self.logger, WandbLogger):
@@ -393,7 +787,11 @@ class DefaultTrainer:
         return self._train_epoch_impl(progress, contextlib.nullcontext, self._backprop)
 
     def _train_epoch_mixed(self, progress):
-        return self._train_epoch_impl(progress, amp.autocast, self._backprop_mixed)
+        return self._train_epoch_impl(
+            progress,
+            partial(torch.autocast, device_type=self._device_type, dtype=getattr(torch, self.mixed_precision_dtype)),
+            self._backprop_mixed
+        )
 
     def _forward_and_loss(self, x, y):
         pred = self.model(x)
@@ -410,7 +808,7 @@ class DefaultTrainer:
         n_iter = 0
         t_per_iter = time.time()
         for x, y in self.train_loader:
-            x, y = x.to(self.device), y.to(self.device)
+            x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
 
             self.optimizer.zero_grad()
 
@@ -436,7 +834,9 @@ class DefaultTrainer:
         return self._validate_impl(contextlib.nullcontext)
 
     def _validate_mixed(self):
-        return self._validate_impl(amp.autocast)
+        return self._validate_impl(
+            partial(torch.autocast, device_type=self._device_type, dtype=getattr(torch, self.mixed_precision_dtype))
+        )
 
     def _validate_impl(self, forward_context):
         self.model.eval()
@@ -446,7 +846,7 @@ class DefaultTrainer:
 
         with torch.no_grad():
             for x, y in self.val_loader:
-                x, y = x.to(self.device), y.to(self.device)
+                x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
                 with forward_context():
                     pred, loss = self._forward_and_loss(x, y)
                     metric = self.metric(pred, y)
@@ -457,5 +857,5 @@ class DefaultTrainer:
         metric_val /= len(self.val_loader)
         loss_val /= len(self.val_loader)
         if self.logger is not None:
-            self.logger.log_validation(self._iteration, metric, loss, x, y, pred)
+            self.logger.log_validation(self._iteration, metric_val, loss_val, x, y, pred)
         return metric_val

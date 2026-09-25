@@ -1,0 +1,23 @@
+import os
+
+from torch_em.util.debug import check_loader
+from torch_em.data.datasets import get_ureteroscopy_lumen_loader
+
+
+DATA_ROOT = "/mnt/vast-nhr/projects/cidas/cca/data"
+
+
+def check_ureteroscopy_lumen():
+    loader = get_ureteroscopy_lumen_loader(
+        path=os.path.join(DATA_ROOT, "ureteroscopy_lumen"),
+        batch_size=1,
+        patch_shape=(512, 512),
+        split="train",
+        resize_inputs=True,
+        download=True,
+    )
+    check_loader(loader, 4, instance_labels=True, plt=True, save_path="test.png")
+
+
+if __name__ == "__main__":
+    check_ureteroscopy_lumen()
