@@ -2,9 +2,8 @@
 in melanoma H&E stained histopathology images.
 
 This dataset is located at https://zenodo.org/records/13859989.
-This is part of the PUMA Grand Challenge: https://puma.grand-challenge.org/
-- Preprint with details about the data: https://doi.org/10.1101/2024.10.07.24315039
-
+This is part of the PUMA Grand Challenge: https://puma.grand-challenge.org/.
+The dataset is from the publication https://doi.org/10.1093/gigascience/giaf011.
 Please cite them if you use this dataset for your research.
 """
 
@@ -29,22 +28,22 @@ from .. import util
 
 
 URL = {
-    "data": "https://zenodo.org/records/13859989/files/01_training_dataset_tif_ROIs.zip",
+    "data": "https://zenodo.org/records/15050523/files/01_training_dataset_tif_ROIs.zip",
     "annotations": {
-        "nuclei": "https://zenodo.org/records/13859989/files/01_training_dataset_geojson_nuclei.zip",
-        "tissue": "https://zenodo.org/records/13859989/files/01_training_dataset_geojson_tissue.zip",
+        "nuclei": "https://zenodo.org/records/15050523/files/01_training_dataset_geojson_nuclei.zip",
+        "tissue": "https://zenodo.org/records/15050523/files/01_training_dataset_geojson_tissue.zip",
     }
 }
 
 CHECKSUM = {
-    "data": "a69fd0d8443da29233df103ece5674fb50e8f0cc4b448dc60508cfe883881993",
+    "data": "af48b879f8ff7e74b84a7114924881606f13f108aa0f9bcc21d3593b717ee022",
     "annotations": {
-        "nuclei": "17f77ca83fb8fccd918ce723a7b3e5cb5a1730b342ad486628f8885d14a1acbd",
-        "tissue": "3b7d6697dd728e3481df0b779ad1e76962f36fc8c871c50edd9aa56ec44c4cc9",
+        "nuclei": "eda271225900d6de0759e0281f3731a570e09f2adab58bd36425b9d2dfad91a0",
+        "tissue": "fc2835135cc28324f52eac131327f0f12c554c0b1f334a108bf4b65e0f18c42b",
     }
 }
 
-CLASS_DICT = {
+NUCLEI_CLASS_DICT = {
     "nuclei_stroma": 1,
     "nuclei_tumor": 2,
     "nuclei_plasma_cell": 3,
@@ -57,8 +56,65 @@ CLASS_DICT = {
     "nuclei_apoptosis": 10,
 }
 
+TISSUE_CLASS_DICT = {
+    "tissue_stroma": 1,
+    "tissue_tumor": 2,
+    "tissue_epidermis": 3,
+    "tissue_blood_vessel": 4,
+    "tissue_necrosis": 5,
+    "tissue_white_background": 6,
+}
 
-def _create_split_csv(path, split):
+CLASS_DICT = {
+    "nuclei": NUCLEI_CLASS_DICT,
+    "tissue": TISSUE_CLASS_DICT,
+}
+
+
+def _get_classes_per_image(path, annotations):
+    "Maps each ROI image id to the set of class ids present in its annotation"
+    ann_dir = os.path.join(path, "annotations", annotations, f"01_training_dataset_geojson_{annotations}")
+    ann_paths = glob(os.path.join(ann_dir, "*.geojson"))
+    assert ann_paths, f"Could not find any '{annotations}' annotations in '{ann_dir}'."
+
+    class_dict = CLASS_DICT[annotations]
+    classes_per_image = {}
+    for ann_path in ann_paths:
+        image_id = os.path.basename(ann_path).replace(f"_{annotations}.geojson", "")
+        with open(ann_path) as f:
+            feature_collection = json.load(f)
+        classes_per_image[image_id] = {
+            class_dict[feat["properties"]["classification"]["name"]]
+            for feat in feature_collection["features"]
+        }
+    return classes_per_image
+
+
+def _split_covers_all_classes(split_ids, classes_per_image, all_classes):
+    "Checks that every class is present in at least one image of every split"
+    for ids in split_ids.values():
+        covered = set()
+        for image_id in ids:
+            covered.update(classes_per_image.get(image_id, set()))
+        if not all_classes.issubset(covered):
+            return False
+    return True
+
+
+def _make_random_split(metastatic_ids, primary_ids, random_state):
+    # Create random splits per dataset: 20% for test, then 15% of the train set for val.
+    train_ids, test_ids = train_test_split(metastatic_ids, test_size=0.2, random_state=random_state)
+    train_ids, val_ids = train_test_split(train_ids, test_size=0.15, random_state=random_state)
+    # Do same as above for 'primary' samples.
+    ptrain_ids, ptest_ids = train_test_split(primary_ids, test_size=0.2, random_state=random_state)
+    ptrain_ids, pval_ids = train_test_split(ptrain_ids, test_size=0.15, random_state=random_state)
+    train_ids = train_ids + ptrain_ids
+    val_ids = val_ids + pval_ids
+    test_ids = test_ids + ptest_ids
+    return {"train": train_ids, "val": val_ids, "test": test_ids}
+
+
+def _create_split_csv(path, annotations, split, random_state=42, max_split_attempts=200):
     "This creates a split saved to a .csv file in the dataset directory"
     csv_path = os.path.join(path, "puma_split.csv")
 
@@ -68,23 +124,40 @@ def _create_split_csv(path, split):
         split_list = df.iloc[0][split]
     else:
         print(f"Creating a new split file at '{csv_path}'.")
-        metastatic_ids = [
-            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*metastatic*"))
-        ]
-        primary_ids = [
-            os.path.basename(image).split(".")[0] for image in glob(os.path.join(path, "data", "*primary*"))
-        ]
+        # NOTE: The ids are sorted, as 'train_test_split' is order sensitive and 'glob' does not
+        # guarantee a stable order, i.e. the fixed 'random_state' alone does not reproduce the split.
+        metastatic_ids = natsorted(
+            os.path.basename(image).split(".")[0]
+            for image in glob(os.path.join(path, "data", "01_training_dataset_tif_ROIs", "*metastatic*"))
+        )
+        primary_ids = natsorted(
+            os.path.basename(image).split(".")[0]
+            for image in glob(os.path.join(path, "data", "01_training_dataset_tif_ROIs", "*primary*"))
+        )
 
-        # Create random splits per dataset.
-        train_ids, test_ids = train_test_split(metastatic_ids, test_size=0.2)  # 20% for test.
-        train_ids, val_ids = train_test_split(train_ids, test_size=0.15)  # 15% of the train set for val.
-        ptrain_ids, ptest_ids = train_test_split(primary_ids, test_size=0.2)  # do same as above for 'primary' samples.
-        ptrain_ids, pval_ids = train_test_split(ptrain_ids, test_size=0.15)  # do same as above for 'primary' samples.
-        train_ids.extend(ptrain_ids)
-        val_ids.extend(pval_ids)
-        test_ids.extend(ptest_ids)
+        # The ROIs (and hence this split) are shared across annotation levels, so a split validated
+        # for one level can still drop a rare class (e.g. 'tissue_white_background') from the other.
+        coverage_checks = []
+        for level, class_dict in CLASS_DICT.items():
+            coverage_checks.append((set(class_dict.values()), _get_classes_per_image(path, level)))
 
-        split_ids = {"train": train_ids, "val": val_ids, "test": test_ids}
+        split_ids, candidate = None, None
+        for attempt in range(max_split_attempts):
+            candidate = _make_random_split(metastatic_ids, primary_ids, random_state=random_state + attempt)
+            if all(
+                _split_covers_all_classes(candidate, classes_per_image, all_classes)
+                for all_classes, classes_per_image in coverage_checks
+            ):
+                split_ids = candidate
+                break
+
+        if split_ids is None:
+            print(
+                f"Warning: could not find a split covering all classes within {max_split_attempts} attempts "
+                f"(seeds {random_state}-{random_state + max_split_attempts - 1}). Using the last candidate "
+                "anyway, please check rare classes manually."
+            )
+            split_ids = candidate
 
         df = pd.DataFrame.from_dict([split_ids])
         df.to_csv(csv_path, index=False)
@@ -95,7 +168,6 @@ def _create_split_csv(path, split):
 
 
 def _preprocess_inputs(path, annotations, split):
-    import ast
     import h5py
     try:
         import geopandas as gpd
@@ -108,20 +180,28 @@ def _preprocess_inputs(path, annotations, split):
     except ModuleNotFoundError:
         raise RuntimeError("Please install 'rasterio': 'conda install -c conda-forge rasterio'.")
 
-    annotation_paths = glob(os.path.join(path, "annotations", annotations, "*.geojson"))
-    roi_dir = os.path.join(path, "data")
+    annotation_paths = glob(
+        os.path.join(path, "annotations", annotations, f"01_training_dataset_geojson_{annotations}", "*.geojson")
+    )
+    roi_dir = os.path.join(path, "data", "01_training_dataset_tif_ROIs")
     preprocessed_dir = os.path.join(path, split, "preprocessed")
     os.makedirs(preprocessed_dir, exist_ok=True)
 
-    split_list = _create_split_csv(path, split)
+    split_list = _create_split_csv(path, annotations, split)
     print(f"The data split '{split}' has '{len(split_list)}' samples!")
 
     for ann_path in tqdm(annotation_paths, desc=f"Preprocessing '{annotations}'"):
         fname = os.path.basename(ann_path).replace(f"_{annotations}.geojson", ".tif")
         image_path = os.path.join(roi_dir, fname)
 
+        # Handle inconsistent extension for sample 103 (.tiff instead of .tif).
+        if not os.path.exists(image_path):
+            image_path = image_path + "f"  # Retrying with .tiff
+
         if os.path.basename(image_path).split(".")[0] not in split_list:
             continue
+
+        assert os.path.exists(image_path), image_path
 
         volume_path = os.path.join(preprocessed_dir, Path(fname).with_suffix(".h5"))
         gdf = gpd.read_file(ann_path)
@@ -130,10 +210,11 @@ def _preprocess_inputs(path, annotations, split):
         width, height = 1024, 1024  # roi shape
         transform = from_bounds(minx, miny, maxx, maxy, width, height)
 
-        # Extract class ids mapped to each class name.
-        class_ids = [
-            CLASS_DICT[nuc_class["name"]] for nuc_class in gdf["classification"].apply(lambda x: ast.literal_eval(x))
-        ]
+        # Extract class ids mapped to each class name. Depending on the geopandas/pyogrio version,
+        # this property comes back either as a JSON-encoded string or already parsed into a dict.
+        class_dict = CLASS_DICT[annotations]
+        classification = gdf["classification"].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
+        class_ids = [class_dict[cls_entry["name"]] for cls_entry in classification]
         semantic_shapes = ((geom, unique_id) for geom, unique_id in zip(gdf.geometry, class_ids))
         semantic_mask = rasterize(
             semantic_shapes, out_shape=(height, width), transform=transform, fill=0, dtype=np.uint8
@@ -166,6 +247,15 @@ def _preprocess_inputs(path, annotations, split):
                 f.create_dataset(f"labels/semantic/{annotations}", data=semantic_mask, compression="gzip")
 
 
+def _annotations_are_stored(data_dir, annotations):
+    import h5py
+    volume_paths = glob(os.path.join(data_dir, "preprocessed", "*.h5"))
+    if not volume_paths:
+        return
+    f = h5py.File(volume_paths[0], "r")
+    return f"labels/instances/{annotations}" in f.keys()
+
+
 def get_puma_data(
     path: Union[os.PathLike, str],
     split: Literal["train", "val", "test"],
@@ -187,7 +277,7 @@ def get_puma_data(
         raise ValueError(f"'{annotations}' is not a valid annotation for the data.")
 
     data_dir = os.path.join(path, split)
-    if os.path.exists(data_dir):
+    if os.path.exists(data_dir) and _annotations_are_stored(data_dir, annotations):
         return data_dir
 
     os.makedirs(path, exist_ok=True)
@@ -198,15 +288,21 @@ def get_puma_data(
         util.download_source(path=zip_path, url=URL["data"], download=download, checksum=CHECKSUM["data"])
         util.unzip(zip_path=zip_path, dst=os.path.join(path, "data"))
 
-    # Download the annotations.
-    zip_path = os.path.join(path, "annotations.zip")
-    util.download_source(
-        path=zip_path,
-        url=URL["annotations"][annotations],
-        download=download,
-        checksum=CHECKSUM["annotations"][annotations]
-    )
-    util.unzip(zip_path=zip_path, dst=os.path.join(path, "annotations", annotations))
+    # Download the annotations. All levels are fetched, as the split is shared across them and is
+    # validated against each level (the geojson files are small).
+    for level in CLASS_DICT:
+        annotation_dir = os.path.join(path, "annotations", level)
+        if os.path.exists(annotation_dir):
+            continue
+
+        zip_path = os.path.join(path, "annotations.zip")
+        util.download_source(
+            path=zip_path,
+            url=URL["annotations"][level],
+            download=download,
+            checksum=CHECKSUM["annotations"][level]
+        )
+        util.unzip(zip_path=zip_path, dst=annotation_dir)
 
     _preprocess_inputs(path, annotations, split)
 

@@ -9,3 +9,9 @@ logs/
 *.png
 *.out
 *.sh
+*.pth
+*.pt
+*.DS_Store
+.claude/
+.codex
+*.log

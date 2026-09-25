@@ -26,7 +26,7 @@ def get_covid_qu_ex_data(path: Union[os.PathLike, str], download: bool = False) 
         download: Whether to download the data if it is not present.
 
     Returns:
-        Filepath where the data is downlaoded.
+        Filepath where the data is downloaded.
     """
     data_dir = os.path.join(path, "data")
     if os.path.exists(data_dir):

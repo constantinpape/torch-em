@@ -2,6 +2,7 @@ import os
 from glob import glob
 from typing import Any, Dict, Optional, Union, Tuple, List, Callable
 
+import numpy as np
 import torch
 import torch.utils.data
 from torch.utils.data import DataLoader
@@ -11,7 +12,7 @@ from .util import load_data
 from .trainer import DefaultTrainer
 from .trainer.tensorboard_logger import TensorboardLogger
 from .transform import get_augmentations, get_raw_transform
-from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset
+from .data import ConcatDataset, ImageCollectionDataset, SegmentationDataset, TensorDataset
 
 
 # TODO add a heuristic to estimate this from the number of epochs
@@ -47,6 +48,10 @@ def check_paths(raw_paths, label_paths):
     if not isinstance(raw_paths, type(label_paths)):
         raise ValueError(f"Expect raw and label paths of same type, got {type(raw_paths)}, {type(label_paths)}")
 
+    # This is a tensor dataset and we don't need to verify the paths.
+    if isinstance(raw_paths, list) and isinstance(raw_paths[0], (torch.Tensor, np.ndarray)):
+        return
+
     def _check_path(path):
         if isinstance(path, str):
             if not os.path.exists(path):
@@ -72,6 +77,13 @@ def check_paths(raw_paths, label_paths):
 def is_segmentation_dataset(raw_paths, raw_key, label_paths, label_key):
     """@private
     """
+    if isinstance(raw_paths, list) and isinstance(raw_paths[0], (np.ndarray, torch.Tensor)):
+        if not all(isinstance(rp, (np.ndarray, torch.Tensor)) for rp in raw_paths):
+            raise ValueError("Inconsistent raw data")
+        if not all(isinstance(lp, (np.ndarray, torch.Tensor)) for lp in label_paths):
+            raise ValueError("Inconsistent label data")
+        return False
+
     def _can_open(path, key):
         try:
             load_data(path, key)
@@ -128,7 +140,13 @@ def _load_segmentation_dataset(raw_paths, raw_key, label_paths, label_key, **kwa
     return ds
 
 
-def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, roi, **kwargs):
+def _load_image_collection_dataset(raw_paths, raw_key, label_paths, label_key, roi, with_channels, **kwargs):
+    if isinstance(raw_paths[0], (torch.Tensor, np.ndarray)):
+        assert raw_key is None and label_key is None
+        assert roi is None
+        kwargs.pop("pre_label_transform")  # NOTE: The 'TensorDataset' currently does not support samplers.
+        return TensorDataset(raw_paths, label_paths, with_channels=with_channels, **kwargs)
+
     def _get_paths(rpath, rkey, lpath, lkey, this_roi):
         rpath = glob(os.path.join(rpath, rkey))
         rpath.sort()
@@ -212,8 +230,8 @@ def default_segmentation_loader(
     label_transform2: Optional[Callable] = None,
     raw_transform: Optional[Callable] = None,
     transform: Optional[Callable] = None,
-    dtype: torch.device = torch.float32,
-    label_dtype: torch.device = torch.float32,
+    dtype: torch.dtype = torch.float32,
+    label_dtype: torch.dtype = torch.float32,
     rois: Optional[Union[slice, Tuple[slice, ...]]] = None,
     n_samples: Optional[int] = None,
     sampler: Optional[Callable] = None,
@@ -224,6 +242,7 @@ def default_segmentation_loader(
     verify_paths: bool = True,
     with_padding: bool = True,
     z_ext: Optional[int] = None,
+    pre_label_transform: Optional[Callable] = None,
     **loader_kwargs,
 ) -> torch.utils.data.DataLoader:
     """Get data loader for training a segmentation network.
@@ -233,9 +252,13 @@ def default_segmentation_loader(
 
     Args:
         raw_paths: The file path(s) to the raw data. Can either be a single path or multiple file paths.
-        raw_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+            This argument also accepts a list of numpy arrays or torch tensors.
+        raw_key: The name of the internal dataset containing the raw data.
+            Set to None for regular image files, numpy arrays, or torch tensors.
         label_paths: The file path(s) to the label data. Can either be a single path or multiple file paths.
-        label_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+            This argument also accepts a list of numpy arrays or torch tensors.
+        label_key: The name of the internal dataset containing the label data.
+            Set to None for regular image files, numpy arrays, or torch tensors.
         batch_size: The batch size for the data loader.
         patch_shape: The patch shape for the training samples.
         label_transform: Transformation applied to the label data of a sample,
@@ -260,6 +283,8 @@ def default_segmentation_loader(
         verify_paths: Whether to verify all paths before creating the dataset.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
         z_ext: Extra bounding box for loading the data across z.
+        pre_label_transform: Transformation applied to the label data of a chosen random sample,
+            before applying the sample validity via the `sampler`.
         loader_kwargs: Keyword arguments for `torch.utils.data.DataLoder`.
 
     Returns:
@@ -287,6 +312,7 @@ def default_segmentation_loader(
         with_padding=with_padding,
         z_ext=z_ext,
         verify_paths=verify_paths,
+        pre_label_transform=pre_label_transform,
     )
     return get_data_loader(ds, batch_size=batch_size, **loader_kwargs)
 
@@ -313,6 +339,7 @@ def default_segmentation_dataset(
     verify_paths: bool = True,
     with_padding: bool = True,
     z_ext: Optional[int] = None,
+    pre_label_transform: Optional[Callable] = None,
 ) -> torch.utils.data.Dataset:
     """Get data set for training a segmentation network.
 
@@ -321,9 +348,13 @@ def default_segmentation_dataset(
 
     Args:
         raw_paths: The file path(s) to the raw data. Can either be a single path or multiple file paths.
-        raw_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+            This argument also accepts a list of numpy arrays or torch tensors.
+        raw_key: The name of the internal dataset containing the raw data.
+            Set to None for regular image files, numpy arrays, or torch tensors.
         label_paths: The file path(s) to the label data. Can either be a single path or multiple file paths.
-        label_key: The name of the internal dataset containing the raw data. Set to None for regular image files.
+            This argument also accepts a list of numpy arrays or torch tensors.
+        label_key: The name of the internal dataset containing the label data.
+            Set to None for regular image files, numpy arrays, or torch tensors.
         patch_shape: The patch shape for the training samples.
         label_transform: Transformation applied to the label data of a sample,
             before applying augmentations via `transform`.
@@ -347,7 +378,8 @@ def default_segmentation_dataset(
         verify_paths: Whether to verify all paths before creating the dataset.
         with_padding: Whether to pad samples to `patch_shape` if their shape is smaller.
         z_ext: Extra bounding box for loading the data across z.
-        loader_kwargs: Keyword arguments for `torch.utils.data.DataLoder`.
+        pre_label_transform: Transformation applied to the label data of a chosen random sample,
+            before applying the sample validity via the `sampler`.
 
     Returns:
         The torch dataset.
@@ -389,6 +421,7 @@ def default_segmentation_dataset(
             with_label_channels=with_label_channels,
             with_padding=with_padding,
             z_ext=z_ext,
+            pre_label_transform=pre_label_transform,
         )
 
     else:
@@ -408,6 +441,8 @@ def default_segmentation_dataset(
             dtype=dtype,
             label_dtype=label_dtype,
             with_padding=with_padding,
+            with_channels=with_channels,
+            pre_label_transform=pre_label_transform,
         )
 
     return ds
@@ -449,6 +484,7 @@ def default_segmentation_trainer(
     save_root: Optional[str] = None,
     compile_model: Optional[Union[bool, str]] = None,
     rank: Optional[int] = None,
+    mixed_precision_dtype: Optional[str] = None,
 ):
     """Get a trainer for a segmentation network.
 
@@ -485,7 +521,7 @@ def default_segmentation_trainer(
         learning_rate: The initial learning rate for the AdamW optimizer.
         device: The torch device to use for training. If None, will use a GPU if available.
         log_image_interval: The interval for saving images during logging, in training iterations.
-        mixed_precision: Whether to train with mixed precision.
+        mixed_precision: Whether to train with mixed precision. CPU training uses float32 unless a dtype is set.
         early_stopping: The patience for early stopping in epochs. If None, early stopping will not be used.
         logger: The logger class. Will be instantiated for logging.
             By default uses `torch_em.training.tensorboard_logger.TensorboardLogger`.
@@ -498,6 +534,8 @@ def default_segmentation_trainer(
         save_root: The root folder for saving the checkpoint and logs.
         compile_model: Whether to compile the model before training.
         rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+        mixed_precision_dtype: The dtype for autocast in mixed precision training, 'float16' or 'bfloat16'.
+            The GPU default is 'float16'. Set this explicitly to enable CPU mixed precision.
 
     Returns:
         The trainer.
@@ -513,8 +551,7 @@ def default_segmentation_trainer(
     else:
         device = torch.device(device)
 
-    # CPU does not support mixed precision training.
-    if device.type == "cpu":
+    if device.type == "cpu" and mixed_precision_dtype is None:
         mixed_precision = False
 
     return trainer_class(
@@ -528,6 +565,7 @@ def default_segmentation_trainer(
         device=device,
         lr_scheduler=scheduler,
         mixed_precision=mixed_precision,
+        mixed_precision_dtype=mixed_precision_dtype,
         early_stopping=early_stopping,
         log_image_interval=log_image_interval,
         logger=logger,
