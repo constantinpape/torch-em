@@ -6,6 +6,7 @@ import inspect
 import warnings
 import contextlib
 from tqdm import tqdm
+from copy import deepcopy
 from functools import partial
 from datetime import datetime
 from collections import OrderedDict
@@ -80,6 +81,9 @@ class DefaultTrainer:
         save_root: The root folder for saving the checkpoint and logs.
         compile_model: Whether to compile the model before training.
         rank: Rank argument for distributed training. See `torch_em.multi_gpu_training` for details.
+        ema: Factor for exponential moving average of model weights.
+            If given, an average model is kept and used for validation. This model should then be used
+            rather than the 'raw' trained model; it usually performs better.
         mixed_precision_dtype: The dtype for autocast in mixed precision training, 'float16' or 'bfloat16'.
             The default is 'float16' on the GPU and 'bfloat16' on the CPU. Use 'bfloat16' to avoid overflows.
     """
@@ -103,6 +107,7 @@ class DefaultTrainer:
         save_root: Optional[str] = None,
         compile_model: Optional[Union[bool, str]] = None,
         rank: Optional[int] = None,
+        ema: Optional[float] = None,
         mixed_precision_dtype: Optional[str] = None,
     ):
         if name is None and not issubclass(logger, WandbLogger):
@@ -123,6 +128,7 @@ class DefaultTrainer:
         self.save_root = save_root
         self.compile_model = compile_model
         self.rank = rank
+        self.ema = ema
         self._device_type = "cpu" if self.device.type == "cpu" else "cuda"
 
         self._iteration = 0
@@ -144,6 +150,12 @@ class DefaultTrainer:
         self.logger_class = logger
         self.logger_kwargs = logger_kwargs
         self.log_image_interval = log_image_interval
+
+        if self.ema is not None:
+            with torch.no_grad():
+                self.average_model = deepcopy(self.model)
+            for param in self.average_model.parameters():
+                param.requires_grad = False
 
     @property
     def checkpoint_folder(self):
@@ -541,6 +553,8 @@ class DefaultTrainer:
             self.model = auto_compile(self.model, self.compile_model)
 
             self.model.to(self.device)
+            if self.ema:
+                self.average_model.to(self.device)
             self.loss.to(self.device)
 
             # this saves all the information that is necessary
@@ -590,12 +604,16 @@ class DefaultTrainer:
             "init": self.init_data | extra_init_dict,
             "train_time": train_time,
             "timestamp": datetime.now().strftime("%d-%m-%Y (%H:%M:%S)"),
+            "ema": self.ema,
         }
         save_dict.update(**extra_save_dict)
         if self.scaler is not None:
             save_dict.update({"scaler_state": self.scaler.state_dict()})
         if self.lr_scheduler is not None:
             save_dict.update({"scheduler_state": self.lr_scheduler.state_dict()})
+
+        if self.ema is not None:
+            save_dict["average_model_state"] = self.average_model.state_dict()
 
         rank = getattr(self, "rank", None)
         if rank is None or rank == 0:
@@ -621,6 +639,7 @@ class DefaultTrainer:
         self.best_metric = save_dict["best_metric"]
         self.current_metric = save_dict["current_metric"]
         self.train_time = save_dict.get("train_time", 0.0)
+        self.ema = save_dict.get("ema", None)
 
         model_state = save_dict["model_state"]
         # to enable loading compiled models
@@ -631,6 +650,13 @@ class DefaultTrainer:
         self.model.load_state_dict(model_state)
         # we need to send the network to the device before loading the optimizer state!
         self.model.to(self.device)
+
+        if self.ema is not None:
+            average_model_state = save_dict["average_model_state"]
+            self.average_model.load_state_dict(average_model_state)
+            self.average_model.to(self.device)
+            for param in self.average_model.parameters():
+                param.requires_grad = False
 
         self.optimizer.load_state_dict(save_dict["optimizer_state"])
         scaler_state = save_dict.get("scaler_state")
@@ -793,14 +819,19 @@ class DefaultTrainer:
             self._backprop_mixed
         )
 
-    def _forward_and_loss(self, x, y):
-        pred = self.model(x)
+    def _forward_and_loss(self, x, y, model=None):
+        pred = self.model(x) if model is None else model(x)
         if self._iteration % self.log_image_interval == 0:
             if pred.requires_grad:
                 pred.retain_grad()
 
         loss = self.loss(pred, y)
         return pred, loss
+
+    @torch.no_grad()
+    def _update_average_model(self):
+        for param, param_avg in zip(self.model.parameters(), self.average_model.parameters()):
+            param_avg.data = param_avg.data * self.ema + param.data * (1. - self.ema)
 
     def _train_epoch_impl(self, progress, forward_context, backprop: Callable[[torch.Tensor], None]):
         self.model.train()
@@ -820,6 +851,9 @@ class DefaultTrainer:
             lr = [pm["lr"] for pm in self.optimizer.param_groups][0]
             if self.logger is not None:
                 self.logger.log_train(self._iteration, loss, lr, x, y, pred, log_gradients=True)
+
+            if self.ema is not None:
+                self._update_average_model()
 
             self._iteration += 1
             n_iter += 1
@@ -848,7 +882,10 @@ class DefaultTrainer:
             for x, y in self.val_loader:
                 x, y = x.to(self.device, non_blocking=True), y.to(self.device, non_blocking=True)
                 with forward_context():
-                    pred, loss = self._forward_and_loss(x, y)
+                    # We use the average model for validation if we train with EMA.
+                    pred, loss = self._forward_and_loss(
+                        x, y, model=self.model if self.ema is None else self.average_model
+                    )
                     metric = self.metric(pred, y)
 
                 loss_val += loss.item()

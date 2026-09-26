@@ -432,7 +432,9 @@ def load_model(
         The model.
     """
     if model is None and os.path.isdir(checkpoint):  # Load the model and its state from a torch_em checkpoint.
-        model = get_trainer(checkpoint, name=name, device=device).model
+        trainer = get_trainer(checkpoint, name=name, device=device)
+        # Use the average model (result from EMA) if it is available.
+        model = getattr(trainer, "average_model", trainer.model)
 
     elif model is None:  # Load the model from a serialized model.
         model = torch.load(checkpoint, map_location=device, weights_only=False)
