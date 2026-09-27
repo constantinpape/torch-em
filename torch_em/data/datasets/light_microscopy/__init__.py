@@ -125,6 +125,7 @@ from .pyropia import get_pyropia_loader, get_pyropia_dataset
 from .revvity25 import get_revvity25_loader, get_revvity25_dataset
 from .segpc import get_segpc_loader, get_segpc_dataset
 from .selma3d import get_selma3d_data, get_selma3d_paths, get_selma3d_loader, get_selma3d_dataset
+from .slice2 import get_slice2_loader, get_slice2_dataset
 from .scaffold_a549 import get_scaffold_a549_loader, get_scaffold_a549_dataset
 from .slimia import get_slimia_loader, get_slimia_dataset
 from .sperm_scd import get_sperm_scd_loader, get_sperm_scd_dataset
