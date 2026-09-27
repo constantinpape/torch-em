@@ -141,6 +141,7 @@ from .vgg_hela import get_vgg_hela_loader, get_vgg_hela_dataset
 from .vibrio_cholerae import get_vibrio_cholerae_loader, get_vibrio_cholerae_dataset
 from .vicar import get_vicar_loader, get_vicar_dataset
 from .wing_disc import get_wing_disc_loader, get_wing_disc_dataset
+from .wing_disc_timelapse import get_wing_disc_timelapse_loader, get_wing_disc_timelapse_dataset
 from .xenium import get_xenium_loader, get_xenium_dataset
 from .xenium_lung_treg import get_xenium_lung_treg_loader, get_xenium_lung_treg_dataset
 from .xpress import get_xpress_loader, get_xpress_dataset
