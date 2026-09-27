@@ -1,3 +1,4 @@
+from .air_leish import get_air_leish_loader, get_air_leish_dataset
 from .aisegcell import get_aisegcell_loader, get_aisegcell_dataset
 from .alfi import get_alfi_loader, get_alfi_dataset
 from .bbbc024 import get_bbbc024_loader, get_bbbc024_dataset
