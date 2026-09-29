@@ -1,8 +1,11 @@
-"""The SegRap dataset contains annotations for organ-at-risk (OAR) segmentation in head and neck CT scans
-of nasopharyngeal carcinoma patients.
+"""The SegRap dataset contains annotations for organ-at-risk (OAR) and gross tumor volume (GTV)
+segmentation in head and neck CT scans of nasopharyngeal carcinoma patients.
 
 It comprises the training set of the SegRap2023 challenge (https://segrap2023.grand-challenge.org): 120 patients
-with a pre-aligned pair of a non-contrast and a contrast-enhanced CT scan, and annotations for 45 OARs.
+with a pre-aligned pair of a non-contrast and a contrast-enhanced CT scan, and annotations for two tasks,
+selected with the 'task' argument: 'oars' (Task001) are the 45 OARs, 'gtv' (Task002) are the primary gross
+tumor volume (GTVp) and the involved metastatic lymph nodes (GTVnd), see `GTV_LABEL_IDS`. The ids were
+verified on the data: the Task002 label volumes contain the ids 0 (background), 1 (GTVp) and 2 (GTVnd).
 
 NOTE: The label legend is as follows. Since some of the 45 OARs are nested (e.g. the hippocampi inside the
 temporal lobes, the cochleae inside the middle ears), the challenge distributes the annotations as a single
@@ -51,16 +54,28 @@ from .. import util
 URLS = {
     "ct": "https://huggingface.co/datasets/YongchengYAO/SegRap23-Lite/resolve/main/Images-CT.zip",
     "ct_contrast": "https://huggingface.co/datasets/YongchengYAO/SegRap23-Lite/resolve/main/Images-contrastCT.zip",
-    "labels": "https://huggingface.co/datasets/YongchengYAO/SegRap23-Lite/resolve/main/Masks-Task1.zip",
+    "labels_oars": "https://huggingface.co/datasets/YongchengYAO/SegRap23-Lite/resolve/main/Masks-Task1.zip",
+    "labels_gtv": "https://huggingface.co/datasets/YongchengYAO/SegRap23-Lite/resolve/main/Masks-Task2.zip",
 }
 
 CHECKSUMS = {
     "ct": "1e7b849c5f0296200e5ad9503eeeb9b2a8b3360297078d0ce016c8f8335534ef",
     "ct_contrast": "000cc8bf9041c49f7e28ad3e183f7af3f9e701b1842031fb17e21a89db0a8f6a",
-    "labels": "3441d2bd56ecff4485b99a197b36251b09d2030468840f9399419b517691d297",
+    "labels_oars": "3441d2bd56ecff4485b99a197b36251b09d2030468840f9399419b517691d297",
+    "labels_gtv": "d412baf209f7a2d2432f05d1f39b5ce1944e1ff2d2b6ccfc4f727626a02f3d55",
 }
 
-FOLDER_NAMES = {"ct": "Images-CT", "ct_contrast": "Images-contrastCT", "labels": "Masks-Task1"}
+FOLDER_NAMES = {
+    "ct": "Images-CT",
+    "ct_contrast": "Images-contrastCT",
+    "labels_oars": "Masks-Task1",
+    "labels_gtv": "Masks-Task2",
+}
+
+# The label component and the label folder of the official release, per task.
+TASKS = {"oars": ("labels_oars", "Task001"), "gtv": ("labels_gtv", "Task002")}
+
+GTV_LABEL_IDS = {"background": 0, "GTVp": 1, "GTVnd": 2}
 
 # The file names of the two scans in the official release.
 OFFICIAL_FILE_NAMES = {"ct": "image.nii.gz", "ct_contrast": "image_contrast.nii.gz"}
@@ -147,7 +162,10 @@ def _download_component(path, name, download):
 
 
 def get_segrap_data(
-    path: Union[os.PathLike, str], modality: Literal["ct", "ct_contrast"] = "ct", download: bool = False
+    path: Union[os.PathLike, str],
+    modality: Literal["ct", "ct_contrast"] = "ct",
+    download: bool = False,
+    task: Literal["oars", "gtv"] = "oars",
 ) -> str:
     """Download the SegRap dataset.
 
@@ -155,24 +173,30 @@ def get_segrap_data(
         path: Filepath to a folder where the data is downloaded for further processing.
         modality: The CT scan to download. Either 'ct' (non-contrast) or 'ct_contrast' (contrast-enhanced).
         download: Whether to download the data if it is not present.
+        task: The annotations to download. Either 'oars' (Task001) or 'gtv' (Task002).
 
     Returns:
         Filepath where the data is stored.
     """
     if modality not in OFFICIAL_FILE_NAMES:
         raise ValueError(f"'{modality}' is not a valid modality. Choose one of {list(OFFICIAL_FILE_NAMES)}.")
+    if task not in TASKS:
+        raise ValueError(f"'{task}' is not a valid task. Choose one of {list(TASKS)}.")
 
     if len(_get_official_case_dirs(path)) > 0:  # The official data was downloaded manually.
         return path
 
-    _download_component(path, "labels", download)
+    _download_component(path, TASKS[task][0], download)
     _download_component(path, modality, download)
 
     return path
 
 
 def get_segrap_paths(
-    path: Union[os.PathLike, str], modality: Literal["ct", "ct_contrast"] = "ct", download: bool = False
+    path: Union[os.PathLike, str],
+    modality: Literal["ct", "ct_contrast"] = "ct",
+    download: bool = False,
+    task: Literal["oars", "gtv"] = "oars",
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the SegRap data.
 
@@ -180,22 +204,24 @@ def get_segrap_paths(
         path: Filepath to a folder where the data is downloaded for further processing.
         modality: The CT scan to use as input. Either 'ct' (non-contrast) or 'ct_contrast' (contrast-enhanced).
         download: Whether to download the data if it is not present.
+        task: The annotations to use. Either 'oars' (Task001) or 'gtv' (Task002).
 
     Returns:
         List of filepaths for the image data.
         List of filepaths for the label data.
     """
-    data_dir = get_segrap_data(path, modality, download)
+    data_dir = get_segrap_data(path, modality, download, task)
+    label_component, official_label_dir = TASKS[task]
 
     case_dirs = _get_official_case_dirs(data_dir)
     if len(case_dirs) > 0:  # The official layout, with one folder per case and the labels in a separate folder.
-        label_dir = os.path.join(os.path.split(os.path.split(case_dirs[0])[0])[0], "Task001")
+        label_dir = os.path.join(os.path.split(os.path.split(case_dirs[0])[0])[0], official_label_dir)
         raw_paths = [os.path.join(p, OFFICIAL_FILE_NAMES[modality]) for p in case_dirs]
         label_paths = [os.path.join(label_dir, f"{os.path.basename(p)}.nii.gz") for p in case_dirs]
     else:  # The redistributed layout, with the files named after the case ids.
         raw_paths = natsorted(glob(os.path.join(data_dir, FOLDER_NAMES[modality], "*.nii.gz")))
         label_paths = [
-            os.path.join(data_dir, FOLDER_NAMES["labels"], os.path.basename(p)) for p in raw_paths
+            os.path.join(data_dir, FOLDER_NAMES[label_component], os.path.basename(p)) for p in raw_paths
         ]
 
     assert len(raw_paths) > 0 and all(os.path.exists(p) for p in raw_paths + label_paths)
@@ -209,9 +235,10 @@ def get_segrap_dataset(
     modality: Literal["ct", "ct_contrast"] = "ct",
     resize_inputs: bool = False,
     download: bool = False,
+    task: Literal["oars", "gtv"] = "oars",
     **kwargs
 ) -> Dataset:
-    """Get the SegRap dataset for organ-at-risk segmentation.
+    """Get the SegRap dataset for organ-at-risk or GTV segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
@@ -219,12 +246,13 @@ def get_segrap_dataset(
         modality: The CT scan to use as input. Either 'ct' (non-contrast) or 'ct_contrast' (contrast-enhanced).
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
+        task: The annotations to use. Either 'oars' (Task001) or 'gtv' (Task002).
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    raw_paths, label_paths = get_segrap_paths(path, modality, download)
+    raw_paths, label_paths = get_segrap_paths(path, modality, download, task)
 
     if resize_inputs:
         resize_kwargs = {"patch_shape": patch_shape, "is_rgb": False}
@@ -250,9 +278,10 @@ def get_segrap_loader(
     modality: Literal["ct", "ct_contrast"] = "ct",
     resize_inputs: bool = False,
     download: bool = False,
+    task: Literal["oars", "gtv"] = "oars",
     **kwargs
 ) -> DataLoader:
-    """Get the SegRap dataloader for organ-at-risk segmentation.
+    """Get the SegRap dataloader for organ-at-risk or GTV segmentation.
 
     Args:
         path: Filepath to a folder where the data is downloaded for further processing.
@@ -261,11 +290,12 @@ def get_segrap_loader(
         modality: The CT scan to use as input. Either 'ct' (non-contrast) or 'ct_contrast' (contrast-enhanced).
         resize_inputs: Whether to resize inputs to the desired patch shape.
         download: Whether to download the data if it is not present.
+        task: The annotations to use. Either 'oars' (Task001) or 'gtv' (Task002).
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_segrap_dataset(path, patch_shape, modality, resize_inputs, download, **ds_kwargs)
+    dataset = get_segrap_dataset(path, patch_shape, modality, resize_inputs, download, task, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
