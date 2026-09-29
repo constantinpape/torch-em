@@ -3,6 +3,29 @@ import torch
 
 
 class TestDecoder(unittest.TestCase):
+    def test_legacy_layout(self):
+        from torch_em.model.unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d
+
+        for ndim, block, sampler in ((2, ConvBlock2d, Upsampler2d), (3, ConvBlock3d, Upsampler3d)):
+            with self.subTest(ndim=ndim):
+                decoder = Decoder(
+                    features=[16, 8, 4], scale_factors=[2, 2],
+                    conv_block_impl=block, sampler_impl=sampler,
+                )
+                self.assertEqual([b.in_channels for b in decoder.blocks], [16, 8])
+                x = torch.rand((1, 16) + (4,) * ndim, requires_grad=True)
+                skips = [
+                    torch.rand((1, 16) + (8,) * ndim, requires_grad=True),
+                    torch.rand((1, 8) + (16,) * ndim, requires_grad=True),
+                ]
+                cropped = decoder._crop(skips[0], (1, 8) + (8,) * ndim)
+                torch.testing.assert_close(cropped, skips[0][:, 4:12])
+                output = decoder(x, skips)
+                self.assertEqual(output.shape, (1, 4) + (16,) * ndim)
+                output.sum().backward()
+                self.assertIsNotNone(x.grad)
+                self.assertIsNotNone(skips[0].grad)
+
     def test_skip_channels(self):
         from torch_em.model.unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d
 

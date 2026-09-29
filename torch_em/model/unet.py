@@ -327,17 +327,17 @@ class Decoder(nn.Module):
     def __init__(
         self,
         features,
-        skip_channels,
         scale_factors,
         conv_block_impl,
         sampler_impl,
+        skip_channels=None,
         anisotropic_kernel=False,
         **conv_block_kwargs
     ):
         super().__init__()
         if len(features) != len(scale_factors) + 1:
             raise ValueError("Incompatible number of features {len(features)} and scale_factors {len(scale_factors)}")
-        if len(skip_channels) != len(scale_factors):
+        if skip_channels is not None and len(skip_channels) != len(scale_factors):
             raise ValueError("Each decoder level must have a skip-channel count.")
 
         conv_kwargs = [conv_block_kwargs] * len(scale_factors)
@@ -345,10 +345,15 @@ class Decoder(nn.Module):
             conv_kwargs = [_update_conv_kwargs(kwargs, scale_factor)
                            for kwargs, scale_factor in zip(conv_kwargs, scale_factors)]
 
+        self.explicit_skip_channels = skip_channels is not None
+        if self.explicit_skip_channels:
+            block_in_channels = [outc + skipc for outc, skipc in zip(features[1:], skip_channels)]
+        else:
+            block_in_channels = features[:-1]
         self.blocks = nn.ModuleList(
             [
-                conv_block_impl(outc + skipc, outc, **kwargs)
-                for outc, skipc, kwargs in zip(features[1:], skip_channels, conv_kwargs)
+                conv_block_impl(inc, outc, **kwargs)
+                for inc, outc, kwargs in zip(block_in_channels, features[1:], conv_kwargs)
             ]
         )
         self.samplers = nn.ModuleList(
@@ -366,9 +371,10 @@ class Decoder(nn.Module):
     # FIXME this prevents traces from being valid for other input sizes, need to find
     # a solution to traceable cropping
     def _crop(self, x, shape):
-        shape_diff = [(xsh - sh) // 2 for xsh, sh in zip(x.shape[2:], shape[2:])]
-        crop = (slice(None), slice(None)) + tuple(
-            slice(sd, sd + sh) for sd, sh in zip(shape_diff, shape[2:])
+        start = 2 if self.explicit_skip_channels else 1
+        shape_diff = [(xsh - sh) // 2 for xsh, sh in zip(x.shape[start:], shape[start:])]
+        crop = (slice(None),) * start + tuple(
+            slice(sd, sd + sh) for sd, sh in zip(shape_diff, shape[start:])
         )
         return x[crop]
         # # Implementation with torch.narrow, does not fix the tracing warnings!
