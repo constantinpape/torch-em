@@ -4,9 +4,9 @@ brain MRI of epilepsy patients.
 The dataset consists of 430 postoperative T1-weighted MRI from patients who underwent resective
 brain surgery for refractory epilepsy at the National Hospital of Neurology and Neurosurgery
 (Queen Square, London, United Kingdom). The corresponding preoperative MRI is present for 269 of
-these subjects. The resection cavity was manually segmented by three human raters on partially
-overlapping subsets of the postoperative scans (133, 34 and 33 subjects, respectively), so that
-200 of the 430 subjects have a resection cavity mask.
+these subjects. The resection cavity was manually segmented by three human raters on overlapping
+subsets of the postoperative scans (133, 34 and 33 subjects, respectively, the second and third
+rater re-annotating scans of the first), so 133 of the 430 subjects have a resection cavity mask.
 
 The dataset is located at https://doi.org/10.5522/04/9996158.v1 and is distributed under the
 CC BY-NC-SA 4.0 license.
