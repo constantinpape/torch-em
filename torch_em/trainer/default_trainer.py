@@ -616,7 +616,9 @@ class DefaultTrainer:
             raise RuntimeError
 
         self._iteration = save_dict["iteration"]
-        self._epoch = save_dict["epoch"]
+        # Checkpoints are saved at the end of an epoch, before the epoch counter is incremented.
+        # So the stored value is the index of the last finished epoch, and the next epoch has the index + 1.
+        self._epoch = save_dict["epoch"] + 1
         self._best_epoch = save_dict["best_epoch"]
         self.best_metric = save_dict["best_metric"]
         self.current_metric = save_dict["current_metric"]

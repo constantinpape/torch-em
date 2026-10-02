@@ -90,6 +90,24 @@ class TestDefaultTrainer(unittest.TestCase):
         trainer.fit(8, load_from_checkpoint="latest")
         self.assertEqual(trainer.iteration, 20)
 
+    def test_resume_continues_epoch_count(self):
+        from torch_em.trainer import DefaultTrainer
+
+        trainer = DefaultTrainer(**self._get_kwargs())
+        trainer.fit(epochs=2, save_every_kth_epoch=1)
+        n_iterations = len(trainer.train_loader)
+        self.assertEqual(trainer.epoch, 2)
+
+        trainer = DefaultTrainer(**self._get_kwargs())
+        trainer.fit(epochs=1, load_from_checkpoint="latest", save_every_kth_epoch=1)
+        self.assertEqual(trainer.epoch, 3)
+
+        # The resumed epoch must not overwrite the checkpoint of the last epoch before the resume.
+        save_folder = os.path.join(self.checkpoint_folder, self.name)
+        for epoch in (1, 2, 3):
+            checkpoint = torch.load(os.path.join(save_folder, f"epoch-{epoch}.pt"), weights_only=False)
+            self.assertEqual(checkpoint["iteration"], epoch * n_iterations)
+
     def test_from_checkpoint(self):
         from torch_em.trainer import DefaultTrainer
 
