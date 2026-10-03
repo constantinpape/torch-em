@@ -285,6 +285,12 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 # so that how the loss is calculated stays flexible, e.g. to enable ELBO for PUNet.
                 supervised_loss = self.supervised_loss(self.model, xs, ys)
 
+            # Backpropagate each half of the loss separately, so that only one graph is in memory at a time.
+            if self.mixed_precision:
+                self.scaler.scale(supervised_loss / 2).backward()
+            else:
+                (supervised_loss / 2).backward()
+
             teacher_input, model_input = xu1, xu2
 
             with forward_context(), torch.no_grad():
@@ -295,8 +301,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             with forward_context():
                 unsupervised_loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
 
+            backprop(unsupervised_loss / 2)
             loss = (supervised_loss + unsupervised_loss) / 2
-            backprop(loss)
 
             if self.logger is not None:
                 with torch.no_grad(), forward_context():
@@ -591,6 +597,12 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 supervised_pred = self.model(xs)
                 supervised_loss = self.supervised_loss(supervised_pred, ys)
 
+            # Backpropagate each half of the loss separately, so that only one graph is in memory at a time.
+            if self.mixed_precision:
+                self.scaler.scale(supervised_loss / 2).backward()
+            else:
+                (supervised_loss / 2).backward()
+
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.teacher, teacher_input)
@@ -606,8 +618,8 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 unsup_pred_inv = self.augmenter.student.reverse_transform(unsup_pred)
                 unsupervised_loss = self.unsupervised_loss(unsup_pred_inv, pseudo_labels_inv, label_filter_inv)
 
+            backprop(unsupervised_loss / 2)
             loss = (supervised_loss + unsupervised_loss) / 2
-            backprop(loss)
 
             if self.logger is not None:
                 with torch.no_grad(), forward_context():
