@@ -60,6 +60,8 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         source_distribution: The ratio of labels in the source label distribution.
             If given, the predicted distribution of the trained model will be regularized to
             match this source label distribution.
+        separate_backward: Whether to backpropagate each loss term separately to reduce peak memory.
+            The default uses one backward pass on the combined loss.
         kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
     """
 
@@ -77,8 +79,10 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
         supervised_loss_and_metric: Optional[Callable] = None,
         logger=SelfTrainingTensorboardLogger,
         source_distribution: List[float] = None,
+        separate_backward: bool = False,
         **kwargs,
     ):
+        self.separate_backward = separate_backward
         # Do we have supervised data or not?
         if supervised_train_loader is None:
             # No. -> We use the unsupervised training logic.
@@ -252,6 +256,10 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 # so that how the loss is calculated stays flexible, e.g. to enable ELBO for PUNet.
                 supervised_loss = self.supervised_loss(self.model, xs, ys)
 
+            if self.separate_backward:
+                # Free supervised activations before the unsupervised forward pass.
+                self._accumulate_gradients(supervised_loss / 2)
+
             teacher_input, model_input = xu1, xu2
 
             with forward_context(), torch.no_grad():
@@ -270,7 +278,7 @@ class FixMatchTrainer(torch_em.trainer.DefaultTrainer):
                 unsupervised_loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
 
             loss = (supervised_loss + unsupervised_loss) / 2
-            backprop(loss)
+            backprop(unsupervised_loss / 2 if self.separate_backward else loss)
 
             if self.logger is not None:
                 with torch.no_grad(), forward_context():
@@ -424,6 +432,8 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
         source_distribution: The ratio of labels in the source label distribution.
             If given, the predicted distribution of the trained model will be regularized to
             match this source label distribution.
+        separate_backward: Whether to backpropagate each loss term separately to reduce peak memory.
+            The default uses one backward pass on the combined loss.
         kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
     """
 
@@ -442,6 +452,7 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
         supervised_loss_and_metric: Optional[Callable] = None,
         logger=SelfTrainingTensorboardLogger,
         source_distribution: List[float] = None,
+        separate_backward: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -457,6 +468,7 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
             supervised_loss_and_metric=supervised_loss_and_metric,
             logger=logger,
             source_distribution=source_distribution,
+            separate_backward=separate_backward,
             **kwargs,
         )
 
@@ -551,6 +563,10 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
                 supervised_pred = self.model(xs)
                 supervised_loss = self.supervised_loss(supervised_pred, ys)
 
+            if self.separate_backward:
+                # Free supervised activations before the unsupervised forward pass.
+                self._accumulate_gradients(supervised_loss / 2)
+
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
                 pseudo_labels, label_filter = self.pseudo_labeler(self.model, teacher_input)
@@ -574,7 +590,7 @@ class FixMatchTrainerWithInvertibleAugmentations(FixMatchTrainer):
                 unsupervised_loss = self.unsupervised_loss(unsup_pred_inv, pseudo_labels_inv, label_filter_inv)
 
             loss = (supervised_loss + unsupervised_loss) / 2
-            backprop(loss)
+            backprop(unsupervised_loss / 2 if self.separate_backward else loss)
 
             if self.logger is not None:
                 with torch.no_grad(), forward_context():

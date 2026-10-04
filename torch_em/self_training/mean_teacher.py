@@ -69,6 +69,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         momentum: The momentum value for the exponential moving weight average of the teacher model.
         reinit_teacher: Whether to reinit the teacher model before starting the training.
         sampler: A sampler for rejecting pseudo-labels according to a defined criterion.
+        separate_backward: Whether to backpropagate each loss term separately to reduce peak memory.
+            The default uses one backward pass on the combined loss.
         kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
     """
 
@@ -88,9 +90,11 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
         momentum: float = 0.999,
         reinit_teacher: Optional[bool] = None,
         sampler: Optional[Callable] = None,
+        separate_backward: bool = False,
         **kwargs,
     ):
         self.sampler = sampler
+        self.separate_backward = separate_backward
         # Do we have supervised data or not?
         if supervised_train_loader is None:
             # No. -> We use the unsupervised training logic.
@@ -285,11 +289,9 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
                 # so that how the loss is calculated stays flexible, e.g. to enable ELBO for PUNet.
                 supervised_loss = self.supervised_loss(self.model, xs, ys)
 
-            # Backpropagate each half of the loss separately, so that only one graph is in memory at a time.
-            if self.mixed_precision:
-                self.scaler.scale(supervised_loss / 2).backward()
-            else:
-                (supervised_loss / 2).backward()
+            if self.separate_backward:
+                # Free supervised activations before the unsupervised forward pass.
+                self._accumulate_gradients(supervised_loss / 2)
 
             teacher_input, model_input = xu1, xu2
 
@@ -301,8 +303,8 @@ class MeanTeacherTrainer(torch_em.trainer.DefaultTrainer):
             with forward_context():
                 unsupervised_loss = self.unsupervised_loss(self.model, model_input, pseudo_labels, label_filter)
 
-            backprop(unsupervised_loss / 2)
             loss = (supervised_loss + unsupervised_loss) / 2
+            backprop(unsupervised_loss / 2 if self.separate_backward else loss)
 
             if self.logger is not None:
                 with torch.no_grad(), forward_context():
@@ -466,6 +468,8 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
         momentum: The momentum value for the exponential moving weight average of the teacher model.
         reinit_teacher: Whether to reinit the teacher model before starting the training.
         sampler: A sampler for rejecting pseudo-labels according to a defined criterion.
+        separate_backward: Whether to backpropagate each loss term separately to reduce peak memory.
+            The default uses one backward pass on the combined loss.
         kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
     """
 
@@ -486,6 +490,7 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
         momentum: float = 0.999,
         reinit_teacher: Optional[bool] = None,
         sampler: Optional[Callable] = None,
+        separate_backward: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -503,6 +508,7 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
             momentum=momentum,
             reinit_teacher=reinit_teacher,
             sampler=sampler,
+            separate_backward=separate_backward,
             **kwargs,
         )
         self.augmenter = augmenter
@@ -597,11 +603,9 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 supervised_pred = self.model(xs)
                 supervised_loss = self.supervised_loss(supervised_pred, ys)
 
-            # Backpropagate each half of the loss separately, so that only one graph is in memory at a time.
-            if self.mixed_precision:
-                self.scaler.scale(supervised_loss / 2).backward()
-            else:
-                (supervised_loss / 2).backward()
+            if self.separate_backward:
+                # Free supervised activations before the unsupervised forward pass.
+                self._accumulate_gradients(supervised_loss / 2)
 
             with forward_context(), torch.no_grad():
                 # Compute the pseudo labels.
@@ -618,8 +622,8 @@ class MeanTeacherTrainerWithInvertibleAugmentations(MeanTeacherTrainer):
                 unsup_pred_inv = self.augmenter.student.reverse_transform(unsup_pred)
                 unsupervised_loss = self.unsupervised_loss(unsup_pred_inv, pseudo_labels_inv, label_filter_inv)
 
-            backprop(unsupervised_loss / 2)
             loss = (supervised_loss + unsupervised_loss) / 2
+            backprop(unsupervised_loss / 2 if self.separate_backward else loss)
 
             if self.logger is not None:
                 with torch.no_grad(), forward_context():

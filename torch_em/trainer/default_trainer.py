@@ -776,6 +776,12 @@ class DefaultTrainer:
         if isinstance(self.logger, WandbLogger):
             self.logger.get_wandb().finish()
 
+    def _accumulate_gradients(self, loss):
+        """Accumulate gradients without an optimizer step."""
+        if self.mixed_precision:
+            loss = self.scaler.scale(loss)
+        loss.backward()
+
     def _backprop(self, loss):
         loss.backward()
         self.optimizer.step()
