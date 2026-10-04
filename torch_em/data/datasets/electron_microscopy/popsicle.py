@@ -1,9 +1,13 @@
-"""The POPSICLE dataset contains annotations for bacterial compartment segmentation in cryo-ET.
+"""The POPSICLE dataset contains annotations for compartment segmentation in cryo-ET. It has two sources,
+selected with the 'source' argument:
+- 'bacteria_compartments': multi-class compartment masks for 80 tomograms from eight bacterial genera, together
+  with the matching 20 Angstrom re-binned tomograms. It follows the official train/test split.
+- 'yeast_organelles': multi-class organelle masks (cytoplasm, nucleus, nuclear envelope, vesicle, membrane-enclosed
+  lumen and mitochondrion) for 19 S. pombe tomograms. Every tomogram is only partly annotated, so the classes that
+  were not annotated in a tomogram are part of its background. It follows the official train/test split.
 
-The data is hosted on the CryoET Data Portal at https://cryoetdataportal.czscience.com/depositions/10350.
-It provides curated multi-class compartment masks for 80 tomograms from eight bacterial genera,
-together with the matching 20 Angstrom re-binned tomograms, and follows the official train/test split.
-
+The data is hosted on the CryoET Data Portal at https://cryoetdataportal.czscience.com/depositions/10350 (bacteria)
+and https://cryoetdataportal.czscience.com/depositions/10351 (yeast), and is released under a CC0 license.
 The dataset is part of the publication https://doi.org/10.48550/arXiv.2606.10255.
 Please cite it if you use this dataset in your research.
 """
@@ -125,6 +129,37 @@ RUNS = [
 ]
 
 
+YEAST_BASE_URL = "https://files.cryoetdataportal.cziscience.com/{dataset}/{run}/Reconstructions/VoxelSpacing13.480/"
+YEAST_RAW_URL = YEAST_BASE_URL + "Tomograms/100/{run}.zarr"
+YEAST_LABEL_URL = YEAST_BASE_URL + "Annotations/{folder}/{name}-1.0_segmentationmask.zarr"
+
+# The yeast classes in the order of their label values (starting at 1).
+YEAST_CLASSES = ("cytoplasm", "nucleus", "nuclear_envelope", "vesicle", "membrane_enclosed_lumen", "mitochondrion")
+
+# The run name, portal dataset, official split and the portal annotation folder of each class (0 if not annotated).
+YEAST_RUNS = [
+    ("TS_026", 10000, "train", (117, 0, 0, 120, 121, 0)),
+    ("TS_027", 10000, "train", (114, 115, 116, 117, 118, 0)),
+    ("TS_028", 10000, "train", (115, 0, 0, 118, 119, 0)),
+    ("TS_029", 10000, "train", (112, 0, 0, 115, 116, 117)),
+    ("TS_030", 10000, "train", (117, 0, 0, 120, 121, 0)),
+    ("TS_034", 10000, "train", (117, 0, 0, 120, 121, 122)),
+    ("TS_037", 10000, "test", (117, 118, 119, 120, 0, 0)),
+    ("TS_041", 10000, "test", (117, 0, 0, 120, 121, 0)),
+    ("TS_043", 10000, "train", (114, 115, 116, 117, 118, 0)),
+    ("TS_045", 10000, "test", (114, 115, 116, 117, 118, 119)),
+    ("TS_0001", 10001, "test", (117, 0, 0, 120, 121, 122)),
+    ("TS_0002", 10001, "train", (117, 118, 119, 120, 121, 0)),
+    ("TS_0003", 10001, "train", (117, 0, 0, 120, 121, 122)),
+    ("TS_0004", 10001, "train", (117, 0, 0, 120, 123, 124)),
+    ("TS_0005", 10001, "train", (117, 0, 0, 120, 121, 0)),
+    ("TS_0006", 10001, "train", (117, 118, 119, 120, 121, 122)),
+    ("TS_0007", 10001, "train", (117, 118, 119, 0, 121, 122)),
+    ("TS_0008", 10001, "train", (117, 0, 0, 120, 121, 122)),
+    ("TS_0009", 10001, "train", (117, 118, 119, 120, 121, 0)),
+]
+
+
 def _fetch(url, path, optional=False):
     if os.path.exists(path):
         return True
@@ -175,11 +210,17 @@ def _download_ome_zarr(url, out_path, download):
     return array_path
 
 
-def _merge_labels(run_dir, dataset, run, extras, download):
+def _merge_labels(run_dir, class_urls, run, download):
     """Merge the per-class masks into one multi-class volume.
 
     The classes are only mutually exclusive at the native resolution, so the coarser levels of the
     portal label pyramid are not used.
+
+    Args:
+        run_dir: The folder of the run.
+        class_urls: The class name, label value and portal url of the mask of each class.
+        run: The name of the run.
+        download: Whether to download the data if it is not present.
     """
     import zarr
 
@@ -187,11 +228,8 @@ def _merge_labels(run_dir, dataset, run, extras, download):
     if os.path.exists(label_path):
         return label_path
 
-    names = list(CORE_CLASSES) + [OPTIONAL_CLASSES[key] for key in extras]
     merged = None
-    for name in names:
-        value, folder = CLASSES[name]
-        url = LABEL_URL.format(dataset=dataset, run=run, folder=folder, name=name)
+    for name, value, url in class_urls:
         class_dir = os.path.join(run_dir, f"class_{name}.zarr")
         array = zarr.open_array(_download_ome_zarr(url, class_dir, download), mode="r")
         mask = array[:] > 0
@@ -215,14 +253,43 @@ def _merge_labels(run_dir, dataset, run, extras, download):
     return label_path
 
 
+def _get_runs(split, source):
+    """Get the run name, raw url and the class urls of each run of the source and split."""
+    runs = []
+    if source == "bacteria_compartments":
+        for dataset, run, run_split, extras in RUNS:
+            if run_split != split:
+                continue
+            names = list(CORE_CLASSES) + [OPTIONAL_CLASSES[key] for key in extras]
+            class_urls = [
+                (name, CLASSES[name][0], LABEL_URL.format(dataset=dataset, run=run, folder=CLASSES[name][1], name=name))
+                for name in names
+            ]
+            runs.append((run, RAW_URL.format(dataset=dataset, run=run), class_urls))
+    else:
+        for run, dataset, run_split, folders in YEAST_RUNS:
+            if run_split != split:
+                continue
+            class_urls = [
+                (name, value, YEAST_LABEL_URL.format(dataset=dataset, run=run, folder=folder, name=name))
+                for value, (name, folder) in enumerate(zip(YEAST_CLASSES, folders), start=1) if folder
+            ]
+            runs.append((run, YEAST_RAW_URL.format(dataset=dataset, run=run), class_urls))
+    return runs
+
+
 def get_popsicle_data(
-    path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False
+    path: Union[os.PathLike, str],
+    split: Literal["train", "test"],
+    source: Literal["bacteria_compartments", "yeast_organelles"],
+    download: bool = False,
 ) -> str:
-    """Download the POPSICLE bacterial segmentation dataset.
+    """Download the POPSICLE segmentation dataset.
 
     Args:
         path: Filepath to a folder where the data will be downloaded.
         split: The data split to download. Either 'train' or 'test'.
+        source: The data source. Either 'bacteria_compartments' or 'yeast_organelles'.
         download: Whether to download the data if it is not present.
 
     Returns:
@@ -230,37 +297,42 @@ def get_popsicle_data(
     """
     if split not in ("train", "test"):
         raise ValueError(f"The split must be 'train' or 'test', got '{split}'.")
+    if source not in ("bacteria_compartments", "yeast_organelles"):
+        raise ValueError(f"The source must be 'bacteria_compartments' or 'yeast_organelles', got '{source}'.")
 
-    data_dir = os.path.join(path, split)
+    data_dir = os.path.join(path, split) if source == "bacteria_compartments" else os.path.join(path, source, split)
     os.makedirs(data_dir, exist_ok=True)
 
-    runs = [entry for entry in RUNS if entry[2] == split]
-    for dataset, run, _, extras in tqdm(runs, desc=f"Downloading the {split} tomograms"):
+    for run, raw_url, class_urls in tqdm(_get_runs(split, source), desc=f"Downloading the {split} tomograms"):
         run_dir = os.path.join(data_dir, run)
-        _download_ome_zarr(RAW_URL.format(dataset=dataset, run=run), os.path.join(run_dir, "raw.zarr"), download)
+        _download_ome_zarr(raw_url, os.path.join(run_dir, "raw.zarr"), download)
         if not download and not os.path.exists(os.path.join(run_dir, "labels.zarr")):
             raise RuntimeError(f"Cannot find the data at {run_dir}, but download was set to False.")
-        _merge_labels(run_dir, dataset, run, extras, download)
+        _merge_labels(run_dir, class_urls, run, download)
 
     return data_dir
 
 
 def get_popsicle_paths(
-    path: Union[os.PathLike, str], split: Literal["train", "test"], download: bool = False
+    path: Union[os.PathLike, str],
+    split: Literal["train", "test"],
+    source: Literal["bacteria_compartments", "yeast_organelles"],
+    download: bool = False,
 ) -> Tuple[List[str], List[str]]:
     """Get paths to the POPSICLE data.
 
     Args:
         path: Filepath to a folder where the data will be downloaded.
         split: The data split. Either 'train' or 'test'.
+        source: The data source. Either 'bacteria_compartments' or 'yeast_organelles'.
         download: Whether to download the data if it is not present.
 
     Returns:
         List of filepaths to the tomograms.
-        List of filepaths to the multi-class compartment masks.
+        List of filepaths to the multi-class masks.
     """
-    data_dir = get_popsicle_data(path, split, download)
-    runs = [entry[1] for entry in RUNS if entry[2] == split]
+    data_dir = get_popsicle_data(path, split, source, download)
+    runs = [run for run, _, _ in _get_runs(split, source)]
     raw_paths = [os.path.join(data_dir, run, "raw.zarr") for run in runs]
     label_paths = [os.path.join(data_dir, run, "labels.zarr") for run in runs]
     return raw_paths, label_paths
@@ -270,18 +342,23 @@ def get_popsicle_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int, int],
     split: Literal["train", "test"],
+    source: Literal["bacteria_compartments", "yeast_organelles"],
     download: bool = False,
     **kwargs
 ) -> Dataset:
-    """Get the dataset for bacterial compartment segmentation in cryo-ET data.
+    """Get the dataset for compartment segmentation in cryo-ET data.
 
-    The labels are a multi-class mask with 1: cytoplasm, 2: membrane, 3: periplasmic space,
-    4: bacterial-type flagellum and 5: dense body. The last two classes are not present in every tomogram.
+    The labels of the bacterial source are a multi-class mask with 1: cytoplasm, 2: membrane,
+    3: periplasmic space, 4: bacterial-type flagellum and 5: dense body. The last two classes are not present
+    in every tomogram. The labels of the yeast source are 1: cytoplasm, 2: nucleus, 3: nuclear envelope,
+    4: vesicle, 5: membrane-enclosed lumen and 6: mitochondrion. The classes that are not annotated in a
+    tomogram are part of its background (0).
 
     Args:
         path: Filepath to a folder where the data will be downloaded.
         patch_shape: The patch shape to use for training.
         split: The data split. Either 'train' or 'test'.
+        source: The data source. Either 'bacteria_compartments' or 'yeast_organelles'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
@@ -290,7 +367,7 @@ def get_popsicle_dataset(
     """
     assert len(patch_shape) == 3
 
-    raw_paths, label_paths = get_popsicle_paths(path, split, download)
+    raw_paths, label_paths = get_popsicle_paths(path, split, source, download)
 
     return torch_em.default_segmentation_dataset(
         raw_paths=raw_paths,
@@ -308,16 +385,18 @@ def get_popsicle_loader(
     patch_shape: Tuple[int, int, int],
     batch_size: int,
     split: Literal["train", "test"],
+    source: Literal["bacteria_compartments", "yeast_organelles"],
     download: bool = False,
     **kwargs
 ) -> DataLoader:
-    """Get the DataLoader for bacterial compartment segmentation in cryo-ET data.
+    """Get the DataLoader for compartment segmentation in cryo-ET data.
 
     Args:
         path: Filepath to a folder where the data will be downloaded.
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
         split: The data split. Either 'train' or 'test'.
+        source: The data source. Either 'bacteria_compartments' or 'yeast_organelles'.
         download: Whether to download the data if it is not present.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
@@ -325,5 +404,5 @@ def get_popsicle_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_popsicle_dataset(path, patch_shape, split, download=download, **ds_kwargs)
+    dataset = get_popsicle_dataset(path, patch_shape, split, source, download=download, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
