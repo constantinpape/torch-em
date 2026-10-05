@@ -246,8 +246,9 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
 
             self.optimizer.zero_grad()
             # supervised loss (supervised student prediction)
-            pred_s = self.model(x_s)
-            supervised_loss = self.supervised_loss(pred_s, y_s)
+            with forward_context():
+                pred_s = self.model(x_s)
+                supervised_loss = self.supervised_loss(pred_s, y_s)
 
             if self.separate_backward:
                 self._accumulate_gradients(supervised_loss)
