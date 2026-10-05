@@ -70,13 +70,13 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
         momentum: The momentum value for the exponential moving weight average of the teacher model.
         reinit_teacher: Whether to reinit the teacher model before starting the training.
         sampler: A sampler for rejecting pseudo-labels according to a defined criterion.
+        separate_backward: Whether to backpropagate each loss term separately before one optimizer update.
+            The default uses separate optimizer updates for the supervised and unsupervised losses.
         kwargs: Additional keyword arguments for `torch_em.trainer.DefaultTrainer`.
     """
 
-    def __init__(
-        self, complementary_dropout, **kwargs
-    ):
-        super().__init__(**kwargs)
+    def __init__(self, complementary_dropout, separate_backward: bool = False, **kwargs):
+        super().__init__(separate_backward=separate_backward, **kwargs)
         self.complementary_dropout = complementary_dropout
 
         self.teacher.eval()
@@ -246,10 +246,14 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
 
             self.optimizer.zero_grad()
             # supervised loss (supervised student prediction)
-            pred_s = self.model(x_s)
-            supervised_loss = self.supervised_loss(pred_s, y_s)
+            with forward_context():
+                pred_s = self.model(x_s)
+                supervised_loss = self.supervised_loss(pred_s, y_s)
 
-            backprop(supervised_loss)
+            if self.separate_backward:
+                self._accumulate_gradients(supervised_loss)
+            else:
+                backprop(supervised_loss)
 
             # Compute the pseudo labels (unsupervised teacher prediction)
             with forward_context(), torch.no_grad():
@@ -261,7 +265,8 @@ class UniMatchv2Trainer(MeanTeacherTrainerWithInvertibleAugmentations):
                 )
 
             # Perform unsupervised training
-            self.optimizer.zero_grad()
+            if not self.separate_backward:
+                self.optimizer.zero_grad()
             with forward_context():
                 if self.complementary_dropout:
                     pred_s1, pred_s2 = self.predict_with_comp_drop(self.model, torch.cat((x_u_s1, x_u_s2))).chunk(2)

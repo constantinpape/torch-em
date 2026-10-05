@@ -33,6 +33,8 @@ class TestMeanTeacher(unittest.TestCase):
         supervised_loss=None,
         supervised_loss_and_metric=None,
         unsupervised_loss_and_metric=None,
+        mixed_precision=False,
+        separate_backward=False,
     ):
         model = UNet2d(in_channels=1, out_channels=1, initial_features=8, depth=3)
         optimizer = torch.optim.AdamW(model.parameters())
@@ -51,7 +53,8 @@ class TestMeanTeacher(unittest.TestCase):
             supervised_val_loader=supervised_val_loader,
             supervised_loss=supervised_loss,
             supervised_loss_and_metric=supervised_loss_and_metric,
-            mixed_precision=False,
+            mixed_precision=mixed_precision,
+            separate_backward=separate_backward,
             device=torch.device("cpu"),
             compile_model=False,
         )
@@ -62,6 +65,7 @@ class TestMeanTeacher(unittest.TestCase):
         # make sure that the trainer can be deserialized from the checkpoint
         trainer2 = self_training.MeanTeacherTrainer.from_checkpoint(os.path.join("./checkpoints", name), name="latest")
         self.assertEqual(trainer.iteration, trainer2.iteration)
+        self.assertEqual(trainer2.separate_backward, separate_backward)
         self.assertTrue(torch_em.util.model_is_equal(trainer.model, trainer2.model))
         self.assertTrue(torch_em.util.model_is_equal(trainer.teacher, trainer2.teacher))
         self.assertEqual(len(trainer.unsupervised_train_loader), len(trainer2.unsupervised_train_loader))
@@ -115,13 +119,18 @@ class TestMeanTeacher(unittest.TestCase):
         unsupervised_train_loader = self.get_unsupervised_loader(n_samples=50)
         supervised_train_loader = self.get_supervised_loader(n_samples=51)
         supervised_val_loader = self.get_supervised_loader(n_samples=4)
-        self._test_mean_teacher(
-            unsupervised_train_loader=unsupervised_train_loader,
-            supervised_train_loader=supervised_train_loader,
-            supervised_val_loader=supervised_val_loader,
-            supervised_loss=self_training.DefaultSelfTrainingLoss(),
-            supervised_loss_and_metric=self_training.DefaultSelfTrainingLossAndMetric(),
-        )
+        for separate_backward in (False, True):
+            for mixed_precision in (False, True):
+                with self.subTest(separate_backward=separate_backward, mixed_precision=mixed_precision):
+                    self._test_mean_teacher(
+                        unsupervised_train_loader=unsupervised_train_loader,
+                        supervised_train_loader=supervised_train_loader,
+                        supervised_val_loader=supervised_val_loader,
+                        supervised_loss=self_training.DefaultSelfTrainingLoss(),
+                        supervised_loss_and_metric=self_training.DefaultSelfTrainingLossAndMetric(),
+                        mixed_precision=mixed_precision,
+                        separate_backward=separate_backward,
+                    )
 
 
 if __name__ == "__main__":
