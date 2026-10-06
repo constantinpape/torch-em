@@ -614,6 +614,14 @@ class UNETR(UNETRBase):
             perform_range_checks=perform_range_checks,
             **kwargs,
         )
+        self.init_kwargs = {"img_size": img_size, "backbone": backbone, "encoder": encoder, "decoder": decoder,
+                            "out_channels": out_channels, "use_sam_stats": use_sam_stats,
+                            "use_mae_stats": use_mae_stats, "use_dino_stats": use_dino_stats,
+                            "use_imagenet_stats": use_imagenet_stats, "resize_input": resize_input,
+                            "encoder_checkpoint": encoder_checkpoint, "final_activation": final_activation,
+                            "use_skip_connection": use_skip_connection, "embed_dim": embed_dim,
+                            "use_conv_transpose": use_conv_transpose, "perform_range_checks": perform_range_checks,
+                            **kwargs}
 
         encoder = self.encoder
 
@@ -837,6 +845,14 @@ class UNETR3D(UNETRBase):
             perform_range_checks=perform_range_checks,
             **kwargs,
         )
+        self.init_kwargs = {"img_size": img_size, "backbone": backbone, "encoder": encoder, "decoder": decoder,
+                            "out_channels": out_channels, "use_sam_stats": use_sam_stats,
+                            "use_mae_stats": use_mae_stats, "use_dino_stats": use_dino_stats,
+                            "use_imagenet_stats": use_imagenet_stats, "resize_input": resize_input,
+                            "encoder_checkpoint": encoder_checkpoint, "final_activation": final_activation,
+                            "use_skip_connection": use_skip_connection, "embed_dim": embed_dim,
+                            "use_conv_transpose": use_conv_transpose, "use_strip_pooling": use_strip_pooling,
+                            "perform_range_checks": perform_range_checks, **kwargs}
 
         # The 3d convolutional decoder.
         # First, get the important parameters for the decoder.
