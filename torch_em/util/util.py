@@ -25,6 +25,20 @@ DTYPE_MAP = {
 """
 
 
+def get_cache_directory() -> str:
+    """Get the torch-em cache directory, for example for downloaded model weights.
+
+    Set the TORCH_EM_CACHEDIR environment variable to use a custom cache directory.
+
+    Returns:
+        The path to the cache directory.
+    """
+    import pooch  # We import pooch here, so that 'import torch_em' does not need it.
+
+    default_cache_directory = os.path.expanduser(pooch.os_cache("torch_em"))
+    return os.environ.get("TORCH_EM_CACHEDIR", default_cache_directory)
+
+
 # This is a fairly brittle way to check if a module is compiled.
 # Would be good to find a better solution, ideall something like model.is_compiled().
 def is_compiled(model):
