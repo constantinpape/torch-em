@@ -3,7 +3,9 @@ import numpy as np
 import torch
 import kornia.augmentation as K
 
-from torch_em.transform.invertible_augmentations import AugmentationSequential3D, InvertibleAugmenter
+from torch_em.transform.invertible_augmentations import (
+    AugmentationSequential3D, InvertibleAugmenter, MeanTeacherAugmenters
+)
 
 
 def _identity(x):
@@ -131,6 +133,37 @@ class TestInvertibleAugmenter(unittest.TestCase):
         x_aug = augmenter.transform(x)
 
         self.assertEqual(x.shape, x_aug.shape)
+
+
+class TestMeanTeacherAugmenters(unittest.TestCase):
+    aug_dict = {
+        "intensity": {
+            "RandomGaussianBlur": {"kernel_size": (3, 3), "sigma": (0.1, 1.0)},
+        },
+        "geometrical": {
+            "RandomHorizontalFlip": {},
+            "RandomVerticalFlip": {},
+            "RandomRotation90": {"times": (-1, 2)},
+        },
+    }
+
+    def test_aug_dict(self):
+        augmenters = MeanTeacherAugmenters(ndim=2, aug_dict=self.aug_dict)
+
+        x = torch.rand(1, 1, 64, 64)
+        x_aug = augmenters.teacher.transform(x)
+        x_inv = augmenters.teacher.reverse_transform(x_aug)
+
+        self.assertEqual(x.shape, x_inv.shape)
+
+    def test_aug_dict_3d(self):
+        augmenters = MeanTeacherAugmenters(ndim=3, aug_dict=self.aug_dict)
+
+        x = torch.rand(1, 1, 16, 64, 64)
+        x_aug = augmenters.teacher.transform(x)
+        x_inv = augmenters.teacher.reverse_transform(x_aug)
+
+        self.assertEqual(x.shape, x_inv.shape)
 
 
 if __name__ == "__main__":

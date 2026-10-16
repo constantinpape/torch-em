@@ -1,18 +1,27 @@
+import os
 from functools import partial
 from collections import OrderedDict
 from typing import Optional, Tuple, Union, Literal
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from .vit import get_vision_transformer
 from .unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d, _update_conv_kwargs
+from ..transform.raw import normalize_percentile
+from ..util.util import get_cache_directory
 
 try:
     from micro_sam.util import get_sam_model
 except ImportError:
     get_sam_model = None
+
+try:
+    from micro_sam.util import models as microsam_models
+except ImportError:
+    microsam_models = None
 
 try:
     from micro_sam.v2.util import get_sam2_model
@@ -23,6 +32,193 @@ try:
     from micro_sam3.util import get_sam3_model
 except ImportError:
     get_sam3_model = None
+
+#
+#  UNETR WITH PRETRAINED ENCODERS
+#
+
+def _normalize_percentile_to_range(raw, clip_max):
+    raw = normalize_percentile(raw)
+    raw = torch.clamp(raw, 0, 1) if torch.is_tensor(raw) else np.clip(raw, 0, 1)
+    return raw * clip_max
+
+
+def get_vit_raw_transform(backbone):
+    """Get the raw transform and the maximum input value for a pretrained ViT backbone.
+
+    Args:
+        backbone: The pretrained ViT encoder. Options: "sam", "sam2", "dinov2", "dinov3", or None.
+
+    Returns:
+        The raw transform. It normalizes the raw data with percentiles to [0, 255] for "sam",
+            and to [0, 1] for "sam2", "dinov2" and "dinov3". None if `backbone` is None,
+            so the loaders use the default torch-em standardization.
+        The maximum input value `clip_max`. The intensity augmentations clip their output to
+            [0, clip_max], so that the input stays in the expected range. None if `backbone` is None.
+    """
+    if backbone == "sam":
+        clip_max = 255
+    elif backbone in ("sam2", "dinov2", "dinov3"):
+        clip_max = 1
+    elif backbone is None:
+        return None, None
+    else:
+        raise ValueError(f"Unsupported backbone: {backbone}.")
+
+    return partial(_normalize_percentile_to_range, clip_max=clip_max), clip_max
+
+
+def _get_dinov2_checkpoint(model_type: str):
+    """Downloads the model checkpoints and returns filepath to it.
+    """
+    import pooch  # We import pooch here, so that 'import torch_em' does not need it.
+
+    assert isinstance(model_type, str), "Watch out, we need the 'model_type' name."
+
+    save_directory = os.path.join(get_cache_directory(), "models", "dinov2")
+
+    urls = {"vit_b": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"}
+    hashes = {"vit_b": "0b8b82f85de91b424aded121c7e1dcc2b7bc6d0adeea651bf73a13307fad8c73"}
+
+    # Make an explicit check
+    assert model_type in urls, "Oops, seems like the specific DINOv2 model is not worked out atm."
+
+    # Download the model weights
+    pooch.retrieve(
+        url=urls[model_type],
+        known_hash=hashes[model_type],
+        fname=model_type,
+        path=save_directory,
+        progressbar=True,
+    )
+
+    # Get the checkpoint path
+    checkpoint_path = os.path.join(save_directory, model_type)
+
+    return checkpoint_path
+
+
+def _get_dinov3_checkpoint(model_type: str):
+    """Downloads the model checkpoint and returns filepath to it.
+    """
+    import pooch  # We import pooch here, so that 'import torch_em' does not need it.
+
+    assert isinstance(model_type, str), "Watch out, we need the 'model_type' name."
+
+    save_directory = os.path.join(get_cache_directory(), "models", "dinov3")
+
+    # The weights are stored on owncloud for now
+    urls = {"vit_b": "https://owncloud.gwdg.de/index.php/s/PvTzG3fdo2pnNCz/download"}
+    hashes = {"vit_b": "73cec8be7427c8655ceced13ce62f6e20a1fa90d1b4d4a550df17a1144081a7c"}
+
+    # Make an explicit check
+    assert model_type in urls, "Oops, seems like the specific DINOv3 model is not stored on OwnCloud."
+
+    # Download the model weights
+    pooch.retrieve(
+        url=urls[model_type],
+        known_hash=hashes[model_type],
+        fname=model_type,
+        path=save_directory,
+        progressbar=True,
+    )
+
+    # Get the checkpoint path
+    checkpoint_path = os.path.join(save_directory, model_type)
+
+    return checkpoint_path
+
+
+def _get_checkpoint(backbone, model_type, return_decoder_path=False):
+
+    if backbone == "sam":
+        if microsam_models is None:
+            raise RuntimeError(
+                "The 'sam' backbone requires micro_sam. Install it with 'conda install -c conda-forge micro_sam'."
+                )
+        model_registry = microsam_models()
+        checkpoint_path = model_registry.fetch(model_type, progressbar=True)
+
+        if return_decoder_path:
+            decoder_name = f"{model_type}_decoder"
+            decoder_path = model_registry.fetch(
+                decoder_name, progressbar=True
+            ) if decoder_name in model_registry.registry else None
+
+    elif backbone == "dinov2":
+        checkpoint_path = _get_dinov2_checkpoint(model_type)
+        decoder_path = None
+
+    elif backbone == "dinov3":
+        checkpoint_path = _get_dinov3_checkpoint(model_type)
+        decoder_path = None
+    else:
+        raise ValueError(f"Unsupported backbone '{backbone}'.")
+
+    if return_decoder_path:
+        return checkpoint_path, decoder_path
+    else:
+        return checkpoint_path
+
+
+def _get_vit_type(model_type: str) -> str:
+    if model_type is None:
+        return model_type
+    else:
+        parts = model_type.split("_")
+        model_type = "_".join(parts[:2])
+        return model_type
+
+
+def get_unetr_model(
+    ndim: int,
+    backbone: Literal["sam", "dinov2", "dinov3"],
+    model_type: str,
+    out_channels: int = 1,
+    init_decoder: bool = False,
+    final_activation: str = "Sigmoid",
+) -> nn.Module:
+    """Get the UNETR model with a pretrained ViT encoder for 2D or 3D segmentation tasks.
+
+    Args:
+        ndim: The number of spatial dimensions for the model; must be 2 or 3.
+        backbone: The pretrained ViT encoder of the UNETR model. Options: "sam", "dinov2", or "dinov3".
+        model_type: Model type for the selected `backbone` model family,
+            for example "vit_b" or "vit_b_em_organelles" for "sam".
+        out_channels: The number of output channels of the network.
+        init_decoder: Whether to initialize the decoder with pretrained micro-sam weights. Not implemented yet.
+        final_activation: The activation applied to the last output layer.
+
+    Returns:
+        The UNETR model.
+    """
+    if backbone not in ("sam", "dinov2", "dinov3"):
+        raise ValueError(f"Unsupported backbone '{backbone}'.")
+    if init_decoder:
+        raise NotImplementedError("Initializing the decoder with pretrained weights is not implemented yet.")
+
+    # Get the model class.
+    if ndim == 2:
+        model_class = UNETR2D
+    else:
+        model_class = partial(UNETR3D, use_strip_pooling=False)
+
+    # Load the model
+    model = model_class(
+        img_size=518 if backbone == "dinov2" else 1024,
+        backbone=backbone,
+        encoder=_get_vit_type(model_type),
+        encoder_checkpoint=_get_checkpoint(backbone=backbone, model_type=model_type),
+        out_channels=out_channels,
+        resize_input=True,
+        final_activation=final_activation,
+        use_skip_connection=False,
+        use_conv_transpose=False,
+        use_sam_stats="sam" in backbone,
+        use_dino_stats="dino" in backbone,
+    )
+
+    return model
 
 
 #
@@ -972,6 +1168,7 @@ class UNETR3D(UNETRBase):
 
         # Postprocess the output back to original size.
         return self.postprocess_masks(x, input_shape, original_shape)
+
 
 #
 #  ADDITIONAL FUNCTIONALITIES

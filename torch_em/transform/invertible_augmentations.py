@@ -172,9 +172,24 @@ class MeanTeacherAugmenters:
         teacher=None,
         student=None,
         clip_max=None,
+        aug_dict=None,
     ):
-        self.teacher = teacher or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
-        self.student = student or InvertibleAugmenter(*get_default_augmentations("weak", ndim=ndim), clip_max=clip_max)
+        self.teacher = teacher or self._get_weak_augmenter(ndim, clip_max, aug_dict)
+        self.student = student or self._get_weak_augmenter(ndim, clip_max, aug_dict)
+
+    def _get_weak_augmenter(self, ndim, clip_max, aug_dict):
+        if aug_dict is None:
+            augmenter = InvertibleAugmenter(
+                *get_default_augmentations("weak", ndim=ndim),
+                clip_max=clip_max,
+            )
+        else:
+            augmenter = InvertibleAugmenter(
+                get_intensity_augmentations(ndim, aug_dict=aug_dict["intensity"]),
+                get_geometrical_augmentations(ndim, aug_dict=aug_dict["geometrical"]),
+                clip_max=clip_max,
+            )
+        return augmenter
 
     def reset_all(self):
         self.teacher.reset()
