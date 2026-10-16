@@ -55,9 +55,8 @@ CMITO_STAGES = {
     "l3": {
         "raw_url": "precomputed://https://bossdb-open-data.s3.amazonaws.com/witvliet2020/Dataset_6/em",
         "mask_url": "precomputed://https://storage.googleapis.com/gnd-neuroglancer/witvliet/dataset6/mito_seg_v4",
-        # Raw mip3 (8x downsample) spatially matches the mask, despite the mask's reported
-        # 8 nm nominal resolution not being an exact 8x multiple of the raw 0.768 nm mip0
-        # pixel size; shapes (4544 x 4288) confirm the 8x factor is the correct match.
+        # Raw mip3 (0.768 nm x 8 = 6.144 nm xy) is the mask's voxel grid (both 4544 x 4288), although the mask
+        # reports 8 nm. Bounding boxes are in the nm of the raw grid, see 'get_cmito_data'.
         "raw_mip": 3,
         "bbox_nm": (0, 27918, 0, 26345, 0, 21600),
     },
@@ -158,8 +157,8 @@ def get_cmito_data(
         stage: The developmental stage to use. One of 'l1', 'l2', 'l3', 'adult', 'dauer'.
             The 'dauer' stage's mask bucket has no independently confirmed data license
             (see the module docstring); use it with that caveat in mind.
-        bounding_box: Region in nm as (x_min, x_max, y_min, y_max, z_min, z_max).
-            Defaults to the full volume extent for the chosen stage.
+        bounding_box: Region in nm as (x_min, x_max, y_min, y_max, z_min, z_max), in the resolution of the raw
+            data at `raw_mip`. Defaults to the full volume extent for the chosen stage.
         download: Whether to stream and cache the data if not present.
 
     Returns:
@@ -200,13 +199,16 @@ def get_cmito_data(
     )
     mask_cv = CloudVolume(stage_info["mask_url"], mip=0, progress=False, fill_missing=True)
 
-    rx0, rx1, ry0, ry1, rz0, rz1, raw_shape = _cmito_bbox_voxels(
-        raw_cv, x_min_nm, x_max_nm, y_min_nm, y_max_nm, z_min_nm, z_max_nm
-    )
-    mx0, mx1, my0, my1, mz0, mz1, mask_shape = _cmito_bbox_voxels(
-        mask_cv, x_min_nm, x_max_nm, y_min_nm, y_max_nm, z_min_nm, z_max_nm
-    )
-    shape = tuple(min(r, m) for r, m in zip(raw_shape, mask_shape))
+    # For every stage the raw (at raw_mip) and the mask share one voxel grid with the same origin, but the mask does
+    # not always report the true resolution (l3 reports 8 nm on the 6.144 nm raw grid). So the box is converted to
+    # voxels once, with the raw resolution, the same voxel box is read from both, and it is clipped to both volumes.
+    assert tuple(raw_cv.voxel_offset) == tuple(mask_cv.voxel_offset), \
+        f"The raw and mask voxel grids of stage '{stage}' have different origins."
+    x0, x1, y0, y1, z0, z1, _ = _cmito_bbox_voxels(raw_cv, x_min_nm, x_max_nm, y_min_nm, y_max_nm, z_min_nm, z_max_nm)
+    x1, y1, z1 = (min(v, int(r), int(m)) for v, r, m in zip((x1, y1, z1), raw_cv.volume_size, mask_cv.volume_size))
+    shape = (z1 - z0, y1 - y0, x1 - x0)
+    if min(shape) <= 0:
+        raise ValueError(f"The bounding box {bbox} lies outside the stage '{stage}' volume.")
 
     root = zarr.open_group(zarr_path, mode="a")
     root.attrs["stage"] = stage
@@ -215,11 +217,11 @@ def get_cmito_data(
 
     if "raw" not in root:
         ds_raw = _cmito_create_array(root, "raw", shape, np.dtype("uint8"), is_label=False)
-        _cmito_download_to_zarr(raw_cv, ds_raw, rx0, ry0, rz0, name="raw")
+        _cmito_download_to_zarr(raw_cv, ds_raw, x0, y0, z0, name="raw")
 
     if "labels" not in root:
         ds_lbl = _cmito_create_array(root, "labels", shape, np.dtype("uint16"), is_label=True)
-        _cmito_download_to_zarr(mask_cv, ds_lbl, mx0, my0, mz0, name="labels")
+        _cmito_download_to_zarr(mask_cv, ds_lbl, x0, y0, z0, name="labels")
 
     print(f"Cached to {zarr_path} (shape {shape})")
     return zarr_path
