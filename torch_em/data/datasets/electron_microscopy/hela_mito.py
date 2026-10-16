@@ -3,12 +3,12 @@ microscopy slices of HeLa cells.
 
 The raw slices are from the same acquisition (EMPIAR-10094) already used by the
 `cefa_hela` module, but that module only provides nuclear-envelope annotations; this
-module adds a separate, complementary layer of mitochondria instance masks on 9 of the
+module adds a separate, complementary layer of mitochondria instance masks on 5 of the
 24 raw slices released alongside it.
 
-Annotation coverage is sparse, not exhaustive: only 9 of the 24 available slices carry
-labels, and some mitochondria visible in the raw data may be left unannotated even on
-labeled slices.
+Annotation coverage is sparse, not exhaustive: only 5 of the 24 available slices carry
+labels, only the central cell is annotated, and some mitochondria visible in the raw data
+may be left unannotated even in the central cell.
 
 The dataset is available at https://github.com/reyesaldasoro/MitoEM.
 The dataset was published in https://doi.org/10.1101/2023.11.14.567016.
@@ -27,22 +27,12 @@ from .. import util
 
 BASE_URL = "https://raw.githubusercontent.com/reyesaldasoro/MitoEM/main/CODE"
 RAW_URL = BASE_URL + "/OriginalImages/ROI_6005_4739_81_z{slice_id}.tif"
-LABEL_URL = BASE_URL + "/{prefix}_ROI_6005_4739_81_z{slice_id}.mat"
+LABEL_URL = BASE_URL + "/GT_ROI_6005_4739_81_z{slice_id}.mat"
 
-# The annotated slice ids and the ground-truth file prefix to use for each. GT and GT2
-# both annotate z0001 (0.94 IoU between them); GT is used there and GT2 only for the
-# 4 additional slices it uniquely covers.
-SLICES = {
-    "0001": "GT",
-    "0002": "GT2",
-    "0004": "GT2",
-    "0026": "GT2",
-    "0028": "GT2",
-    "0030": "GT",
-    "0060": "GT",
-    "0116": "GT",
-    "0150": "GT",
-}
+# The annotated raw slice ids, with the 'GT' annotation of each. The repository also has 'GT2' files, but these are
+# a second annotation of the same 5 slices and numbered sequentially, not by raw slice: GT2 z0001, z0002, z0004,
+# z0026 and z0028 annotate the raw slices z0001, z0030, z0060, z0116 and z0150 (mask IoU with GT 0.76 to 0.96).
+SLICES = ["0001", "0030", "0060", "0116", "0150"]
 
 
 def _convert_slice(raw_path, mat_path, out_path):
@@ -73,7 +63,7 @@ def get_hela_mito_data(path: Union[os.PathLike, str], download: bool = False) ->
     """
     os.makedirs(path, exist_ok=True)
 
-    for slice_id, prefix in SLICES.items():
+    for slice_id in SLICES:
         out_path = os.path.join(path, f"z{slice_id}.h5")
         if os.path.exists(out_path):
             continue
@@ -81,9 +71,9 @@ def get_hela_mito_data(path: Union[os.PathLike, str], download: bool = False) ->
             raise RuntimeError(f"Cannot find the data at {out_path}, but download was set to False.")
 
         raw_path = os.path.join(path, f"raw_z{slice_id}.tif")
-        mat_path = os.path.join(path, f"{prefix}_z{slice_id}.mat")
+        mat_path = os.path.join(path, f"GT_z{slice_id}.mat")
         util.download_source(raw_path, RAW_URL.format(slice_id=slice_id), download)
-        util.download_source(mat_path, LABEL_URL.format(prefix=prefix, slice_id=slice_id), download)
+        util.download_source(mat_path, LABEL_URL.format(slice_id=slice_id), download)
 
         _convert_slice(raw_path, mat_path, out_path)
         os.remove(raw_path)
