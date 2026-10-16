@@ -8,12 +8,16 @@ The dataset has 21 training and 6 test images. There is no validation split.
 
 Masks are stored as grayscale PNGs (0=background, 255=mitochondria) with slight
 anti-aliased edges. They are thresholded to binary during preprocessing.
+One test mask (y_5) is stored at half the image resolution and is upsampled to it.
 
 This dataset is from the publication https://doi.org/10.1038/s41598-025-03311-1.
 Please cite it if you use this dataset in your research.
 
 The data is available at https://yoonlab.unist.ac.kr/index.php/research/mitochondria-tem-dataset/
 and requires a Google Drive download via gdown: pip install gdown.
+Google Drive may deny the automated download of the image files. In that case, download the folder
+https://drive.google.com/drive/folders/1n2ZqbJEHPyMB_6a6OTBBACt5Jct2PZJc in a browser and extract it in `path`,
+so that `path/Deeppi-EM/mitoseg_deploy/datasets/Skeletal_muscle` exists.
 """
 
 import os
@@ -49,16 +53,26 @@ def _preprocess_probtem(raw_dir, label_dir, out_dir):
         label_name = name.replace("x_", "y_")
         lp = os.path.join(label_dir, f"{label_name}.png")
         if not os.path.exists(lp):
-            continue
+            raise FileNotFoundError(f"The mask {lp} for {rp} is missing, the download is likely incomplete.")
 
         labels = imageio.imread(lp)
         if labels.ndim == 3:
             labels = labels[..., 0]
         labels = (labels >= 127).astype(np.uint8)
 
-        with h5py.File(out_path, "w") as f:
+        # Some masks are stored at a lower resolution than their image, by an integer factor.
+        if labels.shape != raw.shape:
+            factors = [r / s for r, s in zip(raw.shape, labels.shape)]
+            if factors[0] != factors[1] or not factors[0].is_integer():
+                raise RuntimeError(f"The mask {lp} has shape {labels.shape}, which does not fit the image {raw.shape}.")
+            labels = np.kron(labels, np.ones((int(factors[0]),) * 2, dtype=labels.dtype))
+
+        # The file is written under a temporary name, so that an interrupted conversion is redone.
+        tmp_path = out_path + ".tmp"
+        with h5py.File(tmp_path, "w") as f:
             f.create_dataset("raw", data=raw, compression="gzip")
             f.create_dataset("labels", data=labels, compression="gzip")
+        os.replace(tmp_path, out_path)
 
 
 def get_probtem_data(
@@ -77,11 +91,12 @@ def get_probtem_data(
         Path to the folder containing preprocessed HDF5 files.
     """
     processed_dir = os.path.join(str(path), "processed", split)
-    if os.path.isdir(processed_dir) and len(glob(os.path.join(processed_dir, "*.h5"))) > 0:
-        return processed_dir
-
     raw_dir = os.path.join(str(path), PROBTEM_DATA_ROOT, split, "input")
     label_dir = os.path.join(str(path), PROBTEM_DATA_ROOT, split, "target")
+
+    # Without the original data there is nothing left to process, so the processed data is used as it is.
+    if not os.path.isdir(raw_dir) and len(glob(os.path.join(processed_dir, "*.h5"))) > 0:
+        return processed_dir
 
     if not os.path.isdir(raw_dir):
         if not download:
