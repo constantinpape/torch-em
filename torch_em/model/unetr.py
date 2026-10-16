@@ -33,11 +33,9 @@ try:
 except ImportError:
     get_sam3_model = None
 
-
 #
 #  UNETR WITH PRETRAINED ENCODERS
 #
-
 
 def _normalize_percentile_to_range(raw, clip_max):
     raw = normalize_percentile(raw)
@@ -69,55 +67,6 @@ def get_vit_raw_transform(backbone):
 
     return partial(_normalize_percentile_to_range, clip_max=clip_max), clip_max
 
-
-def get_unetr_model(
-    ndim: int,
-    backbone: Literal["sam", "dinov2", "dinov3"],
-    model_type: str,
-    out_channels: int = 1,
-    init_decoder: bool = False,
-    final_activation: str = "Sigmoid",
-) -> nn.Module:
-    """Get the UNETR model with a pretrained ViT encoder for 2D or 3D segmentation tasks.
-
-    Args:
-        ndim: The number of spatial dimensions for the model; must be 2 or 3.
-        backbone: The pretrained ViT encoder of the UNETR model. Options: "sam", "dinov2", or "dinov3".
-        model_type: Model type for the selected `backbone` model family,
-            for example "vit_b" or "vit_b_em_organelles" for "sam".
-        out_channels: The number of output channels of the network.
-        init_decoder: Whether to initialize the decoder with pretrained micro-sam weights.
-            Only available for 2D models with a micro-sam `model_type` that has a pretrained decoder.
-        final_activation: The activation applied to the last output layer.
-
-    Returns:
-        The UNETR model.
-    """
-    if backbone not in ("sam", "dinov2", "dinov3"):
-        raise ValueError(f"Unsupported backbone '{backbone}'.")
-
-    # Get the model class.
-    if ndim == 2:
-        model_class = UNETR2D
-    else:
-        model_class = partial(UNETR3D, use_strip_pooling=False)
-
-    # Load the model
-    model = model_class(
-        img_size=518 if backbone == "dinov2" else 1024,
-        backbone=backbone,
-        encoder=_get_vit_type(model_type),
-        encoder_checkpoint=_get_checkpoint(backbone=backbone, model_type=model_type),
-        out_channels=out_channels,
-        resize_input=True,
-        final_activation=final_activation,
-        use_skip_connection=False,
-        use_conv_transpose=False,
-        use_sam_stats="sam" in backbone,
-        use_dino_stats="dino" in backbone,
-    )
-
-    return model
 
 def _get_dinov2_checkpoint(model_type: str):
     """Downloads the model checkpoints and returns filepath to it.
@@ -219,6 +168,57 @@ def _get_vit_type(model_type: str) -> str:
         parts = model_type.split("_")
         model_type = "_".join(parts[:2])
         return model_type
+
+
+def get_unetr_model(
+    ndim: int,
+    backbone: Literal["sam", "dinov2", "dinov3"],
+    model_type: str,
+    out_channels: int = 1,
+    init_decoder: bool = False,
+    final_activation: str = "Sigmoid",
+) -> nn.Module:
+    """Get the UNETR model with a pretrained ViT encoder for 2D or 3D segmentation tasks.
+
+    Args:
+        ndim: The number of spatial dimensions for the model; must be 2 or 3.
+        backbone: The pretrained ViT encoder of the UNETR model. Options: "sam", "dinov2", or "dinov3".
+        model_type: Model type for the selected `backbone` model family,
+            for example "vit_b" or "vit_b_em_organelles" for "sam".
+        out_channels: The number of output channels of the network.
+        init_decoder: Whether to initialize the decoder with pretrained micro-sam weights. Not implemented yet.
+        final_activation: The activation applied to the last output layer.
+
+    Returns:
+        The UNETR model.
+    """
+    if backbone not in ("sam", "dinov2", "dinov3"):
+        raise ValueError(f"Unsupported backbone '{backbone}'.")
+    if init_decoder:
+        raise NotImplementedError("Initializing the decoder with pretrained weights is not implemented yet.")
+
+    # Get the model class.
+    if ndim == 2:
+        model_class = UNETR2D
+    else:
+        model_class = partial(UNETR3D, use_strip_pooling=False)
+
+    # Load the model
+    model = model_class(
+        img_size=518 if backbone == "dinov2" else 1024,
+        backbone=backbone,
+        encoder=_get_vit_type(model_type),
+        encoder_checkpoint=_get_checkpoint(backbone=backbone, model_type=model_type),
+        out_channels=out_channels,
+        resize_input=True,
+        final_activation=final_activation,
+        use_skip_connection=False,
+        use_conv_transpose=False,
+        use_sam_stats="sam" in backbone,
+        use_dino_stats="dino" in backbone,
+    )
+
+    return model
 
 
 #
