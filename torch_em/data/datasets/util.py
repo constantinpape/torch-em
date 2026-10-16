@@ -43,6 +43,11 @@ except ImportError:
     synapseclient, synapseutils = None, None
 
 
+# fsspec's HTTP filesystem (aiohttp) ignores the http(s)_proxy environment variables unless 'trust_env' is set,
+# so remote data behind a proxy needs these storage options.
+HTTP_STORAGE_OPTIONS = {"client_kwargs": {"trust_env": True}}
+
+
 BIOIMAGEIO_IDS = {
     "covid_if": "ilastik/covid_if_training_data",
     "cremi": "ilastik/cremi_training_data",

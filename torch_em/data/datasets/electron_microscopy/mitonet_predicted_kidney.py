@@ -61,7 +61,7 @@ def _read_label_block(z_min, z_max, y_min, y_max, x_min, x_max):
     import fsspec
     import numcodecs
 
-    fs = fsspec.filesystem("http")
+    fs = fsspec.filesystem("http", **util.HTTP_STORAGE_OPTIONS)
     zf = zipfile.ZipFile(fs.open(LABEL_ZIP_URL, "rb"))
     codec = numcodecs.Blosc()
 
