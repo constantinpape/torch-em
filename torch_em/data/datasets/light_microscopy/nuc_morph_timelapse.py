@@ -69,10 +69,10 @@ def _open_array(url: str):
     import zarr
 
     try:
-        return zarr.open(url, mode="r")
+        return zarr.open(url, mode="r", storage_options=util.HTTP_STORAGE_OPTIONS)
     except Exception:
         from zarr.storage import FsspecStore
-        return zarr.open(store=FsspecStore.from_url(url), mode="r")
+        return zarr.open(store=FsspecStore.from_url(url, storage_options=util.HTTP_STORAGE_OPTIONS), mode="r")
 
 
 def _get_colonies(condition: Optional[str], colony: Optional[Union[str, Sequence[str]]]) -> List[str]:

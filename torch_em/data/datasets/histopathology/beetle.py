@@ -74,7 +74,7 @@ def _extract_zip_member(zip_url, member, out_path):
 
     if os.path.exists(out_path):
         return
-    fs = fsspec.filesystem("http")
+    fs = fsspec.filesystem("http", **util.HTTP_STORAGE_OPTIONS)
     with fs.open(zip_url) as f:
         data = zipfile.ZipFile(f).read(member)
     tmp_path = out_path + ".tmp"

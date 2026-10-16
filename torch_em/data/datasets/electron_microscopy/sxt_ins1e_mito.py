@@ -63,7 +63,7 @@ def _read_mrc_member(zip_url, member_name):
     import fsspec
     import mrcfile
 
-    fs = fsspec.filesystem("http")
+    fs = fsspec.filesystem("http", **util.HTTP_STORAGE_OPTIONS)
     with fs.open(zip_url, "rb") as f, zipfile.ZipFile(f) as zf:
         content = zf.read(member_name)
 
