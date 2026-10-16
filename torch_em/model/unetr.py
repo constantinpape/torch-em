@@ -2,12 +2,14 @@ from functools import partial
 from collections import OrderedDict
 from typing import Optional, Tuple, Union, Literal
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from .vit import get_vision_transformer
 from .unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d, _update_conv_kwargs
+from ..transform.raw import normalize_percentile
 
 try:
     from micro_sam.util import get_sam_model
@@ -478,6 +480,37 @@ class UNETRBase(nn.Module):
             raise ValueError("Expected 4d or 5d labels, got", masks.shape)
 
         return masks
+
+
+def _normalize_percentile_to_range(raw, clip_max):
+    raw = normalize_percentile(raw)
+    raw = torch.clamp(raw, 0, 1) if torch.is_tensor(raw) else np.clip(raw, 0, 1)
+    return raw * clip_max
+
+
+def get_vit_raw_transform(backbone):
+    """Get the raw transform and the maximum input value for a pretrained ViT backbone.
+
+    Args:
+        backbone: The pretrained ViT encoder. Options: "sam", "sam2", "dinov2", "dinov3", or None.
+
+    Returns:
+        The raw transform. It normalizes the raw data with percentiles to [0, 255] for "sam",
+            and to [0, 1] for "sam2", "dinov2" and "dinov3". None if `backbone` is None,
+            so the loaders use the default torch-em standardization.
+        The maximum input value `clip_max`. The intensity augmentations clip their output to
+            [0, clip_max], so that the input stays in the expected range. None if `backbone` is None.
+    """
+    if backbone == "sam":
+        clip_max = 255
+    elif backbone in ("sam2", "dinov2", "dinov3"):
+        clip_max = 1
+    elif backbone is None:
+        return None, None
+    else:
+        raise ValueError(f"Unsupported backbone: {backbone}.")
+
+    return partial(_normalize_percentile_to_range, clip_max=clip_max), clip_max
 
 
 def preprocess_vit_inputs(
