@@ -76,6 +76,7 @@ from .surface_morphometrics import get_surface_morphometrics_loader, get_surface
 from .sxt_ins1e_mito import get_sxt_ins1e_mito_loader, get_sxt_ins1e_mito_dataset
 from .tnbc_mito import get_tnbc_mito_loader, get_tnbc_mito_dataset
 from .tumor_spheroid_em import get_tumor_spheroid_loader, get_tumor_spheroid_dataset
+from .u2os_fibsem import get_u2os_fibsem_loader, get_u2os_fibsem_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
 from .vem_nuclei import get_vem_nuclei_loader, get_vem_nuclei_dataset
 from .vnc import get_vnc_mito_loader, get_vnc_mito_dataset
