@@ -7,7 +7,9 @@ The dataset is from the publications:
 
 Please cite these if you use this dataset in your research.
 
-The ground truth labels are available at https://zenodo.org/records/4590903.
+The ground truth labels are available at https://zenodo.org/records/4590903 (five classes, only the central
+cell is annotated) and https://zenodo.org/records/6355622 (four classes, multiple nuclei are annotated).
+The annotation can be selected via `label_version`. The multi-nuclei labels are semantic masks, not instances.
 The raw electron microscopy images are available via EMPIAR-10094
 (https://www.ebi.ac.uk/empiar/EMPIAR-10094/).
 
@@ -17,7 +19,7 @@ Downloading from EMPIAR requires the aspera CLI. Install it via:
 
 import os
 from glob import glob
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import List, Literal, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from tqdm import tqdm
@@ -29,16 +31,34 @@ import torch_em
 from .. import util
 
 
-ZENODO_URL = "https://zenodo.org/api/records/4590903/files-archive"
+ZENODO_URLS = {
+    "central": "https://zenodo.org/api/records/4590903/files-archive",
+    "multinuclei": "https://zenodo.org/api/records/6355622/files-archive",
+}
 ZENODO_CHECKSUM = None
 
-LABEL_CLASSES = {
-    "nuclear_envelope": 1,
-    "nucleus": 2,
-    "other_cells": 3,
-    "background": 4,
-    "cell": 5,
+LABEL_CLASSES_BY_VERSION = {
+    "central": {
+        "nuclear_envelope": 1,
+        "nucleus": 2,
+        "other_cells": 3,
+        "background": 4,
+        "cell": 5,
+    },
+    "multinuclei": {
+        "nuclear_envelope": 1,
+        "nucleus": 2,
+        "cell": 3,
+        "background": 4,
+    },
 }
+# Kept for backwards compatibility.
+LABEL_CLASSES = LABEL_CLASSES_BY_VERSION["central"]
+
+
+def _check_label_version(label_version):
+    if label_version not in LABEL_CLASSES_BY_VERSION:
+        raise ValueError(f"Invalid label_version '{label_version}'. Choose from {list(LABEL_CLASSES_BY_VERSION)}.")
 
 
 def _preprocess_data(empiar_path, gt_path, output_path):
@@ -86,7 +106,11 @@ def _preprocess_data(empiar_path, gt_path, output_path):
             f.create_dataset("labels", data=label, compression="gzip")
 
 
-def get_cefa_hela_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+def get_cefa_hela_data(
+    path: Union[os.PathLike, str],
+    download: bool = False,
+    label_version: Literal["central", "multinuclei"] = "central",
+) -> str:
     """Download and prepare the Cefa-HeLa dataset.
 
     Ground truth labels are downloaded from Zenodo and raw SBF-SEM images from
@@ -96,19 +120,23 @@ def get_cefa_hela_data(path: Union[os.PathLike, str], download: bool = False) ->
         path: Filepath to a folder where the downloaded data will be saved.
         download: Whether to download the data if it is not present.
             Downloading from EMPIAR requires the aspera CLI.
+        label_version: The annotation version. Either 'central' (five classes, only the central cell,
+            Zenodo 4590903) or 'multinuclei' (four classes, multiple nuclei, Zenodo 6355622).
 
     Returns:
         The filepath for the preprocessed H5 data.
     """
-    output_path = os.path.join(path, "data")
+    _check_label_version(label_version)
+    suffix = "" if label_version == "central" else f"_{label_version}"
+    output_path = os.path.join(path, f"data{suffix}")
     if os.path.exists(output_path) and len(glob(os.path.join(output_path, "*.h5"))) > 0:
         return output_path
 
     # Download GT labels from Zenodo.
-    gt_dir = os.path.join(path, "gt_labels")
+    gt_dir = os.path.join(path, f"gt_labels{suffix}")
     if not os.path.exists(gt_dir) or len(glob(os.path.join(gt_dir, "GT_Slice_*.mat"))) == 0:
-        zip_path = os.path.join(path, "cefa_hela_gt.zip")
-        util.download_source(zip_path, ZENODO_URL, download, ZENODO_CHECKSUM)
+        zip_path = os.path.join(path, f"cefa_hela_gt{suffix}.zip")
+        util.download_source(zip_path, ZENODO_URLS[label_version], download, ZENODO_CHECKSUM)
         util.unzip(zip_path, gt_dir, remove=True)
 
     # Download raw images from EMPIAR-10094.
@@ -124,17 +152,22 @@ def get_cefa_hela_data(path: Union[os.PathLike, str], download: bool = False) ->
     return output_path
 
 
-def get_cefa_hela_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
+def get_cefa_hela_paths(
+    path: Union[os.PathLike, str],
+    download: bool = False,
+    label_version: Literal["central", "multinuclei"] = "central",
+) -> List[str]:
     """Get paths to the Cefa-HeLa data.
 
     Args:
         path: Filepath to a folder where the downloaded data will be saved.
         download: Whether to download the data if it is not present.
+        label_version: The annotation version, either 'central' or 'multinuclei'.
 
     Returns:
         The filepaths to the stored data.
     """
-    data_root = get_cefa_hela_data(path, download)
+    data_root = get_cefa_hela_data(path, download, label_version)
     paths = sorted(glob(os.path.join(data_root, "*.h5")))
     return paths
 
@@ -144,6 +177,7 @@ def get_cefa_hela_dataset(
     patch_shape: Tuple[int, int],
     label_classes: Optional[Sequence[str]] = None,
     download: bool = False,
+    label_version: Literal["central", "multinuclei"] = "central",
     **kwargs,
 ) -> Dataset:
     """Get the Cefa-HeLa dataset for semantic segmentation of HeLa cell structures in SBF-SEM.
@@ -152,25 +186,31 @@ def get_cefa_hela_dataset(
         path: Filepath to a folder where the downloaded data will be saved.
         patch_shape: The patch shape to use for training.
         label_classes: The label classes to use for one-hot encoding.
-            Available classes are 'nuclear_envelope', 'nucleus', 'other_cells',
-            'background', 'cell'. If None, returns the full label map
-            (1=nuclear_envelope, 2=nucleus, 3=other_cells, 4=background, 5=cell).
+            For 'central' the classes are 'nuclear_envelope', 'nucleus', 'other_cells', 'background', 'cell'.
+            For 'multinuclei' they are 'nuclear_envelope', 'nucleus', 'cell', 'background'.
+            If None, returns the full label map
+            (central: 1=nuclear_envelope, 2=nucleus, 3=other_cells, 4=background, 5=cell;
+            multinuclei: 1=nuclear_envelope, 2=nucleus, 3=cell, 4=background).
         download: Whether to download the data if it is not present.
+        label_version: The annotation version, either 'central' (only the central cell is annotated)
+            or 'multinuclei' (multiple nuclei are annotated, semantic labels only).
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
         The segmentation dataset.
     """
-    paths = get_cefa_hela_paths(path, download)
+    _check_label_version(label_version)
+    label_classes_map = LABEL_CLASSES_BY_VERSION[label_version]
+    paths = get_cefa_hela_paths(path, download, label_version)
 
     if label_classes is not None:
         class_ids = []
         for cls_name in label_classes:
-            if cls_name not in LABEL_CLASSES:
+            if cls_name not in label_classes_map:
                 raise ValueError(
-                    f"Invalid class name: '{cls_name}'. Choose from {list(LABEL_CLASSES.keys())}."
+                    f"Invalid class name: '{cls_name}'. Choose from {list(label_classes_map.keys())}."
                 )
-            class_ids.append(LABEL_CLASSES[cls_name])
+            class_ids.append(label_classes_map[cls_name])
         label_transform = torch_em.transform.label.OneHotTransform(class_ids=class_ids)
         msg = "'label_classes' is set, but 'label_transform' is in kwargs. It will be overridden."
         kwargs = util.update_kwargs(kwargs, "label_transform", label_transform, msg=msg)
@@ -191,6 +231,7 @@ def get_cefa_hela_loader(
     batch_size: int,
     label_classes: Optional[Sequence[str]] = None,
     download: bool = False,
+    label_version: Literal["central", "multinuclei"] = "central",
     **kwargs,
 ) -> DataLoader:
     """Get the DataLoader for the Cefa-HeLa dataset.
@@ -200,9 +241,11 @@ def get_cefa_hela_loader(
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
         label_classes: The label classes to use for one-hot encoding.
-            Available classes are 'nuclear_envelope', 'nucleus', 'other_cells',
-            'background', 'cell'. If None, returns the full label map.
+            For 'central' the classes are 'nuclear_envelope', 'nucleus', 'other_cells', 'background', 'cell'.
+            For 'multinuclei' they are 'nuclear_envelope', 'nucleus', 'cell', 'background'.
+            If None, returns the full label map.
         download: Whether to download the data if it is not present.
+        label_version: The annotation version, either 'central' or 'multinuclei'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`
             or for the PyTorch DataLoader.
 
@@ -210,5 +253,5 @@ def get_cefa_hela_loader(
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_cefa_hela_dataset(path, patch_shape, label_classes, download, **ds_kwargs)
+    dataset = get_cefa_hela_dataset(path, patch_shape, label_classes, download, label_version, **ds_kwargs)
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
