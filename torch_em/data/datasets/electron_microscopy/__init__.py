@@ -39,6 +39,7 @@ from .pancreas_fibsem import get_pancreas_fibsem_loader, get_pancreas_fibsem_dat
 from .parlakgul_liver import get_parlakgul_liver_loader, get_parlakgul_liver_dataset
 from .parlakgul_fasting_liver import get_parlakgul_fasting_liver_loader, get_parlakgul_fasting_liver_dataset
 from .perez import get_perez_loader, get_perez_dataset
+from .plantorganelle_hunter import get_plantorganelle_hunter_loader, get_plantorganelle_hunter_dataset
 from .cardiomyocyte_tem import get_cardiomyocyte_tem_loader, get_cardiomyocyte_tem_dataset
 from .brain_pfibsem import get_brain_pfibsem_loader, get_brain_pfibsem_dataset
 from .skeletal_muscle_fibsem import get_skeletal_muscle_fibsem_loader, get_skeletal_muscle_fibsem_dataset
