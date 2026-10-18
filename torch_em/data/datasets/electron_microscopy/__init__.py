@@ -39,6 +39,7 @@ from .l4_dense_reconstruction import get_l4_dense_reconstruction_loader, get_l4_
 from .cerebellum_fibsem import get_cerebellum_fibsem_loader, get_cerebellum_fibsem_dataset
 from .pancreas_fibsem import get_pancreas_fibsem_loader, get_pancreas_fibsem_dataset
 from .parlakgul_liver import get_parlakgul_liver_loader, get_parlakgul_liver_dataset
+from .parlakgul_liver_eval import get_parlakgul_liver_eval_loader, get_parlakgul_liver_eval_dataset
 from .parlakgul_fasting_liver import get_parlakgul_fasting_liver_loader, get_parlakgul_fasting_liver_dataset
 from .hela_metaphase import get_hela_metaphase_loader, get_hela_metaphase_dataset
 from .perez import get_perez_loader, get_perez_dataset
