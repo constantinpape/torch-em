@@ -44,6 +44,7 @@ from .perez import get_perez_loader, get_perez_dataset
 from .plantorganelle_hunter import get_plantorganelle_hunter_loader, get_plantorganelle_hunter_dataset
 from .cardiomyocyte_tem import get_cardiomyocyte_tem_loader, get_cardiomyocyte_tem_dataset
 from .aive import get_aive_loader, get_aive_dataset
+from .lewy_mito import get_lewy_mito_loader, get_lewy_mito_dataset
 from .etchacell import get_etchacell_loader, get_etchacell_dataset
 from .brain_pfibsem import get_brain_pfibsem_loader, get_brain_pfibsem_dataset
 from .skeletal_muscle_fibsem import get_skeletal_muscle_fibsem_loader, get_skeletal_muscle_fibsem_dataset
