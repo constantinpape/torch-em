@@ -70,6 +70,7 @@ from .sxt_ins1e_mito import get_sxt_ins1e_mito_loader, get_sxt_ins1e_mito_datase
 from .tnbc_mito import get_tnbc_mito_loader, get_tnbc_mito_dataset
 from .tumor_spheroid_em import get_tumor_spheroid_loader, get_tumor_spheroid_dataset
 from .uro_cell import get_uro_cell_loader, get_uro_cell_dataset
+from .vem_nuclei import get_vem_nuclei_loader, get_vem_nuclei_dataset
 from .vnc import get_vnc_mito_loader, get_vnc_mito_dataset
 from .waenet import get_waenet_loader, get_waenet_dataset
 from .wafer4 import get_wafer4_loader, get_wafer4_dataset
