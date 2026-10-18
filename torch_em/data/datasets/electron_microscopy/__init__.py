@@ -45,6 +45,7 @@ from .brain_pfibsem import get_brain_pfibsem_loader, get_brain_pfibsem_dataset
 from .skeletal_muscle_fibsem import get_skeletal_muscle_fibsem_loader, get_skeletal_muscle_fibsem_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
+from .macrophage_a431 import get_macrophage_a431_loader, get_macrophage_a431_dataset
 from .malecns import get_malecns_loader, get_malecns_dataset
 from .manc import get_manc_loader, get_manc_dataset
 from .microns import get_microns_loader, get_microns_dataset, get_microns_minnie65_loader, get_microns_minnie65_dataset
