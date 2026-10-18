@@ -38,6 +38,7 @@ from .cerebellum_fibsem import get_cerebellum_fibsem_loader, get_cerebellum_fibs
 from .pancreas_fibsem import get_pancreas_fibsem_loader, get_pancreas_fibsem_dataset
 from .parlakgul_liver import get_parlakgul_liver_loader, get_parlakgul_liver_dataset
 from .parlakgul_fasting_liver import get_parlakgul_fasting_liver_loader, get_parlakgul_fasting_liver_dataset
+from .hela_metaphase import get_hela_metaphase_loader, get_hela_metaphase_dataset
 from .perez import get_perez_loader, get_perez_dataset
 from .plantorganelle_hunter import get_plantorganelle_hunter_loader, get_plantorganelle_hunter_dataset
 from .cardiomyocyte_tem import get_cardiomyocyte_tem_loader, get_cardiomyocyte_tem_dataset
