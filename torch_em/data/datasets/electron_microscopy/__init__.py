@@ -34,6 +34,7 @@ from .isbi2012 import get_isbi_loader, get_isbi_dataset
 from .janelia_nucleus import get_janelia_nucleus_loader, get_janelia_nucleus_dataset
 from .kasthuri import get_kasthuri_loader, get_kasthuri_dataset
 from .l4_dense_reconstruction import get_l4_dense_reconstruction_loader, get_l4_dense_reconstruction_dataset
+from .cerebellum_fibsem import get_cerebellum_fibsem_loader, get_cerebellum_fibsem_dataset
 from .pancreas_fibsem import get_pancreas_fibsem_loader, get_pancreas_fibsem_dataset
 from .parlakgul_liver import get_parlakgul_liver_loader, get_parlakgul_liver_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
