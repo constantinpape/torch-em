@@ -28,6 +28,7 @@ from .human_cortex_h01 import get_human_cortex_h01_loader, get_human_cortex_h01_
 from .human_liver_em import get_human_liver_em_loader, get_human_liver_em_dataset
 from .hemibrain import get_hemibrain_loader, get_hemibrain_dataset
 from .hela_mito import get_hela_mito_loader, get_hela_mito_dataset
+from .hela_stard3 import get_hela_stard3_loader, get_hela_stard3_dataset
 from .human_organoids import get_human_organoids_loader, get_human_organoids_dataset
 from .hydra_vulgaris import get_hydra_loader, get_hydra_dataset
 from .isbi2012 import get_isbi_loader, get_isbi_dataset
@@ -38,13 +39,16 @@ from .cerebellum_fibsem import get_cerebellum_fibsem_loader, get_cerebellum_fibs
 from .pancreas_fibsem import get_pancreas_fibsem_loader, get_pancreas_fibsem_dataset
 from .parlakgul_liver import get_parlakgul_liver_loader, get_parlakgul_liver_dataset
 from .parlakgul_fasting_liver import get_parlakgul_fasting_liver_loader, get_parlakgul_fasting_liver_dataset
+from .hela_metaphase import get_hela_metaphase_loader, get_hela_metaphase_dataset
 from .perez import get_perez_loader, get_perez_dataset
 from .plantorganelle_hunter import get_plantorganelle_hunter_loader, get_plantorganelle_hunter_dataset
 from .cardiomyocyte_tem import get_cardiomyocyte_tem_loader, get_cardiomyocyte_tem_dataset
+from .aive import get_aive_loader, get_aive_dataset
 from .brain_pfibsem import get_brain_pfibsem_loader, get_brain_pfibsem_dataset
 from .skeletal_muscle_fibsem import get_skeletal_muscle_fibsem_loader, get_skeletal_muscle_fibsem_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
+from .macrophage_a431 import get_macrophage_a431_loader, get_macrophage_a431_dataset
 from .malecns import get_malecns_loader, get_malecns_dataset
 from .manc import get_manc_loader, get_manc_dataset
 from .microns import get_microns_loader, get_microns_dataset, get_microns_minnie65_loader, get_microns_minnie65_dataset
