@@ -42,6 +42,7 @@ from .hela_metaphase import get_hela_metaphase_loader, get_hela_metaphase_datase
 from .perez import get_perez_loader, get_perez_dataset
 from .plantorganelle_hunter import get_plantorganelle_hunter_loader, get_plantorganelle_hunter_dataset
 from .cardiomyocyte_tem import get_cardiomyocyte_tem_loader, get_cardiomyocyte_tem_dataset
+from .aive import get_aive_loader, get_aive_dataset
 from .brain_pfibsem import get_brain_pfibsem_loader, get_brain_pfibsem_dataset
 from .skeletal_muscle_fibsem import get_skeletal_muscle_fibsem_loader, get_skeletal_muscle_fibsem_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
