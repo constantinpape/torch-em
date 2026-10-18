@@ -38,6 +38,7 @@ from .cerebellum_fibsem import get_cerebellum_fibsem_loader, get_cerebellum_fibs
 from .pancreas_fibsem import get_pancreas_fibsem_loader, get_pancreas_fibsem_dataset
 from .parlakgul_liver import get_parlakgul_liver_loader, get_parlakgul_liver_dataset
 from .brain_pfibsem import get_brain_pfibsem_loader, get_brain_pfibsem_dataset
+from .skeletal_muscle_fibsem import get_skeletal_muscle_fibsem_loader, get_skeletal_muscle_fibsem_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
 from .lucchi import get_lucchi_loader, get_lucchi_dataset
 from .malecns import get_malecns_loader, get_malecns_dataset
