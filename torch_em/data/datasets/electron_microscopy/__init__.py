@@ -83,6 +83,7 @@ from .platynereis import (
 from .popsicle import get_popsicle_loader, get_popsicle_dataset
 from .saber import get_saber_loader, get_saber_dataset
 from .snemi import get_snemi_loader, get_snemi_dataset
+from .snemi_mito import get_snemi_mito_loader, get_snemi_mito_dataset
 from .sponge_em import get_sponge_em_loader, get_sponge_em_dataset
 from .surface_morphometrics import get_surface_morphometrics_loader, get_surface_morphometrics_dataset
 from .sxt_ins1e_mito import get_sxt_ins1e_mito_loader, get_sxt_ins1e_mito_dataset
