@@ -1,3 +1,4 @@
+from .ai4mat import get_ai4mat_loader, get_ai4mat_dataset
 from .aimseg import get_aimseg_loader, get_aimseg_dataset
 from .asem import get_asem_loader, get_asem_dataset
 from .astih import get_astih_loader, get_astih_dataset
