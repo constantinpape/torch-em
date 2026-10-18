@@ -10,13 +10,16 @@ Annotation coverage is sparse, not exhaustive: only 5 of the 24 available slices
 labels, only the central cell is annotated, and some mitochondria visible in the raw data
 may be left unannotated even in the central cell.
 
+The repository contains two independent annotations of these 5 slices ('gt' and 'gt2'), which can be selected
+via `annotation_version`. They are useful to study annotation disagreement.
+
 The dataset is available at https://github.com/reyesaldasoro/MitoEM.
 The dataset was published in https://doi.org/10.1101/2023.11.14.567016.
 Please cite this publication if you use the dataset in your research.
 """
 
 import os
-from typing import List, Tuple, Union
+from typing import List, Literal, Tuple, Union
 
 from torch.utils.data import DataLoader, Dataset
 
@@ -27,12 +30,30 @@ from .. import util
 
 BASE_URL = "https://raw.githubusercontent.com/reyesaldasoro/MitoEM/main/CODE"
 RAW_URL = BASE_URL + "/OriginalImages/ROI_6005_4739_81_z{slice_id}.tif"
-LABEL_URL = BASE_URL + "/GT_ROI_6005_4739_81_z{slice_id}.mat"
+LABEL_URLS = {
+    "gt": BASE_URL + "/GT_ROI_6005_4739_81_z{label_id}.mat",
+    "gt2": BASE_URL + "/GT2_ROI_6005_4739_81_z{label_id}.mat",
+}
 
 # The annotated raw slice ids, with the 'GT' annotation of each. The repository also has 'GT2' files, but these are
 # a second annotation of the same 5 slices and numbered sequentially, not by raw slice: GT2 z0001, z0002, z0004,
 # z0026 and z0028 annotate the raw slices z0001, z0030, z0060, z0116 and z0150 (mask IoU with GT 0.76 to 0.96).
 SLICES = ["0001", "0030", "0060", "0116", "0150"]
+LABEL_IDS = {
+    "gt": {slice_id: slice_id for slice_id in SLICES},
+    "gt2": dict(zip(SLICES, ["0001", "0002", "0004", "0026", "0028"])),
+}
+
+
+def _check_annotation_version(annotation_version):
+    if annotation_version not in LABEL_URLS:
+        raise ValueError(f"Invalid annotation_version '{annotation_version}', choose one of {list(LABEL_URLS)}.")
+
+
+def _slice_path(path, slice_id, annotation_version):
+    # The 'gt' files keep their original name, so that existing downloads stay valid.
+    suffix = "" if annotation_version == "gt" else f"_{annotation_version}"
+    return os.path.join(path, f"z{slice_id}{suffix}.h5")
 
 
 def _convert_slice(raw_path, mat_path, out_path):
@@ -51,29 +72,35 @@ def _convert_slice(raw_path, mat_path, out_path):
     os.rename(tmp_path, out_path)
 
 
-def get_hela_mito_data(path: Union[os.PathLike, str], download: bool = False) -> str:
+def get_hela_mito_data(
+    path: Union[os.PathLike, str], download: bool = False, annotation_version: Literal["gt", "gt2"] = "gt"
+) -> str:
     """Download the HeLa-Mito dataset.
 
     Args:
         path: Filepath to a folder where the data will be downloaded.
         download: Whether to download the data if it is not present.
+        annotation_version: The annotation set to use, either 'gt' or 'gt2' (a second, independent annotation
+            of the same 5 slices).
 
     Returns:
         Filepath to the folder with the per-slice HDF5 files.
     """
+    _check_annotation_version(annotation_version)
     os.makedirs(path, exist_ok=True)
 
     for slice_id in SLICES:
-        out_path = os.path.join(path, f"z{slice_id}.h5")
+        out_path = _slice_path(path, slice_id, annotation_version)
         if os.path.exists(out_path):
             continue
         if not download:
             raise RuntimeError(f"Cannot find the data at {out_path}, but download was set to False.")
 
         raw_path = os.path.join(path, f"raw_z{slice_id}.tif")
-        mat_path = os.path.join(path, f"GT_z{slice_id}.mat")
+        mat_path = os.path.join(path, f"{annotation_version}_z{slice_id}.mat")
+        label_url = LABEL_URLS[annotation_version].format(label_id=LABEL_IDS[annotation_version][slice_id])
         util.download_source(raw_path, RAW_URL.format(slice_id=slice_id), download)
-        util.download_source(mat_path, LABEL_URL.format(slice_id=slice_id), download)
+        util.download_source(mat_path, label_url, download)
 
         _convert_slice(raw_path, mat_path, out_path)
         os.remove(raw_path)
@@ -82,24 +109,28 @@ def get_hela_mito_data(path: Union[os.PathLike, str], download: bool = False) ->
     return path
 
 
-def get_hela_mito_paths(path: Union[os.PathLike, str], download: bool = False) -> List[str]:
+def get_hela_mito_paths(
+    path: Union[os.PathLike, str], download: bool = False, annotation_version: Literal["gt", "gt2"] = "gt"
+) -> List[str]:
     """Get paths to the HeLa-Mito data.
 
     Args:
         path: Filepath to a folder where the data will be downloaded.
         download: Whether to download the data if it is not present.
+        annotation_version: The annotation set to use, either 'gt' or 'gt2'.
 
     Returns:
         List of filepaths to the per-slice HDF5 files.
     """
-    data_dir = get_hela_mito_data(path, download)
-    return [os.path.join(data_dir, f"z{slice_id}.h5") for slice_id in SLICES]
+    data_dir = get_hela_mito_data(path, download, annotation_version)
+    return [_slice_path(data_dir, slice_id, annotation_version) for slice_id in SLICES]
 
 
 def get_hela_mito_dataset(
     path: Union[os.PathLike, str],
     patch_shape: Tuple[int, int],
     download: bool = False,
+    annotation_version: Literal["gt", "gt2"] = "gt",
     **kwargs
 ) -> Dataset:
     """Get the dataset for mitochondria instance segmentation in HeLa cell EM slices.
@@ -108,6 +139,7 @@ def get_hela_mito_dataset(
         path: Filepath to a folder where the data will be downloaded.
         patch_shape: The patch shape to use for training.
         download: Whether to download the data if it is not present.
+        annotation_version: The annotation set to use, either 'gt' or 'gt2'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
@@ -115,7 +147,7 @@ def get_hela_mito_dataset(
     """
     assert len(patch_shape) == 2
 
-    paths = get_hela_mito_paths(path, download)
+    paths = get_hela_mito_paths(path, download, annotation_version)
 
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
     kwargs, _ = util.add_instance_label_transform(kwargs, add_binary_target=True)
@@ -135,6 +167,7 @@ def get_hela_mito_loader(
     patch_shape: Tuple[int, int],
     batch_size: int,
     download: bool = False,
+    annotation_version: Literal["gt", "gt2"] = "gt",
     **kwargs
 ) -> DataLoader:
     """Get the DataLoader for mitochondria instance segmentation in HeLa cell EM slices.
@@ -144,11 +177,14 @@ def get_hela_mito_loader(
         patch_shape: The patch shape to use for training.
         batch_size: The batch size for training.
         download: Whether to download the data if it is not present.
+        annotation_version: The annotation set to use, either 'gt' or 'gt2'.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset` or for the PyTorch DataLoader.
 
     Returns:
         The DataLoader.
     """
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
-    dataset = get_hela_mito_dataset(path, patch_shape, download=download, **ds_kwargs)
+    dataset = get_hela_mito_dataset(
+        path, patch_shape, download=download, annotation_version=annotation_version, **ds_kwargs
+    )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
