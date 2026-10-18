@@ -46,6 +46,7 @@ from .cardiomyocyte_tem import get_cardiomyocyte_tem_loader, get_cardiomyocyte_t
 from .aive import get_aive_loader, get_aive_dataset
 from .lewy_mito import get_lewy_mito_loader, get_lewy_mito_dataset
 from .etchacell import get_etchacell_loader, get_etchacell_dataset
+from .chlamydomonas_cryoet import get_chlamydomonas_cryoet_loader, get_chlamydomonas_cryoet_dataset
 from .brain_pfibsem import get_brain_pfibsem_loader, get_brain_pfibsem_dataset
 from .skeletal_muscle_fibsem import get_skeletal_muscle_fibsem_loader, get_skeletal_muscle_fibsem_dataset
 from .synapseweb_hippocampus import get_synapseweb_hippocampus_loader, get_synapseweb_hippocampus_dataset
