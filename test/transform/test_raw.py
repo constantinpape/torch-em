@@ -2,6 +2,7 @@ import unittest
 from copy import deepcopy
 
 import numpy as np
+
 import torch
 
 
@@ -232,6 +233,39 @@ class TestRaw(unittest.TestCase):
             RandomPercentileNormalization(seed=1.5)
 
         self.assertEqual(RandomPercentileNormalization(seed=np.int64(42)).seed, 42)
+
+
+class TestRawTransformForPretrainedVit(unittest.TestCase):
+    def _get_data(self):
+        # Data in an arbitrary range [0, 1000] with some outliers, as in EM data.
+        data = np.random.rand(64, 64).astype("float32") * 1000
+        data[0, 0], data[0, 1] = -1e4, 1e4
+        return data
+
+    def test_raw_transform_ranges(self):
+        from torch_em.transform.raw import RawTransform, get_raw_transform_for_pretrained_vit
+
+        for backbone, expected_max in [
+            ("sam", 255), ("sam2", 1), ("sam3", 1), ("cellpose_sam", 1), ("mae", 1), ("scalemae", 1),
+            ("dinov2", 1), ("dinov3", 1), ("torchvision", 1)
+        ]:
+            raw_transform, clip_max = get_raw_transform_for_pretrained_vit(backbone)
+            self.assertIsInstance(raw_transform, RawTransform)
+            self.assertEqual(clip_max, expected_max)
+            out = raw_transform(self._get_data())
+            self.assertEqual(out.min(), 0)
+            self.assertEqual(out.max(), expected_max)
+
+    def test_no_backbone(self):
+        from torch_em.transform.raw import get_raw_transform_for_pretrained_vit
+
+        self.assertEqual(get_raw_transform_for_pretrained_vit(backbone=None), (None, None))
+
+    def test_unsupported_backbone(self):
+        from torch_em.transform.raw import get_raw_transform_for_pretrained_vit
+
+        with self.assertRaises(ValueError):
+            get_raw_transform_for_pretrained_vit(backbone="unknown")
 
 
 if __name__ == "__main__":

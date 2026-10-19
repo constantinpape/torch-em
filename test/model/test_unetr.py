@@ -1,6 +1,16 @@
 import unittest
-import numpy as np
+
 import torch
+
+try:
+    import dinov2
+except ImportError:
+    dinov2 = None
+
+try:
+    import dinov3
+except ImportError:
+    dinov3 = None
 
 try:
     import segment_anything
@@ -13,41 +23,23 @@ except ImportError:
     micro_sam = None
 
 
-class TestVitRawTransform(unittest.TestCase):
-    def _get_data(self):
-        # Data in an arbitrary range [0, 1000] with some outliers, as in EM data.
-        data = np.random.rand(64, 64).astype("float32") * 1000
-        data[0, 0], data[0, 1] = -1e4, 1e4
-        return data
-
-    def test_raw_transform_ranges(self):
-        from torch_em.model.unetr import get_vit_raw_transform
-
-        for backbone, expected_max in [("sam", 255), ("sam2", 1), ("dinov2", 1), ("dinov3", 1)]:
-            raw_transform, clip_max = get_vit_raw_transform(backbone)
-            self.assertEqual(clip_max, expected_max)
-            out = raw_transform(self._get_data())
-            self.assertEqual(out.min(), 0)
-            self.assertEqual(out.max(), expected_max)
-
-    def test_no_backbone(self):
-        from torch_em.model.unetr import get_vit_raw_transform
-
-        self.assertEqual(get_vit_raw_transform(backbone=None), (None, None))
-
-    def test_unsupported_backbone(self):
-        from torch_em.model.unetr import get_vit_raw_transform
-
-        with self.assertRaises(ValueError):
-            get_vit_raw_transform(backbone="mae")
-
-
 class TestGetUnetrModel(unittest.TestCase):
+    def _test_dino_3d(self, backbone, img_size):
+        from torch_em.model.unetr import get_unetr_model
+
+        model = get_unetr_model(ndim=3, backbone=backbone, model_type="vit_s", img_size=img_size, initial_features=4)
+        self.assertEqual(model.embed_dim, 384)
+
+        x = torch.rand(1, 1, 2, img_size, img_size)
+        with torch.inference_mode():
+            y = model.eval()(x)
+        self.assertEqual(y.shape, x.shape)
+
     @unittest.skipIf(segment_anything is None, "Needs segment_anything")
     def test_unetr_2d(self):
         from torch_em.model.unetr import get_unetr_model, UNETR2D
 
-        model = get_unetr_model(ndim=2, backbone="sam", model_type="vit_b", out_channels=3)
+        model = get_unetr_model(ndim=2, backbone="sam", model_type="vit_b_em_organelles", out_channels=3)
         self.assertIsInstance(model, UNETR2D)
         self.assertEqual(model.out_channels, 3)
 
@@ -55,8 +47,45 @@ class TestGetUnetrModel(unittest.TestCase):
     def test_unetr_3d(self):
         from torch_em.model.unetr import get_unetr_model, UNETR3D
 
-        model = get_unetr_model(ndim=3, backbone="sam", model_type="vit_b")
+        model = get_unetr_model(ndim=3, backbone="sam", model_type="vit_b", img_size=32, initial_features=4)
         self.assertIsInstance(model, UNETR3D)
+        self.assertEqual(model.embed_dim, 768)
+
+        x = torch.rand(1, 1, 2, 32, 32) * 255
+        with torch.inference_mode():
+            y = model.eval()(x)
+        self.assertEqual(y.shape, x.shape)
+
+    @unittest.skipIf(dinov2 is None, "Needs dinov2")
+    def test_unetr_3d_dinov2(self):
+        self._test_dino_3d("dinov2", img_size=28)
+
+    @unittest.skipIf(dinov3 is None, "Needs dinov3")
+    def test_unetr_3d_dinov3(self):
+        self._test_dino_3d("dinov3", img_size=32)
+
+    @unittest.skipIf(dinov2 is None, "Needs dinov2")
+    def test_dinov2_register_tokens(self):
+        from torch_em.model.vit import get_vision_transformer
+        from torch_em.model.unetr import get_unetr_model
+
+        encoder = get_vision_transformer(backbone="dinov2", model="vit_b_reg4", img_size=28)
+        checkpoint = encoder.state_dict()
+        del encoder
+
+        for ndim in (2, 3):
+            with self.subTest(ndim=ndim):
+                model = get_unetr_model(
+                    ndim=ndim, backbone="dinov2", model_type="vit_b_reg4", encoder_checkpoint=checkpoint,
+                    img_size=28, initial_features=4
+                )
+                self.assertEqual(model.encoder.num_register_tokens, 4)
+                torch.testing.assert_close(model.encoder.register_tokens, checkpoint["register_tokens"])
+                shape = (1, 1, 28, 28) if ndim == 2 else (1, 1, 2, 28, 28)
+                x = torch.rand(*shape)
+                with torch.inference_mode():
+                    y = model.eval()(x)
+                self.assertEqual(y.shape, x.shape)
 
     @unittest.skipIf(segment_anything is None, "Needs segment_anything")
     def test_init_decoder(self):
@@ -76,7 +105,7 @@ class TestGetUnetrModel(unittest.TestCase):
         from torch_em.model.unetr import get_unetr_model
 
         with self.assertRaises(ValueError):
-            get_unetr_model(ndim=2, backbone="mae", model_type="vit_b")
+            get_unetr_model(ndim=2, backbone="unknown", model_type="vit_b")
 
 
 class TestUnetrNormalizationRange(unittest.TestCase):

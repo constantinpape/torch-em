@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Union, Optional, Tuple, Dict, Callable
 
 import numpy as np
@@ -138,6 +139,15 @@ def normalize_percentile(
     v_lower = np.percentile(raw, lower, axis=axis, keepdims=True)
     v_upper = np.percentile(raw, upper, axis=axis, keepdims=True) - v_lower
     return normalize(raw, v_lower, v_upper, eps=eps)
+
+
+def _normalize_percentile_to_range(
+    raw: Union[np.ndarray, torch.Tensor], clip_max: int
+) -> Union[np.ndarray, torch.Tensor]:
+    raw = normalize_percentile(raw)
+    if torch.is_tensor(raw):
+        return torch.clamp(raw, min=0.0, max=1.0) * clip_max
+    return np.clip(raw, 0.0, 1.0) * clip_max
 
 
 class RandomPercentileNormalization:
@@ -508,6 +518,31 @@ def get_raw_transform(
         The raw transformation.
     """
     return RawTransform(normalizer, augmentation1=augmentation1, augmentation2=augmentation2)
+
+
+def get_raw_transform_for_pretrained_vit(backbone: Optional[str]) -> Tuple[Optional[Callable], Optional[int]]:
+    """Get the raw transformation and clipping limit for a pretrained ViT backbone.
+
+    Args:
+        backbone: The pretrained ViT backbone. Options: "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae",
+            "dinov2", "dinov3", "torchvision", or None.
+
+    Returns:
+        The raw transformation. It normalizes percentiles to [0, 255] for "sam" and [0, 1] for the other backbones.
+        The maximum value `clip_max` for intensity augmentations. Use it to clip their output to [0, clip_max].
+            Both values are None if `backbone` is None, so data loaders use the default standardization.
+    """
+    if backbone is None:
+        return None, None
+
+    from ..model.util import VIT_CONFIGS
+
+    if backbone not in VIT_CONFIGS:
+        raise ValueError(f"Unsupported backbone: {backbone}.")
+
+    clip_max = VIT_CONFIGS[backbone].clip_max
+    normalizer = partial(_normalize_percentile_to_range, clip_max=clip_max)
+    return get_raw_transform(normalizer=normalizer), clip_max
 
 
 def get_default_mean_teacher_augmentations(
