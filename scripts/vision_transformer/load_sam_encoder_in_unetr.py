@@ -1,103 +1,75 @@
 import torch
 
-from torch_em.model import UNETR
+from torch_em.model.unetr import get_unetr_model
 
-from micro_sam.util import get_sam_model, _download_sam_model
-
-
-def load_sam1_encoder():
-    from torch_em.model.vit import get_vision_transformer
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    encoder = get_vision_transformer("sam", "vit_b")
-    encoder.to(device)
-
-    x = torch.ones((1, 3, 1024, 1024)).to(device)
-    y = encoder(x)
-    print(x.shape, y.shape)
+from micro_sam.v2.util import _get_checkpoint
+from micro_sam.v1.util import _download_sam_model
 
 
-def load_sam1():
-    model_type = "vit_b"
-    checkpoint, _, _ = _download_sam_model(model_type)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    predictor = get_sam_model(model_type=model_type, checkpoint_path=checkpoint)
-
-    model = UNETR(
-        backbone="sam",
-        encoder=predictor.model.image_encoder,
-        out_channels=3,
-        use_sam_stats=True,
-        final_activation="Sigmoid",
-        use_skip_connection=False,
-    )
-    model.to(device)
-
-    x = torch.ones((1, 1, 512, 512)).to(device)
-    y = model(x)
-    print(x.shape, y.shape)
-
-    print("UNETR Model successfully created and encoder initialized from", checkpoint)
+def get_input(ndim, device, max_value):
+    shape = (1, 1, 512, 512) if ndim == 2 else (1, 1, 4, 512, 512)
+    return max_value * torch.rand(shape, device=device)
 
 
-def load_sam2():
-    from micro_sam2.util import _get_checkpoint
-
-    model_type = "hvit_t"
-    checkpoint = _get_checkpoint(model_type=model_type)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    model = UNETR(
-        backbone="sam2",
-        encoder=model_type,
-        out_channels=3,
-        use_sam_stats=True,
-        final_activation="Sigmoid",
-        use_skip_connections=False,
-        embed_dim=256,
-    )
-    model.to(device)
-
-    x = torch.ones((1, 1, 512, 512)).to(device)
-    y = model(x)
-    print(x.shape, y.shape)
-
-    checkpoint = None  # HACK
-    print("UNETR Model successfully created and encoder initialized from", checkpoint)
-
-
-def load_sam3():
-    from micro_sam3.util import _get_checkpoint
-
-    model_type = "vit_pe"
-    checkpoint = _get_checkpoint()
+def load_sam1(ndim):
+    """Load the SAM encoder in UNETR with pretrained weights."""
+    checkpoint, _, _ = _download_sam_model("vit_b")
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    model = UNETR(
-        backbone="sam3",
-        encoder=model_type,
-        encoder_checkpoint=checkpoint,
-        out_channels=3,
-        use_sam_stats=True,
-        final_activation="Sigmoid",
-        use_skip_connection=False,
-    )
-    model.to(device)
+    model = get_unetr_model(
+        ndim=ndim, backbone="sam", model_type="vit_b", encoder_checkpoint=checkpoint,
+        out_channels=3, final_activation="Sigmoid",
+    ).to(device)
 
-    x = torch.ones((1, 1, 512, 512)).to(device)
-    y = model(x)
+    # SAM expects inputs in the range [0, 255].
+    x = get_input(ndim, device, max_value=255)
+    with torch.no_grad():
+        y = model(x)
     print(x.shape, y.shape)
-    print("UNETR Model successfully created and encoder initialized from", checkpoint)
+    print("UNETR with the SAM encoder loaded the weights from", checkpoint)
+
+
+def load_sam2(ndim):
+    """Load the SAM2 encoder in UNETR with pretrained weights."""
+    checkpoint = _get_checkpoint("hvit_t")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model = get_unetr_model(
+        ndim=ndim, backbone="sam2", model_type="hvit_t", encoder_checkpoint=checkpoint,
+        out_channels=3, final_activation="Sigmoid",
+    ).to(device)
+
+    x = get_input(ndim, device, max_value=1)
+    with torch.no_grad():
+        y = model(x)
+    print(x.shape, y.shape)
+    print("UNETR with the SAM2 encoder loaded the weights from", checkpoint)
+
+
+def load_sam3(ndim):
+    """Load the SAM3 encoder in UNETR without pretrained weights."""
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model = get_unetr_model(
+        ndim=ndim, backbone="sam3", model_type="vit_pe", out_channels=3, final_activation="Sigmoid"
+    ).to(device)
+
+    x = get_input(ndim, device, max_value=1)
+    with torch.no_grad():
+        y = model(x)
+    print(x.shape, y.shape)
+    print("UNETR with the SAM3 encoder was created.")
 
 
 def main():
-    load_sam1()
-    # load_sam2()
-    # load_sam3()
+    load_sam1(ndim=2)
+    load_sam1(ndim=3)
 
-    # load_sam1_encoder()
+    load_sam2(ndim=2)
+    load_sam2(ndim=3)
+
+    load_sam3(ndim=2)
+    load_sam3(ndim=3)
 
 
 if __name__ == "__main__":

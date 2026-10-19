@@ -1,89 +1,46 @@
 import torch
 
-from torch_em.model.unetr import UNETR2D, UNETR3D
+from torch_em.model.unetr import get_unetr_model
+
+
+def get_input(ndim, device):
+    # CellposeSAM uses vit_l with patch_size=8 and img_size=256 by default.
+    shape = (1, 1, 256, 256) if ndim == 2 else (1, 1, 4, 256, 256)
+    return torch.rand(shape, device=device)
 
 
 def load_cellpose_sam(ndim):
-    """Load CellposeSAM image encoder in UNETR (without pretrained weights)."""
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    """Load the CellposeSAM encoder in UNETR without pretrained weights."""
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # CellposeSAM uses vit_l with patch_size=8 and img_size=256 by default.
+    model = get_unetr_model(
+        ndim=ndim, backbone="cellpose_sam", model_type="vit_l", out_channels=3, final_activation="Sigmoid"
+    ).to(device)
 
-    if ndim == 2:
-        x = torch.ones((1, 1, 256, 256)).to(device)
-    else:
-        x = torch.ones((1, 1, 4, 256, 256)).to(device)
-
-    if ndim == 2:
-        model = UNETR2D(
-            backbone="cellpose_sam",
-            encoder="vit_l",
-            img_size=256,
-            out_channels=3,
-            use_sam_stats=True,
-            final_activation="Sigmoid",
-            use_skip_connection=False,
-        )
-    else:
-        model = UNETR3D(
-            backbone="cellpose_sam",
-            encoder="vit_l",
-            img_size=256,
-            out_channels=3,
-            use_sam_stats=True,
-            final_activation="Sigmoid",
-            use_skip_connection=False,
-            embed_dim=1024,
-        )
-
-    model.to(device)
-
-    y = model(x)
+    x = get_input(ndim, device)
+    with torch.no_grad():
+        y = model(x)
     print(x.shape, y.shape)
-    print("UNETR Model with CellposeSAM encoder successfully created.")
+    print("UNETR with the CellposeSAM encoder was created.")
 
 
 def load_cellpose_sam_pretrained(ndim):
-    """Load CellposeSAM image encoder in UNETR with pretrained weights."""
-    from cellpose.models import model_path
+    """Load the CellposeSAM encoder in UNETR with pretrained weights."""
+    from cellpose.models import MODEL_DIR
 
-    checkpoint = model_path("cpsam")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    checkpoint = MODEL_DIR / "cpsam"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    if ndim == 2:
-        x = torch.ones((1, 1, 256, 256)).to(device)
-    else:
-        x = torch.ones((1, 1, 4, 256, 256)).to(device)
+    model = get_unetr_model(
+        ndim=ndim, backbone="cellpose_sam", model_type="vit_l", encoder_checkpoint=checkpoint,
+        out_channels=3, final_activation="Sigmoid",
+    ).to(device)
 
-    if ndim == 2:
-        model = UNETR2D(
-            backbone="cellpose_sam",
-            encoder="vit_l",
-            img_size=256,
-            encoder_checkpoint=checkpoint,
-            out_channels=3,
-            use_sam_stats=True,
-            final_activation="Sigmoid",
-            use_skip_connection=False,
-        )
-    else:
-        model = UNETR3D(
-            backbone="cellpose_sam",
-            encoder="vit_l",
-            img_size=256,
-            encoder_checkpoint=checkpoint,
-            out_channels=3,
-            use_sam_stats=True,
-            final_activation="Sigmoid",
-            use_skip_connection=False,
-            embed_dim=1024,
-        )
-
-    model.to(device)
-
-    y = model(x)
+    x = get_input(ndim, device)
+    with torch.no_grad():
+        y = model(x)
     print(x.shape, y.shape)
-    print("UNETR Model with pretrained CellposeSAM encoder successfully created from", checkpoint)
+    print("UNETR with the CellposeSAM encoder loaded the weights from", checkpoint)
 
 
 def main():

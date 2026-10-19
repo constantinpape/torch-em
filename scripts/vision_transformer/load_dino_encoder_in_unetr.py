@@ -1,57 +1,43 @@
-import argparse
-
-import imageio.v3 as imageio
+import os
 
 import torch
 
 from torch_em.model.unetr import get_unetr_model
-from torch_em.transform.raw import get_raw_transform_for_pretrained_vit
 
 
-def load_input(input_path, backbone, ndim, device):
-    raw_transform, _ = get_raw_transform_for_pretrained_vit(backbone)
-    raw = raw_transform(imageio.imread(input_path))
-    if raw.ndim == 2 and ndim == 3:
-        raw = raw[None]
-    if raw.ndim != ndim:
-        raise ValueError(f"The input shape {raw.shape} does not match ndim={ndim}. Pass a {ndim}D grayscale input.")
-    return torch.as_tensor(raw, dtype=torch.float32, device=device)[None, None]
+def get_input(ndim, device):
+    shape = (1, 1, 256, 256) if ndim == 2 else (1, 1, 4, 256, 256)
+    return torch.rand(shape, device=device)
 
 
-def check_unetr(checkpoint, input_path, backbone, model_type, ndim, initial_features):
+def load_dino(ndim, backbone, model_type, checkpoint):
+    """Load a DINO encoder in UNETR with pretrained weights."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = get_unetr_model(
-        ndim=ndim, backbone=backbone, model_type=model_type,
-        encoder_checkpoint=checkpoint, initial_features=initial_features
-    ).to(device).eval()
-    x = load_input(input_path, backbone, ndim, device)
-    with torch.inference_mode():
-        y = model(x)
 
-    assert y.shape == x.shape
-    assert torch.isfinite(y).all()
-    print(f"Input: {tuple(x.shape)}, output: {tuple(y.shape)}")
+    model = get_unetr_model(
+        ndim=ndim, backbone=backbone, model_type=model_type, encoder_checkpoint=checkpoint,
+        out_channels=1, final_activation="Sigmoid",
+    ).to(device)
+
+    x = get_input(ndim, device)
+    with torch.no_grad():
+        y = model(x)
+    print(x.shape, y.shape)
+    print(f"UNETR with the {backbone} {model_type} encoder loaded the weights from", checkpoint)
 
 
 def main():
-    # DINOv2 checkpoints and their matching --model-type values:
-    # --checkpoint ./dinov2_vits14_pretrain.pth --model-type vit_s
-    # --checkpoint ./dinov2_vits14_reg4_pretrain.pth --model-type vit_s_reg4
-    # --checkpoint ./dinov2_vitb14_pretrain.pth --model-type vit_b
-    # --checkpoint ./dinov2_vitb14_reg4_pretrain.pth --model-type vit_b_reg4
-    # --checkpoint ./dinov2_vitl14_pretrain.pth --model-type vit_l
-    # --checkpoint ./dinov2_vitl14_reg4_pretrain.pth --model-type vit_l_reg4
-    # --checkpoint ./dinov2_vitg14_pretrain.pth --model-type vit_g
-    # --checkpoint ./dinov2_vitg14_reg4_pretrain.pth --model-type vit_g_reg4
-    parser = argparse.ArgumentParser(description="Load a pretrained DINO encoder in a 2D or 3D UNETR.")
-    parser.add_argument("--checkpoint", required=True, help="The path to the encoder checkpoint.")
-    parser.add_argument("--input", required=True, help="The path to a grayscale image or volume.")
-    parser.add_argument("--backbone", choices=("dinov2", "dinov3"), default="dinov2")
-    parser.add_argument("--model-type", default="vit_s_reg4")
-    parser.add_argument("--ndim", type=int, choices=(2, 3), default=2)
-    parser.add_argument("--initial-features", type=int, default=64)
-    args = parser.parse_args()
-    check_unetr(args.checkpoint, args.input, args.backbone, args.model_type, args.ndim, args.initial_features)
+    dinov3_checkpoint = os.path.expanduser("~/models/dinov3/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth")
+    load_dino(ndim=2, backbone="dinov3", model_type="vit_b", checkpoint=dinov3_checkpoint)
+    load_dino(ndim=3, backbone="dinov3", model_type="vit_b", checkpoint=dinov3_checkpoint)
+
+    # The other DINOv2 checkpoints and their model types:
+    # ./dinov2_vitb14_pretrain.pth with vit_b, ./dinov2_vitb14_reg4_pretrain.pth with vit_b_reg4
+    # ./dinov2_vitl14_pretrain.pth with vit_l, ./dinov2_vitl14_reg4_pretrain.pth with vit_l_reg4
+    # ./dinov2_vitg14_pretrain.pth with vit_g, ./dinov2_vitg14_reg4_pretrain.pth with vit_g_reg4
+    load_dino(ndim=2, backbone="dinov2", model_type="vit_s", checkpoint="./dinov2_vits14_pretrain.pth")
+    load_dino(ndim=2, backbone="dinov2", model_type="vit_s_reg4", checkpoint="./dinov2_vits14_reg4_pretrain.pth")
+    load_dino(ndim=3, backbone="dinov2", model_type="vit_s_reg4", checkpoint="./dinov2_vits14_reg4_pretrain.pth")
 
 
 if __name__ == "__main__":
