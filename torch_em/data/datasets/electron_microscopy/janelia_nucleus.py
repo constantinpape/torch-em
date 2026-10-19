@@ -21,6 +21,8 @@ stub whose actual content lives on the S3 bucket, at
 `s3://janelia-cosem-datasets/{dataset}/{dataset}.zarr/{recon}/em/...` (raw) and
 `.../{recon}/labels/inference/segmentations/nuc/...` (nucleus instance labels), where `recon` is
 either "recon-1" or "recon-2" depending on the deposit.
+The zarr container of `jrc_mus-pancreas-1` has no 'em' group, so its raw data is read from the n5 container
+`jrc_mus-pancreas-1.n5/em/fibsem-uint16` instead (see `N5_RAW`).
 
 The raw EM data is stored as a multiscale OME-Zarr pyramid at up to 4 nm isotropic resolution,
 while the nucleus labels are only released at one, coarser resolution (their pyramid level "s0").
@@ -70,6 +72,9 @@ DATASETS = {
     "jrc_mus-nacc-4": (26513215, "recon-2", "manual"),
 }
 
+# dataset name -> raw array in the n5 container, for datasets without an 'em' group in the zarr container.
+N5_RAW = {"jrc_mus-pancreas-1": "em/fibsem-uint16"}
+
 
 def _get_json(url):
     import requests
@@ -93,12 +98,16 @@ def _find_em_array_name(dataset_name, recon):
     return names[0]
 
 
-def _find_matching_em_level(dataset_name, recon, em_name):
-    em_attrs = _get_json(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}/.zattrs")
+def _get_nucleus_scale(dataset_name, recon):
     nuc_attrs = _get_json(
         f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/labels/inference/segmentations/nuc/.zattrs"
     )
-    nuc_scale = nuc_attrs["multiscales"][0]["datasets"][0]["coordinateTransformations"][0]["scale"]
+    return nuc_attrs["multiscales"][0]["datasets"][0]["coordinateTransformations"][0]["scale"]
+
+
+def _find_matching_em_level(dataset_name, recon, em_name):
+    em_attrs = _get_json(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}/.zattrs")
+    nuc_scale = _get_nucleus_scale(dataset_name, recon)
     for level in em_attrs["multiscales"][0]["datasets"]:
         scale = level["coordinateTransformations"][0]["scale"]
         if scale == nuc_scale:
@@ -106,6 +115,43 @@ def _find_matching_em_level(dataset_name, recon, em_name):
     raise RuntimeError(
         f"No EM resolution level of '{dataset_name}' matches the nucleus label resolution {nuc_scale}."
     )
+
+
+def _read_n5_raw(dataset_name, recon, em_path):
+    """Read the raw data at the resolution of the nucleus labels from the n5 container (gzip blocks, big-endian)."""
+    import gzip
+    import struct
+    import requests
+
+    n5_path = f"{dataset_name}/{dataset_name}.n5/{em_path}"
+    nuc_scale = _get_nucleus_scale(dataset_name, recon)
+    levels = _get_json(f"{BUCKET_URL}{n5_path}/attributes.json")["multiscales"][0]["datasets"]
+    # The scales of the n5 levels differ from the label scale by float rounding.
+    matching = [level["path"] for level in levels if np.allclose(level["transform"]["scale"], nuc_scale)]
+    if not matching:
+        raise RuntimeError(f"No n5 level of '{dataset_name}' matches the nucleus label resolution {nuc_scale}.")
+    level_url = f"{BUCKET_URL}{n5_path}/{matching[0]}"
+    attrs = _get_json(f"{level_url}/attributes.json")
+    assert attrs["compression"]["type"] == "gzip", attrs["compression"]
+
+    # The n5 axis order is (x, y, z), so the shapes and the block ids are reversed.
+    shape, block_shape = attrs["dimensions"][::-1], attrs["blockSize"][::-1]
+    dtype = np.dtype(attrs["dataType"])
+    raw = np.zeros(shape, dtype=dtype)
+    for block_id in np.ndindex(*[int(np.ceil(s / b)) for s, b in zip(shape, block_shape)]):
+        resp = requests.get(f"{level_url}/" + "/".join(str(i) for i in block_id[::-1]), timeout=120)
+        if resp.status_code == 404:  # A missing block is empty.
+            continue
+        resp.raise_for_status()
+        mode, ndim = struct.unpack(">HH", resp.content[:4])
+        block_dims = struct.unpack(f">{ndim}I", resp.content[4:4 + 4 * ndim])[::-1]
+        data_start = 4 + 4 * ndim + (4 if mode == 1 else 0)
+        data = gzip.decompress(resp.content[data_start:])
+        block = np.frombuffer(data, dtype=dtype.newbyteorder(">")).reshape(block_dims)
+        bb = tuple(slice(i * b, min(i * b + d, s)) for i, b, d, s in zip(block_id, block_shape, block_dims, shape))
+        raw[bb] = block[tuple(slice(0, b.stop - b.start) for b in bb)]
+
+    return raw, f"s3://janelia-cosem-datasets/{n5_path}/{matching[0]}"
 
 
 def _read_zarr_array(s3_path):
@@ -145,17 +191,19 @@ def get_janelia_nucleus_data(path: Union[os.PathLike, str], dataset_name: str, d
         raise RuntimeError(f"No cached data found at '{zarr_path}'. Set download=True to stream it from S3.")
 
     _, recon, annotation = DATASETS[dataset_name]
-    em_name = _find_em_array_name(dataset_name, recon)
-    em_level = _find_matching_em_level(dataset_name, recon, em_name)
-
-    em_s3 = f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}/{em_level}"
     nuc_s3 = (
         f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/"
         "labels/inference/segmentations/nuc/s0"
     )
 
     print(f"Streaming '{dataset_name}' ({recon}, {annotation} labels) from the janelia-cosem-datasets S3 bucket ...")
-    raw = _read_zarr_array(em_s3)
+    if dataset_name in N5_RAW:
+        raw, em_s3 = _read_n5_raw(dataset_name, recon, N5_RAW[dataset_name])
+    else:
+        em_name = _find_em_array_name(dataset_name, recon)
+        em_level = _find_matching_em_level(dataset_name, recon, em_name)
+        em_s3 = f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}/{em_level}"
+        raw = _read_zarr_array(em_s3)
     labels = _read_zarr_array(nuc_s3)
     assert raw.shape == labels.shape, f"Shape mismatch for '{dataset_name}': raw {raw.shape} vs labels {labels.shape}"
 
