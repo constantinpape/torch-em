@@ -26,6 +26,8 @@ downloaded whole, following `janelia_nucleus.py`'s pattern. The rest (full volum
 tens of GB to several TB) are downloaded as one fixed-size representative crop, auto-detected
 from a non-empty region of the coarsest available label pyramid level, following `cellmap.py`'s
 per-crop pattern - see `DATASETS[name]["full_array"]`.
+Alternatively, the full raw and label arrays of a dataset are downloaded at one pyramid level, selected by its voxel
+size in nm (`voxel_size`). They are cached as `<name>_<voxel_size>nm.zarr` and cropped to their common shape.
 
 `jrc_mosquito-stylet-6` is the only dataset whose raw and label arrays are stored in zarr v3 with
 sharding (1024^3 outer shards, 64^3 inner chunks); `_open_remote_zarr` uses `zarr.storage.
@@ -261,6 +263,14 @@ def _nearest_em_level(dataset_name, recon, em_name, label_scale):
     return best_level, em_levels[best_level]
 
 
+def _find_level(levels, voxel_size, array_path):
+    """Find the pyramid level with the given isotropic voxel size."""
+    for level, scale in levels.items():
+        if np.allclose(scale, voxel_size):
+            return level, scale
+    raise ValueError(f"'{array_path}' has no pyramid level with voxel size {voxel_size} nm. The levels are {levels}.")
+
+
 def _auto_bounding_box(dataset_name, recon, label_full_path, label_level, label_scale, crop_shape):
     """Center a crop on a non-empty region, found via the coarsest available label level.
 
@@ -285,13 +295,17 @@ def _auto_bounding_box(dataset_name, recon, label_full_path, label_level, label_
     return tuple((max(0, int(c - h)), int(c + h)) for c, h in zip(center, half))
 
 
-def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: str, download: bool = False) -> str:
+def get_openorganelle_nucleus_data(
+    path: Union[os.PathLike, str], dataset_name: str, download: bool = False, voxel_size: Optional[float] = None,
+) -> str:
     """Download nucleus segmentation data for one OpenOrganelle dataset.
 
     Args:
         path: Filepath to a folder where the cached zarr store will be saved.
         dataset_name: The name of the dataset, one of the keys in `DATASETS`.
         download: Whether to download the data if it is not present.
+        voxel_size: The isotropic voxel size in nm of the pyramid level to download. If given, the full raw and
+            label arrays at this level are downloaded. Otherwise, the label level in `DATASETS` is used.
 
     Returns:
         The filepath to the cached zarr store.
@@ -309,7 +323,8 @@ def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: 
     axis_reverse, full_array = info["axis_reverse"], info["full_array"]
 
     os.makedirs(str(path), exist_ok=True)
-    zarr_path = os.path.join(str(path), f"{dataset_name}.zarr")
+    zarr_name = dataset_name if voxel_size is None else f"{dataset_name}_{voxel_size:g}nm"
+    zarr_path = os.path.join(str(path), f"{zarr_name}.zarr")
 
     root = zarr.open_group(zarr_path, mode="a")
     if "raw" in root and "labels" in root:
@@ -320,16 +335,21 @@ def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: 
 
     print(f"Streaming nucleus data for '{dataset_name}' from the janelia-cosem-datasets S3 bucket ...")
     label_full_path = f"labels/inference/{label_subpath}"
+    label_levels = _multiscale_levels(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/{label_full_path}")
+    if voxel_size is None:
+        label_scale = label_levels[label_level]
+        em_level, em_scale = _find_matching_em_level(dataset_name, recon, em_name, label_scale)
+    else:
+        label_level, label_scale = _find_level(label_levels, voxel_size, label_full_path)
+        em_levels = _multiscale_levels(f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/em/{em_name}")
+        em_level, em_scale = _find_level(em_levels, voxel_size, f"em/{em_name}")
+        full_array = True
+    resampled = em_level is None
+
     label_url = (
         f"s3://janelia-cosem-datasets/{dataset_name}/{dataset_name}.zarr/{recon}/{label_full_path}/{label_level}"
     )
     label_arr = _open_remote_zarr(label_url)
-
-    label_scale = _multiscale_levels(
-        f"{BUCKET_URL}{dataset_name}/{dataset_name}.zarr/{recon}/{label_full_path}"
-    )[label_level]
-    em_level, em_scale = _find_matching_em_level(dataset_name, recon, em_name, label_scale)
-    resampled = em_level is None
 
     if full_array:
         label_data = np.asarray(label_arr[:])
@@ -395,6 +415,7 @@ def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: 
     root.attrs["label_source"] = label_url
     root.attrs["em_source"] = em_url
     root.attrs["resampled"] = resampled
+    root.attrs["voxel_size_nm"] = list(label_scale)
     root.attrs["license_verified"] = dataset_name not in UNVERIFIED_LICENSE
 
     _make_array("raw", raw_data, shuffle="shuffle")
@@ -405,7 +426,10 @@ def get_openorganelle_nucleus_data(path: Union[os.PathLike, str], dataset_name: 
 
 
 def get_openorganelle_nucleus_paths(
-    path: Union[os.PathLike, str], dataset_names: Optional[List[str]] = None, download: bool = False,
+    path: Union[os.PathLike, str],
+    dataset_names: Optional[List[str]] = None,
+    download: bool = False,
+    voxel_size: Optional[float] = None,
 ) -> List[str]:
     """Get paths to cached OpenOrganelle nucleus zarr stores.
 
@@ -413,13 +437,15 @@ def get_openorganelle_nucleus_paths(
         path: Filepath to a folder where the cached zarr stores will be saved.
         dataset_names: The names of the datasets to use. Defaults to all datasets in `DATASETS`.
         download: Whether to download the data if it is not present.
+        voxel_size: The isotropic voxel size in nm of the pyramid level to download. If given, the full raw and
+            label arrays at this level are downloaded. Otherwise, the label level in `DATASETS` is used.
 
     Returns:
         List of filepaths to the cached zarr stores.
     """
     if dataset_names is None:
         dataset_names = list(DATASETS.keys())
-    return [get_openorganelle_nucleus_data(path, name, download) for name in dataset_names]
+    return [get_openorganelle_nucleus_data(path, name, download, voxel_size) for name in dataset_names]
 
 
 def get_openorganelle_nucleus_dataset(
@@ -429,6 +455,7 @@ def get_openorganelle_nucleus_dataset(
     download: bool = False,
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
+    voxel_size: Optional[float] = None,
     **kwargs,
 ) -> Dataset:
     """Get the OpenOrganelle nucleus dataset for nucleus segmentation.
@@ -440,6 +467,8 @@ def get_openorganelle_nucleus_dataset(
         download: Whether to download the data if it is not present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
+        voxel_size: The isotropic voxel size in nm of the pyramid level to download. If given, the full raw and
+            label arrays at this level are downloaded. Otherwise, the label level in `DATASETS` is used.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`.
 
     Returns:
@@ -447,7 +476,7 @@ def get_openorganelle_nucleus_dataset(
     """
     assert len(patch_shape) == 3
 
-    paths = get_openorganelle_nucleus_paths(path, dataset_names, download)
+    paths = get_openorganelle_nucleus_paths(path, dataset_names, download, voxel_size)
 
     kwargs = util.update_kwargs(kwargs, "is_seg_dataset", True)
     kwargs, _ = util.add_instance_label_transform(
@@ -472,6 +501,7 @@ def get_openorganelle_nucleus_loader(
     download: bool = False,
     offsets: Optional[List[List[int]]] = None,
     boundaries: bool = False,
+    voxel_size: Optional[float] = None,
     **kwargs,
 ) -> DataLoader:
     """Get the DataLoader for nucleus segmentation in the OpenOrganelle nucleus dataset.
@@ -484,6 +514,8 @@ def get_openorganelle_nucleus_loader(
         download: Whether to download the data if it is not present.
         offsets: Offset values for affinity computation used as target.
         boundaries: Whether to compute boundaries as the target.
+        voxel_size: The isotropic voxel size in nm of the pyramid level to download. If given, the full raw and
+            label arrays at this level are downloaded. Otherwise, the label level in `DATASETS` is used.
         kwargs: Additional keyword arguments for `torch_em.default_segmentation_dataset`
             or for the PyTorch DataLoader.
 
@@ -493,6 +525,6 @@ def get_openorganelle_nucleus_loader(
     ds_kwargs, loader_kwargs = util.split_kwargs(torch_em.default_segmentation_dataset, **kwargs)
     dataset = get_openorganelle_nucleus_dataset(
         path, patch_shape, dataset_names=dataset_names, download=download,
-        offsets=offsets, boundaries=boundaries, **ds_kwargs
+        offsets=offsets, boundaries=boundaries, voxel_size=voxel_size, **ds_kwargs
     )
     return torch_em.get_data_loader(dataset, batch_size, **loader_kwargs)
