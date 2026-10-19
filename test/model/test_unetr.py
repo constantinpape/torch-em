@@ -42,6 +42,43 @@ class TestVitRawTransform(unittest.TestCase):
             get_vit_raw_transform(backbone="mae")
 
 
+class TestGetUnetrModel(unittest.TestCase):
+    @unittest.skipIf(segment_anything is None, "Needs segment_anything")
+    def test_unetr_2d(self):
+        from torch_em.model.unetr import get_unetr_model, UNETR2D
+
+        model = get_unetr_model(ndim=2, backbone="sam", model_type="vit_b", out_channels=3)
+        self.assertIsInstance(model, UNETR2D)
+        self.assertEqual(model.out_channels, 3)
+
+    @unittest.skipIf(segment_anything is None, "Needs segment_anything")
+    def test_unetr_3d(self):
+        from torch_em.model.unetr import get_unetr_model, UNETR3D
+
+        model = get_unetr_model(ndim=3, backbone="sam", model_type="vit_b")
+        self.assertIsInstance(model, UNETR3D)
+
+    @unittest.skipIf(segment_anything is None, "Needs segment_anything")
+    def test_init_decoder(self):
+        from torch_em.model.unetr import get_unetr_model
+
+        # dummy function that sets all decoder params to 0
+        def init_decoder(model):
+            for param in model.decoder.parameters():
+                torch.nn.init.zeros_(param)
+            return model
+
+        # check that the returned model was modified by the dummy function
+        model = get_unetr_model(ndim=2, backbone="sam", model_type="vit_b", init_decoder=init_decoder)
+        self.assertTrue(all((param == 0).all() for param in model.decoder.parameters()))
+
+    def test_unsupported_backbone(self):
+        from torch_em.model.unetr import get_unetr_model
+
+        with self.assertRaises(ValueError):
+            get_unetr_model(ndim=2, backbone="mae", model_type="vit_b")
+
+
 class TestUnetrNormalizationRange(unittest.TestCase):
     def test_input_normalization_range_check(self):
         from torch_em.model.unetr import _check_input_normalization_range
