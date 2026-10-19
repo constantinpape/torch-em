@@ -1,7 +1,6 @@
-import os
 from functools import partial
 from collections import OrderedDict
-from typing import Optional, Tuple, Union, Literal
+from typing import Callable, Optional, Tuple, Union, Literal
 
 import numpy as np
 import torch
@@ -11,17 +10,11 @@ import torch.nn.functional as F
 from .vit import get_vision_transformer
 from .unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d, _update_conv_kwargs
 from ..transform.raw import normalize_percentile
-from ..util.util import get_cache_directory
 
 try:
     from micro_sam.util import get_sam_model
 except ImportError:
     get_sam_model = None
-
-try:
-    from micro_sam.util import models as microsam_models
-except ImportError:
-    microsam_models = None
 
 try:
     from micro_sam.v2.util import get_sam2_model
@@ -67,100 +60,6 @@ def get_vit_raw_transform(backbone):
 
     return partial(_normalize_percentile_to_range, clip_max=clip_max), clip_max
 
-
-def _get_dinov2_checkpoint(model_type: str):
-    """Downloads the model checkpoints and returns filepath to it.
-    """
-    import pooch  # We import pooch here, so that 'import torch_em' does not need it.
-
-    assert isinstance(model_type, str), "Watch out, we need the 'model_type' name."
-
-    save_directory = os.path.join(get_cache_directory(), "models", "dinov2")
-
-    urls = {"vit_b": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"}
-    hashes = {"vit_b": "0b8b82f85de91b424aded121c7e1dcc2b7bc6d0adeea651bf73a13307fad8c73"}
-
-    # Make an explicit check
-    assert model_type in urls, "Oops, seems like the specific DINOv2 model is not worked out atm."
-
-    # Download the model weights
-    pooch.retrieve(
-        url=urls[model_type],
-        known_hash=hashes[model_type],
-        fname=model_type,
-        path=save_directory,
-        progressbar=True,
-    )
-
-    # Get the checkpoint path
-    checkpoint_path = os.path.join(save_directory, model_type)
-
-    return checkpoint_path
-
-
-def _get_dinov3_checkpoint(model_type: str):
-    """Downloads the model checkpoint and returns filepath to it.
-    """
-    import pooch  # We import pooch here, so that 'import torch_em' does not need it.
-
-    assert isinstance(model_type, str), "Watch out, we need the 'model_type' name."
-
-    save_directory = os.path.join(get_cache_directory(), "models", "dinov3")
-
-    # The weights are stored on owncloud for now
-    urls = {"vit_b": "https://owncloud.gwdg.de/index.php/s/PvTzG3fdo2pnNCz/download"}
-    hashes = {"vit_b": "73cec8be7427c8655ceced13ce62f6e20a1fa90d1b4d4a550df17a1144081a7c"}
-
-    # Make an explicit check
-    assert model_type in urls, "Oops, seems like the specific DINOv3 model is not stored on OwnCloud."
-
-    # Download the model weights
-    pooch.retrieve(
-        url=urls[model_type],
-        known_hash=hashes[model_type],
-        fname=model_type,
-        path=save_directory,
-        progressbar=True,
-    )
-
-    # Get the checkpoint path
-    checkpoint_path = os.path.join(save_directory, model_type)
-
-    return checkpoint_path
-
-
-def _get_checkpoint(backbone, model_type, return_decoder_path=False):
-
-    if backbone == "sam":
-        if microsam_models is None:
-            raise RuntimeError(
-                "The 'sam' backbone requires micro_sam. Install it with 'conda install -c conda-forge micro_sam'."
-                )
-        model_registry = microsam_models()
-        checkpoint_path = model_registry.fetch(model_type, progressbar=True)
-
-        if return_decoder_path:
-            decoder_name = f"{model_type}_decoder"
-            decoder_path = model_registry.fetch(
-                decoder_name, progressbar=True
-            ) if decoder_name in model_registry.registry else None
-
-    elif backbone == "dinov2":
-        checkpoint_path = _get_dinov2_checkpoint(model_type)
-        decoder_path = None
-
-    elif backbone == "dinov3":
-        checkpoint_path = _get_dinov3_checkpoint(model_type)
-        decoder_path = None
-    else:
-        raise ValueError(f"Unsupported backbone '{backbone}'.")
-
-    if return_decoder_path:
-        return checkpoint_path, decoder_path
-    else:
-        return checkpoint_path
-
-
 def _get_vit_type(model_type: str) -> str:
     if model_type is None:
         return model_type
@@ -174,9 +73,9 @@ def get_unetr_model(
     ndim: int,
     backbone: Literal["sam", "dinov2", "dinov3"],
     model_type: str,
-    out_channels: int = 1,
-    init_decoder: bool = False,
-    final_activation: str = "Sigmoid",
+    encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
+    init_decoder: Optional[Callable[[nn.Module], nn.Module]] = None,
+    **init_kwargs,
 ) -> nn.Module:
     """Get the UNETR model with a pretrained ViT encoder for 2D or 3D segmentation tasks.
 
@@ -185,38 +84,44 @@ def get_unetr_model(
         backbone: The pretrained ViT encoder of the UNETR model. Options: "sam", "dinov2", or "dinov3".
         model_type: Model type for the selected `backbone` model family,
             for example "vit_b" or "vit_b_em_organelles" for "sam".
-        out_channels: The number of output channels of the network.
-        init_decoder: Whether to initialize the decoder with pretrained micro-sam weights. Not implemented yet.
-        final_activation: The activation applied to the last output layer.
+        encoder_checkpoint: Checkpoint to initialize the encoder. It can either be a filepath or already
+            loaded checkpoint.
+        init_decoder: Function to initialize the decoder with pretrained weights.
+            Only supported for 2D models.
+        init_kwargs: Additional keyword arguments for UNETR2D or UNET3D; used to override the defaults.
 
     Returns:
         The UNETR model.
     """
     if backbone not in ("sam", "dinov2", "dinov3"):
         raise ValueError(f"Unsupported backbone '{backbone}'.")
-    if init_decoder:
-        raise NotImplementedError("Initializing the decoder with pretrained weights is not implemented yet.")
-
+    
     # Get the model class.
-    if ndim == 2:
-        model_class = UNETR2D
-    else:
-        model_class = partial(UNETR3D, use_strip_pooling=False)
+    model_class = UNETR2D if ndim == 2 else UNETR3D
 
-    # Load the model
-    model = model_class(
+    model_kwargs = dict(
         img_size=518 if backbone == "dinov2" else 1024,
-        backbone=backbone,
-        encoder=_get_vit_type(model_type),
-        encoder_checkpoint=_get_checkpoint(backbone=backbone, model_type=model_type),
-        out_channels=out_channels,
+        out_channels=1,
         resize_input=True,
-        final_activation=final_activation,
+        final_activation="Sigmoid",
         use_skip_connection=False,
         use_conv_transpose=False,
-        use_sam_stats="sam" in backbone,
-        use_dino_stats="dino" in backbone,
+        use_sam_stats=backbone == "sam",
+        use_dino_stats=backbone in ("dinov2", "dinov3"),
     )
+    model_kwargs.update(init_kwargs)
+
+    model = model_class(
+        backbone=backbone,
+        encoder=_get_vit_type(model_type),
+        encoder_checkpoint=encoder_checkpoint,
+        **model_kwargs,
+    )
+    if init_decoder is not None:
+        if ndim != 2:
+            raise ValueError(f"`init_decoder` is only supported for 2D models, got ndim={ndim}.")
+        
+        model = init_decoder(model)
 
     return model
 
