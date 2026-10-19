@@ -1,57 +1,37 @@
-import argparse
-
 import torch
-from torch_em.model import UNETR
+
+from torch_em.model.unetr import get_unetr_model
+
+
+def get_input(ndim, device):
+    shape = (1, 1, 256, 256) if ndim == 2 else (1, 1, 4, 256, 256)
+    return torch.rand(shape, device=device)
+
+
+def load_torchvision(ndim, model_type, pretrained):
+    """Load a torchvision ViT encoder in UNETR."""
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # The factory disables the skip connections for the encoders with patch size 32 and 14.
+    model = get_unetr_model(
+        ndim=ndim, backbone="torchvision", model_type=model_type, pretrained=pretrained,
+        out_channels=1, final_activation="Sigmoid",
+    ).to(device)
+
+    x = get_input(ndim, device)
+    with torch.no_grad():
+        y = model(x)
+    print(x.shape, y.shape)
+    print(f"UNETR with the torchvision {model_type} encoder was created with pretrained={pretrained}.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Load a torchvision ViT encoder in UNETR.")
-    parser.add_argument(
-        "--encoder", default="vit_b_16",
-        help=(
-            "Torchvision ViT variant: vit_b_16, vit_b_32, vit_l_16, vit_l_32, vit_h_14. "
-            "vit_b_32, vit_l_32, and vit_h_14 require use_skip_connection=False (set automatically)."
-        ),
-    )
-    parser.add_argument(
-        "--checkpoint", default=None,
-        help=(
-            "Optional path to a fine-tuned torchvision ViT checkpoint (.pth). "
-            "If not provided, ImageNet-pretrained weights are loaded from torchvision."
-        ),
-    )
-    parser.add_argument("--img_size", type=int, default=224)
-    parser.add_argument("--out_channels", type=int, default=1)
-    parser.add_argument("--no_pretrained", action="store_true", help="Skip loading pretrained weights.")
-    args = parser.parse_args()
+    # The torchvision models are: vit_b_16, vit_b_32, vit_l_16, vit_l_32, and vit_h_14.
+    load_torchvision(ndim=2, model_type="vit_b_16", pretrained=True)
+    load_torchvision(ndim=3, model_type="vit_b_16", pretrained=True)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    # patch_size=32 and patch_size=14 models need skip connections disabled so that
-    # all tensors in the decoder chain from the same patch grid and sizes align.
-    # postprocess_masks then resizes the output back to the input resolution.
-    use_skip_connection = args.encoder.endswith("_16")
-
-    model = UNETR(
-        backbone="torchvision",
-        encoder=args.encoder,
-        img_size=args.img_size,
-        out_channels=args.out_channels,
-        use_imagenet_stats=True,
-        final_activation="Sigmoid",
-        resize_input=True,
-        pretrained=not args.no_pretrained,
-        encoder_checkpoint=args.checkpoint,
-        use_skip_connection=use_skip_connection,
-    )
-    model.to(device)
-
-    x = torch.rand(1, 3, args.img_size, args.img_size).to(device)
-    y = model(x)
-
-    print(f"Encoder: {args.encoder}")
-    print(f"Input: {tuple(x.shape)}")
-    print(f"Output: {tuple(y.shape)}")
+    load_torchvision(ndim=2, model_type="vit_b_32", pretrained=False)
+    load_torchvision(ndim=3, model_type="vit_b_32", pretrained=False)
 
 
 if __name__ == "__main__":
