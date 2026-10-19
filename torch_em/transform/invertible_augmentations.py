@@ -184,6 +184,10 @@ class MeanTeacherAugmenters:
                 clip_max=clip_max,
             )
         else:
+            missing_keys = {"intensity", "geometrical"} - set(aug_dict)
+            if missing_keys:
+                raise ValueError(f"aug_dict needs the keys 'intensity' and 'geometrical', missing: {missing_keys}")
+
             augmenter = InvertibleAugmenter(
                 get_intensity_augmentations(ndim, aug_dict=aug_dict["intensity"]),
                 get_geometrical_augmentations(ndim, aug_dict=aug_dict["geometrical"]),

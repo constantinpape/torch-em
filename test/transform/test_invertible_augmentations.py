@@ -165,6 +165,10 @@ class TestMeanTeacherAugmenters(unittest.TestCase):
 
         self.assertEqual(x.shape, x_inv.shape)
 
+    def test_aug_dict_missing_key(self):
+        with self.assertRaises(ValueError):
+            MeanTeacherAugmenters(ndim=2, aug_dict={"intensity": self.aug_dict["intensity"]})
+
 
 if __name__ == "__main__":
     unittest.main()
