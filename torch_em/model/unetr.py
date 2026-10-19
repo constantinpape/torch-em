@@ -101,11 +101,6 @@ def get_unetr_model(
 
     model_kwargs = dict(
         img_size=518 if backbone == "dinov2" else 1024,
-        out_channels=1,
-        resize_input=True,
-        final_activation="Sigmoid",
-        use_skip_connection=False,
-        use_conv_transpose=False,
         use_sam_stats=backbone == "sam",
         use_dino_stats=backbone in ("dinov2", "dinov3"),
     )
