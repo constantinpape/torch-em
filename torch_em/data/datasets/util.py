@@ -43,6 +43,11 @@ except ImportError:
     synapseclient, synapseutils = None, None
 
 
+# fsspec's HTTP filesystem (aiohttp) ignores the http(s)_proxy environment variables unless 'trust_env' is set,
+# so remote data behind a proxy needs these storage options.
+HTTP_STORAGE_OPTIONS = {"client_kwargs": {"trust_env": True}}
+
+
 BIOIMAGEIO_IDS = {
     "covid_if": "ilastik/covid_if_training_data",
     "cremi": "ilastik/cremi_training_data",
@@ -883,3 +888,79 @@ def download_from_cryo_et_portal(path: str, dataset_id: int, download: bool) -> 
     dataset.download_everything(dest_path=path)
 
     return output_path
+
+
+CRYO_ET_PORTAL_BUCKET = "cryoet-data-portal-public"
+
+
+def _open_cryo_et_portal_zarr(s3_path):
+    import zarr
+    from zarr.storage import FsspecStore
+
+    store = FsspecStore.from_url(s3_path, storage_options={"anon": True}, read_only=True)
+    return zarr.open(store, mode="r")
+
+
+def stream_from_cryo_et_portal(
+    zarr_path: str,
+    dataset_id: int,
+    run: str,
+    voxel_spacing: str,
+    tomogram_folder: str,
+    annotations: Dict[str, str],
+    download: bool,
+) -> str:
+    """Stream a tomogram and its segmentation masks of a single run from the CryoET Data Portal.
+
+    In contrast to `download_from_cryo_et_portal` this only fetches the tomogram and the requested masks
+    (and not the frames and tilt series). The data is cached in a zarr group with the tomogram stored as 'raw'
+    and one array per annotation. Already cached arrays are not downloaded again.
+
+    Requires zarr (v3) and s3fs.
+
+    Args:
+        zarr_path: The filepath for the cached zarr group.
+        dataset_id: The id of the dataset on the portal.
+        run: The name of the run.
+        voxel_spacing: The voxel spacing folder of the run, e.g. 'VoxelSpacing13.480'.
+        tomogram_folder: The folder of the tomogram within 'Tomograms', e.g. '100'.
+        annotations: Mapping from the annotation name (e.g. 'nucleus') to the portal annotation folder (e.g. '108').
+        download: Whether to download the data if it is not cached at `zarr_path` yet.
+
+    Returns:
+        The filepath to the cached zarr group.
+    """
+    import zarr
+    from zarr.codecs import BloscCodec
+
+    root = zarr.open_group(zarr_path, mode="a")
+    if "raw" in root and all(name in root for name in annotations):
+        return zarr_path
+
+    if not download:
+        raise RuntimeError(f"Cannot find the data at {zarr_path}, but download was set to False.")
+
+    print(f"Streaming run {run} of dataset {dataset_id} from the CryoET Data Portal ...")
+    prefix = f"s3://{CRYO_ET_PORTAL_BUCKET}/{dataset_id}/{run}/Reconstructions/{voxel_spacing}"
+
+    def _make_array(name, data, shuffle):
+        arr = root.create_array(
+            name, shape=data.shape, chunks=tuple(min(128, s) for s in data.shape), dtype=data.dtype,
+            compressors=BloscCodec(cname="zstd", clevel=6, shuffle=shuffle),
+        )
+        arr[:] = data
+
+    raw = _open_cryo_et_portal_zarr(f"{prefix}/Tomograms/{tomogram_folder}/{run}.zarr/0")[:]
+    if "raw" not in root:
+        _make_array("raw", raw, shuffle="shuffle")
+
+    for name, folder in annotations.items():
+        if name in root:
+            continue
+        labels = _open_cryo_et_portal_zarr(f"{prefix}/Annotations/{folder}/{name}-1.0_segmentationmask.zarr/0")[:]
+        assert labels.shape == raw.shape, f"Shape mismatch for {run}, '{name}': raw {raw.shape} vs label {labels.shape}"
+        _make_array(name, labels, shuffle="bitshuffle")
+
+    root.attrs["dataset_id"] = dataset_id
+    root.attrs["run"] = run
+    return zarr_path

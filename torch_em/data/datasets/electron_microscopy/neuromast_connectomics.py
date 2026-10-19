@@ -47,7 +47,8 @@ def _bbox_to_str(bounding_box):
 def _open_remote_array(dataset_id, layer):
     import fsspec
     import zarr
-    return zarr.open(fsspec.get_mapper(f"{DATASTORE_URL}/{dataset_id}/{layer}/1-1-1"), mode="r", zarr_format=2)
+    store = fsspec.get_mapper(f"{DATASTORE_URL}/{dataset_id}/{layer}/1-1-1", **util.HTTP_STORAGE_OPTIONS)
+    return zarr.open(store, mode="r", zarr_format=2)
 
 
 def get_neuromast_connectomics_data(
