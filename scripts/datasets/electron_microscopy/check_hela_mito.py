@@ -9,7 +9,7 @@ from torch_em.data.datasets.electron_microscopy import get_hela_mito_loader
 sys.path.append("..")
 
 
-def check_hela_mito(patch_shape, n_samples):
+def check_hela_mito(patch_shape, n_samples, annotation_version):
     from util import ROOT
 
     loader = get_hela_mito_loader(
@@ -17,6 +17,7 @@ def check_hela_mito(patch_shape, n_samples):
         patch_shape=patch_shape,
         batch_size=1,
         download=True,
+        annotation_version=annotation_version,
         sampler=MinForegroundSampler(min_fraction=0.01),
     )
     check_loader(loader, n_samples, instance_labels=True)
@@ -26,8 +27,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--patch_shape", type=int, nargs=2, default=[512, 512], help="The patch shape.")
     parser.add_argument("-n", "--n_samples", type=int, default=8, help="The number of samples to display.")
+    parser.add_argument("--annotation_version", default="gt", choices=["gt", "gt2"], help="The annotation set.")
     args = parser.parse_args()
-    check_hela_mito(tuple(args.patch_shape), args.n_samples)
+    check_hela_mito(tuple(args.patch_shape), args.n_samples, args.annotation_version)
 
 
 if __name__ == "__main__":

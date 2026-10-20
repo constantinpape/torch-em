@@ -10,6 +10,7 @@ Please cite it if you use this dataset in your research.
 """
 
 import os
+import json
 from glob import glob
 from typing import Union, Literal, Optional, Tuple, List
 
@@ -38,35 +39,48 @@ DATASETS = {
 DATASET_NAMES = list(DATASETS.keys())
 
 
-def _convert_nifti_to_n5(nifti_path, n5_path):
-    """Convert NIfTI file to n5 format for efficient access."""
-    import nibabel as nib
-    import z5py
+CHUNKS = (32, 256, 256)
 
-    if os.path.exists(n5_path):
-        return
+
+def _read_split_info(dataset_dir):
+    # The split file is called 'split.json' in most datasets, but 'splits.json' in the pyra dataset.
+    for name in ("split.json", "splits.json"):
+        split_path = os.path.join(dataset_dir, name)
+        if os.path.exists(split_path):
+            with open(split_path) as f:
+                return json.load(f)[0]
+    raise FileNotFoundError(f"Cannot find the split file in {dataset_dir}.")
+
+
+def _write_nifti(f, key, nifti_path, transpose):
+    """Write a NIfTI volume into the n5 file as (z, y, x).
+
+    NIfTI stores (x, y, z) in Fortran order, so a slab along the last axis is contiguous on disk and the volume can
+    be converted slab by slab, without loading it into memory as a whole.
+    """
+    import nibabel as nib
 
     nii = nib.load(nifti_path)
-    data = np.asarray(nii.dataobj)
+    dtype = nii.get_data_dtype()
+    if not transpose:
+        f.create_dataset(key, data=np.asarray(nii.dataobj).astype(dtype), chunks=CHUNKS, compression="gzip")
+        return
 
-    # NIfTI stores as (X, Y, Z), we want (Z, Y, X)
-    data = np.transpose(data, (2, 1, 0))
-
-    chunks = (32, 256, 256)
-    with z5py.File(n5_path, "a") as f:
-        f.create_dataset("data", data=data, chunks=chunks, compression="gzip")
+    shape = nii.shape[::-1]
+    ds = f.create_dataset(key, shape=shape, dtype=dtype, chunks=CHUNKS, compression="gzip")
+    for z0 in range(0, shape[0], CHUNKS[0]):
+        z1 = min(z0 + CHUNKS[0], shape[0])
+        ds[z0:z1] = np.asarray(nii.dataobj[:, :, z0:z1]).astype(dtype).transpose(2, 1, 0)
 
 
 def _preprocess_dataset(path, dataset_name, dataset_dir):
     """Preprocess a single dataset: convert NIfTI to n5."""
-    import json
+    import shutil
+    import z5py
 
     n5_dir = os.path.join(path, "n5_data", dataset_name)
     os.makedirs(n5_dir, exist_ok=True)
-
-    # Read split info
-    with open(os.path.join(dataset_dir, "split.json")) as f:
-        split_info = json.load(f)[0]
+    split_info = _read_split_info(dataset_dir)
 
     processed = {}
     for split_name, split_key in [("train", "train"), ("val", "val"), ("test", "test")]:
@@ -93,31 +107,21 @@ def _preprocess_dataset(path, dataset_name, dataset_dir):
 
             if not os.path.exists(n5_path):
                 print(f"Converting {sample} to n5...")
-                _convert_nifti_to_n5(img_nifti, os.path.join(n5_dir, f"{sample}_raw.n5"))
-                _convert_nifti_to_n5(lbl_nifti, os.path.join(n5_dir, f"{sample}_labels.n5"))
+                # The volume is written under a temporary name and moved in place once it is complete,
+                # so that an interrupted conversion is not mistaken for a complete one.
+                tmp_path = os.path.join(n5_dir, f"{sample}_incomplete.n5")
+                if os.path.exists(tmp_path):
+                    shutil.rmtree(tmp_path)
 
-                # Combine into single n5 file
-                import z5py
-                with z5py.File(os.path.join(n5_dir, f"{sample}_raw.n5"), "r") as f_raw:
-                    raw = f_raw["data"][:]
-                with z5py.File(os.path.join(n5_dir, f"{sample}_labels.n5"), "r") as f_lbl:
-                    labels = f_lbl["data"][:]
-
-                if sample == "me2-jurkat_train02":
-                    print("Label dimensions in nifti are stored the other way around for this sample, transposing labels...")  # noqa
-                    labels = np.transpose(labels, (2, 1, 0))
-
-                if raw.shape != labels.shape:
-                    raise RuntimeError("There is a shape mismatch between raw and labels.")
-
-                with z5py.File(n5_path, "a") as f:
-                    f.create_dataset("raw", data=raw, chunks=(32, 256, 256), compression="gzip")
-                    f.create_dataset("labels", data=labels.astype("uint64"), chunks=(32, 256, 256), compression="gzip")
-
-                # Clean up temp files
-                import shutil
-                shutil.rmtree(os.path.join(n5_dir, f"{sample}_raw.n5"))
-                shutil.rmtree(os.path.join(n5_dir, f"{sample}_labels.n5"))
+                # The labels of this sample are stored in (z, y, x) order in the NIfTI file already.
+                # NOTE: Even then they do not match the raw data (the mitochondria are drawn in empty resin).
+                transpose_labels = sample != "me2-jurkat_train02"
+                with z5py.File(tmp_path, "a") as f:
+                    _write_nifti(f, "raw", img_nifti, transpose=True)
+                    _write_nifti(f, "labels", lbl_nifti, transpose=transpose_labels)
+                    if f["raw"].shape != f["labels"].shape:
+                        raise RuntimeError(f"There is a shape mismatch between raw and labels for {sample}.")
+                os.rename(tmp_path, n5_path)
 
             if split_name not in processed:
                 processed[split_name] = []
@@ -146,15 +150,14 @@ def get_mitoemv2_data(
 
     dataset_folder = DATASETS[dataset]
     n5_dir = os.path.join(path, "n5_data", dataset)
-
-    # Check if already preprocessed
-    if os.path.exists(n5_dir) and len(glob(os.path.join(n5_dir, "*.n5"))) > 0:
-        return n5_dir
-
-    # Download if needed
     zip_path = os.path.join(path, f"{dataset_folder}.zip")
     dataset_dir = os.path.join(path, dataset_folder)
 
+    # Without the NIfTI data there is nothing left to convert, so the converted data is used as it is.
+    if not os.path.exists(dataset_dir) and len(glob(os.path.join(n5_dir, "*.n5"))) > 0:
+        return n5_dir
+
+    # Download if needed
     if not os.path.exists(dataset_dir):
         os.makedirs(path, exist_ok=True)
         url = f"{BASE_URL}/{dataset_folder}.zip"
@@ -186,7 +189,6 @@ def get_mitoemv2_paths(
     Returns:
         List of filepaths for the n5 data.
     """
-    import json
     from natsort import natsorted
 
     assert split in ("train", "val", "test"), f"'{split}' is not a valid split."
@@ -203,8 +205,7 @@ def get_mitoemv2_paths(
         # Read split info to get correct samples
         dataset_folder = DATASETS[ds]
         dataset_dir = os.path.join(path, dataset_folder)
-        with open(os.path.join(dataset_dir, "split.json")) as f:
-            split_info = json.load(f)[0]
+        split_info = _read_split_info(dataset_dir)
 
         samples = split_info.get(split, [])
         n5_paths = [os.path.join(n5_dir, f"{sample}.n5") for sample in samples]

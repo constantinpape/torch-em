@@ -1,32 +1,97 @@
+from os import PathLike
 from functools import partial
-from collections import OrderedDict
-from typing import Optional, Tuple, Union, Literal
+from collections.abc import Mapping
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .util import VIT_CONFIGS
 from .vit import get_vision_transformer
 from .unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d, _update_conv_kwargs
 
-try:
-    from micro_sam.util import get_sam_model
-except ImportError:
-    get_sam_model = None
 
-try:
-    from micro_sam.v2.util import get_sam2_model
-except ImportError:
-    get_sam2_model = None
+#
+# UNETR WITH PRETRAINED ENCODERS
+#
 
-try:
-    from micro_sam3.util import get_sam3_model
-except ImportError:
-    get_sam3_model = None
+
+def get_unetr_model(
+    ndim: int,
+    backbone: str,
+    model_type: Union[str, nn.Module],
+    encoder_checkpoint: Optional[Union[str, PathLike, Mapping]] = None,
+    init_decoder: Optional[Callable[[nn.Module], nn.Module]] = None,
+    **init_kwargs,
+) -> nn.Module:
+    """Create a UNETR with a ViT encoder for 2D or 3D segmentation.
+
+    Pass `encoder_checkpoint` to load encoder weights.
+    Torchvision loads its default pretrained weights without a checkpoint.
+    Set `pretrained=False` to disable this torchvision download.
+    3D models apply the encoder to each slice and use a 3D convolutional decoder.
+
+    Args:
+        ndim: The number of spatial dimensions. Use 2 or 3.
+        backbone: The ViT family supported by `get_vision_transformer`: "sam", "sam2", "sam3", "cellpose_sam",
+            "mae", "scalemae", "dinov2", "dinov3", or "torchvision".
+            Use a custom name for an injected encoder from another family.
+        model_type: The encoder name or a module from `get_vision_transformer`. Examples: "hvit_t" for SAM2,
+            "vit_b_reg4" for DINOv2, or "vit_b_16" for torchvision. SAM weight names can include training suffixes.
+            Custom modules must expose `img_size`, `embed_dim`, and `in_chans`.
+            They return feature maps or a tuple of feature maps and intermediate features.
+        encoder_checkpoint: The encoder checkpoint, as a file path or a loaded state dictionary.
+        init_decoder: The function that initializes the decoder with pretrained weights. Use this only for 2D models.
+        init_kwargs: The keyword arguments that override the defaults for UNETR2D or UNETR3D.
+            The factory selects the image size and normalization for the backbone.
+            It disables skip connections when the encoder features do not match the decoder.
+
+    Returns:
+        The UNETR model.
+    """
+    if ndim not in (2, 3):
+        raise ValueError(f"Invalid ndim={ndim}. Use 2 or 3.")
+    if init_decoder is not None and ndim != 2:
+        raise ValueError(f"`init_decoder` is only supported for 2D models, got ndim={ndim}.")
+
+    config = VIT_CONFIGS.get(backbone)
+    if config is None and not isinstance(model_type, nn.Module):
+        raise ValueError(f"Unsupported backbone '{backbone}'.")
+
+    # Get the model class.
+    model_class = UNETR2D if ndim == 2 else UNETR3D
+    if isinstance(model_type, str):
+        encoder = "_".join(model_type.split("_")[:2]) if config.weight_suffixes else model_type
+        img_size = config.img_size
+        encoder_name = encoder
+    elif isinstance(model_type, nn.Module):
+        encoder = model_type
+        img_size = encoder.img_size
+        encoder_name = getattr(encoder, "model_type", None)
+    else:
+        raise TypeError("The model_type must be an encoder name or a torch module.")
+
+    model_kwargs = {"img_size": img_size}
+    if config is not None and config.stats is not None:
+        model_kwargs[f"use_{config.stats}_stats"] = True
+    compatible_skips = config is not None and encoder_name in config.skip_models
+    if ndim == 2 and (not compatible_skips or getattr(encoder, "apply_neck", False)):
+        model_kwargs["use_skip_connection"] = False
+    if backbone == "torchvision" and encoder_checkpoint is not None:
+        model_kwargs["pretrained"] = False
+    model_kwargs.update(init_kwargs)
+
+    model = model_class(backbone=backbone, encoder=encoder, encoder_checkpoint=encoder_checkpoint, **model_kwargs)
+    if init_decoder is not None:
+        model = init_decoder(model)
+
+    return model
 
 
 #
-# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / CellposeSAM / SAM2 / SAM3 / DINOv2 / DINOv3 / MAE / ScaleMAE) + UNet Decoder from `torch_em`]  # noqa
+# UNETR IMPLEMENTATION [Vision Transformer (ViT from SAM / CellposeSAM / SAM2 / SAM3 /
+# DINOv2 / DINOv3 / MAE / ScaleMAE / torchvision) + UNet Decoder from `torch_em`]
 #
 
 
@@ -159,9 +224,7 @@ class UNETRBase(nn.Module):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal[
-            "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3", "torchvision"
-        ] = "sam",
+        backbone: str = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -170,7 +233,7 @@ class UNETRBase(nn.Module):
         use_dino_stats: bool = False,
         use_imagenet_stats: bool = False,
         resize_input: bool = True,
-        encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
+        encoder_checkpoint: Optional[Union[str, PathLike, Mapping]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
@@ -196,140 +259,76 @@ class UNETRBase(nn.Module):
         if isinstance(encoder, str):  # e.g. "vit_b" / "hvit_b" / "vit_pe"
             print(f"Using {encoder} from {backbone.upper()}")
             self.encoder = get_vision_transformer(img_size=img_size, backbone=backbone, model=encoder, **kwargs)
-
-            if encoder_checkpoint is not None:
-                self._load_encoder_from_checkpoint(backbone=backbone, encoder=encoder, checkpoint=encoder_checkpoint)
-
-            if embed_dim is None:
-                embed_dim = self.encoder.embed_dim
-
-            # For SAM1 encoder, if 'apply_neck' is applied, the embedding dimension must change.
-            if hasattr(self.encoder, "apply_neck") and self.encoder.apply_neck:
-                embed_dim = self.encoder.neck[2].out_channels  # the value is 256
-
         else:  # `nn.Module` ViT backbone
             self.encoder = encoder
 
-            have_neck = False
-            for name, _ in self.encoder.named_parameters():
-                if name.startswith("neck"):
-                    have_neck = True
+        if encoder_checkpoint is not None:
+            self._load_encoder_from_checkpoint(backbone, encoder_checkpoint)
 
-            if embed_dim is None:
-                if have_neck:
-                    embed_dim = self.encoder.neck[2].out_channels  # the value is 256
-                else:
-                    embed_dim = self.encoder.patch_embed.proj.out_channels
+        # Sort the `embed_dim` out using the encoder output width.
+        if embed_dim is None:
+            have_neck = hasattr(self.encoder, "neck") and not hasattr(self.encoder, "embed_dim")
+            # For SAM1 encoder, if 'apply_neck' is applied, the embedding dimension must change.
+            if getattr(self.encoder, "apply_neck", have_neck):
+                embed_dim = self.encoder.neck[2].out_channels  # 256 for SAM1.
+            elif hasattr(self.encoder, "embed_dim"):
+                embed_dim = self.encoder.embed_dim
+            else:
+                embed_dim = self.encoder.patch_embed.proj.out_channels
 
         self.embed_dim = embed_dim
         self.final_activation = self._get_activation(final_activation)
 
-    def _load_encoder_from_checkpoint(self, backbone, encoder, checkpoint):
-        """Function to load pretrained weights to the image encoder.
-        """
-        if isinstance(checkpoint, str):
-            if backbone == "sam" and isinstance(encoder, str):
-                # If we have a SAM encoder, then we first try to load the full SAM Model
-                # (using micro_sam) and otherwise fall back on directly loading the encoder state
-                # from the checkpoint
-                try:
-                    _, model = get_sam_model(model_type=encoder, checkpoint_path=checkpoint, return_sam=True)
-                    encoder_state = model.image_encoder.state_dict()
-                except Exception:
-                    # Try loading the encoder state directly from a checkpoint.
-                    encoder_state = torch.load(checkpoint, weights_only=False)
-
-            elif backbone == "cellpose_sam" and isinstance(encoder, str):
-                # The architecture matches CellposeSAM exactly (same rel_pos sizes),
-                # so weights load directly without any interpolation.
-                encoder_state = torch.load(checkpoint, map_location="cpu", weights_only=False)
-                # Handle DataParallel/DistributedDataParallel prefix.
-                if any(k.startswith("module.") for k in encoder_state.keys()):
-                    encoder_state = OrderedDict(
-                        {k[len("module."):]: v for k, v in encoder_state.items()}
-                    )
-                # Extract encoder weights from CellposeSAM checkpoint format (strip 'encoder.' prefix).
-                if any(k.startswith("encoder.") for k in encoder_state.keys()):
-                    encoder_state = OrderedDict(
-                        {k[len("encoder."):]: v for k, v in encoder_state.items() if k.startswith("encoder.")}
-                    )
-
-            elif backbone == "sam2" and isinstance(encoder, str):
-                # If we have a SAM2 encoder, then we first try to load the full SAM2 Model.
-                # (using micro_sam2) and otherwise fall back on directly loading the encoder state
-                # from the checkpoint
-                try:
-                    model = get_sam2_model(model_type=encoder, checkpoint_path=checkpoint)
-                    encoder_state = model.image_encoder.state_dict()
-                except Exception:
-                    # Try loading the encoder state directly from a checkpoint.
-                    encoder_state = torch.load(checkpoint, weights_only=False)
-
-            elif backbone == "sam3" and isinstance(encoder, str):
-                # If we have a SAM3 encoder, then we first try to load the full SAM3 Model.
-                # (using micro_sam3) and otherwise fall back on directly loading the encoder state
-                # from the checkpoint
-                try:
-                    model = get_sam3_model(checkpoint_path=checkpoint)
-                    encoder_state = model.backbone.vision_backbone.state_dict()
-                    # Let's align loading the encoder weights with expected parameter names
-                    encoder_state = {
-                        k[len("trunk."):] if k.startswith("trunk.") else k: v for k, v in encoder_state.items()
-                    }
-                    # And drop the 'convs' and 'sam2_convs' - these seem like some upsampling blocks.
-                    encoder_state = {
-                        k: v for k, v in encoder_state.items()
-                        if not (k.startswith("convs.") or k.startswith("sam2_convs."))
-                    }
-                except Exception:
-                    # Try loading the encoder state directly from a checkpoint.
-                    encoder_state = torch.load(checkpoint, weights_only=False)
-
-            elif backbone == "mae":
-                # vit initialization hints from:
-                #     - https://github.com/facebookresearch/mae/blob/main/main_finetune.py#L233-L242
-                encoder_state = torch.load(checkpoint, weights_only=False)["model"]
-                encoder_state = OrderedDict({
-                    k: v for k, v in encoder_state.items() if (k != "mask_token" and not k.startswith("decoder"))
-                })
-                # Let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
-                current_encoder_state = self.encoder.state_dict()
-                if ("head.weight" in current_encoder_state) and ("head.bias" in current_encoder_state):
-                    del self.encoder.head
-
-            elif backbone == "scalemae":
-                # Load the encoder state directly from a checkpoint.
-                encoder_state = torch.load(checkpoint)["model"]
-                encoder_state = OrderedDict({
-                    k: v for k, v in encoder_state.items()
-                    if not k.startswith(("mask_token", "decoder", "fcn", "fpn", "pos_embed"))
-                })
-
-                # Let's remove the `head` from our current encoder (as the MAE pretrained don't expect it)
-                current_encoder_state = self.encoder.state_dict()
-                if ("head.weight" in current_encoder_state) and ("head.bias" in current_encoder_state):
-                    del self.encoder.head
-
-                if "pos_embed" in current_encoder_state:  # NOTE: ScaleMAE uses 'pos. embeddings' in a diff. format.
-                    del self.encoder.pos_embed
-
-            elif backbone in ["dinov2", "dinov3"]:  # Load the encoder state directly from a checkpoint.
-                encoder_state = torch.load(checkpoint)
-
-            elif backbone == "torchvision":
-                encoder_state = torch.load(checkpoint, weights_only=False)
-
-            else:
-                raise ValueError(
-                    f"We don't support either the '{backbone}' backbone or the '{encoder}' model combination (or both)."
-                )
-
+    def _load_encoder_from_checkpoint(self, backbone, checkpoint):
+        """Load encoder weights from an encoder state or a full model checkpoint."""
+        if isinstance(checkpoint, (str, PathLike)):
+            # Load the checkpoint directly; extract encoder weights from full model checkpoints below.
+            encoder_state = torch.load(checkpoint, map_location="cpu", weights_only=False)
         else:
             encoder_state = checkpoint
 
-        if backbone == "torchvision":
-            if "state_dict" in encoder_state:
-                encoder_state = encoder_state["state_dict"]
+        for state_key in ("model_state", "model", "state_dict"):
+            if state_key in encoder_state:
+                encoder_state = encoder_state[state_key]
+        # Handle DataParallel/DistributedDataParallel prefix.
+        encoder_state = {key.removeprefix("module."): value for key, value in encoder_state.items()}
+
+        if backbone in ("sam", "sam2"):
+            # Extract the image encoder state from the full SAM or SAM2 checkpoint.
+            prefixes = ("image_encoder.", "encoder.")
+        elif backbone == "sam3":
+            # Align the trunk names and leave out the neck's 'convs' and 'sam2_convs' upsampling blocks.
+            prefixes = (
+                "detector.backbone.vision_backbone.trunk.", "backbone.vision_backbone.trunk.",
+                "vision_backbone.trunk.", "trunk.", "encoder."
+            )
+        elif backbone == "torchvision":
+            prefixes = ("encoder.",) if "encoder.conv_proj.weight" in encoder_state else ()
+        else:
+            # CellposeSAM matches the pretrained rel_pos sizes, so its weights need no interpolation.
+            # Extract encoder weights from CellposeSAM checkpoint format (strip 'encoder.' prefix).
+            prefixes = ("encoder.",)
+        for prefix in prefixes:
+            if any(key.startswith(prefix) for key in encoder_state):
+                encoder_state = {
+                    key[len(prefix):]: value for key, value in encoder_state.items() if key.startswith(prefix)
+                }
+                break
+
+        if backbone in ("mae", "scalemae"):
+            # ViT initialization hints from:
+            # https://github.com/facebookresearch/mae/blob/main/main_finetune.py#L233-L242
+            excluded = ("mask_token", "decoder", "head.")
+            if backbone == "scalemae":
+                # NOTE: ScaleMAE computes positional embeddings from the input resolution.
+                excluded += ("fcn", "fpn", "pos_embed")
+                if hasattr(self.encoder, "pos_embed"):
+                    del self.encoder.pos_embed
+            encoder_state = {key: value for key, value in encoder_state.items() if not key.startswith(excluded)}
+            # Remove the classification head, which the MAE pretrained encoder weights do not need.
+            if hasattr(self.encoder, "head"):
+                del self.encoder.head
+        elif backbone == "torchvision":
             encoder_state = {k: v for k, v in encoder_state.items() if not k.startswith("heads.")}
 
         self.encoder.load_state_dict(encoder_state)
@@ -433,6 +432,13 @@ class UNETRBase(nn.Module):
         features, input_shape = self.encode(x)
         return self.decode(features, input_shape, tuple(x.shape[2:]))
 
+    def _encode_image(self, x):
+        # Encoders can return either:
+        # - only the image embeddings
+        # - image embeddings and intermediate attention features
+        features = self.encoder(x)
+        return (features, None) if isinstance(features, torch.Tensor) else features
+
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         """@private
         """
@@ -532,9 +538,8 @@ def preprocess_vit_inputs(
             mean, std = (123.675, 116.28, 103.53), (58.395, 57.12, 57.375)
             expected_range = (0.0, 255.0)
             unit_scale_max = 1.0
-    elif use_mae_stats:  # TODO: add mean std from mae / scalemae experiments (or open up arguments for this)
-        raise NotImplementedError
-    elif use_dino_stats or use_imagenet_stats:
+    elif use_mae_stats or use_dino_stats or use_imagenet_stats:
+        # MAE, ScaleMAE, and DINO use the same ImageNet mean and standard deviation.
         mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
         expected_range = (0.0, 1.0)
     else:
@@ -575,9 +580,7 @@ class UNETR(UNETRBase):
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal[
-            "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3", "torchvision"
-        ] = "sam",
+        backbone: str = "sam",
         encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
@@ -586,7 +589,7 @@ class UNETR(UNETRBase):
         use_dino_stats: bool = False,
         use_imagenet_stats: bool = False,
         resize_input: bool = True,
-        encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
+        encoder_checkpoint: Optional[Union[str, PathLike, Mapping]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
         use_skip_connection: bool = True,
         embed_dim: Optional[int] = None,
@@ -733,17 +736,7 @@ class UNETR(UNETRBase):
         # Reshape the inputs to the shape expected by the encoder
         # and normalize the inputs if normalization is part of the model.
         x, input_shape = self.preprocess(x)
-
-        encoder_outputs = self.encoder(x)
-
-        if isinstance(encoder_outputs[-1], list):
-            # `encoder_outputs` can be arranged in only two forms:
-            #   - either we only return the image embeddings
-            #   - or, we return the image embeddings and the "list" of global attention layers
-            z12, from_encoder = encoder_outputs
-        else:
-            z12, from_encoder = encoder_outputs, None
-
+        z12, from_encoder = self._encode_image(x)
         return (z12, from_encoder, x), input_shape
 
     def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
@@ -795,15 +788,12 @@ class UNETR2D(UNETR):
 
 
 class UNETR3D(UNETRBase):
-    """A three dimensional UNet Transformer using a vision transformer as encoder and a convolutional decoder.
-    """
+    """A 3D UNet Transformer with a vision transformer encoder and a convolutional decoder."""
     def __init__(
         self,
         img_size: int = 1024,
-        backbone: Literal[
-            "sam", "sam2", "sam3", "cellpose_sam", "mae", "scalemae", "dinov2", "dinov3", "torchvision"
-        ] = "sam",
-        encoder: Optional[Union[nn.Module, str]] = "hvit_b",
+        backbone: str = "sam",
+        encoder: Optional[Union[nn.Module, str]] = "vit_b",
         decoder: Optional[nn.Module] = None,
         out_channels: int = 1,
         use_sam_stats: bool = False,
@@ -811,7 +801,7 @@ class UNETR3D(UNETRBase):
         use_dino_stats: bool = False,
         use_imagenet_stats: bool = False,
         resize_input: bool = True,
-        encoder_checkpoint: Optional[Union[str, OrderedDict]] = None,
+        encoder_checkpoint: Optional[Union[str, PathLike, Mapping]] = None,
         final_activation: Optional[Union[str, nn.Module]] = None,
         use_skip_connection: bool = False,
         embed_dim: Optional[int] = None,
@@ -824,9 +814,6 @@ class UNETR3D(UNETRBase):
             raise NotImplementedError("The framework cannot handle skip connections atm.")
         if use_conv_transpose:
             raise NotImplementedError("It's not enabled to switch between interpolation and transposed convolutions.")
-
-        # Sort the `embed_dim` out
-        embed_dim = 256 if embed_dim is None else embed_dim
 
         super().__init__(
             img_size=img_size,
@@ -868,7 +855,7 @@ class UNETR3D(UNETRBase):
 
         # The mapping blocks.
         self.deconv1 = Deconv3DBlock(
-            in_channels=embed_dim,
+            in_channels=self.embed_dim,
             out_channels=features_decoder[0],
             scale_factor=scale_factors,
             use_strip_pooling=use_strip_pooling,
@@ -910,16 +897,14 @@ class UNETR3D(UNETRBase):
 
         # Additional conjunction blocks.
         self.base = ConvBlock3dWithStrip(
-            in_channels=embed_dim,
-            out_channels=features_decoder[0],
-            use_strip_pooling=use_strip_pooling,
+            in_channels=self.embed_dim, out_channels=features_decoder[0], use_strip_pooling=use_strip_pooling
         )
 
         # And the output layers.
         self.decoder_head = ConvBlock3dWithStrip(
             in_channels=2 * features_decoder[-1],
             out_channels=features_decoder[-1],
-            use_strip_pooling=use_strip_pooling,
+            use_strip_pooling=use_strip_pooling
         )
         self.out_conv = nn.Conv3d(features_decoder[-1], out_channels, 1)
 
@@ -927,21 +912,21 @@ class UNETR3D(UNETRBase):
         """Preprocess the input and run the image encoder on every z-slice.
 
         Args:
-            x: Inputs of expected shape (B, C, Z, Y, X), where Z considers flexible inputs.
+            x: The input tensor with shape (B, C, Z, Y, X). The depth Z can vary.
 
         Returns:
             The encoder features of shape (B, D, Z, Y', X') and the spatial shape after preprocessing.
         """
         Z = x.shape[2]
         x, input_shape = self.preprocess(x)
-        features = torch.stack([self.encoder(x[:, :, i])[0] for i in range(Z)], dim=2)
+        features = torch.stack([self._encode_image(x[:, :, i])[0] for i in range(Z)], dim=2)
         return features, input_shape
 
     def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
         """Run the convolutional decoder on the encoder features.
 
         Args:
-            features: Encoder features of shape (B, D, Z, Y', X'), see `encode`.
+            features: The encoder features with shape (B, D, Z, Y', X'), returned by `encode`.
             input_shape: The spatial shape (Z, Y, X) after preprocessing.
             original_shape: The spatial shape (Z, Y, X) of the original input.
 
@@ -949,7 +934,7 @@ class UNETR3D(UNETRBase):
             The UNETR output, resized to `original_shape`.
         """
         # Prepare the counterparts for the decoder.
-        # NOTE: The section below is sequential, there's no skip connections atm.
+        # NOTE: These mappings are sequential; they do not use intermediate encoder skip connections.
         z9 = self.deconv1(features)
         z6 = self.deconv2(z9)
         z3 = self.deconv3(z6)
@@ -961,7 +946,7 @@ class UNETR3D(UNETRBase):
         x = self.base(features)
         # Run the decoder
         x = self.decoder(x, encoder_inputs=updated_from_encoder)
-        x = self.deconv_out(x)  # NOTE before `end_up`
+        x = self.deconv_out(x)  # NOTE: formerly `end_up`.
 
         # And the final output head.
         x = torch.cat([x, z0], dim=1)
@@ -973,8 +958,9 @@ class UNETR3D(UNETRBase):
         # Postprocess the output back to original size.
         return self.postprocess_masks(x, input_shape, original_shape)
 
+
 #
-#  ADDITIONAL FUNCTIONALITIES
+# ADDITIONAL FUNCTIONALITIES
 #
 
 

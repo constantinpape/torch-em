@@ -4,6 +4,9 @@ with semantic segmentations of cellular and organelle structures.
 The dataset covers a reconstructed human periportal liver volume (597 z-slices,
 20000 x 20000 pixels per slice) with 9 binary semantic segmentation classes
 (0=background, 255=foreground - not instance segmentation).
+The segmentations were produced automatically by the authors' multiscale deep learning approach,
+they are not manual annotations. The mitochondria labels only cover part of each slice
+(mainly the upper part of the tissue), so unlabeled tissue is not necessarily background.
 
 Currently recommended label choices for training: "er", "mito", "nucleus".
 These are the classes that are well-represented and have clear biological meaning
@@ -26,10 +29,9 @@ are not available in EMPIAR-13356. The Parlakgul liver dataset (EMPIAR-10791) pr
 richer organelle annotations (ER sheets/tubules, lipid droplets, nuclear membrane,
 plasma membrane) at higher FIB-SEM resolution for mouse liver.
 
-NOTE (on resolution): the pixel size is not documented in EMPIAR-13356. Based on the
-visible tissue scale (~1-2mm tissue spanning 20000 pixels), xy resolution is estimated
-at ~50-100nm/pixel. The z section thickness is also unconfirmed. Check the paper for
-the exact values before selecting patch shapes for isotropic training.
+NOTE (on resolution): the pixel size is not documented in EMPIAR-13356. The bioRxiv abstract (linked below)
+reports a volume of 152 x 140 x 33 um at 8 nm pixel size, i.e. 8 nm in xy and about
+55 nm section thickness in z (33 um over 597 slices).
 
 Data is streamed lazily from EMPIAR-13356 via HTTP: raw 16-bit TIFFs and binary PNG
 masks are fetched per z-slice and cached in a single zarr v3 store per bounding box.

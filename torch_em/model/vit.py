@@ -1,6 +1,7 @@
 import math
 from functools import partial
-from typing import Tuple, List
+from collections import OrderedDict
+from typing import Tuple, List, Optional
 
 import torch
 import torch.nn as nn
@@ -33,8 +34,10 @@ except ImportError:
     _sam2_import_success = False
 
 try:
+    from dinov2.layers.attention import Attention
+    from dinov2.layers.block import NestedTensorBlock as Block
+    from dinov2.layers.swiglu_ffn import SwiGLUFFN, SwiGLUFFNFused
     from dinov2.models.vision_transformer import DinoVisionTransformer as DinoV2VisionTransformer
-    from dinov2.layers import MemEffAttention, NestedTensorBlock as Block
     _dinov2_import_success = True
 except ImportError:
     DinoV2VisionTransformer = object
@@ -61,6 +64,8 @@ try:
 except ImportError:
     _tv_models = None
     _torchvision_import_success = False
+
+from .util import VIT_CONFIGS
 
 
 class ViT_Sam(ImageEncoderViT):
@@ -242,7 +247,8 @@ class ViT_MAE(VisionTransformer):
                 "Please install timm (using conda/mamba) for using https://github.com/facebookresearch/mae/ "
                 "and then rerun your code"
             )
-        super().__init__(img_size=img_size, depth=depth, **kwargs)
+        kwargs["num_classes"] = 0
+        super().__init__(img_size=img_size, in_chans=in_chans, depth=depth, **kwargs)
         self.img_size = img_size
         self.in_chans = in_chans
         self.depth = depth
@@ -280,7 +286,7 @@ class ViT_MAE(VisionTransformer):
             if i in chunks_for_projection:
                 list_from_encoder.append(self.convert_to_expected_dim(x))
 
-        x = self.convert_to_expected_dim(x)
+        x = self.convert_to_expected_dim(self.norm(x))
         return x, list_from_encoder[:3]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -349,7 +355,7 @@ class ViT_Sam2(ImageEncoder):
 
         super().__init__(trunk=trunk, neck=neck, scalp=scalp, **kwargs)
         self.scalp = scalp
-        self.embed_dim = embed_dim
+        self.embed_dim = neck.d_model
         self.img_size = img_size
 
     def forward(self, x: torch.Tensor):
@@ -382,6 +388,20 @@ class ViT_Sam3(SAM3ViT):
         super().__init__(img_size=img_size, embed_dim=embed_dim, **kwargs)
         self.img_size = img_size
         self.embed_dim = embed_dim
+        # Native layers preserve autograd and the input dtype.
+        for block in self.blocks:
+            block.mlp = nn.Sequential(OrderedDict(block.mlp.named_children()))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs,
+    ):
+        # Rotary buffers depend on the input size, so keep the constructed values.
+        for name, buffer in self.named_buffers():
+            if name.endswith(("attn.freqs_cis", "attn.freqs_cis_real", "attn.freqs_cis_imag")):
+                state_dict[prefix + name] = buffer
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs,
+        )
 
     def forward_features(self, x):
         """@private
@@ -573,11 +593,17 @@ class ViT_ScaleMAE(VisionTransformer):
     def __init__(
         self, img_size=224, patch_size=16, in_chans=3, embed_dim=1024, depth=12, base_resolution=2.5, **kwargs
     ):
-        super().__init__(img_size=img_size, embed_dim=embed_dim, **kwargs)
+        if not _timm_import_success:
+            raise RuntimeError("The ScaleMAE backend requires timm.")
+        kwargs["num_classes"] = 0
+        super().__init__(
+            img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, depth=depth, **kwargs
+        )
         self.img_size = img_size
         self.in_chans = in_chans
         self.depth = depth
         self.base_resolution = base_resolution
+        self.pos_embed = None
 
         self.patch_embed = PatchEmbedUnSafe(
             img_size=img_size,
@@ -592,13 +618,13 @@ class ViT_ScaleMAE(VisionTransformer):
 
         self._transforms = CustomCompose(
             rescale_transform=K.RandomResizedCrop(
-                (448, 448),
+                (2 * self.img_size, 2 * self.img_size),
                 ratio=(1.0, 1.0),
                 scale=(1.0, 1.0),
                 resample=Resample.BICUBIC.name,
             ),
             other_transforms=None,
-            src_transform=K.Resize((224, 224)),
+            src_transform=K.Resize((self.img_size, self.img_size)),
         )
         x, _, ratios, _, _ = self._transforms(x)
         input_res = ratios * self.base_resolution
@@ -643,13 +669,24 @@ class ViT_ScaleMAE(VisionTransformer):
             if i in chunks_for_projection:
                 list_from_encoder.append(self.convert_to_expected_dim(x))
 
-        x = self.convert_to_expected_dim(x)
+        x = self.convert_to_expected_dim(self.norm(x))
 
         return x, list_from_encoder
 
     def forward(self, x):
         x, list_from_encoder = self.forward_features(x)
         return x, list_from_encoder
+
+
+def _get_dinov2_swiglu(in_features, hidden_features, **kwargs):
+    hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+    return SwiGLUFFN(in_features=in_features, hidden_features=hidden_features, **kwargs)
+
+
+def _get_dinov2_block(*args, ffn_layer, **kwargs):
+    if ffn_layer is SwiGLUFFNFused:
+        ffn_layer = _get_dinov2_swiglu
+    return Block(*args, attn_class=Attention, ffn_layer=ffn_layer, **kwargs)
 
 
 class ViT_DINOv2(DinoV2VisionTransformer):
@@ -770,6 +807,7 @@ class ViT_DINOv3(DinoV3VisionTransformer):
         self.img_size = img_size
         self.n_storage_tokens = n_storage_tokens
         self.attn_outs = [i for i in range(depth) if i % 3 == 2]
+        self.init_weights()
 
     def forward(self, x) -> torch.Tensor:
 
@@ -912,20 +950,27 @@ class ViT_Torchvision(nn.Module):
         return x, list_from_encoder
 
 
-def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kwargs) -> nn.Module:
+def get_vision_transformer(backbone: str, model: str, img_size: Optional[int] = None, **kwargs) -> nn.Module:
     """Get vision transformer encoder.
 
     Args:
         backbone: The name of the vision transformer implementation.
             One of "sam" / "cellpose_sam" / "sam2" / "sam3" / "mae" / "scalemae" / "dinov2" / "dinov3" / "torchvision".
-        model: The name of the model. One of "vit_b", "vit_l" or "vit_h".
-        img_size: The size of the input for the image encoder. Input images will be resized to match this size.
+        model: The model name supported by the selected backbone.
+        img_size: The encoder input size. If None, use the registered default for the backbone.
         kwargs: Additional kwargs which can be expected by the vision transformer,
             e.g. 'base_resolution' for `ViT_ScaleMAE`.
 
     Returns:
         The vision transformer.
     """
+    if backbone not in VIT_CONFIGS:
+        raise ValueError(f"Unsupported backbone '{backbone}'.")
+    if model not in VIT_CONFIGS[backbone].models:
+        raise ValueError(f"Unsupported encoder '{model}' for backbone '{backbone}'.")
+    if img_size is None:
+        img_size = VIT_CONFIGS[backbone].img_size
+
     if backbone == "sam":
         if model == "vit_b":
             encoder = ViT_Sam(
@@ -991,7 +1036,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             )
 
         encoder = ViT_Sam3(
-            img_size=1008, pretrain_img_size=336, patch_size=14, embed_dim=1024, depth=32, num_heads=16,
+            img_size=img_size, pretrain_img_size=336, patch_size=14, embed_dim=1024, depth=32, num_heads=16,
             mlp_ratio=4.625, norm_layer="LayerNorm", drop_path_rate=0.1, qkv_bias=True, use_abs_pos=True,
             tile_abs_pos=True, global_att_blocks=(7, 15, 23, 31), rel_pos_blocks=(), use_rope=True,
             use_interp_rope=True, window_size=24, pretrain_use_cls_token=True, retain_cls_token=False, ln_pre=True,
@@ -1022,19 +1067,19 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
 
         if model == "vit_b":
             encoder = ViT_ScaleMAE(
-                img_size=img_size, patch_size=8, embed_dim=768, depth=12, num_heads=12,
+                img_size=img_size, patch_size=16, embed_dim=768, depth=12, num_heads=12,
                 mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
                 base_resolution=base_resolution,
             )
         elif model == "vit_l":
             encoder = ViT_ScaleMAE(
-                img_size=img_size, patch_size=8, embed_dim=1024, depth=24, num_heads=16,
+                img_size=img_size, patch_size=16, embed_dim=1024, depth=24, num_heads=16,
                 mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
                 base_resolution=base_resolution,
             )
         elif model == "vit_h":
             encoder = ViT_ScaleMAE(
-                img_size=img_size, patch_size=8, embed_dim=1280, depth=32, num_heads=16,
+                img_size=img_size, patch_size=14, embed_dim=1280, depth=32, num_heads=16,
                 mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
                 base_resolution=base_resolution,
             )
@@ -1044,35 +1089,35 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
             )
 
     elif backbone == "dinov2":
-        block_fn = partial(Block, attn_class=MemEffAttention)
+        block_fn = _get_dinov2_block
         msg = "The model name should be either 'vit_<X>' or 'vit_<X>_reg<Y>."
 
         if model.startswith("vit_s"):
             assert model in ["vit_s", "vit_s_reg4"], msg
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
-                block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
+                block_fn=block_fn, in_chans=3, init_values=1e-5, block_chunks=0,
                 num_register_tokens=4 if model.endswith("_reg4") else 0,
             )
         elif model.startswith("vit_b"):
             assert model in ["vit_b", "vit_b_reg4"], msg
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
-                block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
+                block_fn=block_fn, in_chans=3, init_values=1e-5, block_chunks=0,
                 num_register_tokens=4 if model.endswith("_reg4") else 0,
             )
         elif model.startswith("vit_l"):
             assert model in ["vit_l", "vit_l_reg4"], msg
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4,
-                block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
+                block_fn=block_fn, in_chans=3, init_values=1e-5, block_chunks=0,
                 num_register_tokens=4 if model.endswith("_reg4") else 0,
             )
         elif model.startswith("vit_g"):
             assert model in ["vit_g", "vit_g_reg4"], msg
             encoder = ViT_DINOv2(
                 img_size=img_size, patch_size=14, embed_dim=1536, depth=40, num_heads=24, mlp_ratio=4,
-                block_fn=block_fn, in_chans=3, channel_adaptive=False, init_values=1e-5, block_chunks=0,
+                block_fn=block_fn, in_chans=3, init_values=1e-5, block_chunks=0,
                 num_register_tokens=4 if model.endswith("_reg4") else 0, ffn_layer="swiglu",
             )
         else:
@@ -1137,9 +1182,7 @@ def get_vision_transformer(backbone: str, model: str, img_size: int = 1024, **kw
         encoder = ViT_Torchvision(model_name=model, img_size=img_size, **kwargs)
 
     else:
-        raise ValueError(
-            "The 'UNETR' supported backbones are 'sam', 'cellpose_sam', 'sam2', 'sam3', "
-            "'mae', 'scalemae', 'dinov2', 'dinov3' or 'torchvision'. Please choose one of them."
-        )
+        raise ValueError(f"The encoder constructor for '{backbone}' is not implemented.")
 
+    encoder.model_type = model
     return encoder

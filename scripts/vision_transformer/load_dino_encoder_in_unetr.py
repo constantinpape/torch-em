@@ -1,48 +1,43 @@
+import os
+
 import torch
 
-from torch_em.model import UNETR
+from torch_em.model.unetr import get_unetr_model
+
+
+def get_input(ndim, device):
+    shape = (1, 1, 256, 256) if ndim == 2 else (1, 1, 4, 256, 256)
+    return torch.rand(shape, device=device)
+
+
+def load_dino(ndim, backbone, model_type, checkpoint):
+    """Load a DINO encoder in UNETR with pretrained weights."""
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model = get_unetr_model(
+        ndim=ndim, backbone=backbone, model_type=model_type, encoder_checkpoint=checkpoint,
+        out_channels=1, final_activation="Sigmoid",
+    ).to(device)
+
+    x = get_input(ndim, device)
+    with torch.no_grad():
+        y = model(x)
+    print(x.shape, y.shape)
+    print(f"UNETR with the {backbone} {model_type} encoder loaded the weights from", checkpoint)
 
 
 def main():
-    # checkpoint_path = "./dinov2_vits14_pretrain.pth"
-    # model_type = "vit_s"
-    # checkpoint_path = "./dinov2_vits14_reg4_pretrain.pth"
-    # model_type = "vit_s_reg4"
+    dinov3_checkpoint = os.path.expanduser("~/models/dinov3/dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth")
+    load_dino(ndim=2, backbone="dinov3", model_type="vit_b", checkpoint=dinov3_checkpoint)
+    load_dino(ndim=3, backbone="dinov3", model_type="vit_b", checkpoint=dinov3_checkpoint)
 
-    # checkpoint_path = "./dinov2_vitb14_pretrain.pth"
-    # model_type = "vit_b"
-    # checkpoint_path = "./dinov2_vitb14_reg4_pretrain.pth"
-    # model_type = "vit_b_reg4"
-
-    # checkpoint_path = "./dinov2_vitl14_pretrain.pth"
-    # model_type = "vit_l"
-    # checkpoint_path = "./dinov2_vitl14_reg4_pretrain.pth"
-    # model_type = "vit_l_reg4"
-
-    # checkpoint_path = "./dinov2_vitg14_pretrain.pth"
-    # model_type = "vit_g"
-    checkpoint_path = "./dinov2_vitg14_reg4_pretrain.pth"
-    model_type = "vit_g_reg4"
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    model = UNETR(
-        backbone="dinov2",
-        encoder=model_type,
-        encoder_checkpoint=checkpoint_path,
-        out_channels=1,
-        use_dino_stats=True,
-        final_activation="Sigmoid",
-        use_skip_connection=False,
-        resize_input=True,
-        img_size=518,
-    )
-    model.to(device)
-
-    x = torch.ones((1, 3, 256, 256)).to(device)
-    y = model(x)
-
-    print(x.shape, y.shape)
+    # The other DINOv2 checkpoints and their model types:
+    # ./dinov2_vitb14_pretrain.pth with vit_b, ./dinov2_vitb14_reg4_pretrain.pth with vit_b_reg4
+    # ./dinov2_vitl14_pretrain.pth with vit_l, ./dinov2_vitl14_reg4_pretrain.pth with vit_l_reg4
+    # ./dinov2_vitg14_pretrain.pth with vit_g, ./dinov2_vitg14_reg4_pretrain.pth with vit_g_reg4
+    load_dino(ndim=2, backbone="dinov2", model_type="vit_s", checkpoint="./dinov2_vits14_pretrain.pth")
+    load_dino(ndim=2, backbone="dinov2", model_type="vit_s_reg4", checkpoint="./dinov2_vits14_reg4_pretrain.pth")
+    load_dino(ndim=3, backbone="dinov2", model_type="vit_s_reg4", checkpoint="./dinov2_vits14_reg4_pretrain.pth")
 
 
 if __name__ == "__main__":
