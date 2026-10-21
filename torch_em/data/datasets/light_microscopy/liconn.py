@@ -121,15 +121,6 @@ def get_liconn_data(
     if segmentation not in SEGMENTATIONS:
         raise ValueError(f"'{segmentation}' is not a valid segmentation. Choose from {SEGMENTATIONS}.")
 
-    try:
-        from cloudvolume import CloudVolume
-    except ImportError:
-        raise ImportError(
-            "cloudvolume is required to download the LICONN data. Install it with: pip install cloud-volume"
-        )
-
-    import zarr
-
     os.makedirs(path, exist_ok=True)
     zarr_path = os.path.join(str(path), ZARR_FNAME)
     label_key = f"seg_{segmentation}"
@@ -147,6 +138,16 @@ def get_liconn_data(
     if not download:
         missing = [k for k, m in [("raw", raw_missing), (label_key, label_missing)] if m]
         raise RuntimeError(f"LICONN arrays {missing} not found in {zarr_path}. Pass download=True to download them.")
+
+    # Only the download needs cloudvolume, so data already on disk loads without it.
+    try:
+        from cloudvolume import CloudVolume
+    except ImportError:
+        raise ImportError(
+            "cloudvolume is required to download the LICONN data. Install it with: pip install cloud-volume"
+        )
+
+    import zarr
 
     root = zarr.open_group(zarr_path, mode="a")
 
