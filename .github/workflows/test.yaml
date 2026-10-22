@@ -23,6 +23,7 @@ jobs:
           environment-file: environment.yaml
           create-args: >-
             python=${{ matrix.python-version }}
+            mkl<2026.2
 
       - name: Install segment-anything
         shell: bash -l {0}
