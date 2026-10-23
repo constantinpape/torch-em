@@ -61,13 +61,17 @@ def swap_axes(model, keras_shape, axes):
     return tf.keras.Model(inputs, outputs)
 
 
-def to_onnx(model, input_shape, opset):
+# The ONNX operator set version that tf2onnx writes and onnx2torch reads. 17 works for all three model types.
+OPSET = 17
+
+
+def to_onnx(model, input_shape):
     """Convert the Keras model to ONNX for a fixed input shape.
 
     Without a fixed input shape, tf2onnx writes 'SAME_UPPER' padding, which onnx2torch does not support.
     """
     spec = tf.TensorSpec(input_shape, tf.float32, name="input")
-    onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=[spec], opset=opset)
+    onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=[spec], opset=OPSET)
     return onnx_model
 
 
@@ -96,7 +100,7 @@ def convert_easymode(args):
 
     if weights_path.endswith(".scnm"):
         model, metadata = load_scnm(weights_path)
-        # Conversion requires fixed input shape; open dims set to `box_size` used in training, batch size set to 1.
+        # Fixed input shape: open dims set to `box_size` used in training, batch size set to 1.
         keras_shape = (1,) + tuple(metadata["box_size"] if sh is None else sh for sh in model.input_shape[1:])
         reference = model
     else:
@@ -110,7 +114,7 @@ def convert_easymode(args):
 
     wrapped = swap_axes(model, keras_shape, axes)
     input_shape = wrapped.input_shape
-    onnx_model = to_onnx(wrapped, input_shape, args.opset)
+    onnx_model = to_onnx(wrapped, input_shape)
     torch_model = convert(onnx_model).eval()
     diff = check(reference, torch_model, input_shape, axes)
 
@@ -129,7 +133,6 @@ def main():
     parser.add_argument("--feature", required=True, help="The easymode feature, e.g. 'actin'.")
     parser.add_argument("--variant", help="The model variant. By default, easymode uses the default variant.")
     parser.add_argument("--output_dir", required=True, help="The folder for the converted model.")
-    parser.add_argument("--opset", type=int, default=17, help="The ONNX opset version.")
     args = parser.parse_args()
     convert_easymode(args)
 
