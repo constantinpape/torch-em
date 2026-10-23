@@ -1,3 +1,13 @@
+"""Convert an easymode Keras model to PyTorch via ONNX.
+
+The script needs a specific environment:
+
+    micromamba env create -f environment.yaml
+    micromamba activate easymode-convert
+    python convert_easymode.py --feature actin --output_dir converted_models
+
+Loading a converted model with 'torch.load(path, weights_only=False)' needs onnx2torch.
+"""
 import os
 import glob
 import json
@@ -14,7 +24,8 @@ import tf2onnx
 import torch
 from onnx2torch import convert
 
-from easymode.core.distribution import get_model
+from easymode.core.distribution import get_model, load_model_weights
+from easymode.segmentation.models import get_arch
 
 
 def load_scnm(path):
@@ -28,15 +39,21 @@ def load_scnm(path):
     return model, metadata
 
 
-# The axis permutations from torch (B, C, [Z,] Y, X) to Keras (B, Y, X, [Z,] C) and back, by the number of dimensions.
-# Ais feeds the Keras models with (Y, X, Z) volumes, see 'SEModel.apply_to_slice'.
-AXES = {4: ((0, 2, 3, 1), (0, 3, 1, 2)), 5: ((0, 3, 4, 2, 1), (0, 4, 3, 1, 2))}
+# The axis permutations from torch (B, C, Z, Y, X) to Keras, by model type.
+# Ais 'sv2-3d' model input is (Y, X, Z).
+# Ais 'sv2-2.5d' model input is (Y, X, D), with the depth D as channels.
+# easymode 'sv3-3d' model input is (Z, Y, X).
+AXES = {
+    "sv2-3d": ((0, 3, 4, 2, 1), (0, 4, 3, 1, 2)),
+    "sv2-2.5d": ((0, 2, 3, 1), (0, 3, 1, 2)),
+    "sv3-3d": ((0, 2, 3, 4, 1), (0, 4, 1, 2, 3)),
+}
 
 
-def swap_axes(model):
+def swap_axes(model, keras_shape, axes):
     """Wrap the Keras model, so that it takes and returns the axis order of torch-em."""
-    to_keras, to_torch = AXES[len(model.input_shape)]
-    torch_shape = tuple(model.input_shape[i] for i in to_torch)
+    to_keras, to_torch = axes
+    torch_shape = tuple(keras_shape[i] for i in to_torch)
     inputs = tf.keras.Input(shape=torch_shape[1:], batch_size=torch_shape[0])
     x = tf.keras.layers.Permute(to_keras[1:])(inputs)
     outputs = tf.keras.layers.Permute(to_torch[1:])(model(x))
@@ -53,9 +70,9 @@ def to_onnx(model, input_shape, opset):
     return onnx_model
 
 
-def check(model, onnx_model, torch_model, input_shape, atol=1e-4):
+def check(model, onnx_model, torch_model, input_shape, axes, atol=1e-4):
     """Compare the predictions of the original Keras model, ONNX runtime and torch for a random input."""
-    to_keras, to_torch = AXES[len(input_shape)]
+    to_keras, to_torch = axes
     x = np.random.default_rng(0).standard_normal(input_shape, dtype="float32")
     y_keras = np.transpose(model(np.transpose(x, to_keras), training=False).numpy(), to_torch)
 
@@ -70,22 +87,29 @@ def check(model, onnx_model, torch_model, input_shape, atol=1e-4):
     print(f"Max abs difference to Keras: ONNX {diff_onnx:.2e}, torch {diff_torch:.2e}")
     assert np.allclose(y_onnx, y_keras, atol=atol), "The ONNX predictions differ from Keras."
     assert np.allclose(y_torch, y_keras, atol=atol), "The torch predictions differ from Keras."
+    return diff_onnx, diff_torch
 
 
 def convert_easymode(args):
-    weights_path, _ = get_model(args.feature, variant=args.variant)
+    weights_path, metadata = get_model(args.feature, variant=args.variant)
     if weights_path is None:
         raise RuntimeError(f"Could not get the easymode model for '{args.feature}'.")
-    if not weights_path.endswith(".scnm"):
-        raise ValueError(f"Only .scnm models are supported, got {weights_path}.")
+    axes = AXES[metadata["tag"]]
 
-    model, metadata = load_scnm(weights_path)
-    wrapped = swap_axes(model)
-    # Dimensions that the Keras model leaves open are filled with the training box size.
-    input_shape = tuple(metadata["box_size"] if sh is None else sh for sh in wrapped.input_shape)
+    if weights_path.endswith(".scnm"):
+        model, metadata = load_scnm(weights_path)
+        # Dimensions that the Keras model leaves open are filled with the training box size, and the batch with 1.
+        keras_shape = (1,) + tuple(metadata["box_size"] if sh is None else sh for sh in model.input_shape[1:])
+    else:
+        # The 'sv3-3d' weights only load into the subclassed easymode model, which is built from the json sidecar.
+        model = load_model_weights(weights_path)
+        keras_shape = (1,) + tuple(get_arch(metadata["arch"])["input_shape"])
+
+    wrapped = swap_axes(model, keras_shape, axes)
+    input_shape = wrapped.input_shape
     onnx_model = to_onnx(wrapped, input_shape, args.opset)
     torch_model = convert(onnx_model).eval()
-    check(model, onnx_model, torch_model, input_shape)
+    diffs = check(model, onnx_model, torch_model, input_shape, axes)
 
     os.makedirs(args.output_dir, exist_ok=True)
     name = os.path.splitext(os.path.basename(weights_path))[0]
@@ -94,10 +118,11 @@ def convert_easymode(args):
     with open(os.path.join(args.output_dir, f"{name}.json"), "w") as f:
         json.dump({**metadata, "input_layout": "channels_first", "input_shape": input_shape}, f, indent=2)
     print(f"Saved the converted model to {args.output_dir}.")
+    return input_shape, diffs
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert an easymode .scnm model to PyTorch via ONNX.")
+    parser = argparse.ArgumentParser(description="Convert an easymode model to PyTorch via ONNX.")
     parser.add_argument("--feature", required=True, help="The easymode feature, e.g. 'actin'.")
     parser.add_argument("--variant", help="The model variant. By default, easymode uses the default variant.")
     parser.add_argument("--output_dir", required=True, help="The folder for the converted model.")

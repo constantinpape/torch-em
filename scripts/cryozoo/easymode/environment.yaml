@@ -1,0 +1,11 @@
+name: easymode-convert
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - easymode
+    - tf2onnx
+    - onnxruntime
+    - onnx2torch
