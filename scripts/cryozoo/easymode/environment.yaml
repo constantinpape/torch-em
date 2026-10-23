@@ -7,5 +7,4 @@ dependencies:
   - pip:
     - easymode
     - tf2onnx
-    - onnxruntime
     - onnx2torch

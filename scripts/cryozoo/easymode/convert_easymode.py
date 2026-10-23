@@ -1,9 +1,11 @@
 """Convert an easymode Keras model to PyTorch via ONNX.
 
-The script needs a specific environment:
+The script needs a specific environment, create one using the yaml in this directory:
 
     micromamba env create -f environment.yaml
     micromamba activate easymode-convert
+
+Usage:
     python convert_easymode.py --feature actin --output_dir converted_models
 
 Loading a converted model with 'torch.load(path, weights_only=False)' needs onnx2torch.
@@ -18,7 +20,6 @@ import tempfile
 import numpy as np
 
 import onnx
-import onnxruntime
 import tensorflow as tf
 import tf2onnx
 import torch
@@ -61,33 +62,30 @@ def swap_axes(model, keras_shape, axes):
 
 
 def to_onnx(model, input_shape, opset):
-    """Convert the Keras model to ONNX for a static input shape.
+    """Convert the Keras model to ONNX for a fixed input shape.
 
-    With dynamic spatial dimensions, tf2onnx writes 'SAME_UPPER' padding, which onnx2torch does not support.
+    Without a fixed input shape, tf2onnx writes 'SAME_UPPER' padding, which onnx2torch does not support.
     """
     spec = tf.TensorSpec(input_shape, tf.float32, name="input")
     onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=[spec], opset=opset)
     return onnx_model
 
 
-def check(model, onnx_model, torch_model, input_shape, axes, atol=1e-4):
-    """Compare the predictions of the original Keras model, ONNX runtime and torch for a random input."""
+def check(reference, torch_model, input_shape, axes, atol=1e-4):
+    """Compare the predictions of the Keras reference model and torch for a random input."""
     to_keras, to_torch = axes
     x = np.random.default_rng(0).standard_normal(input_shape, dtype="float32")
-    y_keras = np.transpose(model(np.transpose(x, to_keras), training=False).numpy(), to_torch)
-
-    session = onnxruntime.InferenceSession(onnx_model.SerializeToString(), providers=["CPUExecutionProvider"])
-    y_onnx = session.run(None, {session.get_inputs()[0].name: x})[0]
+    x_keras = np.transpose(x, to_keras).astype(reference.dtype)
+    y_keras = np.transpose(reference(x_keras, training=False).numpy(), to_torch)
 
     with torch.no_grad():
         y_torch = torch_model(torch.from_numpy(x)).numpy()
 
     print(f"Input shape {x.shape}, output shape {y_keras.shape}.")
-    diff_onnx, diff_torch = np.abs(y_onnx - y_keras).max(), np.abs(y_torch - y_keras).max()
-    print(f"Max abs difference to Keras: ONNX {diff_onnx:.2e}, torch {diff_torch:.2e}")
-    assert np.allclose(y_onnx, y_keras, atol=atol), "The ONNX predictions differ from Keras."
+    diff = np.abs(y_torch - y_keras).max()
+    print(f"Max abs difference to Keras ({reference.dtype}): {diff:.2e}")
     assert np.allclose(y_torch, y_keras, atol=atol), "The torch predictions differ from Keras."
-    return diff_onnx, diff_torch
+    return diff
 
 
 def convert_easymode(args):
@@ -98,18 +96,23 @@ def convert_easymode(args):
 
     if weights_path.endswith(".scnm"):
         model, metadata = load_scnm(weights_path)
-        # Dimensions that the Keras model leaves open are filled with the training box size, and the batch with 1.
+        # Conversion requires fixed input shape; open dims set to `box_size` used in training, batch size set to 1.
         keras_shape = (1,) + tuple(metadata["box_size"] if sh is None else sh for sh in model.input_shape[1:])
+        reference = model
     else:
-        # The 'sv3-3d' weights only load into the subclassed easymode model, which is built from the json sidecar.
+        # The 'sv3-3d' weights load into the easymode model which is built from `arch` in the .json metadata.
         model = load_model_weights(weights_path)
         keras_shape = (1,) + tuple(get_arch(metadata["arch"])["input_shape"])
+        # float32 GroupNorm sums over large volumes are inaccurate on CPU, so the reference runs in float64.
+        tf.keras.backend.set_floatx("float64")
+        reference = load_model_weights(weights_path)
+        tf.keras.backend.set_floatx("float32")
 
     wrapped = swap_axes(model, keras_shape, axes)
     input_shape = wrapped.input_shape
     onnx_model = to_onnx(wrapped, input_shape, args.opset)
     torch_model = convert(onnx_model).eval()
-    diffs = check(model, onnx_model, torch_model, input_shape, axes)
+    diff = check(reference, torch_model, input_shape, axes)
 
     os.makedirs(args.output_dir, exist_ok=True)
     name = os.path.splitext(os.path.basename(weights_path))[0]
@@ -118,7 +121,7 @@ def convert_easymode(args):
     with open(os.path.join(args.output_dir, f"{name}.json"), "w") as f:
         json.dump({**metadata, "input_layout": "channels_first", "input_shape": input_shape}, f, indent=2)
     print(f"Saved the converted model to {args.output_dir}.")
-    return input_shape, diffs
+    return input_shape, diff
 
 
 def main():
