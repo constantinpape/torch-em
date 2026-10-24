@@ -127,6 +127,7 @@ def _check_input_normalization_range(
     x: torch.Tensor,
     expected_range: Optional[Tuple[float, float]],
     unit_scale_max: Optional[float] = None,
+    range_tolerance: float = 1e-4,
 ) -> None:
     """Check whether raw inputs match the value range expected by the model normalizer.
 
@@ -135,6 +136,9 @@ def _check_input_normalization_range(
         expected_range: The (min, max) value range the input must lie within. If None, all checks are skipped.
         unit_scale_max: If set, raises an error when the input's maximum value is at or below this threshold,
             catching inputs that are likely in the wrong scale (e.g. [0, 1] instead of [0, 255] for SAM1).
+        range_tolerance: The allowed deviation outside of the expected range, as a fraction of the range width.
+            It accepts float rounding errors, for example from augmentations.
+            For float inputs, the function uses at least 4 times the machine epsilon of the input dtype.
     """
     if expected_range is None:
         return
@@ -143,24 +147,24 @@ def _check_input_normalization_range(
         raise ValueError("The input contains NaN or infinite values before normalization.")
 
     min_value, max_value = expected_range
-    if torch.any((x < min_value) | (x > max_value)):
-        actual_min, actual_max = torch.aminmax(x.detach())
+    if torch.is_floating_point(x):
+        range_tolerance = max(range_tolerance, 4 * torch.finfo(x.dtype).eps)
+    tolerance = range_tolerance * (max_value - min_value)
+
+    # Compare Python floats, because a half precision dtype rounds off the tolerance.
+    actual_min, actual_max = (value.item() for value in torch.aminmax(x.detach()))
+    if actual_min < min_value - tolerance or actual_max > max_value + tolerance:
         raise ValueError(
-            "The input is outside the expected scale before normalization: "
-            f"expected values in [{min_value}, {max_value}], got [{actual_min.item()}, {actual_max.item()}]. "
-            "Please check whether the raw inputs should be scaled to [0, 1] or kept in [0, 255] "
-            "before applying the pretrained normalization statistics."
+            f"The input values [{actual_min}, {actual_max}] are outside of the expected range "
+            f"[{min_value}, {max_value}] with a tolerance of {tolerance:.2g}. "
+            "Make sure that the scale of the raw inputs matches the pretrained normalization, [0, 1] or [0, 255]."
         )
 
-    if unit_scale_max is not None:
-        actual_max = x.detach().max().item()
-        if actual_max <= unit_scale_max:
-            raise ValueError(
-                f"The input maximum value ({actual_max:.4f}) suggests the input is in the wrong scale: "
-                f"expected inputs with values in [{min_value}, {max_value}], "
-                f"but the maximum is only {actual_max:.4f}. "
-                "Please check whether the raw inputs should be scaled to [0, 255] instead of [0, 1]."
-            )
+    if unit_scale_max is not None and actual_max <= unit_scale_max:
+        raise ValueError(
+            f"The maximum input value {actual_max:.4f} is too small for the expected range [{min_value}, {max_value}]. "
+            "Scale the raw inputs to [0, 255] instead of [0, 1]."
+        )
 
 
 def _as_stats(mean, std, device, dtype, is_3d: bool):

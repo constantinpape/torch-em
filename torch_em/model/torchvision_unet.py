@@ -372,11 +372,15 @@ class TorchvisionUNetBase(UNetBase):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.norm_mean is not None and self.perform_range_checks:
-            actual_min, actual_max = torch.aminmax(x.detach())
-            if actual_min < 0.0 or actual_max > 1.0:
+            # Accept float rounding errors, for example from augmentations.
+            tolerance = 1e-4
+            if torch.is_floating_point(x):
+                tolerance = max(tolerance, 4 * torch.finfo(x.dtype).eps)
+            actual_min, actual_max = (value.item() for value in torch.aminmax(x.detach()))
+            if actual_min < -tolerance or actual_max > 1.0 + tolerance:
                 raise ValueError(
-                    f"Input is outside the expected [0, 1] range for pretrained normalization: "
-                    f"got [{actual_min.item():.4f}, {actual_max.item():.4f}]."
+                    f"The input values [{actual_min:.4f}, {actual_max:.4f}] are outside of the expected range [0, 1] "
+                    f"with a tolerance of {tolerance:.2g}. Scale the inputs to [0, 1] for the pretrained normalization."
                 )
 
         if self.norm_mean is not None:
