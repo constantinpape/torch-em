@@ -17,6 +17,34 @@ from .unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d, _
 #
 
 
+def _convert_hf_dinov3_state(state, reference_state):
+    """Convert a HuggingFace DINOv3 state to the layout of the original DINOv3 code."""
+    renames = [
+        ("embeddings.patch_embeddings", "patch_embed.proj"), ("embeddings.register_tokens", "storage_tokens"),
+        ("embeddings.", ""), ("layer.", "blocks."), ("attention.o_proj", "attn.proj"),
+        ("layer_scale1.lambda1", "ls1.gamma"), ("layer_scale2.lambda1", "ls2.gamma"),
+        ("up_proj", "fc1"), ("down_proj", "fc2"),
+    ]
+    converted = {}
+    for key, value in state.items():
+        # The model of transformers stores the blocks under 'model.layer', but the embeddings without a prefix.
+        key = key.removeprefix("model.")
+        for old, new in renames:
+            key = key.replace(old, new)
+        converted[key] = value
+
+    # HuggingFace splits the fused qkv projection and drops the bias of the k projection.
+    for q_key in [key for key in converted if ".attention.q_proj." in key]:
+        q, v = converted.pop(q_key), converted.pop(q_key.replace("q_proj", "v_proj"))
+        k = converted.pop(q_key.replace("q_proj", "k_proj"), torch.zeros_like(v))
+        converted[q_key.replace("attention.q_proj", "attn.qkv")] = torch.cat([q, k, v])
+    converted["mask_token"] = converted["mask_token"].flatten(0, 1)
+
+    # HuggingFace does not store the RoPE periods and the qkv bias masks.
+    converted.update({k: v for k, v in reference_state.items() if k.endswith(("rope_embed.periods", "bias_mask"))})
+    return converted
+
+
 def get_unetr_model(
     ndim: int,
     backbone: str,
@@ -330,6 +358,18 @@ class UNETRBase(nn.Module):
                 del self.encoder.head
         elif backbone == "torchvision":
             encoder_state = {k: v for k, v in encoder_state.items() if not k.startswith("heads.")}
+        elif backbone == "dinov3" and "embeddings.patch_embeddings.weight" in encoder_state:
+            # DINOv3 from HuggingFace, e.g. from micro-sam. The original checkpoints of Meta need no conversion.
+            encoder_state = _convert_hf_dinov3_state(encoder_state, self.encoder.state_dict())
+        elif backbone == "dinov2" and encoder_state["pos_embed"].shape != self.encoder.pos_embed.shape:
+            # DINOv2 from the original checkpoints of Meta, which micro-sam also uses.
+            # Resize the grid of the pretrained positional embeddings to the input size.
+            cls_pos, patch_pos = encoder_state["pos_embed"][:, :1], encoder_state["pos_embed"][:, 1:]
+            size = int(patch_pos.shape[1] ** 0.5)
+            scale = (self.encoder.img_size // self.encoder.patch_size + self.encoder.interpolate_offset) / size
+            patch_pos = patch_pos.reshape(1, size, size, -1).permute(0, 3, 1, 2)
+            patch_pos = F.interpolate(patch_pos, scale_factor=scale, mode="bicubic")
+            encoder_state["pos_embed"] = torch.cat([cls_pos, patch_pos.flatten(2).transpose(1, 2)], dim=1)
 
         self.encoder.load_state_dict(encoder_state)
 
