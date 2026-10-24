@@ -53,6 +53,11 @@ class TestTorchvisionUNet2d(unittest.TestCase):
         net.register_buffer("norm_std", torch.tensor((0.229, 0.224, 0.225)).view(1, 3, 1, 1))
         with self.assertRaises(ValueError):
             net(torch.ones(1, 3, 64, 64) * 2.0)
+        with self.assertRaises(ValueError):
+            net(torch.ones(1, 3, 64, 64) * 1.001)
+
+        # The check accepts small float rounding errors outside of [0, 1].
+        net(torch.ones(1, 3, 64, 64) * 1.00005)
 
 
 class TestTorchvisionUNet3d(unittest.TestCase):
