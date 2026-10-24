@@ -115,7 +115,8 @@ def _check_input_normalization_range(
         raise ValueError("The input contains NaN or infinite values before normalization.")
 
     min_value, max_value = expected_range
-    if torch.any((x < min_value) | (x > max_value)):
+    atol = 1e-4
+    if torch.any((x < min_value - atol) | (x > max_value + atol)):
         actual_min, actual_max = torch.aminmax(x.detach())
         raise ValueError(
             "The input is outside the expected scale before normalization: "
