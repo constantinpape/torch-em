@@ -62,13 +62,12 @@ class DefaultPseudoLabeler:
         if self.confidence_threshold is None:
             label_mask = None
         else:
-            mask_input = pseudo_labels if self.mask_channel is None\
-                else pseudo_labels[self.mask_channel:(self.mask_channel+1)]
-            label_mask = self._compute_label_mask_both_sides(mask_input) if self.threshold_from_both_sides\
+            mask_input = pseudo_labels if self.mask_channel is None \
+                else pseudo_labels[:, [self.mask_channel]]
+            label_mask = self._compute_label_mask_both_sides(mask_input) if self.threshold_from_both_sides \
                 else self._compute_label_mask_one_side(mask_input)
             if self.mask_channel is not None:
-                size = (pseudo_labels.shape[0], pseudo_labels.shape[1], *([-1] * (pseudo_labels.ndim - 2)))
-                label_mask = label_mask.expand(*size)
+                label_mask = label_mask.expand_as(pseudo_labels)
         return pseudo_labels, label_mask
 
     def step(self, metric, epoch):
@@ -196,8 +195,8 @@ class ScheduledPseudoLabeler:
         warm_up_epochs: Number of warm-up epochs. At the end of warm-up,
             `confidence_threshold` is set to `max_ct`. This is intended for
             decreasing-threshold scheduling (`increase=False`).
-        mask_channel: Specific channel to use for confidence masking. Currently,
-            only None is supported.
+        mask_channel: Specific channel to use for confidence masking. If set, the threshold
+            is applied only to that channel and the resulting mask is broadcast to all channels.
         verbose: If True, prints messages when the confidence threshold is updated.
     """
 
@@ -252,9 +251,6 @@ class ScheduledPseudoLabeler:
         if self.increase and self.warm_up_epochs > 0:
             raise ValueError("warm_up_epochs > 0 is only supported when increase=False.")
 
-        # TODO implement mask_channel functionality; for now only None is supported
-        if mask_channel is not None:
-            raise NotImplementedError("mask_channel is not implemented yet; only None is supported.")
         self.mask_channel = mask_channel
         self.verbose = verbose
 
@@ -307,8 +303,12 @@ class ScheduledPseudoLabeler:
         if self.confidence_threshold is None:
             label_mask = None
         else:
-            label_mask = self._compute_label_mask_both_sides(pseudo_labels) if self.threshold_from_both_sides\
-                else self._compute_label_mask_one_side(pseudo_labels)
+            mask_input = pseudo_labels if self.mask_channel is None \
+                else pseudo_labels[:, [self.mask_channel]]
+            label_mask = self._compute_label_mask_both_sides(mask_input) if self.threshold_from_both_sides \
+                else self._compute_label_mask_one_side(mask_input)
+            if self.mask_channel is not None:
+                label_mask = label_mask.expand_as(pseudo_labels)
         return pseudo_labels, label_mask
 
     def end_warm_up(self):
