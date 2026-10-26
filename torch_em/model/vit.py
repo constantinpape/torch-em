@@ -1022,7 +1022,8 @@ def get_vision_transformer(backbone: str, model: str, img_size: Optional[int] = 
         elif model == "hvit_l":
             encoder = ViT_Sam2(
                 img_size=img_size, embed_dim=144, num_heads=2, stages=[2, 6, 36, 4], global_att_blocks=[23, 33, 43],
-                window_spec=[8, 4, 16, 8], backbone_channel_list=[1152, 576, 288, 144],
+                window_spec=[8, 4, 16, 8], window_pos_embed_bkg_spatial_size=[7, 7],
+                backbone_channel_list=[1152, 576, 288, 144],
             )
         else:
             raise ValueError(
