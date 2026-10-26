@@ -17,6 +17,34 @@ from .unet import Decoder, ConvBlock2d, ConvBlock3d, Upsampler2d, Upsampler3d, _
 #
 
 
+def _convert_hf_dinov3_state(state, reference_state):
+    """Convert a HuggingFace DINOv3 state to the layout of the original DINOv3 code."""
+    renames = [
+        ("embeddings.patch_embeddings", "patch_embed.proj"), ("embeddings.register_tokens", "storage_tokens"),
+        ("embeddings.", ""), ("layer.", "blocks."), ("attention.o_proj", "attn.proj"),
+        ("layer_scale1.lambda1", "ls1.gamma"), ("layer_scale2.lambda1", "ls2.gamma"),
+        ("up_proj", "fc1"), ("down_proj", "fc2"),
+    ]
+    converted = {}
+    for key, value in state.items():
+        # The model of transformers stores the blocks under 'model.layer', but the embeddings without a prefix.
+        key = key.removeprefix("model.")
+        for old, new in renames:
+            key = key.replace(old, new)
+        converted[key] = value
+
+    # HuggingFace splits the fused qkv projection and drops the bias of the k projection.
+    for q_key in [key for key in converted if ".attention.q_proj." in key]:
+        q, v = converted.pop(q_key), converted.pop(q_key.replace("q_proj", "v_proj"))
+        k = converted.pop(q_key.replace("q_proj", "k_proj"), torch.zeros_like(v))
+        converted[q_key.replace("attention.q_proj", "attn.qkv")] = torch.cat([q, k, v])
+    converted["mask_token"] = converted["mask_token"].flatten(0, 1)
+
+    # HuggingFace does not store the RoPE periods and the qkv bias masks.
+    converted.update({k: v for k, v in reference_state.items() if k.endswith(("rope_embed.periods", "bias_mask"))})
+    return converted
+
+
 def get_unetr_model(
     ndim: int,
     backbone: str,
@@ -99,6 +127,7 @@ def _check_input_normalization_range(
     x: torch.Tensor,
     expected_range: Optional[Tuple[float, float]],
     unit_scale_max: Optional[float] = None,
+    range_tolerance: float = 1e-4,
 ) -> None:
     """Check whether raw inputs match the value range expected by the model normalizer.
 
@@ -107,6 +136,9 @@ def _check_input_normalization_range(
         expected_range: The (min, max) value range the input must lie within. If None, all checks are skipped.
         unit_scale_max: If set, raises an error when the input's maximum value is at or below this threshold,
             catching inputs that are likely in the wrong scale (e.g. [0, 1] instead of [0, 255] for SAM1).
+        range_tolerance: The allowed deviation outside of the expected range, as a fraction of the range width.
+            It accepts float rounding errors, for example from augmentations.
+            For float inputs, the function uses at least 4 times the machine epsilon of the input dtype.
     """
     if expected_range is None:
         return
@@ -115,24 +147,24 @@ def _check_input_normalization_range(
         raise ValueError("The input contains NaN or infinite values before normalization.")
 
     min_value, max_value = expected_range
-    if torch.any((x < min_value) | (x > max_value)):
-        actual_min, actual_max = torch.aminmax(x.detach())
+    if torch.is_floating_point(x):
+        range_tolerance = max(range_tolerance, 4 * torch.finfo(x.dtype).eps)
+    tolerance = range_tolerance * (max_value - min_value)
+
+    # Compare Python floats, because a half precision dtype rounds off the tolerance.
+    actual_min, actual_max = (value.item() for value in torch.aminmax(x.detach()))
+    if actual_min < min_value - tolerance or actual_max > max_value + tolerance:
         raise ValueError(
-            "The input is outside the expected scale before normalization: "
-            f"expected values in [{min_value}, {max_value}], got [{actual_min.item()}, {actual_max.item()}]. "
-            "Please check whether the raw inputs should be scaled to [0, 1] or kept in [0, 255] "
-            "before applying the pretrained normalization statistics."
+            f"The input values [{actual_min}, {actual_max}] are outside of the expected range "
+            f"[{min_value}, {max_value}] with a tolerance of {tolerance:.2g}. "
+            "Make sure that the scale of the raw inputs matches the pretrained normalization, [0, 1] or [0, 255]."
         )
 
-    if unit_scale_max is not None:
-        actual_max = x.detach().max().item()
-        if actual_max <= unit_scale_max:
-            raise ValueError(
-                f"The input maximum value ({actual_max:.4f}) suggests the input is in the wrong scale: "
-                f"expected inputs with values in [{min_value}, {max_value}], "
-                f"but the maximum is only {actual_max:.4f}. "
-                "Please check whether the raw inputs should be scaled to [0, 255] instead of [0, 1]."
-            )
+    if unit_scale_max is not None and actual_max <= unit_scale_max:
+        raise ValueError(
+            f"The maximum input value {actual_max:.4f} is too small for the expected range [{min_value}, {max_value}]. "
+            "Scale the raw inputs to [0, 255] instead of [0, 1]."
+        )
 
 
 def _as_stats(mean, std, device, dtype, is_3d: bool):
@@ -330,6 +362,18 @@ class UNETRBase(nn.Module):
                 del self.encoder.head
         elif backbone == "torchvision":
             encoder_state = {k: v for k, v in encoder_state.items() if not k.startswith("heads.")}
+        elif backbone == "dinov3" and "embeddings.patch_embeddings.weight" in encoder_state:
+            # DINOv3 from HuggingFace, e.g. from micro-sam. The original checkpoints of Meta need no conversion.
+            encoder_state = _convert_hf_dinov3_state(encoder_state, self.encoder.state_dict())
+        elif backbone == "dinov2" and encoder_state["pos_embed"].shape != self.encoder.pos_embed.shape:
+            # DINOv2 from the original checkpoints of Meta, which micro-sam also uses.
+            # Resize the grid of the pretrained positional embeddings to the input size.
+            cls_pos, patch_pos = encoder_state["pos_embed"][:, :1], encoder_state["pos_embed"][:, 1:]
+            size = int(patch_pos.shape[1] ** 0.5)
+            scale = (self.encoder.img_size // self.encoder.patch_size + self.encoder.interpolate_offset) / size
+            patch_pos = patch_pos.reshape(1, size, size, -1).permute(0, 3, 1, 2)
+            patch_pos = F.interpolate(patch_pos, scale_factor=scale, mode="bicubic")
+            encoder_state["pos_embed"] = torch.cat([cls_pos, patch_pos.flatten(2).transpose(1, 2)], dim=1)
 
         self.encoder.load_state_dict(encoder_state)
 

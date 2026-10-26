@@ -122,6 +122,23 @@ class TestUnetrNormalizationRange(unittest.TestCase):
         with self.assertRaises(ValueError):
             _check_input_normalization_range(torch.tensor([0.0, float("nan")]), (0.0, 1.0))
 
+        # The check accepts small float rounding errors and rejects larger deviations.
+        _check_input_normalization_range(torch.tensor([-5e-5, 1.00005]), (0.0, 1.0))
+        _check_input_normalization_range(torch.tensor([0.0, 255.002]), (0.0, 255.0))
+        with self.assertRaises(ValueError):
+            _check_input_normalization_range(torch.tensor([0.0, 1.001]), (0.0, 1.0))
+        with self.assertRaises(ValueError):
+            _check_input_normalization_range(torch.tensor([-0.001, 1.0]), (0.0, 1.0))
+        with self.assertRaises(ValueError):
+            _check_input_normalization_range(torch.tensor([0.0, 255.1]), (0.0, 255.0))
+
+        # For half precision, the next float value above 1.0 is more than 1e-4 away. The check must accept it.
+        for dtype in (torch.float16, torch.bfloat16):
+            next_after_one = torch.nextafter(torch.tensor(1.0, dtype=dtype), torch.tensor(2.0, dtype=dtype))
+            _check_input_normalization_range(torch.stack([torch.tensor(0.0, dtype=dtype), next_after_one]), (0.0, 1.0))
+            with self.assertRaises(ValueError):
+                _check_input_normalization_range(torch.tensor([0.0, 1.1], dtype=dtype), (0.0, 1.0))
+
         # SAM1: [0, 1]-scaled inputs must be rejected when expected range is [0, 255].
         with self.assertRaises(ValueError):
             _check_input_normalization_range(torch.tensor([0.0, 0.5, 1.0]), (0.0, 255.0), unit_scale_max=1.0)
