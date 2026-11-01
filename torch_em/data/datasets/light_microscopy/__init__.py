@@ -8,6 +8,7 @@ from .bbbc010 import get_bbbc010_loader, get_bbbc010_dataset
 from .bbbc032 import get_bbbc032_loader, get_bbbc032_dataset
 from .bbbc033 import get_bbbc033_loader, get_bbbc033_dataset
 from .bbbc034 import get_bbbc034_loader, get_bbbc034_dataset
+from .bbbc041 import get_bbbc041_loader, get_bbbc041_dataset
 from .apacs23 import get_apacs23_loader, get_apacs23_dataset
 from .arvidsson import get_arvidsson_loader, get_arvidsson_dataset
 from .bac_mother import get_bac_mother_loader, get_bac_mother_dataset
