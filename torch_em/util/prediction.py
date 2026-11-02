@@ -670,8 +670,11 @@ def predict_with_halo_pipelined(
             # the last producer to finish signals the consumers (skipped on the abort path,
             # where consumers unwind via _safe_get instead)
             if remaining_producers.decrement() == 0 and not stop_event.is_set():
-                for _ in range(n_consumers):
-                    input_queue.put(_STOP)
+                try:
+                    for _ in range(n_consumers):
+                        _safe_put(input_queue, _STOP, stop_event)
+                except _Aborted:
+                    pass
 
     def consumer(worker_id):
         net, device = models[worker_id]
@@ -707,8 +710,11 @@ def predict_with_halo_pipelined(
             record_error(e)
         finally:
             if remaining_consumers.decrement() == 0 and not stop_event.is_set():
-                for _ in range(num_write_workers):
-                    output_queue.put(_STOP)
+                try:
+                    for _ in range(num_write_workers):
+                        _safe_put(output_queue, _STOP, stop_event)
+                except _Aborted:
+                    pass
 
     def writer():
         try:
