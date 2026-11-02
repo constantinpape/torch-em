@@ -1,9 +1,12 @@
+from .bc_multiset import get_bc_multiset_loader, get_bc_multiset_dataset
 from .bcss import get_bcss_loader, get_bcss_dataset
+from .beacon import get_beacon_loader, get_beacon_dataset
 from .beetle import get_beetle_loader, get_beetle_dataset
 from .camelyon import (
     get_camelyon16_loader, get_camelyon16_dataset, get_camelyon17_loader, get_camelyon17_dataset
 )
 from .catch import get_catch_loader, get_catch_dataset
+from .cd47_ihcnusc import get_cd47_ihcnusc_loader, get_cd47_ihcnusc_dataset
 from .conic import get_conic_loader, get_conic_dataset
 from .consep import get_consep_loader, get_consep_dataset
 from .cpm import get_cpm_loader, get_cpm_dataset
@@ -35,6 +38,7 @@ from .monusac import get_monusac_loader, get_monusac_dataset
 from .nuclick import get_nuclick_loader, get_nuclick_dataset
 from .lipid_droplet_histology import get_lipid_droplet_histology_loader, get_lipid_droplet_histology_dataset
 from .nuinsseg import get_nuinsseg_loader, get_nuinsseg_dataset
+from .nusec import get_nusec_loader, get_nusec_dataset
 from .ocelot import get_ocelot_loader, get_ocelot_dataset
 from .orion_crc import get_orion_crc_loader, get_orion_crc_dataset
 from .pannuke import get_pannuke_loader, get_pannuke_dataset

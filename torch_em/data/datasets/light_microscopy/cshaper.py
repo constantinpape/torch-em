@@ -79,6 +79,14 @@ def _convert_to_h5(data_dir: str, split: str) -> str:
     Returns:
         The directory containing the converted HDF5 files.
     """
+    split_subdir = "TrainingData" if split == "train" else "EvaluationData"
+    split_dir = os.path.join(data_dir, split_subdir)
+
+    h5_dir = os.path.join(data_dir, f"h5_{split}")
+    if os.path.exists(h5_dir) and len(glob(os.path.join(h5_dir, "*.h5"))) > 0:
+        return h5_dir
+
+    # nibabel is only needed for the conversion, so that the converted data also loads without it.
     try:
         import nibabel as nib
     except ImportError:
@@ -88,12 +96,6 @@ def _convert_to_h5(data_dir: str, split: str) -> str:
         )
     import h5py
 
-    split_subdir = "TrainingData" if split == "train" else "EvaluationData"
-    split_dir = os.path.join(data_dir, split_subdir)
-
-    h5_dir = os.path.join(data_dir, f"h5_{split}")
-    if os.path.exists(h5_dir) and len(glob(os.path.join(h5_dir, "*.h5"))) > 0:
-        return h5_dir
     os.makedirs(h5_dir, exist_ok=True)
 
     sample_dirs = natsorted([
