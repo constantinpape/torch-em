@@ -11,6 +11,9 @@ image, from which an image stem computes the skips at stride 2 and 1. They follo
 The same weights therefore decode single images (Z = 1) and volumes (Z > 1). At initialization a volume decodes
 exactly to the stack of its decoded slices.
 
+The blocks and decoders take the features with z folded into the batch, (B * Z, C, H, W). The ones with
+context along z also take the number of slices `n_z`.
+
 The decoders:
 - `HieraUDecoder` ("hiera_u"): a plain skip U-decoder.
 - `C3F2Decoder` ("c3f2"): a coarse-3D / fine-2D fusion head. ConvNeXt blocks with attention along z at stride 16,
@@ -25,13 +28,13 @@ The decoders:
 import math
 from collections.abc import Mapping
 from os import PathLike
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .unetr import UNETRBase, _load_checkpoint_state
+from .unetr import UNETRBase
 
 
 def fold_z(x: torch.Tensor) -> torch.Tensor:
@@ -71,6 +74,10 @@ def _resize_to(x: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
     return F.interpolate(x, size=reference.shape[-2:], mode="bilinear", align_corners=False)
 
 
+def _resize_cat(x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+    return torch.cat([_resize_to(x, skip), skip], dim=1)
+
+
 #
 # BLOCKS
 #
@@ -97,15 +104,6 @@ class ZResidual(nn.Module):
         nn.init.zeros_(self.pointwise.bias)
 
     def forward(self, x: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the branch.
-
-        Args:
-            x: The features with z folded into the batch, (B * Z, C, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The features with the same shape.
-        """
         if n_z == 1:
             return x
         volume = unfold_z(x, n_z)
@@ -137,15 +135,6 @@ class ZAttention(nn.Module):
         self.position_bias = nn.Parameter(torch.zeros(self.n_heads, 2 * max_distance + 1))
 
     def forward(self, x: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the attention.
-
-        Args:
-            x: The features with z folded into the batch, (B * Z, C, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The features with the same shape.
-        """
         if n_z == 1:
             return x
         bz, c, h, w = x.shape
@@ -181,15 +170,6 @@ class HybridBlock(nn.Module):
         self.z_branch = ZResidual(out_channels) if with_z else None
 
     def forward(self, x: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the block.
-
-        Args:
-            x: The features with z folded into the batch, (B * Z, C, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The output features.
-        """
         y = self.act(self.norm1(self.conv1(x)))
         y = self.norm2(self.conv2(y))
         y = self.act(y + self.shortcut(x))
@@ -222,15 +202,6 @@ class NeXtBlock(nn.Module):
             raise ValueError(f"Invalid z_mode {z_mode}")
 
     def forward(self, x: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the block.
-
-        Args:
-            x: The features with z folded into the batch, (B * Z, C, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The features with the same shape.
-        """
         x = x + self.mlp(self.norm(self.depthwise(x)))
         return x if self.z_module is None else self.z_module(x, n_z)
 
@@ -243,7 +214,8 @@ class NeXtBlock(nn.Module):
 class HybridDecoder(nn.Module):
     """Base class of the hybrid decoders.
 
-    It holds the projections of the stride-4 and stride-8 encoder features. A decoder implements
+    It holds the projections of the stride-4 and stride-8 encoder features and the image stem, which computes
+    the skips at stride 1 (`stem1`) and stride 2 (`stem2`). A decoder implements
     `forward(features, image, n_z)`, with all tensors folded:
     - features: The encoder features at stride 4, 8 and 16, each of shape (B * Z, C_l, H_l, W_l).
     - image: The preprocessed image of shape (B * Z, 3, H, W).
@@ -252,22 +224,31 @@ class HybridDecoder(nn.Module):
 
     Args:
         out_channels: The number of output channels.
+        stem_widths: The widths of the image stem at strides 1 and 2.
         in_channels: The channels of the encoder features at stride 4, 8 and 16.
         skip_projections: The output channels of the 1x1 projections of the stride-4 and stride-8 features.
             The defaults correspond to `conv_s0` and `conv_s1` of the SAM2 mask decoder.
             If None, the decoder uses the features without projections.
+        norm: The function that creates the normalization layer of the image stem for a number of channels.
+        activation: The activation of the image stem.
     """
     def __init__(
         self,
         out_channels: int,
+        stem_widths: Sequence[int] = (16, 32),
         in_channels: Sequence[int] = (256, 256, 256),
         skip_projections: Optional[Sequence[int]] = (32, 64),
+        norm: Callable[[int], nn.Module] = _group_norm,
+        activation: Callable[[], nn.Module] = nn.GELU,
     ):
         super().__init__()
         if len(in_channels) != 3:
             raise ValueError(f"Expected the channels of three feature levels, got {in_channels}.")
         self.out_channels = out_channels
         self.in_channels = tuple(in_channels)
+        st1, st2 = stem_widths
+        self.stem1 = nn.Sequential(nn.Conv2d(3, st1, 3, padding=1, bias=False), norm(st1), activation())
+        self.stem2 = nn.Sequential(nn.Conv2d(st1, st2, 3, stride=2, padding=1, bias=False), norm(st2), activation())
         if skip_projections is None:
             self.proj_s4, self.proj_s8 = None, None
             self.skip_channels = self.in_channels[:2]
@@ -305,14 +286,10 @@ class HieraUDecoder(HybridDecoder):
         in_channels: Sequence[int] = (256, 256, 256),
         skip_projections: Optional[Sequence[int]] = (32, 64),
     ):
-        super().__init__(out_channels, in_channels, skip_projections)
+        super().__init__(out_channels, stem_widths, in_channels, skip_projections)
         w16, w8, w4, w2, w1 = widths
         st1, st2 = stem_widths
         c4, c8 = self.skip_channels
-        self.stem1 = nn.Sequential(nn.Conv2d(3, st1, 3, padding=1, bias=False), _group_norm(st1), nn.GELU())
-        self.stem2 = nn.Sequential(
-            nn.Conv2d(st1, st2, 3, stride=2, padding=1, bias=False), _group_norm(st2), nn.GELU(),
-        )
         self.block16 = HybridBlock(self.in_channels[2], w16)
         self.block8 = HybridBlock(w16 + c8, w8)
         self.block4 = HybridBlock(w8 + c4, w4)
@@ -320,30 +297,16 @@ class HieraUDecoder(HybridDecoder):
         self.block1 = HybridBlock(w2 + st1, w1, with_z=False)
         self.out_conv = nn.Conv2d(w1, out_channels, 1)
 
-    @staticmethod
-    def _up(x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
-        x = F.interpolate(x, size=skip.shape[-2:], mode="bilinear", align_corners=False)
-        return torch.cat([x, skip], dim=1)
-
     def forward(self, features: Sequence[torch.Tensor], image: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the decoder.
-
-        Args:
-            features: The encoder features at stride 4, 8 and 16 with z folded into the batch.
-            image: The preprocessed image with z folded into the batch, (B * Z, 3, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The decoder output before the activation, (B * Z, out_channels, H, W).
-        """
+        """Apply the decoder, see `HybridDecoder`."""
         s4, s8, s16 = self._project(features)
         stem1 = self.stem1(image)
         stem2 = self.stem2(stem1)
         x = self.block16(s16, n_z)
-        x = self.block8(self._up(x, s8), n_z)
-        x = self.block4(self._up(x, s4), n_z)
-        x = self.block2(self._up(x, stem2), n_z)
-        x = self.block1(self._up(x, stem1), n_z)
+        x = self.block8(_resize_cat(x, s8), n_z)
+        x = self.block4(_resize_cat(x, s4), n_z)
+        x = self.block2(_resize_cat(x, stem2), n_z)
+        x = self.block1(_resize_cat(x, stem1), n_z)
         return self.out_conv(x)
 
 
@@ -373,14 +336,10 @@ class C3F2Decoder(HybridDecoder):
         in_channels: Sequence[int] = (256, 256, 256),
         skip_projections: Optional[Sequence[int]] = (32, 64),
     ):
-        super().__init__(out_channels, in_channels, skip_projections)
+        super().__init__(out_channels, stem_widths, in_channels, skip_projections)
         w16, w8, w4 = widths
         st1, st2 = stem_widths
         c4, c8 = self.skip_channels
-        self.stem1 = nn.Sequential(nn.Conv2d(3, st1, 3, padding=1, bias=False), _group_norm(st1), nn.GELU())
-        self.stem2 = nn.Sequential(
-            nn.Conv2d(st1, st2, 3, stride=2, padding=1, bias=False), _group_norm(st2), nn.GELU(),
-        )
         self.lateral16 = nn.Conv2d(self.in_channels[2], w16, 1)
         self.blocks16 = nn.ModuleList([NeXtBlock(w16, "attention"), NeXtBlock(w16, "attention")])
         self.lateral8 = nn.Conv2d(c8, w8, 1)
@@ -406,16 +365,7 @@ class C3F2Decoder(HybridDecoder):
         return x
 
     def forward(self, features: Sequence[torch.Tensor], image: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the decoder.
-
-        Args:
-            features: The encoder features at stride 4, 8 and 16 with z folded into the batch.
-            image: The preprocessed image with z folded into the batch, (B * Z, 3, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The decoder output before the activation, (B * Z, out_channels, H, W).
-        """
+        """Apply the decoder, see `HybridDecoder`."""
         s4, s8, s16 = self._project(features)
         stem1 = self.stem1(image)
         stem2 = self.stem2(stem1)
@@ -424,8 +374,8 @@ class C3F2Decoder(HybridDecoder):
         x = self._run(self.blocks8, _resize_to(self.reduce8(x), lateral) + lateral, n_z)
         lateral = self.lateral4(s4)
         x = self._run(self.blocks4, _resize_to(self.reduce4(x), lateral) + lateral, n_z)
-        x = self.fuse2(torch.cat([_resize_to(self.up2(x), stem2), stem2], dim=1))
-        x = self.fuse1(torch.cat([_resize_to(self.up1(x), stem1), stem1], dim=1))
+        x = self.fuse2(_resize_cat(self.up2(x), stem2))
+        x = self.fuse1(_resize_cat(self.up1(x), stem1))
         return self.out_conv(x)
 
 
@@ -462,14 +412,6 @@ class ECA(nn.Module):
         self.tau_min, self.tau_max = 0.5, 2.0
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply the channel attention.
-
-        Args:
-            x: The features with z folded into the batch, (B * Z, C, H, W).
-
-        Returns:
-            The features with the same shape.
-        """
         logits = self.conv(x.mean(dim=(2, 3))[:, None])[:, 0]  # (N, C), N = slices
         tau = self.log_tau.exp().clamp(self.tau_min, self.tau_max)
         attention = torch.sigmoid(logits / tau)
@@ -496,14 +438,6 @@ class GlobalContext(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply the global-context attention.
-
-        Args:
-            x: The features with z folded into the batch, (B * Z, C, H, W).
-
-        Returns:
-            The features with the same shape.
-        """
         n, c, h, w = x.shape
         weights = torch.softmax(self.mask(x).reshape(n, 1, h * w), dim=-1)
         context = torch.bmm(x.reshape(n, c, h * w), weights.transpose(1, 2)).reshape(n, c, 1, 1)
@@ -549,15 +483,6 @@ class SCAGate(nn.Module):
         self.att = nn.Sequential(nn.GroupNorm(1, inter_channels), nn.Conv2d(inter_channels, 1, 1), nn.Hardsigmoid())
 
     def forward(self, guide: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
-        """Apply the gate.
-
-        Args:
-            guide: The upsampled decoder features with z folded into the batch.
-            skip: The skip features with z folded into the batch.
-
-        Returns:
-            The gated skip features.
-        """
         skip = self.eca_skip(skip)
         guide = self.eca_guide(guide)
         fused = F.normalize(self.theta(guide) * self.phi(skip), p=2, dim=1)
@@ -591,15 +516,6 @@ class DWBlock(nn.Module):
         self.z_branch = ZResidual(out_channels) if with_z else None
 
     def forward(self, x: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the block.
-
-        Args:
-            x: The features with z folded into the batch, (B * Z, C, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The output features.
-        """
         x = self.block(x)
         return x if self.z_branch is None else self.z_branch(x, n_z)
 
@@ -619,15 +535,6 @@ class RefinementBlock(nn.Module):
         self.eca = ECA(channels)
 
     def forward(self, x: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the block.
-
-        Args:
-            x: The features with z folded into the batch, (B * Z, C, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The features with the same shape.
-        """
         x = self.conv(x, n_z)
         if self.spatial is not None:
             x = self.spatial(x)
@@ -652,16 +559,6 @@ class CAGDStage(nn.Module):
         self.conv = DWBlock(out_channels + skip_channels, out_channels, with_z=with_z)
 
     def forward(self, x: torch.Tensor, skip: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the block.
-
-        Args:
-            x: The features with z folded into the batch.
-            skip: The skip features at twice the resolution, with z folded into the batch.
-            n_z: The number of slices Z.
-
-        Returns:
-            The output features at the resolution of the skip features.
-        """
         x = _resize_to(self.up(x), skip)
         if self.gate is not None:
             skip = self.gate(x, skip)
@@ -681,15 +578,6 @@ class ContextAggregator(nn.Module):
         self.global_context = GlobalContext(out_channels)
 
     def forward(self, features: Sequence[torch.Tensor], reference: torch.Tensor) -> torch.Tensor:
-        """Aggregate the pyramid levels.
-
-        Args:
-            features: The pyramid levels with z folded into the batch.
-            reference: The features that define the output resolution.
-
-        Returns:
-            The aggregated context at the resolution of the reference.
-        """
         fused = sum(_resize_to(proj(f), reference) for f, proj in zip(features, self.proj))
         return self.global_context(fused / len(features))
 
@@ -708,9 +596,10 @@ class CAGD3DDecoder(HybridDecoder):
     (the full-resolution stage of MedCAGD costs 1.7x the FLOPs). It is followed by a transposed convolution to
     full resolution, fused with the stride-1 stem.
 
-    Deep supervision: 1x1 heads on the stages at strides 16, 8 and 4 predict all output channels. In training mode
-    their outputs, upsampled to the image size as in MedCAGD, are kept in `aux_outputs` (deepest first; MedCAGD
-    weights them with 0.4, 0.3 and 0.2). `HybridUNETR` exposes them as `auxiliary_outputs`.
+    Deep supervision (optional): 1x1 heads on the stages at strides 16, 8 and 4 predict all output channels.
+    In training mode their outputs, upsampled to the image size as in MedCAGD, are kept in `aux_outputs` (deepest
+    first; MedCAGD weights them with 0.4, 0.3 and 0.2). `HybridUNETR` exposes them as `auxiliary_outputs`.
+    If it is enabled, the loss must use these outputs, otherwise the heads do not receive gradients.
 
     Args:
         out_channels: The number of output channels.
@@ -726,25 +615,22 @@ class CAGD3DDecoder(HybridDecoder):
         out_channels: int = 5,
         widths: Sequence[int] = (64, 128, 320, 512),
         stem_widths: Sequence[int] = (16, 32),
-        deep_supervision: bool = True,
+        deep_supervision: bool = False,
         in_channels: Sequence[int] = (256, 256, 256),
         skip_projections: Optional[Sequence[int]] = (32, 64),
     ):
-        super().__init__(out_channels, in_channels, skip_projections)
+        super().__init__(
+            out_channels, stem_widths, in_channels, skip_projections, norm=_cagd_group_norm, activation=nn.SiLU,
+        )
         w4, w8, w16, w32 = widths
         st1, st2 = stem_widths
         c4, c8 = self.skip_channels
         c16 = self.in_channels[2]
-        self.stem1 = nn.Sequential(nn.Conv2d(3, st1, 3, padding=1, bias=False), _cagd_group_norm(st1), nn.SiLU())
-        self.stem2 = nn.Sequential(
-            nn.Conv2d(st1, st2, 3, stride=2, padding=1, bias=False), _cagd_group_norm(st2), nn.SiLU(),
-        )
         self.p4 = nn.Conv2d(c4, w4, 1)
         self.p8 = nn.Conv2d(c8, w8, 1)
         self.p16 = nn.Conv2d(c16, w16, 1)
         self.p32 = nn.Conv2d(c16, w32, 3, stride=2, padding=1)
 
-        self.bottleneck_proj = nn.Conv2d(w32, w32, 1)
         self.bottleneck_conv = nn.Sequential(nn.Conv2d(w32, w32, 3, padding=1), _cagd_group_norm(w32), nn.SiLU())
         self.bottleneck_z = ZAttention(w32)
         self.bottleneck_context = GlobalContext(w32)
@@ -774,22 +660,19 @@ class CAGD3DDecoder(HybridDecoder):
         ) if deep_supervision else None
         self.aux_outputs: Optional[List[torch.Tensor]] = None
 
+    def train(self, mode: bool = True):
+        """Set the training mode. The deep supervision outputs are dropped when leaving the training mode."""
+        if not mode:
+            self.aux_outputs = None
+        return super().train(mode)
+
     def forward(self, features: Sequence[torch.Tensor], image: torch.Tensor, n_z: int) -> torch.Tensor:
-        """Apply the decoder.
-
-        Args:
-            features: The encoder features at stride 4, 8 and 16 with z folded into the batch.
-            image: The preprocessed image with z folded into the batch, (B * Z, 3, H, W).
-            n_z: The number of slices Z.
-
-        Returns:
-            The decoder output before the activation, (B * Z, out_channels, H, W).
-        """
+        """Apply the decoder, see `HybridDecoder`."""
         s4, s8, s16 = self._project(features)
         stem1 = self.stem1(image)
         stem2 = self.stem2(stem1)
         p4, p8, p16 = self.p4(s4), self.p8(s8), self.p16(s16)
-        b = self.bottleneck_conv(self.bottleneck_proj(self.p32(s16)))
+        b = self.bottleneck_conv(self.p32(s16))
         b = self.bottleneck_context(self.bottleneck_z(b, n_z))
         levels = [p4, p8, p16, b]
 
@@ -801,8 +684,7 @@ class CAGD3DDecoder(HybridDecoder):
         d4 = self.ref4(d4 + self.context4(levels, d4), n_z)
         d2 = self.ref2(self.stage2(d4, stem2, n_z), n_z)
 
-        x = _resize_to(self.head_up(d2), stem1)
-        out = self.out_conv(self.head_fuse(torch.cat([x, stem1], dim=1)))
+        out = self.out_conv(self.head_fuse(_resize_cat(self.head_up(d2), stem1)))
 
         self.aux_outputs = None
         if self.training and self.aux_heads is not None:
@@ -849,8 +731,8 @@ class HybridUNETR(UNETRBase):
         use_imagenet_stats: Whether to normalize with standard ImageNet statistics.
         resize_input: Whether to resize the input images to match `img_size`.
         encoder_checkpoint: Checkpoint for initializing the image encoder.
-            Can either be a filepath or an already loaded checkpoint. If it is a full SAM2 checkpoint,
-            the projections of the decoder are initialized from `conv_s0` and `conv_s1` of the SAM2 mask decoder.
+            Can either be a filepath or an already loaded checkpoint. It does not initialize the projections
+            of the stride-4 and stride-8 features in the decoder, see `init_skip_projections`.
         final_activation: The activation to apply to the output.
         perform_range_checks: Whether to validate the input value range before normalization on each forward pass.
         kwargs: Keyword arguments for `torch_em.model.vit.get_vision_transformer`, if the encoder is given by name.
@@ -884,9 +766,6 @@ class HybridUNETR(UNETRBase):
         else:
             raise TypeError("The decoder must be a decoder name or a torch module.")
 
-        # Load the checkpoint only once, it is used for the encoder and for the projections of the decoder.
-        checkpoint_state = None if encoder_checkpoint is None else _load_checkpoint_state(encoder_checkpoint)
-
         super().__init__(
             img_size=img_size,
             backbone=backbone,
@@ -897,7 +776,7 @@ class HybridUNETR(UNETRBase):
             use_dino_stats=use_dino_stats,
             use_imagenet_stats=use_imagenet_stats,
             resize_input=resize_input,
-            encoder_checkpoint=checkpoint_state,
+            encoder_checkpoint=encoder_checkpoint,
             final_activation=final_activation,
             use_skip_connection=True,
             # The stride-16 feature width of the decoder. This avoids deriving it from the encoder,
@@ -916,25 +795,15 @@ class HybridUNETR(UNETRBase):
 
         self.decoder = decoder_module
         self.out_channels = getattr(decoder_module, "out_channels", out_channels)
-        self._decoder_name = decoder if isinstance(decoder, str) else None
-        self._decoder_kwargs = dict(decoder_kwargs or {})
         # The deep supervision outputs of the last forward pass in training mode, for decoders that have them
-        # ('cagd_3d'). They are activated and resized like the main output. None otherwise.
+        # ('cagd_3d' with deep supervision). They are activated and resized like the main output. None otherwise.
         self.auxiliary_outputs: Optional[List[torch.Tensor]] = None
 
-        if checkpoint_state is not None and backbone == "sam2":
-            self._init_skip_projections_from_state(checkpoint_state)
-
-    def _init_skip_projections_from_state(self, state: Mapping) -> None:
-        # Full SAM2 checkpoints contain the projections of the stride-4 and stride-8 features in the mask decoder.
-        for name, prefix in (("proj_s4", "sam_mask_decoder.conv_s0."), ("proj_s8", "sam_mask_decoder.conv_s1.")):
-            projection = getattr(self.decoder, name, None)
-            if projection is None:
-                continue
-            projection_state = {key[len(prefix):]: value for key, value in state.items() if key.startswith(prefix)}
-            expected = {key: value.shape for key, value in projection.state_dict().items()}
-            if {key: value.shape for key, value in projection_state.items()} == expected:
-                projection.load_state_dict(projection_state)
+    def train(self, mode: bool = True):
+        """Set the training mode. The deep supervision outputs are dropped when leaving the training mode."""
+        if not mode:
+            self.auxiliary_outputs = None
+        return super().train(mode)
 
     def init_skip_projections(self, conv_s0: nn.Module, conv_s1: nn.Module) -> None:
         """Initialize the projections of the stride-4 and stride-8 features in the decoder from other modules.
@@ -956,10 +825,11 @@ class HybridUNETR(UNETRBase):
     def decoder_config(self) -> dict:
         """The arguments that rebuild the decoder. They can be serialized to JSON, e.g. to store them in checkpoints.
         """
-        if self._decoder_name is None:
+        decoder = self.init_kwargs["decoder"]
+        if not isinstance(decoder, str):
             raise RuntimeError("The decoder_config is only available for a decoder that is given by name.")
         return {
-            "decoder": self._decoder_name, "decoder_kwargs": dict(self._decoder_kwargs),
+            "decoder": decoder, "decoder_kwargs": dict(self.init_kwargs["decoder_kwargs"] or {}),
             "out_channels": self.out_channels,
         }
 
@@ -981,8 +851,9 @@ class HybridUNETR(UNETRBase):
             raise ValueError(f"Expected 4d or 5d inputs, got {tuple(x.shape)}.")
 
         n_z = x.shape[2]
-        x, input_shape = self.preprocess(x)
-        image = fold_z(x)
+        # The slices are preprocessed as images, so that images and volumes are resized in the same way.
+        image, input_shape = self.preprocess(fold_z(x))
+        input_shape = (n_z, *input_shape)
         _, levels = self._encode_image(image)
         if levels is None or len(levels) != 3:
             raise ValueError(

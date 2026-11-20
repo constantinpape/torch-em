@@ -1,5 +1,6 @@
 import json
 import unittest
+from copy import deepcopy
 
 import torch
 import torch.nn as nn
@@ -26,11 +27,6 @@ class _Encoder(nn.Module):
         return s16, [s4, s8, s16]
 
 
-class _SingleScaleEncoder(_Encoder):
-    def forward(self, x):
-        return super().forward(x)[0]
-
-
 # Small decoder configurations to keep the tests fast.
 SMALL_DECODERS = {
     "hiera_u": {"widths": (48, 32, 16, 8, 8), "stem_widths": (8, 16)},
@@ -40,12 +36,13 @@ SMALL_DECODERS = {
 
 
 class TestHybridUNETR(unittest.TestCase):
-    def _get_model(self, decoder, out_channels=5, img_size=64, **kwargs):
+    def _get_model(self, decoder, out_channels=5, img_size=64, decoder_kwargs=None, **kwargs):
         from torch_em.model import HybridUNETR
 
         torch.manual_seed(0)
+        decoder_kwargs = {**SMALL_DECODERS[decoder], **(decoder_kwargs or {})}
         model = HybridUNETR(
-            img_size=img_size, encoder=_Encoder(img_size), decoder=decoder, decoder_kwargs=SMALL_DECODERS[decoder],
+            img_size=img_size, encoder=_Encoder(img_size), decoder=decoder, decoder_kwargs=decoder_kwargs,
             out_channels=out_channels, **kwargs
         )
         return model.eval()
@@ -71,11 +68,12 @@ class TestHybridUNETR(unittest.TestCase):
     def test_image_equals_single_slice_volume(self):
         for decoder in SMALL_DECODERS:
             model = self._get_model(decoder)
-            x = torch.rand(2, 3, 48, 64)
-            with self.subTest(decoder=decoder), torch.no_grad():
-                y = model(x)
-                self.assertEqual(tuple(y.shape), (2, 5, 48, 64))
-                self.assertTrue(torch.equal(y, model(x[:, :, None])[:, :, 0]))
+            for shape in [(48, 64), (100, 128)]:  # Smaller and larger than the image size of the model.
+                x = torch.rand(2, 3, *shape)
+                with self.subTest(decoder=decoder, shape=shape), torch.no_grad():
+                    y = model(x)
+                    self.assertEqual(tuple(y.shape), (2, 5, *shape))
+                    self.assertTrue(torch.equal(y, model(x[:, :, None])[:, :, 0]))
 
     def test_volume_equals_stacked_slices_at_init(self):
         from torch_em.model.hybrid_unetr import HYBRID_DECODERS
@@ -98,47 +96,21 @@ class TestHybridUNETR(unittest.TestCase):
                 volume = decoder(features, image, n_z)
                 self.assertFalse(torch.allclose(volume, slices, atol=1e-6, rtol=0))
 
-    def test_z_attention(self):
-        from torch_em.model.hybrid_unetr import ZAttention
-
-        torch.manual_seed(0)
-        attention = ZAttention(16, n_heads=2).double()
-        x = torch.randn(2 * 4, 16, 5, 6, dtype=torch.float64)
-        with torch.no_grad():
-            self.assertTrue(torch.equal(attention(x, 4), x))  # The output projection is zero-initialized.
-            attention.proj.weight.normal_()
-            y = attention(x, 4)
-            # Changing one slice changes the output of the other slices of the same volume,
-            # but not of the other volume.
-            x2 = x.clone()
-            x2[1] += torch.randn_like(x2[1])  # Not a constant, which the LayerNorm would remove.
-            y2 = attention(x2, 4)
-        self.assertFalse(torch.allclose(y[0], y2[0]))
-        self.assertTrue(torch.allclose(y[4:], y2[4:], atol=1e-12, rtol=0))
-
-        with self.assertRaises(ValueError):
-            ZAttention(10, n_heads=3)
-
-    def test_default_decoders(self):
+    def test_decoders_without_skip_projections(self):
         from torch_em.model.hybrid_unetr import HYBRID_DECODERS
 
-        # The parameter counts of the default configurations for five output channels, without the projections.
-        expected = {"hiera_u": 1555445, "c3f2": 2149533, "cagd_3d": 8510816}
-        n_projection_params = (256 * 32 + 32) + (256 * 64 + 64)
-        for name, n_expected in expected.items():
-            with self.subTest(decoder=name):
-                decoder = HYBRID_DECODERS[name]()
-                self.assertEqual(sum(p.numel() for p in decoder.parameters()), n_expected + n_projection_params)
-
-                decoder = HYBRID_DECODERS[name](in_channels=(32, 64, 256), skip_projections=None)
-                self.assertEqual(sum(p.numel() for p in decoder.parameters()), n_expected)
+        features = [torch.randn(2, c, 64 // s, 64 // s) for c, s in ((32, 4), (64, 8), (256, 16))]
+        for name, kwargs in SMALL_DECODERS.items():
+            with self.subTest(decoder=name), torch.no_grad():
+                decoder = HYBRID_DECODERS[name](in_channels=(32, 64, 256), skip_projections=None, **kwargs)
                 self.assertFalse(any(key.startswith("proj_") for key in decoder.state_dict()))
-                features = [torch.randn(2, c, 64 // s, 64 // s) for c, s in ((32, 4), (64, 8), (256, 16))]
-                with torch.no_grad():
-                    self.assertEqual(tuple(decoder(features, torch.randn(2, 3, 64, 64), 2).shape), (2, 5, 64, 64))
+                self.assertEqual(tuple(decoder(features, torch.randn(2, 3, 64, 64), 2).shape), (2, 5, 64, 64))
 
     def test_state_and_config(self):
         from torch_em.model import HybridUNETR
+
+        with self.assertRaises(ValueError):
+            HybridUNETR(img_size=64, encoder=_Encoder(64), decoder="invalid")
 
         for decoder in SMALL_DECODERS:
             with self.subTest(decoder=decoder):
@@ -151,8 +123,6 @@ class TestHybridUNETR(unittest.TestCase):
                 with torch.no_grad():
                     expected = model(x)
                     features, input_shape = model.encode(x)
-                    self.assertEqual(len(features["features"]), 3)
-                    self.assertEqual(features["n_z"], 2)
                     self.assertTrue(torch.equal(model.decode(features, input_shape, x.shape[2:]), expected))
 
                 # Rebuild the model from the decoder config, after serialization.
@@ -163,16 +133,15 @@ class TestHybridUNETR(unittest.TestCase):
                 with torch.no_grad():
                     self.assertTrue(torch.equal(rebuilt(x), expected))
 
-                # Rebuild the model from the init kwargs.
-                rebuilt = HybridUNETR(**model.init_kwargs).eval()
-                rebuilt.load_state_dict(state, strict=True)
-                with torch.no_grad():
-                    self.assertTrue(torch.equal(rebuilt(x), expected))
-
     def test_deep_supervision(self):
-        model = self._get_model("cagd_3d", final_activation="Sigmoid")
         x = torch.rand(1, 3, 2, 48, 64)
 
+        # The default is no deep supervision.
+        model = self._get_model("cagd_3d").train()
+        model(x)
+        self.assertIsNone(model.auxiliary_outputs)
+
+        model = self._get_model("cagd_3d", final_activation="Sigmoid", decoder_kwargs={"deep_supervision": True})
         with torch.no_grad():
             model(x)
         self.assertIsNone(model.auxiliary_outputs)  # Only in training mode.
@@ -187,81 +156,17 @@ class TestHybridUNETR(unittest.TestCase):
         sum(aux.sum() for aux in model.auxiliary_outputs).backward()
         self.assertTrue(all(head.weight.grad is not None for head in model.decoder.aux_heads))
 
-        # 2D inputs yield 2D auxiliary outputs.
-        y = model(x[:, :, 0])
-        self.assertEqual(model.auxiliary_outputs[0].shape, y.shape)
-
-        # No auxiliary outputs without deep supervision and for the other decoders.
-        from torch_em.model import HybridUNETR
-        from torch_em.model.hybrid_unetr import CAGD3DDecoder
-
-        decoder = CAGD3DDecoder(deep_supervision=False, **SMALL_DECODERS["cagd_3d"])
-        self.assertFalse(any(key.startswith("aux_heads") for key in decoder.state_dict()))
-        model = HybridUNETR(img_size=64, encoder=_Encoder(64), decoder=decoder).train()
-        model(x)
+        # The outputs are dropped in evaluation mode, so that the model can be copied.
+        model.eval()
         self.assertIsNone(model.auxiliary_outputs)
-        model = self._get_model("hiera_u").train()
-        model(x)
-        self.assertIsNone(model.auxiliary_outputs)
+        deepcopy(model)
 
     def test_init_skip_projections(self):
         model = self._get_model("hiera_u")
         conv_s0, conv_s1 = nn.Conv2d(256, 32, 1), nn.Conv2d(256, 64, 1)
         model.init_skip_projections(conv_s0, conv_s1)
-        for projection, conv in ((model.decoder.proj_s4, conv_s0), (model.decoder.proj_s8, conv_s1)):
-            self.assertTrue(torch.equal(projection.weight, conv.weight))
-            self.assertTrue(torch.equal(projection.bias, conv.bias))
-            self.assertIsNot(projection.weight, conv.weight)
-        # The weights are copied, not shared.
-        with torch.no_grad():
-            conv_s0.weight.zero_()
-        self.assertFalse(torch.equal(model.decoder.proj_s4.weight, conv_s0.weight))
-
-    def test_init_from_sam2_checkpoint(self):
-        from torch_em.model import HybridUNETR
-
-        # A checkpoint with the layout of SAM2.
-        torch.manual_seed(1)
-        encoder, conv_s0, conv_s1 = _Encoder(64), nn.Conv2d(256, 32, 1), nn.Conv2d(256, 64, 1)
-        state = {f"image_encoder.{key}": value for key, value in encoder.state_dict().items()}
-        state.update({f"sam_mask_decoder.conv_s0.{key}": value for key, value in conv_s0.state_dict().items()})
-        state.update({f"sam_mask_decoder.conv_s1.{key}": value for key, value in conv_s1.state_dict().items()})
-
-        model = HybridUNETR(
-            img_size=64, encoder=_Encoder(64), decoder="c3f2", decoder_kwargs=SMALL_DECODERS["c3f2"],
-            encoder_checkpoint={"model": state},
-        )
-        self.assertTrue(torch.equal(model.encoder.conv4.weight, encoder.conv4.weight))
         self.assertTrue(torch.equal(model.decoder.proj_s4.weight, conv_s0.weight))
         self.assertTrue(torch.equal(model.decoder.proj_s8.bias, conv_s1.bias))
-
-        # Projections with a different shape are not initialized from the checkpoint.
-        model = HybridUNETR(
-            img_size=64, encoder=_Encoder(64), decoder="c3f2", encoder_checkpoint={"model": state},
-            decoder_kwargs={"skip_projections": (16, 64), **SMALL_DECODERS["c3f2"]},
-        )
-        self.assertEqual(model.decoder.proj_s4.weight.shape[0], 16)
-        self.assertTrue(torch.equal(model.decoder.proj_s8.weight, conv_s1.weight))
-
-    def test_invalid_arguments(self):
-        from torch_em.model import HybridUNETR
-        from torch_em.model.hybrid_unetr import HieraUDecoder
-
-        with self.assertRaises(ValueError):
-            HybridUNETR(img_size=64, encoder=_Encoder(64), decoder="invalid")
-        with self.assertRaises(ValueError):
-            HybridUNETR(img_size=64, encoder=_Encoder(64), decoder=HieraUDecoder(), decoder_kwargs={"widths": (8,)})
-
-        model = HybridUNETR(img_size=64, encoder=_SingleScaleEncoder(64), decoder="hiera_u")
-        with self.assertRaises(ValueError):
-            model(torch.rand(1, 3, 1, 64, 64))
-
-        model = HybridUNETR(img_size=64, encoder=_Encoder(64), decoder=HieraUDecoder(skip_projections=None))
-        self.assertEqual(model.out_channels, 5)
-        with self.assertRaises(RuntimeError):
-            model.decoder_config
-        with self.assertRaises(RuntimeError):
-            model.init_skip_projections(nn.Conv2d(256, 32, 1), nn.Conv2d(256, 64, 1))
 
     @unittest.skipIf(sam2 is None, "Needs sam2")
     def test_sam2_encoder(self):

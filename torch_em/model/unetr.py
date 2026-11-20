@@ -167,20 +167,6 @@ def _check_input_normalization_range(
         )
 
 
-def _load_checkpoint_state(checkpoint: Union[str, PathLike, Mapping]) -> dict:
-    """Load the model state from a checkpoint, given as a file path or an already loaded checkpoint."""
-    if isinstance(checkpoint, (str, PathLike)):
-        state = torch.load(checkpoint, map_location="cpu", weights_only=False)
-    else:
-        state = checkpoint
-
-    for state_key in ("model_state", "model", "state_dict"):
-        if state_key in state:
-            state = state[state_key]
-    # Handle DataParallel/DistributedDataParallel prefix.
-    return {key.removeprefix("module."): value for key, value in state.items()}
-
-
 def _as_stats(mean, std, device, dtype, is_3d: bool):
     view_shape = (1, -1, 1, 1, 1) if is_3d else (1, -1, 1, 1)
     pixel_mean = torch.tensor(mean, device=device, dtype=dtype).view(*view_shape)
@@ -327,8 +313,17 @@ class UNETRBase(nn.Module):
 
     def _load_encoder_from_checkpoint(self, backbone, checkpoint):
         """Load encoder weights from an encoder state or a full model checkpoint."""
-        # Extract encoder weights from full model checkpoints below.
-        encoder_state = _load_checkpoint_state(checkpoint)
+        if isinstance(checkpoint, (str, PathLike)):
+            # Load the checkpoint directly; extract encoder weights from full model checkpoints below.
+            encoder_state = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        else:
+            encoder_state = checkpoint
+
+        for state_key in ("model_state", "model", "state_dict"):
+            if state_key in encoder_state:
+                encoder_state = encoder_state[state_key]
+        # Handle DataParallel/DistributedDataParallel prefix.
+        encoder_state = {key.removeprefix("module."): value for key, value in encoder_state.items()}
 
         if backbone in ("sam", "sam2"):
             # Extract the image encoder state from the full SAM or SAM2 checkpoint.
