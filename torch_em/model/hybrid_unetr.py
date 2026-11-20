@@ -15,10 +15,14 @@ The decoders:
 - `HieraUDecoder` ("hiera_u"): a plain skip U-decoder.
 - `C3F2Decoder` ("c3f2"): a coarse-3D / fine-2D fusion head. ConvNeXt blocks with attention along z at stride 16,
   with convolutions along z at strides 8 and 4, and a 2D image-guided upsampling head.
+- `CAGD3DDecoder` ("cagd_3d"): the decoder of MedCAGD (Wazir et al., arXiv 2607.00409,
+  https://github.com/saadwazir/MedCAGD) adapted to the hybrid recipe: gated skip fusion, context aggregators,
+  refinement blocks with channel recalibration and deep supervision.
 
 `HybridUNETR` combines an encoder with one of the decoders.
 """
 
+import math
 from collections.abc import Mapping
 from os import PathLike
 from typing import Dict, List, Optional, Sequence, Tuple, Union
@@ -425,10 +429,393 @@ class C3F2Decoder(HybridDecoder):
         return self.out_conv(x)
 
 
+#
+# CAGD-3D: MedCAGD adapted to the hybrid 2D/3D recipe.
+#
+
+
+def _cagd_group_norm(channels: int) -> nn.GroupNorm:
+    """GroupNorm with the group count of MedCAGD (4 to 32 channels per group). Per slice on folded inputs."""
+    for groups in (32, 16, 8, 4, 2, 1):
+        if channels % groups == 0 and 4 <= channels // groups <= 32:
+            return nn.GroupNorm(groups, channels)
+    return nn.GroupNorm(1, channels)
+
+
+class ECA(nn.Module):
+    """Efficient channel attention of MedCAGD with a learned temperature, pooled per slice.
+
+    MedCAGD averages three convolutions of the global mean (its pooling scales 1, 2, 4 all reduce to the global
+    mean). This is linear and thus equal to one convolution, which is used here.
+
+    Args:
+        channels: The number of channels.
+        is_encoder: Whether to use the kernel size rule of MedCAGD for encoder (skip) or for decoder features.
+    """
+    def __init__(self, channels: int, is_encoder: bool = True):
+        super().__init__()
+        gamma, b = (2.0, 1.0) if is_encoder else (2.4, 0.8)
+        k = int(abs(math.log2(channels) / gamma + b))
+        k = k + 1 if k % 2 == 0 else k
+        self.conv = nn.Conv1d(1, 1, kernel_size=k, padding=(k - 1) // 2, bias=False)
+        self.log_tau = nn.Parameter(torch.zeros(()))
+        self.tau_min, self.tau_max = 0.5, 2.0
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the channel attention.
+
+        Args:
+            x: The features with z folded into the batch, (B * Z, C, H, W).
+
+        Returns:
+            The features with the same shape.
+        """
+        logits = self.conv(x.mean(dim=(2, 3))[:, None])[:, 0]  # (N, C), N = slices
+        tau = self.log_tau.exp().clamp(self.tau_min, self.tau_max)
+        attention = torch.sigmoid(logits / tau)
+        attention = attention / (attention.mean(dim=1, keepdim=True) + 1e-6)
+        return x * attention[..., None, None]
+
+
+class GlobalContext(nn.Module):
+    """The residual global-context attention of MedCAGD (a GCNet block), pooled per slice.
+
+    Args:
+        channels: The number of channels.
+        reduction: The channel reduction of the transform.
+    """
+    def __init__(self, channels: int, reduction: int = 16):
+        super().__init__()
+        inter = max(4, channels // reduction)  # MedCAGD: max(1, ...); same for the default widths (>= 64)
+        self.mask = nn.Conv2d(channels, 1, kernel_size=1)
+        self.transform = nn.Sequential(
+            nn.Conv2d(channels, inter, kernel_size=1, bias=False),
+            nn.GroupNorm(1, inter),  # = LayerNorm([inter, 1, 1]) of MedCAGD
+            nn.ReLU(inplace=True),
+            nn.Conv2d(inter, channels, kernel_size=1, bias=False),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the global-context attention.
+
+        Args:
+            x: The features with z folded into the batch, (B * Z, C, H, W).
+
+        Returns:
+            The features with the same shape.
+        """
+        n, c, h, w = x.shape
+        weights = torch.softmax(self.mask(x).reshape(n, 1, h * w), dim=-1)
+        context = torch.bmm(x.reshape(n, c, h * w), weights.transpose(1, 2)).reshape(n, c, 1, 1)
+        return x + self.transform(context)
+
+
+class SCAGate(nn.Module):
+    """The attention gate of MedCAGD (SCA-Gate): gates the skip features with guidance from the decoder.
+
+    Changed for large inputs: the spatial competition is a softmax over the H * W positions of a slice, with
+    values of about 1 / (H * W), which is numerically zero for inputs of size 1024. It is rescaled by H * W
+    (mean one) and clamped at `max_spatial`.
+
+    Args:
+        guide_channels: The channels of the upsampled decoder features.
+        skip_channels: The channels of the skip features.
+        inter_channels: The latent width.
+        max_spatial: The maximum of the rescaled spatial attention.
+    """
+    def __init__(self, guide_channels: int, skip_channels: int, inter_channels: int, max_spatial: float = 4.0):
+        super().__init__()
+        self.eca_skip = ECA(skip_channels, is_encoder=True)
+        self.eca_guide = ECA(guide_channels, is_encoder=False)
+
+        def branch(channels):
+            return nn.Sequential(
+                nn.Conv2d(channels, inter_channels, 3, padding=1, bias=False), _cagd_group_norm(inter_channels),
+                nn.SiLU(),
+                nn.Conv2d(inter_channels, inter_channels, 3, padding=2, dilation=2, groups=inter_channels,
+                          bias=False),
+                _cagd_group_norm(inter_channels), nn.SiLU(),
+            )
+        self.theta, self.phi = branch(guide_channels), branch(skip_channels)
+        self.global_fc = nn.Sequential(
+            nn.Conv2d(guide_channels + skip_channels, inter_channels, 1), nn.SiLU(), nn.Sigmoid(),
+        )
+        self.dw3 = nn.Conv2d(inter_channels, inter_channels, 3, padding=1, groups=inter_channels, bias=False)
+        self.dw5 = nn.Conv2d(inter_channels, inter_channels, 5, padding=2, groups=inter_channels, bias=False)
+        self.score = nn.Conv2d(inter_channels, 1, 1, bias=False)
+        self.log_tau = nn.Parameter(torch.tensor(0.7).log())
+        self.tau_min, self.tau_max = 0.3, 2.0
+        self.max_spatial = max_spatial
+        self.att = nn.Sequential(nn.GroupNorm(1, inter_channels), nn.Conv2d(inter_channels, 1, 1), nn.Hardsigmoid())
+
+    def forward(self, guide: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+        """Apply the gate.
+
+        Args:
+            guide: The upsampled decoder features with z folded into the batch.
+            skip: The skip features with z folded into the batch.
+
+        Returns:
+            The gated skip features.
+        """
+        skip = self.eca_skip(skip)
+        guide = self.eca_guide(guide)
+        fused = F.normalize(self.theta(guide) * self.phi(skip), p=2, dim=1)
+        fused = fused + self.global_fc(torch.cat([guide, skip], dim=1).mean(dim=(2, 3), keepdim=True)) * fused
+        score = self.score(self.dw3(fused) + self.dw5(fused))
+        n, _, h, w = score.shape
+        tau = self.log_tau.exp().clamp(self.tau_min, self.tau_max)
+        spatial = torch.softmax(score.reshape(n, h * w) / tau, dim=-1).reshape(n, 1, h, w) * (h * w)
+        fused = fused * (1.0 + spatial.clamp(max=self.max_spatial))
+        return skip * self.att(fused + 1e-5)
+
+
+class DWBlock(nn.Module):
+    """The conv block of MedCAGD (depthwise 3x3 and pointwise, twice), followed by a zero-initialized z branch.
+
+    Args:
+        in_channels: The number of input channels.
+        out_channels: The number of output channels.
+        with_z: Whether to add the z branch.
+    """
+    def __init__(self, in_channels: int, out_channels: int, with_z: bool = True):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, 3, padding=1, groups=in_channels, bias=False),
+            _cagd_group_norm(in_channels), nn.SiLU(),
+            nn.Conv2d(in_channels, out_channels, 1, bias=False), _cagd_group_norm(out_channels), nn.SiLU(),
+            nn.Conv2d(out_channels, out_channels, 3, padding=1, groups=out_channels, bias=False),
+            _cagd_group_norm(out_channels), nn.SiLU(),
+            nn.Conv2d(out_channels, out_channels, 1, bias=False), _cagd_group_norm(out_channels), nn.SiLU(),
+        )
+        self.z_branch = ZResidual(out_channels) if with_z else None
+
+    def forward(self, x: torch.Tensor, n_z: int) -> torch.Tensor:
+        """Apply the block.
+
+        Args:
+            x: The features with z folded into the batch, (B * Z, C, H, W).
+            n_z: The number of slices Z.
+
+        Returns:
+            The output features.
+        """
+        x = self.block(x)
+        return x if self.z_branch is None else self.z_branch(x, n_z)
+
+
+class RefinementBlock(nn.Module):
+    """The refinement block of MedCAGD: conv block, optional depthwise spatial conv and channel recalibration.
+
+    Args:
+        channels: The number of channels.
+        spatial_focus: Whether to add the depthwise spatial convolution.
+        with_z: Whether to add the z branch to the conv block.
+    """
+    def __init__(self, channels: int, spatial_focus: bool, with_z: bool = True):
+        super().__init__()
+        self.conv = DWBlock(channels, channels, with_z=with_z)
+        self.spatial = nn.Conv2d(channels, channels, 3, padding=1, groups=channels) if spatial_focus else None
+        self.eca = ECA(channels)
+
+    def forward(self, x: torch.Tensor, n_z: int) -> torch.Tensor:
+        """Apply the block.
+
+        Args:
+            x: The features with z folded into the batch, (B * Z, C, H, W).
+            n_z: The number of slices Z.
+
+        Returns:
+            The features with the same shape.
+        """
+        x = self.conv(x, n_z)
+        if self.spatial is not None:
+            x = self.spatial(x)
+        return self.eca(x)
+
+
+class CAGDStage(nn.Module):
+    """The decoder block of MedCAGD: transposed-conv upsampling, gated skip fusion and the conv block.
+
+    The skips are gated only if they have more than 64 channels, as in MedCAGD.
+
+    Args:
+        in_channels: The number of input channels.
+        skip_channels: The channels of the skip features.
+        out_channels: The number of output channels.
+        with_z: Whether to add the z branch to the conv block.
+    """
+    def __init__(self, in_channels: int, skip_channels: int, out_channels: int, with_z: bool = True):
+        super().__init__()
+        self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+        self.gate = SCAGate(out_channels, skip_channels, max(1, skip_channels // 2)) if skip_channels > 64 else None
+        self.conv = DWBlock(out_channels + skip_channels, out_channels, with_z=with_z)
+
+    def forward(self, x: torch.Tensor, skip: torch.Tensor, n_z: int) -> torch.Tensor:
+        """Apply the block.
+
+        Args:
+            x: The features with z folded into the batch.
+            skip: The skip features at twice the resolution, with z folded into the batch.
+            n_z: The number of slices Z.
+
+        Returns:
+            The output features at the resolution of the skip features.
+        """
+        x = _resize_to(self.up(x), skip)
+        if self.gate is not None:
+            skip = self.gate(x, skip)
+        return self.conv(torch.cat([x, skip], dim=1), n_z)
+
+
+class ContextAggregator(nn.Module):
+    """The context aggregator of MedCAGD: all pyramid levels projected, resized and averaged, plus global context.
+
+    Args:
+        in_channels: The channels of the pyramid levels.
+        out_channels: The number of output channels.
+    """
+    def __init__(self, in_channels: Sequence[int], out_channels: int):
+        super().__init__()
+        self.proj = nn.ModuleList([nn.Conv2d(c, out_channels, kernel_size=1) for c in in_channels])
+        self.global_context = GlobalContext(out_channels)
+
+    def forward(self, features: Sequence[torch.Tensor], reference: torch.Tensor) -> torch.Tensor:
+        """Aggregate the pyramid levels.
+
+        Args:
+            features: The pyramid levels with z folded into the batch.
+            reference: The features that define the output resolution.
+
+        Returns:
+            The aggregated context at the resolution of the reference.
+        """
+        fused = sum(_resize_to(proj(f), reference) for f, proj in zip(features, self.proj))
+        return self.global_context(fused / len(features))
+
+
+class CAGD3DDecoder(HybridDecoder):
+    """The decoder of MedCAGD on the encoder features at stride 4, 8 and 16, adapted to the hybrid 2D/3D recipe.
+
+    MedCAGD: Wazir et al., arXiv 2607.00409, https://github.com/saadwazir/MedCAGD.
+
+    Pyramid: 1x1 projections of the features at stride 4, 8 and 16. The stride-32 level is a strided 3x3 convolution
+    of the stride-16 features. The bottleneck (conv, attention along z, global context) and the stages at strides
+    16, 8 and 4 (gated fusion, context aggregator, refinement) follow MedCAGD. All global pooling is per slice
+    and the blocks have zero-initialized z branches.
+
+    Changed against MedCAGD: the last stage runs at stride 2 with an image-stem skip instead of at full resolution
+    (the full-resolution stage of MedCAGD costs 1.7x the FLOPs). It is followed by a transposed convolution to
+    full resolution, fused with the stride-1 stem.
+
+    Deep supervision: 1x1 heads on the stages at strides 16, 8 and 4 predict all output channels. In training mode
+    their outputs, upsampled to the image size as in MedCAGD, are kept in `aux_outputs` (deepest first; MedCAGD
+    weights them with 0.4, 0.3 and 0.2). `HybridUNETR` exposes them as `auxiliary_outputs`.
+
+    Args:
+        out_channels: The number of output channels.
+        widths: The pyramid widths at strides 4, 8, 16 and 32.
+        stem_widths: The widths of the image stem at strides 1 and 2.
+        deep_supervision: Whether to build the deep supervision heads.
+        in_channels: The channels of the encoder features at stride 4, 8 and 16.
+        skip_projections: The output channels of the 1x1 projections of the stride-4 and stride-8 features.
+            If None, the decoder uses the features without projections.
+    """
+    def __init__(
+        self,
+        out_channels: int = 5,
+        widths: Sequence[int] = (64, 128, 320, 512),
+        stem_widths: Sequence[int] = (16, 32),
+        deep_supervision: bool = True,
+        in_channels: Sequence[int] = (256, 256, 256),
+        skip_projections: Optional[Sequence[int]] = (32, 64),
+    ):
+        super().__init__(out_channels, in_channels, skip_projections)
+        w4, w8, w16, w32 = widths
+        st1, st2 = stem_widths
+        c4, c8 = self.skip_channels
+        c16 = self.in_channels[2]
+        self.stem1 = nn.Sequential(nn.Conv2d(3, st1, 3, padding=1, bias=False), _cagd_group_norm(st1), nn.SiLU())
+        self.stem2 = nn.Sequential(
+            nn.Conv2d(st1, st2, 3, stride=2, padding=1, bias=False), _cagd_group_norm(st2), nn.SiLU(),
+        )
+        self.p4 = nn.Conv2d(c4, w4, 1)
+        self.p8 = nn.Conv2d(c8, w8, 1)
+        self.p16 = nn.Conv2d(c16, w16, 1)
+        self.p32 = nn.Conv2d(c16, w32, 3, stride=2, padding=1)
+
+        self.bottleneck_proj = nn.Conv2d(w32, w32, 1)
+        self.bottleneck_conv = nn.Sequential(nn.Conv2d(w32, w32, 3, padding=1), _cagd_group_norm(w32), nn.SiLU())
+        self.bottleneck_z = ZAttention(w32)
+        self.bottleneck_context = GlobalContext(w32)
+
+        levels = (w4, w8, w16, w32)
+        self.stage16, self.context16, self.ref16 = (
+            CAGDStage(w32, w16, w16), ContextAggregator(levels, w16), RefinementBlock(w16, spatial_focus=False),
+        )
+        self.stage8, self.context8, self.ref8 = (
+            CAGDStage(w16, w8, w8), ContextAggregator(levels, w8), RefinementBlock(w8, spatial_focus=True),
+        )
+        self.stage4, self.context4, self.ref4 = (
+            CAGDStage(w8, w4, w4), ContextAggregator(levels, w4), RefinementBlock(w4, spatial_focus=True),
+        )
+        self.stage2 = CAGDStage(w4, st2, st2)
+        self.ref2 = RefinementBlock(st2, spatial_focus=True)
+
+        self.head_up = nn.Sequential(
+            nn.ConvTranspose2d(st2, st1, kernel_size=2, stride=2), _cagd_group_norm(st1), nn.SiLU(),
+        )
+        self.head_fuse = nn.Sequential(
+            nn.Conv2d(2 * st1, st1, 3, padding=1, bias=False), _cagd_group_norm(st1), nn.SiLU(),
+        )
+        self.out_conv = nn.Conv2d(st1, out_channels, 1)
+        self.aux_heads = nn.ModuleList(
+            [nn.Conv2d(c, out_channels, 1) for c in (w16, w8, w4)]
+        ) if deep_supervision else None
+        self.aux_outputs: Optional[List[torch.Tensor]] = None
+
+    def forward(self, features: Sequence[torch.Tensor], image: torch.Tensor, n_z: int) -> torch.Tensor:
+        """Apply the decoder.
+
+        Args:
+            features: The encoder features at stride 4, 8 and 16 with z folded into the batch.
+            image: The preprocessed image with z folded into the batch, (B * Z, 3, H, W).
+            n_z: The number of slices Z.
+
+        Returns:
+            The decoder output before the activation, (B * Z, out_channels, H, W).
+        """
+        s4, s8, s16 = self._project(features)
+        stem1 = self.stem1(image)
+        stem2 = self.stem2(stem1)
+        p4, p8, p16 = self.p4(s4), self.p8(s8), self.p16(s16)
+        b = self.bottleneck_conv(self.bottleneck_proj(self.p32(s16)))
+        b = self.bottleneck_context(self.bottleneck_z(b, n_z))
+        levels = [p4, p8, p16, b]
+
+        d16 = self.stage16(b, p16, n_z)
+        d16 = self.ref16(d16 + self.context16(levels, d16), n_z)
+        d8 = self.stage8(d16, p8, n_z)
+        d8 = self.ref8(d8 + self.context8(levels, d8), n_z)
+        d4 = self.stage4(d8, p4, n_z)
+        d4 = self.ref4(d4 + self.context4(levels, d4), n_z)
+        d2 = self.ref2(self.stage2(d4, stem2, n_z), n_z)
+
+        x = _resize_to(self.head_up(d2), stem1)
+        out = self.out_conv(self.head_fuse(torch.cat([x, stem1], dim=1)))
+
+        self.aux_outputs = None
+        if self.training and self.aux_heads is not None:
+            self.aux_outputs = [
+                _resize_to(head(d), image) for head, d in zip(self.aux_heads, (d16, d8, d4))
+            ]
+        return out
+
+
 # The hybrid decoders by name. To add a decoder, implement the `HybridDecoder` interface and register it here.
-# A decoder with deep supervision (e.g. CAGD-3D) can keep its auxiliary outputs of the last forward pass in an
-# attribute, which `HybridUNETR.decode` would then unfold, activate and resize like the main output.
-HYBRID_DECODERS = {"hiera_u": HieraUDecoder, "c3f2": C3F2Decoder}
+# A decoder with deep supervision keeps the auxiliary outputs of the last forward pass in training mode in the
+# attribute `aux_outputs`. `HybridUNETR.decode` processes them like the main output.
+HYBRID_DECODERS = {"hiera_u": HieraUDecoder, "c3f2": C3F2Decoder, "cagd_3d": CAGD3DDecoder}
 """The hybrid decoders by name."""
 
 
@@ -452,8 +839,8 @@ class HybridUNETR(UNETRBase):
         encoder: The image encoder. Can either be a name, such as 'hvit_t', or a torch module.
             A module must have the attribute `img_size` and return a tuple, with the list of features
             at stride 4, 8 and 16 as second element, like `torch_em.model.vit.ViT_Sam2`.
-        decoder: The decoder. Can either be a name from `HYBRID_DECODERS` ('hiera_u' or 'c3f2') or a torch module
-            that implements the interface of `HybridDecoder` and has the attribute `in_channels`.
+        decoder: The decoder. Can either be a name from `HYBRID_DECODERS` ('hiera_u', 'c3f2' or 'cagd_3d') or
+            a torch module that implements the interface of `HybridDecoder` and has the attribute `in_channels`.
         decoder_kwargs: The keyword arguments for the decoder, if it is given by name.
         out_channels: The number of output channels. It is ignored if the decoder is a torch module.
         use_sam_stats: Whether to normalize the input data with the statistics of the pretrained SAM2 model.
@@ -531,6 +918,9 @@ class HybridUNETR(UNETRBase):
         self.out_channels = getattr(decoder_module, "out_channels", out_channels)
         self._decoder_name = decoder if isinstance(decoder, str) else None
         self._decoder_kwargs = dict(decoder_kwargs or {})
+        # The deep supervision outputs of the last forward pass in training mode, for decoders that have them
+        # ('cagd_3d'). They are activated and resized like the main output. None otherwise.
+        self.auxiliary_outputs: Optional[List[torch.Tensor]] = None
 
         if checkpoint_state is not None and backbone == "sam2":
             self._init_skip_projections_from_state(checkpoint_state)
@@ -610,15 +1000,26 @@ class HybridUNETR(UNETRBase):
 
         Returns:
             The output, resized to `original_shape`. It has no z axis if `original_shape` is (Y, X).
+            In training mode, the deep supervision outputs of the decoder are stored in `auxiliary_outputs`.
         """
         is_2d = len(original_shape) == 2
         if is_2d:
             original_shape = (1, *original_shape)
 
-        n_z = features["n_z"]
-        x = unfold_z(self.decoder(features["features"], features["image"], n_z), n_z)
-        if self.final_activation is not None:
-            x = self.final_activation(x)
+        def _postprocess(x):
+            x = unfold_z(x, n_z)
+            if self.final_activation is not None:
+                x = self.final_activation(x)
+            x = self.postprocess_masks(x, input_shape, original_shape)
+            return x[:, :, 0] if is_2d else x
 
-        x = self.postprocess_masks(x, input_shape, original_shape)
-        return x[:, :, 0] if is_2d else x
+        n_z = features["n_z"]
+        x = self.decoder(features["features"], features["image"], n_z)
+
+        auxiliary_outputs = getattr(self.decoder, "aux_outputs", None)
+        if self.training and auxiliary_outputs:
+            self.auxiliary_outputs = [_postprocess(aux) for aux in auxiliary_outputs]
+        else:
+            self.auxiliary_outputs = None
+
+        return _postprocess(x)

@@ -35,6 +35,7 @@ class _SingleScaleEncoder(_Encoder):
 SMALL_DECODERS = {
     "hiera_u": {"widths": (48, 32, 16, 8, 8), "stem_widths": (8, 16)},
     "c3f2": {"widths": (64, 32, 16), "head_width": 16, "stem_widths": (8, 16)},
+    "cagd_3d": {"widths": (16, 32, 80, 128), "stem_widths": (8, 16)},
 }
 
 
@@ -122,7 +123,7 @@ class TestHybridUNETR(unittest.TestCase):
         from torch_em.model.hybrid_unetr import HYBRID_DECODERS
 
         # The parameter counts of the default configurations for five output channels, without the projections.
-        expected = {"hiera_u": 1555445, "c3f2": 2149533}
+        expected = {"hiera_u": 1555445, "c3f2": 2149533, "cagd_3d": 8510816}
         n_projection_params = (256 * 32 + 32) + (256 * 64 + 64)
         for name, n_expected in expected.items():
             with self.subTest(decoder=name):
@@ -167,6 +168,41 @@ class TestHybridUNETR(unittest.TestCase):
                 rebuilt.load_state_dict(state, strict=True)
                 with torch.no_grad():
                     self.assertTrue(torch.equal(rebuilt(x), expected))
+
+    def test_deep_supervision(self):
+        model = self._get_model("cagd_3d", final_activation="Sigmoid")
+        x = torch.rand(1, 3, 2, 48, 64)
+
+        with torch.no_grad():
+            model(x)
+        self.assertIsNone(model.auxiliary_outputs)  # Only in training mode.
+
+        model.train()
+        y = model(x)
+        self.assertEqual(len(model.auxiliary_outputs), 3)
+        for aux in model.auxiliary_outputs:
+            self.assertEqual(aux.shape, y.shape)
+            self.assertTrue(0 <= aux.min() and aux.max() <= 1)  # The activation is applied.
+        # The auxiliary heads receive gradients from the auxiliary outputs.
+        sum(aux.sum() for aux in model.auxiliary_outputs).backward()
+        self.assertTrue(all(head.weight.grad is not None for head in model.decoder.aux_heads))
+
+        # 2D inputs yield 2D auxiliary outputs.
+        y = model(x[:, :, 0])
+        self.assertEqual(model.auxiliary_outputs[0].shape, y.shape)
+
+        # No auxiliary outputs without deep supervision and for the other decoders.
+        from torch_em.model import HybridUNETR
+        from torch_em.model.hybrid_unetr import CAGD3DDecoder
+
+        decoder = CAGD3DDecoder(deep_supervision=False, **SMALL_DECODERS["cagd_3d"])
+        self.assertFalse(any(key.startswith("aux_heads") for key in decoder.state_dict()))
+        model = HybridUNETR(img_size=64, encoder=_Encoder(64), decoder=decoder).train()
+        model(x)
+        self.assertIsNone(model.auxiliary_outputs)
+        model = self._get_model("hiera_u").train()
+        model(x)
+        self.assertIsNone(model.auxiliary_outputs)
 
     def test_init_skip_projections(self):
         model = self._get_model("hiera_u")
