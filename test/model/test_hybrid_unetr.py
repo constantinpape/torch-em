@@ -1,8 +1,11 @@
 import json
+import tempfile
 import unittest
 from copy import deepcopy
+from pathlib import Path
 
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 
 try:
@@ -152,28 +155,45 @@ class TestHybridUNETR(unittest.TestCase):
 
         # The default is no deep supervision.
         model = self._get_model("cagd_3d").train()
-        model(x)
+        self.assertIsInstance(model(x), torch.Tensor)
         self.assertIsNone(model.auxiliary_outputs)
 
         model = self._get_model("cagd_3d", final_activation="Sigmoid", decoder_kwargs={"deep_supervision": True})
         with torch.no_grad():
-            model(x)
+            self.assertIsInstance(model(x), torch.Tensor)
         self.assertIsNone(model.auxiliary_outputs)  # Only in training mode.
 
         model.train()
-        y = model(x)
-        self.assertEqual(len(model.auxiliary_outputs), 3)
-        for aux in model.auxiliary_outputs:
+        y, auxiliary_outputs = model(x)
+        self.assertIs(auxiliary_outputs, model.auxiliary_outputs)
+        self.assertEqual(len(auxiliary_outputs), 3)
+        for aux in auxiliary_outputs:
             self.assertEqual(aux.shape, y.shape)
             self.assertTrue(0 <= aux.min() and aux.max() <= 1)  # The activation is applied.
         # The auxiliary heads receive gradients from the auxiliary outputs.
-        sum(aux.sum() for aux in model.auxiliary_outputs).backward()
+        (y.mean() + sum(aux.mean() for aux in auxiliary_outputs)).backward()
         self.assertTrue(all(head.weight.grad is not None for head in model.decoder.aux_heads))
 
         # The outputs are dropped in evaluation mode, so that the model can be copied.
         model.eval()
         self.assertIsNone(model.auxiliary_outputs)
         deepcopy(model)
+
+    @unittest.skipUnless(dist.is_available() and dist.is_gloo_available(), "Needs the Gloo backend")
+    def test_deep_supervision_ddp(self):
+        model = self._get_model("cagd_3d", decoder_kwargs={"deep_supervision": True}).train()
+        x = torch.rand(1, 3, 2, 48, 64)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            init_method = (Path(tmpdir) / "rendezvous").as_uri()
+            dist.init_process_group("gloo", init_method=init_method, rank=0, world_size=1)
+            try:
+                ddp_model = nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
+                prediction, auxiliary_outputs = ddp_model(x)
+                (prediction.mean() + sum(aux.mean() for aux in auxiliary_outputs)).backward()
+                self.assertTrue(all(head.weight.grad is not None for head in model.decoder.aux_heads))
+            finally:
+                dist.destroy_process_group()
 
     def test_init_skip_projections(self):
         model = self._get_model("hiera_u")

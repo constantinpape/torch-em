@@ -598,7 +598,7 @@ class CAGD3DDecoder(HybridDecoder):
 
     Deep supervision (optional): 1x1 heads on the stages at strides 16, 8 and 4 predict all output channels.
     In training mode their outputs, upsampled to the image size as in MedCAGD, are kept in `aux_outputs` (deepest
-    first; MedCAGD weights them with 0.4, 0.3 and 0.2). `HybridUNETR` exposes them as `auxiliary_outputs`.
+    first; MedCAGD weights them with 0.4, 0.3 and 0.2). `HybridUNETR` includes them in its forward result.
     If it is enabled, the loss must use these outputs, otherwise the heads do not receive gradients.
 
     Args:
@@ -860,6 +860,18 @@ class HybridUNETR(UNETRBase):
                 "The encoder must return a tuple with the list of features at stride 4, 8 and 16 as second element."
             )
         return {"features": list(levels), "image": image, "n_z": n_z}, input_shape
+
+    def forward(self, x: torch.Tensor) -> Union[torch.Tensor, Tuple[torch.Tensor, List[torch.Tensor]]]:
+        """Predict masks for an image or volume.
+
+        During training with deep supervision, return `(prediction, auxiliary_outputs)`.
+        The training loss should use the tensors from this pair, including under DistributedDataParallel.
+        Otherwise, return the prediction tensor.
+        """
+        prediction = super().forward(x)
+        if self.auxiliary_outputs is not None:
+            return prediction, self.auxiliary_outputs
+        return prediction
 
     def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
         """Run the decoder on the encoder features.
