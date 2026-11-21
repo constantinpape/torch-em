@@ -877,11 +877,17 @@ class HybridUNETR(UNETRBase):
         if is_2d:
             original_shape = (1, *original_shape)
 
+        depth, height, width = input_shape
+        # Crop on the same grid that preprocessing padded the slices to.
+        padded_shape = (depth, *features["image"].shape[-2:])
+
         def _postprocess(x):
             x = unfold_z(x, n_z)
             if self.final_activation is not None:
                 x = self.final_activation(x)
-            x = self.postprocess_masks(x, input_shape, original_shape)
+            x = F.interpolate(x, padded_shape, mode="trilinear", align_corners=False)
+            x = x[..., :depth, :height, :width]
+            x = F.interpolate(x, original_shape, mode="trilinear", align_corners=False)
             return x[:, :, 0] if is_2d else x
 
         n_z = features["n_z"]

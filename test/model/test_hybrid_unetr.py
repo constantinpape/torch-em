@@ -75,6 +75,20 @@ class TestHybridUNETR(unittest.TestCase):
                     self.assertEqual(tuple(y.shape), (2, 5, *shape))
                     self.assertTrue(torch.equal(y, model(x[:, :, None])[:, :, 0]))
 
+    def test_postprocess_uses_encoder_grid(self):
+        from torch_em.model import HybridUNETR
+
+        reference = self._get_model("hiera_u", out_channels=1)
+        model = HybridUNETR(
+            img_size=128, encoder=_Encoder(64), decoder="hiera_u", decoder_kwargs=SMALL_DECODERS["hiera_u"],
+        ).eval()
+        model.load_state_dict(reference.state_dict())
+
+        for shape in [(1, 3, 37, 50), (1, 3, 2, 37, 50)]:
+            with self.subTest(shape=shape), torch.no_grad():
+                x = torch.rand(*shape)
+                torch.testing.assert_close(model(x), reference(x))
+
     def test_volume_equals_stacked_slices_at_init(self):
         from torch_em.model.hybrid_unetr import HYBRID_DECODERS
 
