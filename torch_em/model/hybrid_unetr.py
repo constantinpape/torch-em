@@ -850,6 +850,14 @@ class HybridUNETR(UNETRBase):
         elif x.ndim != 5:
             raise ValueError(f"Expected 4d or 5d inputs, got {tuple(x.shape)}.")
 
+        height, width = x.shape[-2:]
+        encoder_size = self.encoder.img_size
+        if not self.resize_input and max(height, width) > encoder_size:
+            raise ValueError(
+                f"Input size {(height, width)} exceeds the encoder size {(encoder_size, encoder_size)} "
+                "with resize_input=False."
+            )
+
         n_z = x.shape[2]
         # The slices are preprocessed as images, so that images and volumes are resized in the same way.
         image, input_shape = self.preprocess(fold_z(x))

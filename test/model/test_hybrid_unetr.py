@@ -92,6 +92,23 @@ class TestHybridUNETR(unittest.TestCase):
                 x = torch.rand(*shape)
                 torch.testing.assert_close(model(x), reference(x))
 
+    def test_input_size_without_resizing(self):
+        from torch_em.model import HybridUNETR
+
+        model = HybridUNETR(
+            img_size=128, encoder=_Encoder(64), decoder="hiera_u", decoder_kwargs=SMALL_DECODERS["hiera_u"],
+            resize_input=False,
+        ).eval()
+
+        for shape in [(1, 3, 80, 64), (1, 3, 2, 64, 80)]:
+            with self.subTest(shape=shape), self.assertRaisesRegex(ValueError, "resize_input=False"):
+                model(torch.rand(*shape))
+
+        for shape in [(1, 3, 48, 64), (1, 3, 2, 64, 64)]:
+            with self.subTest(shape=shape), torch.no_grad():
+                prediction = model(torch.rand(*shape))
+                self.assertEqual(tuple(prediction.shape), (shape[0], model.out_channels, *shape[2:]))
+
     def test_volume_equals_stacked_slices_at_init(self):
         from torch_em.model.hybrid_unetr import HYBRID_DECODERS
 
