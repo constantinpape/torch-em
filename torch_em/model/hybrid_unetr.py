@@ -96,10 +96,12 @@ class ZResidual(nn.Module):
 
     Args:
         channels: The number of channels.
-        kernel_size: The kernel size along z.
+        kernel_size: The positive odd kernel size along z. This keeps the convolution centered and preserves depth.
     """
     def __init__(self, channels: int, kernel_size: int = 3):
         super().__init__()
+        if kernel_size < 1 or kernel_size % 2 == 0:
+            raise ValueError(f"ZResidual requires a positive odd kernel size, got {kernel_size}.")
         self.depthwise = nn.Conv3d(
             channels, channels, kernel_size=(kernel_size, 1, 1), padding=(kernel_size // 2, 0, 0), groups=channels,
         )

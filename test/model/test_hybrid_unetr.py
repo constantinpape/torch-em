@@ -129,6 +129,18 @@ class TestHybridUNETR(unittest.TestCase):
                 prediction = model(torch.rand(*shape))
                 self.assertEqual(tuple(prediction.shape), (shape[0], model.out_channels, *shape[2:]))
 
+    def test_z_residual_kernel_size(self):
+        from torch_em.model.hybrid_unetr import ZResidual
+
+        for kernel_size in (-1, 0, 2):
+            with self.subTest(kernel_size=kernel_size), self.assertRaisesRegex(ValueError, "positive odd kernel size"):
+                ZResidual(channels=4, kernel_size=kernel_size)
+
+        residual = ZResidual(channels=4, kernel_size=5)
+        x = torch.randn(6, 4, 8, 8)  # Two volumes with three slices each, folded into the batch.
+        with torch.no_grad():
+            torch.testing.assert_close(residual(x, n_z=3), x)
+
     def test_volume_equals_stacked_slices_at_init(self):
         from torch_em.model.hybrid_unetr import HYBRID_DECODERS
 
