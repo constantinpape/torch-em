@@ -66,7 +66,11 @@ def unfold_z(x: torch.Tensor, n_z: int) -> torch.Tensor:
 
 
 def _group_norm(channels: int) -> nn.GroupNorm:
-    return nn.GroupNorm(min(8, channels), channels)
+    groups = min(8, channels)
+    # GroupNorm requires the channel count to be divisible by the number of groups.
+    while channels % groups != 0:
+        groups -= 1
+    return nn.GroupNorm(groups, channels)
 
 
 def _resize_to(x: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:

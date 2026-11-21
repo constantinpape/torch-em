@@ -68,6 +68,13 @@ class TestHybridUNETR(unittest.TestCase):
                     y = model(torch.rand(*shape))
                     self.assertEqual(tuple(y.shape), (shape[0], 4, *shape[2:]))
 
+    def test_group_norm_with_custom_stem_widths(self):
+        x = torch.rand(1, 3, 48, 64)
+        for decoder in ("hiera_u", "c3f2"):
+            with self.subTest(decoder=decoder), torch.no_grad():
+                model = self._get_model(decoder, decoder_kwargs={"stem_widths": (12, 24)})
+                self.assertEqual(model(x).shape, (1, model.out_channels, 48, 64))
+
     def test_image_equals_single_slice_volume(self):
         for decoder in SMALL_DECODERS:
             model = self._get_model(decoder)
