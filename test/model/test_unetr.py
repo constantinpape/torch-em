@@ -168,14 +168,14 @@ class TestUnetr(unittest.TestCase):
     def test_unetr(self):
         from torch_em.model import UNETR
 
-        model = UNETR()
-        self._test_net(model, (1, 3, 512, 512))
+        model = UNETR(img_size=256)
+        self._test_net(model, (1, 3, 128, 128))
 
     def test_unetr_no_resize(self):
         from torch_em.model import UNETR
 
-        model = UNETR(resize_input=False)
-        self._test_net(model, (1, 3, 512, 512))
+        model = UNETR(img_size=256, resize_input=False)
+        self._test_net(model, (1, 3, 128, 128))
 
     @unittest.skipIf(micro_sam is None, "Needs micro_sam")
     def test_unetr_from_sam(self):
@@ -192,8 +192,8 @@ class TestUnetr(unittest.TestCase):
         "NOTE: Checking for this exclusively as `use_conv_transpose`, by default, is set to `False`."
         from torch_em.model import UNETR
 
-        model = UNETR(use_conv_transpose=True)
-        self._test_net(model, (1, 3, 512, 512))
+        model = UNETR(img_size=256, use_conv_transpose=True)
+        self._test_net(model, (1, 3, 128, 128))
 
     def test_unetr3d(self):
         from torch_em.model.unetr import UNETR3D
