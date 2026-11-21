@@ -6,9 +6,10 @@ from .default_trainer import DefaultTrainer
 class HybridUNETRDeepSupervisionTrainer(DefaultTrainer):
     """Train HybridUNETR with the three auxiliary heads of the `cagd_3d` decoder.
 
-    Enable `deep_supervision` in the model's `decoder_kwargs` and pass this class as
+    Import this class from `torch_em.trainer.hybrid_unetr_trainer` and pass it as
     `trainer_class` to `torch_em.default_segmentation_trainer`. The same loss and
-    target are used for each prediction. Validation uses the main prediction.
+    target are used for each prediction. Set `deep_supervision=True` in the model's
+    `decoder_kwargs`. Validation uses the main prediction.
     """
 
     aux_weights = (0.4, 0.3, 0.2)  # MedCAGD weights, deepest head first.

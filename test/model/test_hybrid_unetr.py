@@ -1,12 +1,16 @@
 import json
 import tempfile
 import unittest
-from copy import deepcopy
 from pathlib import Path
+from copy import deepcopy
 
 import torch
-import torch.distributed as dist
 import torch.nn as nn
+import torch.distributed as dist
+
+from torch_em import default_segmentation_trainer
+from torch_em.trainer.hybrid_unetr_trainer import HybridUNETRDeepSupervisionTrainer
+from torch_em.model.hybrid_unetr import HYBRID_DECODERS, HybridUNETR, ZAttention, ZResidual
 
 try:
     import sam2
@@ -40,8 +44,6 @@ SMALL_DECODERS = {
 
 class TestHybridUNETR(unittest.TestCase):
     def _get_model(self, decoder, out_channels=5, img_size=64, decoder_kwargs=None, **kwargs):
-        from torch_em.model import HybridUNETR
-
         torch.manual_seed(0)
         decoder_kwargs = {**SMALL_DECODERS[decoder], **(decoder_kwargs or {})}
         model = HybridUNETR(
@@ -51,8 +53,6 @@ class TestHybridUNETR(unittest.TestCase):
         return model.eval()
 
     def _randomize_z_branches(self, module):
-        from torch_em.model.hybrid_unetr import ZAttention, ZResidual
-
         with torch.no_grad():
             for mod in module.modules():
                 if isinstance(mod, ZResidual):
@@ -99,8 +99,6 @@ class TestHybridUNETR(unittest.TestCase):
         torch.testing.assert_close(channel_sum, torch.ones_like(channel_sum))
 
     def test_postprocess_uses_encoder_grid(self):
-        from torch_em.model import HybridUNETR
-
         reference = self._get_model("hiera_u", out_channels=1)
         model = HybridUNETR(
             img_size=128, encoder=_Encoder(64), decoder="hiera_u", decoder_kwargs=SMALL_DECODERS["hiera_u"],
@@ -113,8 +111,6 @@ class TestHybridUNETR(unittest.TestCase):
                 torch.testing.assert_close(model(x), reference(x))
 
     def test_input_size_without_resizing(self):
-        from torch_em.model import HybridUNETR
-
         model = HybridUNETR(
             img_size=128, encoder=_Encoder(64), decoder="hiera_u", decoder_kwargs=SMALL_DECODERS["hiera_u"],
             resize_input=False,
@@ -130,8 +126,6 @@ class TestHybridUNETR(unittest.TestCase):
                 self.assertEqual(tuple(prediction.shape), (shape[0], model.out_channels, *shape[2:]))
 
     def test_z_residual_kernel_size(self):
-        from torch_em.model.hybrid_unetr import ZResidual
-
         for kernel_size in (-1, 0, 2):
             with self.subTest(kernel_size=kernel_size), self.assertRaisesRegex(ValueError, "positive odd kernel size"):
                 ZResidual(channels=4, kernel_size=kernel_size)
@@ -142,8 +136,6 @@ class TestHybridUNETR(unittest.TestCase):
             torch.testing.assert_close(residual(x, n_z=3), x)
 
     def test_volume_equals_stacked_slices_at_init(self):
-        from torch_em.model.hybrid_unetr import HYBRID_DECODERS
-
         for name, kwargs in SMALL_DECODERS.items():
             torch.manual_seed(0)
             decoder = HYBRID_DECODERS[name](out_channels=5, **kwargs).double().eval()
@@ -163,8 +155,6 @@ class TestHybridUNETR(unittest.TestCase):
                 self.assertFalse(torch.allclose(volume, slices, atol=1e-6, rtol=0))
 
     def test_decoders_without_skip_projections(self):
-        from torch_em.model.hybrid_unetr import HYBRID_DECODERS
-
         features = [torch.randn(2, c, 64 // s, 64 // s) for c, s in ((32, 4), (64, 8), (256, 16))]
         for name, kwargs in SMALL_DECODERS.items():
             with self.subTest(decoder=name), torch.no_grad():
@@ -173,8 +163,6 @@ class TestHybridUNETR(unittest.TestCase):
                 self.assertEqual(tuple(decoder(features, torch.randn(2, 3, 64, 64), 2).shape), (2, 5, 64, 64))
 
     def test_state_and_config(self):
-        from torch_em.model import HybridUNETR
-
         with self.assertRaises(ValueError):
             HybridUNETR(img_size=64, encoder=_Encoder(64), decoder="invalid")
 
@@ -200,8 +188,6 @@ class TestHybridUNETR(unittest.TestCase):
                     self.assertTrue(torch.equal(rebuilt(x), expected))
 
     def test_decoder_config_snapshot(self):
-        from torch_em.model import HybridUNETR
-
         decoder_kwargs = {**SMALL_DECODERS["hiera_u"], "widths": list(SMALL_DECODERS["hiera_u"]["widths"])}
         model = HybridUNETR(img_size=64, encoder=_Encoder(), decoder="hiera_u", decoder_kwargs=decoder_kwargs)
         expected_config = deepcopy(model.decoder_config)
@@ -219,37 +205,27 @@ class TestHybridUNETR(unittest.TestCase):
     def test_deep_supervision(self):
         x = torch.rand(1, 3, 2, 48, 64)
 
-        # The default is no deep supervision.
         model = self._get_model("cagd_3d").train()
         self.assertIsInstance(model(x), torch.Tensor)
-        self.assertIsNone(model.auxiliary_outputs)
 
         model = self._get_model("cagd_3d", final_activation="Sigmoid", decoder_kwargs={"deep_supervision": True})
         with torch.no_grad():
             self.assertIsInstance(model(x), torch.Tensor)
-        self.assertIsNone(model.auxiliary_outputs)  # Only in training mode.
 
         model.train()
         y, auxiliary_outputs = model(x)
-        self.assertIs(auxiliary_outputs, model.auxiliary_outputs)
         self.assertEqual(len(auxiliary_outputs), 3)
         for aux in auxiliary_outputs:
             self.assertEqual(aux.shape, y.shape)
             self.assertTrue(0 <= aux.min() and aux.max() <= 1)  # The activation is applied.
-        # The auxiliary heads receive gradients from the auxiliary outputs.
         (y.mean() + sum(aux.mean() for aux in auxiliary_outputs)).backward()
         self.assertTrue(all(head.weight.grad is not None for head in model.decoder.aux_heads))
 
-        # The outputs are dropped in evaluation mode, so that the model can be copied.
-        model.eval()
-        self.assertIsNone(model.auxiliary_outputs)
+        # Copying in training mode verifies that the model holds no auxiliary tensors from the last forward.
         deepcopy(model)
 
     @unittest.skipUnless(dist.is_available() and dist.is_gloo_available(), "Needs the Gloo backend")
     def test_deep_supervision_ddp(self):
-        from torch_em import default_segmentation_trainer
-        from torch_em.trainer import HybridUNETRDeepSupervisionTrainer
-
         model = self._get_model("cagd_3d", decoder_kwargs={"deep_supervision": True}).train()
         x = torch.rand(1, 3, 2, 48, 64)
         y = torch.rand(1, model.out_channels, 2, 48, 64)
@@ -265,9 +241,12 @@ class TestHybridUNETR(unittest.TestCase):
                     name="hybrid-unetr-ddp-test", model=ddp_model, train_loader=loader, val_loader=loader,
                     loss=criterion, device="cpu", logger=None, trainer_class=HybridUNETRDeepSupervisionTrainer,
                 )
-                prediction, loss = trainer._forward_and_loss(x, y)
+                outputs = []
+                with ddp_model.register_forward_hook(lambda _module, _inputs, output: outputs.append(output)):
+                    prediction, loss = trainer._forward_and_loss(x, y)
+                returned_prediction, (aux16, aux8, aux4) = outputs[0]
+                self.assertIs(prediction, returned_prediction)
                 with torch.no_grad():
-                    aux16, aux8, aux4 = model.auxiliary_outputs
                     expected_loss = criterion(prediction, y) + (
                         0.4 * criterion(aux16, y) + 0.3 * criterion(aux8, y) + 0.2 * criterion(aux4, y)
                     )
@@ -292,8 +271,6 @@ class TestHybridUNETR(unittest.TestCase):
 
     @unittest.skipIf(sam2 is None, "Needs sam2")
     def test_sam2_encoder(self):
-        from torch_em.model import HybridUNETR
-
         for decoder in SMALL_DECODERS:
             model = HybridUNETR(
                 img_size=256, backbone="sam2", encoder="hvit_t", decoder=decoder, out_channels=3,

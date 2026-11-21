@@ -26,9 +26,9 @@ The decoders:
 """
 
 import math
-from collections.abc import Mapping
-from copy import deepcopy
 from os import PathLike
+from copy import deepcopy
+from collections.abc import Mapping
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
@@ -227,7 +227,8 @@ class HybridDecoder(nn.Module):
     - features: The encoder features at stride 4, 8 and 16, each of shape (B * Z, C_l, H_l, W_l).
     - image: The preprocessed image of shape (B * Z, 3, H, W).
     - n_z: The number of slices Z.
-    It returns the output before the activation, of shape (B * Z, out_channels, H, W).
+    It returns logits of shape (B * Z, out_channels, H, W). During deep-supervision training it returns
+    `(logits, auxiliary_logits)`, with the auxiliary predictions in a list.
 
     Args:
         out_channels: The number of output channels.
@@ -604,9 +605,8 @@ class CAGD3DDecoder(HybridDecoder):
     full resolution, fused with the stride-1 stem.
 
     Deep supervision (optional): 1x1 heads on the stages at strides 16, 8 and 4 predict all output channels.
-    In training mode their outputs, upsampled to the image size as in MedCAGD, are kept in `aux_outputs` (deepest
-    first; MedCAGD weights them with 0.4, 0.3 and 0.2). `HybridUNETR` includes them in its forward result.
-    If it is enabled, the loss must use these outputs, otherwise the heads do not receive gradients.
+    During training the auxiliary logits are upsampled to the image size and returned with the main logits.
+    The loss should use all three auxiliary outputs, ordered from deepest to shallowest.
 
     Args:
         out_channels: The number of output channels.
@@ -665,15 +665,10 @@ class CAGD3DDecoder(HybridDecoder):
         self.aux_heads = nn.ModuleList(
             [nn.Conv2d(c, out_channels, 1) for c in (w16, w8, w4)]
         ) if deep_supervision else None
-        self.aux_outputs: Optional[List[torch.Tensor]] = None
 
-    def train(self, mode: bool = True):
-        """Set the training mode. The deep supervision outputs are dropped when leaving the training mode."""
-        if not mode:
-            self.aux_outputs = None
-        return super().train(mode)
-
-    def forward(self, features: Sequence[torch.Tensor], image: torch.Tensor, n_z: int) -> torch.Tensor:
+    def forward(
+        self, features: Sequence[torch.Tensor], image: torch.Tensor, n_z: int
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[torch.Tensor]]]:
         """Apply the decoder, see `HybridDecoder`."""
         s4, s8, s16 = self._project(features)
         stem1 = self.stem1(image)
@@ -693,17 +688,14 @@ class CAGD3DDecoder(HybridDecoder):
 
         out = self.out_conv(self.head_fuse(_resize_cat(self.head_up(d2), stem1)))
 
-        self.aux_outputs = None
         if self.training and self.aux_heads is not None:
-            self.aux_outputs = [
+            auxiliary_logits = [
                 _resize_to(head(d), image) for head, d in zip(self.aux_heads, (d16, d8, d4))
             ]
+            return out, auxiliary_logits
         return out
 
 
-# The hybrid decoders by name. To add a decoder, implement the `HybridDecoder` interface and register it here.
-# A decoder with deep supervision keeps the auxiliary outputs of the last forward pass in training mode in the
-# attribute `aux_outputs`. `HybridUNETR.decode` processes them like the main output.
 HYBRID_DECODERS = {"hiera_u": HieraUDecoder, "c3f2": C3F2Decoder, "cagd_3d": CAGD3DDecoder}
 """The hybrid decoders by name."""
 
@@ -787,8 +779,7 @@ class HybridUNETR(UNETRBase):
             encoder_checkpoint=encoder_checkpoint,
             final_activation=final_activation,
             use_skip_connection=True,
-            # The stride-16 feature width of the decoder. This avoids deriving it from the encoder,
-            # which is not possible for arbitrary encoder modules.
+            # Read the stride-16 width from the decoder to support custom encoders.
             embed_dim=decoder_module.in_channels[-1],
             perform_range_checks=perform_range_checks,
             **kwargs,
@@ -803,15 +794,6 @@ class HybridUNETR(UNETRBase):
 
         self.decoder = decoder_module
         self.out_channels = getattr(decoder_module, "out_channels", out_channels)
-        # The deep supervision outputs of the last forward pass in training mode, for decoders that have them
-        # ('cagd_3d' with deep supervision). They are activated and resized like the main output. None otherwise.
-        self.auxiliary_outputs: Optional[List[torch.Tensor]] = None
-
-    def train(self, mode: bool = True):
-        """Set the training mode. The deep supervision outputs are dropped when leaving the training mode."""
-        if not mode:
-            self.auxiliary_outputs = None
-        return super().train(mode)
 
     def init_skip_projections(self, conv_s0: nn.Module, conv_s1: nn.Module) -> None:
         """Initialize the projections of the stride-4 and stride-8 features in the decoder from other modules.
@@ -884,12 +866,11 @@ class HybridUNETR(UNETRBase):
         The training loss should use the tensors from this pair, including under DistributedDataParallel.
         Otherwise, return the prediction tensor.
         """
-        prediction = super().forward(x)
-        if self.auxiliary_outputs is not None:
-            return prediction, self.auxiliary_outputs
-        return prediction
+        return super().forward(x)
 
-    def decode(self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]) -> torch.Tensor:
+    def decode(
+        self, features, input_shape: Tuple[int, ...], original_shape: Tuple[int, ...]
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, List[torch.Tensor]]]:
         """Run the decoder on the encoder features.
 
         Args:
@@ -899,7 +880,7 @@ class HybridUNETR(UNETRBase):
 
         Returns:
             The output, resized to `original_shape`. It has no z axis if `original_shape` is (Y, X).
-            In training mode, the deep supervision outputs of the decoder are stored in `auxiliary_outputs`.
+            During deep-supervision training, return `(prediction, auxiliary_outputs)` at the same spatial size.
         """
         is_2d = len(original_shape) == 2
         if is_2d:
@@ -922,12 +903,8 @@ class HybridUNETR(UNETRBase):
             return x[:, :, 0] if is_2d else x
 
         n_z = features["n_z"]
-        x = self.decoder(features["features"], features["image"], n_z)
-
-        auxiliary_outputs = getattr(self.decoder, "aux_outputs", None)
-        if self.training and auxiliary_outputs:
-            self.auxiliary_outputs = [_postprocess(aux) for aux in auxiliary_outputs]
-        else:
-            self.auxiliary_outputs = None
-
-        return _postprocess(x)
+        outputs = self.decoder(features["features"], features["image"], n_z)
+        if isinstance(outputs, tuple):
+            prediction, auxiliary_logits = outputs
+            return _postprocess(prediction), [_postprocess(aux) for aux in auxiliary_logits]
+        return _postprocess(outputs)
