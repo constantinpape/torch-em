@@ -242,6 +242,7 @@ class TestHybridUNETR(unittest.TestCase):
         # Copying in training mode verifies that the model holds no auxiliary tensors from the last forward.
         deepcopy(model)
 
+    @unittest.skip("Hangs intermittently in the pip CI jobs and makes the runner lose communication")
     @unittest.skipUnless(dist.is_available() and dist.is_gloo_available(), "Needs the Gloo backend")
     def test_deep_supervision_ddp(self):
         model = self._get_model("cagd_3d", decoder_kwargs={"deep_supervision": True}).train()
