@@ -78,6 +78,19 @@ class TestHybridUNETR(unittest.TestCase):
                     self.assertEqual(tuple(y.shape), (2, 5, *shape))
                     self.assertTrue(torch.equal(y, model(x[:, :, None])[:, :, 0]))
 
+    def test_image_final_activation(self):
+        model = self._get_model("hiera_u", final_activation=nn.Softmax2d())
+        x = torch.rand(2, 3, 37, 50)
+
+        with torch.no_grad():
+            prediction = model(x)
+            model.final_activation = nn.Softmax(dim=1)
+            volume_prediction = model(x[:, :, None])
+
+        torch.testing.assert_close(prediction, volume_prediction.squeeze(2))
+        channel_sum = prediction.sum(dim=1)
+        torch.testing.assert_close(channel_sum, torch.ones_like(channel_sum))
+
     def test_postprocess_uses_encoder_grid(self):
         from torch_em.model import HybridUNETR
 

@@ -734,7 +734,8 @@ class HybridUNETR(UNETRBase):
         encoder_checkpoint: Checkpoint for initializing the image encoder.
             Can either be a filepath or an already loaded checkpoint. It does not initialize the projections
             of the stride-4 and stride-8 features in the decoder, see `init_skip_projections`.
-        final_activation: The activation to apply to the output.
+        final_activation: The activation to apply before resizing the output. It receives a 4D tensor for an image
+            and a 5D tensor for a volume.
         perform_range_checks: Whether to validate the input value range before normalization on each forward pass.
         kwargs: Keyword arguments for `torch_em.model.vit.get_vision_transformer`, if the encoder is given by name.
     """
@@ -905,7 +906,10 @@ class HybridUNETR(UNETRBase):
         def _postprocess(x):
             x = unfold_z(x, n_z)
             if self.final_activation is not None:
-                x = self.final_activation(x)
+                if is_2d:
+                    x = self.final_activation(x.squeeze(2)).unsqueeze(2)
+                else:
+                    x = self.final_activation(x)
             x = F.interpolate(x, padded_shape, mode="trilinear", align_corners=False)
             x = x[..., :depth, :height, :width]
             x = F.interpolate(x, original_shape, mode="trilinear", align_corners=False)
