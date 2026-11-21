@@ -247,17 +247,39 @@ class TestHybridUNETR(unittest.TestCase):
 
     @unittest.skipUnless(dist.is_available() and dist.is_gloo_available(), "Needs the Gloo backend")
     def test_deep_supervision_ddp(self):
+        from torch_em import default_segmentation_trainer
+        from torch_em.trainer import HybridUNETRDeepSupervisionTrainer
+
         model = self._get_model("cagd_3d", decoder_kwargs={"deep_supervision": True}).train()
         x = torch.rand(1, 3, 2, 48, 64)
+        y = torch.rand(1, model.out_channels, 2, 48, 64)
+        loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x, y))
+        criterion = nn.MSELoss()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             init_method = (Path(tmpdir) / "rendezvous").as_uri()
             dist.init_process_group("gloo", init_method=init_method, rank=0, world_size=1)
             try:
                 ddp_model = nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
-                prediction, auxiliary_outputs = ddp_model(x)
-                (prediction.mean() + sum(aux.mean() for aux in auxiliary_outputs)).backward()
+                trainer = default_segmentation_trainer(
+                    name="hybrid-unetr-ddp-test", model=ddp_model, train_loader=loader, val_loader=loader,
+                    loss=criterion, device="cpu", logger=None, trainer_class=HybridUNETRDeepSupervisionTrainer,
+                )
+                prediction, loss = trainer._forward_and_loss(x, y)
+                with torch.no_grad():
+                    aux16, aux8, aux4 = model.auxiliary_outputs
+                    expected_loss = criterion(prediction, y) + (
+                        0.4 * criterion(aux16, y) + 0.3 * criterion(aux8, y) + 0.2 * criterion(aux4, y)
+                    )
+                torch.testing.assert_close(loss, expected_loss)
+                loss.backward()
+                self.assertIsNotNone(prediction.grad)
                 self.assertTrue(all(head.weight.grad is not None for head in model.decoder.aux_heads))
+
+                ddp_model.eval()
+                with torch.no_grad():
+                    prediction, loss = trainer._forward_and_loss(x, y)
+                    torch.testing.assert_close(loss, criterion(prediction, y))
             finally:
                 dist.destroy_process_group()
 
