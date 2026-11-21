@@ -110,6 +110,24 @@ class TestHybridUNETR(unittest.TestCase):
                 x = torch.rand(*shape)
                 torch.testing.assert_close(model(x), reference(x))
 
+    def test_decoding_ignores_padding(self):
+        # The same input is padded to 64 or 128. Both are cropped to 64 before decoding, so the outputs match.
+        for decoder in SMALL_DECODERS:
+            reference = self._get_model(decoder, resize_input=False)
+            model = HybridUNETR(
+                img_size=128, encoder=_Encoder(128), decoder=decoder, decoder_kwargs=SMALL_DECODERS[decoder],
+                out_channels=reference.out_channels, resize_input=False,
+            ).eval()
+            self._randomize_z_branches(reference)  # So that the z context also has to match.
+            model.load_state_dict(reference.state_dict())
+            # Double precision, since float32 rounding depends on the memory layout of the cropped tensors.
+            model, reference = model.double(), reference.double()
+
+            for shape in [(1, 3, 40, 50), (1, 3, 2, 40, 50)]:
+                with self.subTest(decoder=decoder, shape=shape), torch.no_grad():
+                    x = torch.rand(*shape, dtype=torch.float64)
+                    torch.testing.assert_close(model(x), reference(x), atol=1e-10, rtol=0)
+
     def test_input_size_without_resizing(self):
         model = HybridUNETR(
             img_size=128, encoder=_Encoder(64), decoder="hiera_u", decoder_kwargs=SMALL_DECODERS["hiera_u"],
