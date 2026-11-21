@@ -27,6 +27,7 @@ The decoders:
 
 import math
 from collections.abc import Mapping
+from copy import deepcopy
 from os import PathLike
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -787,7 +788,7 @@ class HybridUNETR(UNETRBase):
         )
         self.init_kwargs = {
             "img_size": img_size, "backbone": backbone, "encoder": encoder, "decoder": decoder,
-            "decoder_kwargs": decoder_kwargs, "out_channels": out_channels, "use_sam_stats": use_sam_stats,
+            "decoder_kwargs": deepcopy(decoder_kwargs), "out_channels": out_channels, "use_sam_stats": use_sam_stats,
             "use_mae_stats": use_mae_stats, "use_dino_stats": use_dino_stats,
             "use_imagenet_stats": use_imagenet_stats, "resize_input": resize_input,
             "final_activation": final_activation, "perform_range_checks": perform_range_checks, **kwargs,
@@ -829,7 +830,7 @@ class HybridUNETR(UNETRBase):
         if not isinstance(decoder, str):
             raise RuntimeError("The decoder_config is only available for a decoder that is given by name.")
         return {
-            "decoder": decoder, "decoder_kwargs": dict(self.init_kwargs["decoder_kwargs"] or {}),
+            "decoder": decoder, "decoder_kwargs": deepcopy(self.init_kwargs["decoder_kwargs"] or {}),
             "out_channels": self.out_channels,
         }
 

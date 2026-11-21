@@ -167,6 +167,23 @@ class TestHybridUNETR(unittest.TestCase):
                 with torch.no_grad():
                     self.assertTrue(torch.equal(rebuilt(x), expected))
 
+    def test_decoder_config_snapshot(self):
+        from torch_em.model import HybridUNETR
+
+        decoder_kwargs = {**SMALL_DECODERS["hiera_u"], "widths": list(SMALL_DECODERS["hiera_u"]["widths"])}
+        model = HybridUNETR(img_size=64, encoder=_Encoder(), decoder="hiera_u", decoder_kwargs=decoder_kwargs)
+        expected_config = deepcopy(model.decoder_config)
+
+        decoder_kwargs["widths"][0] = 64
+        decoder_kwargs["stem_widths"] = (16, 32)
+        exported_config = model.decoder_config
+        exported_config["decoder_kwargs"]["widths"][-1] = 16
+
+        self.assertEqual(model.decoder_config, expected_config)
+        self.assertEqual(model.init_kwargs["decoder_kwargs"], expected_config["decoder_kwargs"])
+        rebuilt = HybridUNETR(img_size=64, encoder=_Encoder(), **model.decoder_config)
+        rebuilt.load_state_dict(model.state_dict(), strict=True)
+
     def test_deep_supervision(self):
         x = torch.rand(1, 3, 2, 48, 64)
 
