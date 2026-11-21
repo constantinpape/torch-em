@@ -122,12 +122,10 @@ class ZResidual(nn.Module):
 
     Args:
         channels: The number of channels.
-        kernel_size: The positive odd kernel size along z. This keeps the convolution centered and preserves depth.
+        kernel_size: The kernel size along z. It must be odd.
     """
     def __init__(self, channels: int, kernel_size: int = 3):
         super().__init__()
-        if kernel_size < 1 or kernel_size % 2 == 0:
-            raise ValueError(f"ZResidual requires a positive odd kernel size, got {kernel_size}.")
         self.depthwise = nn.Conv3d(
             channels, channels, kernel_size=(kernel_size, 1, 1), padding=(kernel_size // 2, 0, 0), groups=channels,
         )
@@ -262,19 +260,18 @@ class HybridDecoder(nn.Module):
         in_channels: The channels of the encoder features at stride 4, 8 and 16.
         skip_projections: The output channels of the 1x1 projections of the stride-4 and stride-8 features.
             The defaults correspond to `conv_s0` and `conv_s1` of the SAM2 mask decoder.
-            If None, the decoder uses the features without projections.
         norm: The function that creates the normalization layer of the image stem for a number of channels.
         activation: The activation of the image stem.
         skip_activation: The activation applied after the skip projections. Decoders whose next layer on the
             skips is another 1x1 convolution use it, so that the two convolutions do not collapse into one
-            linear map. It is not used without skip projections.
+            linear map.
     """
     def __init__(
         self,
         out_channels: int,
         stem_widths: Sequence[int] = (16, 32),
         in_channels: Sequence[int] = (256, 256, 256),
-        skip_projections: Optional[Sequence[int]] = (32, 64),
+        skip_projections: Sequence[int] = (32, 64),
         norm: Callable[[int], nn.Module] = _group_norm,
         activation: Callable[[], nn.Module] = nn.GELU,
         skip_activation: Optional[Callable[[], nn.Module]] = None,
@@ -287,21 +284,16 @@ class HybridDecoder(nn.Module):
         st1, st2 = stem_widths
         self.stem1 = nn.Sequential(nn.Conv2d(3, st1, 3, padding=1, bias=False), norm(st1), activation())
         self.stem2 = nn.Sequential(nn.Conv2d(st1, st2, 3, stride=2, padding=1, bias=False), norm(st2), activation())
-        if skip_projections is None:
-            self.proj_s4, self.proj_s8, self.skip_act = None, None, None
-            self.skip_channels = self.in_channels[:2]
-        else:
-            self.skip_channels = tuple(skip_projections)
-            self.proj_s4 = nn.Conv2d(self.in_channels[0], self.skip_channels[0], 1)
-            self.proj_s8 = nn.Conv2d(self.in_channels[1], self.skip_channels[1], 1)
-            self.skip_act = None if skip_activation is None else skip_activation()
+        self.skip_channels = tuple(skip_projections)
+        self.proj_s4 = nn.Conv2d(self.in_channels[0], self.skip_channels[0], 1)
+        self.proj_s8 = nn.Conv2d(self.in_channels[1], self.skip_channels[1], 1)
+        self.skip_act = None if skip_activation is None else skip_activation()
 
     def _project(self, features: Sequence[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         s4, s8, s16 = features
-        if self.proj_s4 is not None:
-            s4, s8 = self.proj_s4(s4), self.proj_s8(s8)
-            if self.skip_act is not None:
-                s4, s8 = self.skip_act(s4), self.skip_act(s8)
+        s4, s8 = self.proj_s4(s4), self.proj_s8(s8)
+        if self.skip_act is not None:
+            s4, s8 = self.skip_act(s4), self.skip_act(s8)
         return s4, s8, s16
 
 
@@ -317,7 +309,6 @@ class HieraUDecoder(HybridDecoder):
         stem_widths: The widths of the image stem at strides 1 and 2.
         in_channels: The channels of the encoder features at stride 4, 8 and 16.
         skip_projections: The output channels of the 1x1 projections of the stride-4 and stride-8 features.
-            If None, the decoder uses the features without projections.
     """
     def __init__(
         self,
@@ -325,7 +316,7 @@ class HieraUDecoder(HybridDecoder):
         widths: Sequence[int] = (192, 128, 64, 32, 16),
         stem_widths: Sequence[int] = (16, 32),
         in_channels: Sequence[int] = (256, 256, 256),
-        skip_projections: Optional[Sequence[int]] = (32, 64),
+        skip_projections: Sequence[int] = (32, 64),
     ):
         super().__init__(out_channels, stem_widths, in_channels, skip_projections)
         w16, w8, w4, w2, w1 = widths
@@ -367,7 +358,6 @@ class C3F2Decoder(HybridDecoder):
         in_channels: The channels of the encoder features at stride 4, 8 and 16.
         skip_projections: The output channels of the 1x1 projections of the stride-4 and stride-8 features.
             They are followed by a GELU, since the lateral convolutions are also 1x1.
-            If None, the decoder uses the features without projections.
     """
     def __init__(
         self,
@@ -376,7 +366,7 @@ class C3F2Decoder(HybridDecoder):
         head_width: int = 32,
         stem_widths: Sequence[int] = (16, 32),
         in_channels: Sequence[int] = (256, 256, 256),
-        skip_projections: Optional[Sequence[int]] = (32, 64),
+        skip_projections: Sequence[int] = (32, 64),
     ):
         super().__init__(out_channels, stem_widths, in_channels, skip_projections, skip_activation=nn.GELU)
         w16, w8, w4 = widths
@@ -661,7 +651,6 @@ class CAGD3DDecoder(HybridDecoder):
             They are followed by a SiLU, since the pyramid convolutions are also 1x1. The defaults match the
             pyramid widths (256 -> 64 -> SiLU -> 64 and 256 -> 128 -> SiLU -> 128), so they are wider than
             `conv_s0` and `conv_s1` of SAM2 and `HybridUNETR.init_skip_projections` does not apply to them.
-            If None, the decoder uses the features without projections.
     """
     def __init__(
         self,
@@ -670,7 +659,7 @@ class CAGD3DDecoder(HybridDecoder):
         stem_widths: Sequence[int] = (16, 32),
         deep_supervision: bool = False,
         in_channels: Sequence[int] = (256, 256, 256),
-        skip_projections: Optional[Sequence[int]] = (64, 128),
+        skip_projections: Sequence[int] = (64, 128),
     ):
         super().__init__(
             out_channels, stem_widths, in_channels, skip_projections,

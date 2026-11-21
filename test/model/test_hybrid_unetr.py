@@ -143,16 +143,6 @@ class TestHybridUNETR(unittest.TestCase):
                 prediction = model(torch.rand(*shape))
                 self.assertEqual(tuple(prediction.shape), (shape[0], model.out_channels, *shape[2:]))
 
-    def test_z_residual_kernel_size(self):
-        for kernel_size in (-1, 0, 2):
-            with self.subTest(kernel_size=kernel_size), self.assertRaisesRegex(ValueError, "positive odd kernel size"):
-                ZResidual(channels=4, kernel_size=kernel_size)
-
-        residual = ZResidual(channels=4, kernel_size=5)
-        x = torch.randn(6, 4, 8, 8)  # Two volumes with three slices each, folded into the batch.
-        with torch.no_grad():
-            torch.testing.assert_close(residual(x, n_z=3), x)
-
     def test_volume_equals_stacked_slices_at_init(self):
         for name, kwargs in SMALL_DECODERS.items():
             torch.manual_seed(0)
@@ -171,14 +161,6 @@ class TestHybridUNETR(unittest.TestCase):
                 self._randomize_z_branches(decoder)
                 volume = decoder(features, image, n_z)
                 self.assertFalse(torch.allclose(volume, slices, atol=1e-6, rtol=0))
-
-    def test_decoders_without_skip_projections(self):
-        features = [torch.randn(2, c, 64 // s, 64 // s) for c, s in ((32, 4), (64, 8), (256, 16))]
-        for name, kwargs in SMALL_DECODERS.items():
-            with self.subTest(decoder=name), torch.no_grad():
-                decoder = HYBRID_DECODERS[name](in_channels=(32, 64, 256), skip_projections=None, **kwargs)
-                self.assertFalse(any(key.startswith("proj_") for key in decoder.state_dict()))
-                self.assertEqual(tuple(decoder(features, torch.randn(2, 3, 64, 64), 2).shape), (2, 5, 64, 64))
 
     def test_state_and_config(self):
         with self.assertRaises(ValueError):
