@@ -90,7 +90,8 @@ class TestSpocoTrainer(unittest.TestCase):
         self.assertEqual(trainer.iteration, 20)
 
         # check that we can deserialize with get_trainer
-        trainer_ = torch_em.util.get_trainer(f"./checkpoints/{self.name}")
+        # (the best checkpoint may be from an epoch before the resume, so we load the latest one)
+        trainer_ = torch_em.util.get_trainer(f"./checkpoints/{self.name}", name="latest")
         self.assertEqual(trainer_.iteration, 20)
 
     def test_from_checkpoint(self):
