@@ -108,6 +108,48 @@ class TestDefaultTrainer(unittest.TestCase):
             checkpoint = torch.load(os.path.join(save_folder, f"epoch-{epoch}.pt"), weights_only=False)
             self.assertEqual(checkpoint["iteration"], epoch * n_iterations)
 
+    def test_resume_keeps_best_checkpoint(self):
+        from torch_em.trainer import DefaultTrainer
+
+        def get_trainer(metrics):
+            trainer = DefaultTrainer(**self._get_kwargs())
+            # The validation returns the given metrics, one per epoch.
+            metrics = list(metrics)
+            trainer._validate = trainer._validate_mixed = lambda: metrics.pop(0)
+            return trainer
+
+        def load(name):
+            return torch.load(os.path.join(self.checkpoint_folder, self.name, f"{name}.pt"), weights_only=False)
+
+        trainer = get_trainer([0.5, 0.2])
+        trainer.fit(epochs=2)
+        n_iterations = len(trainer.train_loader)
+        self.assertEqual(load("best")["iteration"], 2 * n_iterations)
+
+        # The epochs after the resume are worse than the best epoch before it, so the best checkpoint is kept.
+        trainer = get_trainer([0.4, 0.3])
+        trainer.fit(epochs=2, load_from_checkpoint="latest")
+        self.assertEqual(trainer.best_metric, 0.2)
+        best, latest = load("best"), load("latest")
+        self.assertEqual(best["iteration"], 2 * n_iterations)
+        self.assertEqual(best["best_metric"], 0.2)
+        self.assertEqual(latest["iteration"], 4 * n_iterations)
+        self.assertEqual(latest["best_metric"], 0.2)
+        self.assertEqual(latest["best_epoch"], best["epoch"])
+
+        # A better epoch after the resume replaces the best checkpoint.
+        trainer = get_trainer([0.1, 0.15])
+        trainer.fit(epochs=1, load_from_checkpoint="latest")
+        best = load("best")
+        self.assertEqual(best["iteration"], 5 * n_iterations)
+        self.assertEqual(best["best_metric"], 0.1)
+
+        # The same holds for a further call to fit of the same trainer.
+        trainer.fit(epochs=1)
+        self.assertEqual(trainer.best_metric, 0.1)
+        self.assertEqual(load("best")["iteration"], 5 * n_iterations)
+        self.assertEqual(load("latest")["best_metric"], 0.1)
+
     def test_from_checkpoint(self):
         from torch_em.trainer import DefaultTrainer
 

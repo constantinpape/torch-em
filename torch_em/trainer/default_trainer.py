@@ -128,6 +128,8 @@ class DefaultTrainer:
         self._iteration = 0
         self._epoch = 0
         self._best_epoch = 0
+        # The best validation metric of this training. It is restored by `load_checkpoint`.
+        self.best_metric = np.inf
 
         self.mixed_precision = mixed_precision
         # These are the defaults of torch.autocast for each device type.
@@ -571,8 +573,10 @@ class DefaultTrainer:
                 )
                 pass
 
-        best_metric = np.inf
-        return best_metric
+        # The best metric so far: infinity for a new training, otherwise the value of the loaded checkpoint
+        # or of the previous call to `fit`. So a training that is continued only replaces the best checkpoint
+        # with an epoch that is better than all epochs before it.
+        return self.best_metric
 
     def save_checkpoint(self, name, current_metric, best_metric, train_time=0.0, **extra_save_dict):
         """@private
@@ -741,6 +745,7 @@ class DefaultTrainer:
             # it has the best overall validation metric
             if current_metric < best_metric:
                 best_metric = current_metric
+                self.best_metric = best_metric
                 self._best_epoch = self._epoch
                 self.save_checkpoint("best", current_metric, best_metric, train_time=total_train_time)
 
