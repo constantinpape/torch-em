@@ -337,11 +337,21 @@ class _Aborted(Exception):
 
 class _AtomicCounter:
     """@private
-    Lock-guarded integer counter used for sentinel reference counting."""
+    Lock-guarded integer counter used for sentinel reference counting and progress tracking."""
 
     def __init__(self, value: int):
         self._value = value
         self._lock = threading.Lock()
+
+    @property
+    def value(self) -> int:
+        with self._lock:
+            return self._value
+
+    def increment(self) -> int:
+        with self._lock:
+            self._value += 1
+            return self._value
 
     def decrement(self) -> int:
         with self._lock:
@@ -634,8 +644,11 @@ def predict_with_halo_pipelined(
     stop_event = threading.Event()
     error_box = []
     error_lock = threading.Lock()
-    progress_lock = threading.Lock()
     pbar = tqdm(total=total, disable=disable_tqdm, desc=tqdm_desc)
+    # The progress bar can be a GUI object (napari), which only the calling thread may update.
+    # The workers count the finished blocks and the calling thread reports them.
+    finished_blocks = _AtomicCounter(0)
+    n_reported = 0
 
     remaining_producers = _AtomicCounter(num_prefetch_workers)
     remaining_consumers = _AtomicCounter(n_consumers)
@@ -657,8 +670,7 @@ def predict_with_halo_pipelined(
                     input_, mask, block, block_shape, halo, with_channels, skip_block, preprocess
                 )
                 if result is _SKIP:
-                    with progress_lock:
-                        pbar.update(1)
+                    finished_blocks.increment()
                     continue
                 tensor, mask_block, inner_bb = result
                 _safe_put(input_queue, _BlockJob(block, inner_bb, mask_block, tensor), stop_event)
@@ -725,8 +737,7 @@ def predict_with_halo_pipelined(
                 _write_prediction(
                     job.prediction, job.block, output, ndim, job.mask_block, job.inner_bb, postprocess
                 )
-                with progress_lock:
-                    pbar.update(1)
+                finished_blocks.increment()
         except _Aborted:
             pass
         except Exception as e:  # noqa
@@ -739,20 +750,22 @@ def predict_with_halo_pipelined(
                  for i in range(num_prefetch_workers)]
     threads = writers + consumers + producers
 
+    def report_progress():
+        nonlocal n_reported
+        n_finished = finished_blocks.value
+        if n_finished > n_reported:
+            pbar.update(n_finished - n_reported)
+            n_reported = n_finished
+
     try:
-        for t in writers:
-            t.start()
-        for t in consumers:
-            t.start()
-        for t in producers:
+        for t in threads:
             t.start()
 
-        for t in producers:
-            t.join()
-        for t in consumers:
-            t.join()
-        for t in writers:
-            t.join()
+        for t in producers + consumers + writers:
+            while t.is_alive():
+                t.join(timeout=0.1)
+                report_progress()
+        report_progress()
     finally:
         stop_event.set()
         for t in threads:
