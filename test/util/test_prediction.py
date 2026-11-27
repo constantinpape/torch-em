@@ -201,6 +201,38 @@ class TestPrediction(unittest.TestCase):
         )
         self.assertEqual(out.shape, (3,) + shape)
 
+    def test_pipelined_progress_in_calling_thread(self):
+        import threading
+        from unittest import mock
+
+        from torch_em.model import UNet2d
+        from torch_em.util import prediction
+
+        update_threads, n_updates = set(), []
+
+        class Progress:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def update(self, n=1):
+                update_threads.add(threading.get_ident())
+                n_updates.append(n)
+
+            def close(self):
+                pass
+
+        model = UNet2d(in_channels=1, out_channels=3, initial_features=8, depth=3)
+        data = np.random.rand(512, 512).astype("float32")
+        mask = np.zeros(data.shape, dtype="bool")
+        mask[:, :256] = True  # The blocks outside of the mask are skipped by the producers.
+
+        with mock.patch.object(prediction, "tqdm", Progress):
+            prediction.predict_with_halo_pipelined(
+                data, model, gpu_ids=["cpu"], block_shape=(128, 128), halo=(16, 16), mask=mask,
+            )
+        self.assertEqual(update_threads, {threading.get_ident()})
+        self.assertEqual(sum(n_updates), 16)
+
     def test_pipelined_grid_shift_raises(self):
         from torch_em.model import UNet2d
         from torch_em.util.prediction import predict_with_halo_pipelined
